@@ -246,70 +246,66 @@ function formatDate($date)
         }
 
         .data-table-wrapper {
-            border: 1px solid #ccc;
+            border: 1px solid #e2e8f0;
+            border-radius: 8px;
             flex: 1;
             overflow-x: auto;
-            /* Horizontal scroll */
             overflow-y: auto;
-            /* Vertical scroll */
             position: relative;
             background: white;
-            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
+            /* Softer shadow */
         }
 
         table.debt-table {
             width: max-content;
-            /* Allow table to be wider than container */
             min-width: 100%;
-            /* But at least 100% */
             border-collapse: separate;
             border-spacing: 0;
             font-size: 13px;
+            /* Slightly larger text */
+            font-family: 'Inter', sans-serif;
             white-space: nowrap;
+            color: #334155;
         }
 
         /* Sticky Header */
         table.debt-table thead th {
             position: sticky;
             top: 0;
-            background-color: #004b75;
-            /* Darker Blue */
-            color: white;
+            background-color: #f8fafc;
+            /* Modern light gray header */
+            color: #475569;
+            /* Gray text */
             font-weight: 600;
-            padding: 10px 12px;
+            text-transform: uppercase;
+            font-size: 11px;
+            letter-spacing: 0.05em;
+            padding: 12px 16px;
             text-align: left;
-            border-bottom: 2px solid #003655;
+            border-bottom: 2px solid #e2e8f0;
             z-index: 10;
             white-space: normal;
-            line-height: 1.3;
+            line-height: 1.4;
             vertical-align: middle;
-            min-width: 100px;
-            /* Increased from 80px */
-            max-height: 52px;
-            /* ~2 lines at line-height 1.3 */
-            overflow: hidden;
-        }
-
-        /* Column borders in header */
-        table.debt-table thead th:not(:last-child) {
-            border-right: 1px solid rgba(255, 255, 255, 0.2);
+            min-width: 120px;
         }
 
         table.debt-table tbody td {
-            padding: 8px 10px;
-            border-bottom: 1px solid #e0e0e0;
-            border-right: 1px solid #f0f0f0;
+            padding: 10px 16px;
+            border-bottom: 1px solid #f1f5f9;
             vertical-align: middle;
-            color: #333;
+            color: #1e293b;
+            transition: background-color 0.15s;
         }
 
-        /* Row Stripes */
-        table.debt-table tbody tr:nth-child(even) {
-            background-color: #f8fafc;
+        /* Subtle Striping */
+        table.debt-table tbody tr:nth-child(even) td {
+            background-color: #fafafa;
         }
 
-        table.debt-table tbody tr:hover {
-            background-color: #e3f2fd;
+        table.debt-table tbody tr:hover td {
+            background-color: #f1f5f9;
             cursor: pointer;
         }
 
@@ -322,6 +318,7 @@ function formatDate($date)
             font-weight: 700;
             color: #0f172a;
             text-align: right;
+            font-variant-numeric: tabular-nums;
         }
 
         /* Badges/Pills */
@@ -567,13 +564,15 @@ function formatDate($date)
             background: #334155;
         }
 
+        /* Group Headers */
         .group-header td {
-            background-color: #f1f5f9 !important;
+            background-color: #e2e8f0 !important;
             font-weight: 700;
-            color: #334155;
-            padding: 12px 15px !important;
-            border-top: 2px solid #e2e8f0;
-            border-bottom: 2px solid #e2e8f0;
+            color: #0f172a;
+            padding: 12px 16px !important;
+            border-top: none;
+            border-bottom: 2px solid #cbd5e1;
+            font-size: 13px;
         }
 
         .group-total {
