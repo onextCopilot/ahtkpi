@@ -1,5 +1,5 @@
-CREATE DATABASE IF NOT EXISTS `login_system`;
-USE `login_system`;
+CREATE DATABASE IF NOT EXISTS `aht_kpi`;
+USE `aht_kpi`;
 
 
 DROP TABLE IF EXISTS `debts`;

@@ -9,7 +9,7 @@
 
 // Basic error reporting for debugging
 error_reporting(E_ALL);
-ini_set('display_errors', 1); // ENABLED for debugging live site 500 errors
+ini_set('display_errors', 0); // Keep disabled in production
 
 // Parse the current URI
 $request_uri = $_SERVER['REQUEST_URI'];

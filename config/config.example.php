@@ -7,9 +7,9 @@
 
 // Database Configuration
 define('DB_HOST', 'localhost');           // Database host
-define('DB_USER', 'your_username');       // Database username
+define('DB_USER', 'aht_kpi');       // Database username
 define('DB_PASS', 'your_password');       // Database password
-define('DB_NAME', 'your_database');       // Database name
+define('DB_NAME', 'aht_kpi');       // Database name
 
 // Application Configuration
 define('APP_NAME', 'AHT KPI Management');
