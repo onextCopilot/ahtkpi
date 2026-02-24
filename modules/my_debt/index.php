@@ -207,6 +207,22 @@ function formatDate($date)
 {
     return ($date && $date != '0000-00-00') ? date('d/m/Y', strtotime($date)) : '';
 }
+
+// Fetch AM / BD Users
+$am_list = [];
+$res_am = $conn->query("SELECT full_name FROM users WHERE is_am_bd = 1 ORDER BY full_name ASC");
+if ($res_am && $res_am->num_rows > 0) {
+    while ($row_am = $res_am->fetch_assoc()) {
+        $n = trim($row_am['full_name']);
+        if (!empty($n) && !in_array($n, $am_list)) {
+            $am_list[] = $n;
+        }
+    }
+} else {
+    // Fallback if none found
+    $am_list = ['Emily', 'Ryan', 'Hyun'];
+}
+
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -1146,10 +1162,12 @@ function formatDate($date)
                         <div class="form-group">
                             <label>AM</label>
                             <select name="am" id="am">
-                                <option>Emily</option>
-                                <option>Ryan</option>
-                                <option>Hyun</option>
-                                <option>Other</option>
+                                <?php foreach ($am_list as $am_name): ?>
+                                    <option value="<?php echo htmlspecialchars($am_name); ?>">
+                                        <?php echo htmlspecialchars($am_name); ?>
+                                    </option>
+                                <?php endforeach; ?>
+                                <option value="Other">Other</option>
                             </select>
                         </div>
                     </div>
