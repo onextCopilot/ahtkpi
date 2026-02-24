@@ -83,9 +83,6 @@ if ($res_kpi) {
     }
 }
 
-// Get recent users
-$recent_users_query = "SELECT id, username, full_name, email, role, created_at FROM users ORDER BY created_at DESC LIMIT 5";
-$recent_users_result = $conn->query($recent_users_query);
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -266,69 +263,6 @@ $recent_users_result = $conn->query($recent_users_query);
                         tooltip: { theme: 'light', y: { formatter: val => val + "%" } }
                     }).render();
                 </script>
-
-                <!-- Recent Users Table -->
-                <div class="table-card">
-                    <div class="table-header">
-                        <h2>Recent Users</h2>
-                        <button class="btn-primary">
-                            <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                                <path d="M12 5V19M5 12H19" stroke="currentColor" stroke-width="2" stroke-linecap="round"
-                                    stroke-linejoin="round" />
-                            </svg>
-                            Add User
-                        </button>
-                    </div>
-
-                    <div class="table-wrapper">
-                        <table class="data-table">
-                            <thead>
-                                <tr>
-                                    <th>ID</th>
-                                    <th>Username</th>
-                                    <th>Full Name</th>
-                                    <th>Email</th>
-                                    <th>Role</th>
-                                    <th>Created Date</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                <?php while ($user = $recent_users_result->fetch_assoc()): ?>
-                                    <tr>
-                                        <td>
-                                            <?php echo $user['id']; ?>
-                                        </td>
-                                        <td>
-                                            <div class="user-cell">
-                                                <div class="user-avatar-small">
-                                                    <?php echo strtoupper(substr($user['username'], 0, 1)); ?>
-                                                </div>
-                                                <span>
-                                                    <?php echo htmlspecialchars($user['username']); ?>
-                                                </span>
-                                            </div>
-                                        </td>
-                                        <td>
-                                            <?php echo htmlspecialchars($user['full_name']); ?>
-                                        </td>
-                                        <td>
-                                            <?php echo htmlspecialchars($user['email']); ?>
-                                        </td>
-                                        <td>
-                                            <span
-                                                class="badge <?php echo $user['role'] == 'admin' ? 'badge-admin' : 'badge-user'; ?>">
-                                                <?php echo htmlspecialchars($user['role']); ?>
-                                            </span>
-                                        </td>
-                                        <td>
-                                            <?php echo date('d/m/Y H:i', strtotime($user['created_at'])); ?>
-                                        </td>
-                                    </tr>
-                                <?php endwhile; ?>
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
             </div>
         </main>
     </div>
