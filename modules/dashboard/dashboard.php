@@ -62,6 +62,27 @@ foreach ($teams_data as $t => $d) {
     $chart_unpaid[] = $d['unpaid'] ?? 0;
 }
 
+// Fetch KPI Data
+$kpi_dept_names = [];
+$kpi_counts = [];
+$kpi_weights = [];
+$res_kpi = $conn->query("
+    SELECT d.name AS dept_name, 
+           COUNT(k.id) AS total_kpi,
+           COALESCE(SUM(k.weight), 0) AS total_weight
+    FROM departments d
+    LEFT JOIN kpi_definitions k ON d.id = k.department_id AND k.year = YEAR(CURDATE())
+    GROUP BY d.id
+    ORDER BY d.sort_order ASC, d.id ASC
+");
+if ($res_kpi) {
+    while ($row = $res_kpi->fetch_assoc()) {
+        $kpi_dept_names[] = $row['dept_name'];
+        $kpi_counts[] = (int) $row['total_kpi'];
+        $kpi_weights[] = (float) $row['total_weight'];
+    }
+}
+
 // Get recent users
 $recent_users_query = "SELECT id, username, full_name, email, role, created_at FROM users ORDER BY created_at DESC LIMIT 5";
 $recent_users_result = $conn->query($recent_users_query);
@@ -139,7 +160,8 @@ $recent_users_result = $conn->query($recent_users_query);
                         <div class="stat-content">
                             <h3>Total Paid (VND)</h3>
                             <p class="stat-number" style="font-size: 1.2rem; color: #16a34a;">
-                                <?php echo number_format($total_paid_vnd, 0, ',', '.'); ?> ₫</p>
+                                <?php echo number_format($total_paid_vnd, 0, ',', '.'); ?> ₫
+                            </p>
                         </div>
                     </div>
 
@@ -154,7 +176,8 @@ $recent_users_result = $conn->query($recent_users_query);
                         <div class="stat-content">
                             <h3>Pending (VND)</h3>
                             <p class="stat-number" style="font-size: 1.2rem; color: #dc2626;">
-                                <?php echo number_format($total_unpaid_vnd, 0, ',', '.'); ?> ₫</p>
+                                <?php echo number_format($total_unpaid_vnd, 0, ',', '.'); ?> ₫
+                            </p>
                         </div>
                     </div>
                 </div>
@@ -173,6 +196,23 @@ $recent_users_result = $conn->query($recent_users_query);
                             style="margin-top:0; color: #0f172a; font-size: 1.1rem; border-bottom: 1px solid #e2e8f0; padding-bottom: 10px;">
                             Debt by Sale Teams</h3>
                         <div id="chart-teams-bar"></div>
+                    </div>
+                </div>
+
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin-bottom: 24px;">
+                    <div
+                        style="background: white; padding: 20px; border-radius: 12px; border: 1px solid #e2e8f0; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);">
+                        <h3
+                            style="margin-top:0; color: #0f172a; font-size: 1.1rem; border-bottom: 1px solid #e2e8f0; padding-bottom: 10px;">
+                            KPIs Count by Department (YTD)</h3>
+                        <div id="chart-kpis-count"></div>
+                    </div>
+                    <div
+                        style="background: white; padding: 20px; border-radius: 12px; border: 1px solid #e2e8f0; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);">
+                        <h3
+                            style="margin-top:0; color: #0f172a; font-size: 1.1rem; border-bottom: 1px solid #e2e8f0; padding-bottom: 10px;">
+                            Total KPI Weights by Department (YTD)</h3>
+                        <div id="chart-kpis-weight"></div>
                     </div>
                 </div>
 
@@ -200,6 +240,30 @@ $recent_users_result = $conn->query($recent_users_query);
                         colors: ['#22c55e', '#ef4444'],
                         yaxis: { labels: { formatter: val => (val / 1000000).toFixed(0) + 'M' } },
                         tooltip: { y: { formatter: val => formatVND(val) } }
+                    }).render();
+
+                    const kpiDeptNames = <?php echo json_encode($kpi_dept_names); ?>;
+                    const kpiCounts = <?php echo json_encode($kpi_counts); ?>;
+                    const kpiWeights = <?php echo json_encode($kpi_weights); ?>;
+
+                    new ApexCharts(document.querySelector("#chart-kpis-count"), {
+                        series: [{ name: 'KPI Count', data: kpiCounts }],
+                        chart: { type: 'bar', height: 350 },
+                        plotOptions: { bar: { borderRadius: 4, distributed: true, dataLabels: { position: 'top' } } },
+                        dataLabels: { enabled: true, style: { fontSize: '12px', colors: ["#304758"] } },
+                        xaxis: { categories: kpiDeptNames, labels: { show: false } }, // Hide x-axis labels to save space since we have legend/tooltip
+                        colors: ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#14b8a6', '#f97316'],
+                        tooltip: { theme: 'light' }
+                    }).render();
+
+                    new ApexCharts(document.querySelector("#chart-kpis-weight"), {
+                        series: [{ name: 'Total Weight', data: kpiWeights }],
+                        chart: { type: 'bar', height: 350 },
+                        plotOptions: { bar: { borderRadius: 4, distributed: true, dataLabels: { position: 'top' } } },
+                        dataLabels: { enabled: true, formatter: function (val) { return val + "%" }, style: { fontSize: '12px', colors: ["#304758"] } },
+                        xaxis: { categories: kpiDeptNames, labels: { show: false } }, // Hide x-axis labels to save space since we have legend/tooltip
+                        colors: ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#14b8a6', '#f97316'],
+                        tooltip: { theme: 'light', y: { formatter: val => val + "%" } }
                     }).render();
                 </script>
 
