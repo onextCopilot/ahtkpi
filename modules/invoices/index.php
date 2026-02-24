@@ -559,7 +559,7 @@ function formatDate($date)
                                                     }
                                                 }
                                                 ?>
-                                                <?php if (in_array($inv['name'], $existingInvoiceNames)): ?>
+                                                <?php if (!empty($inv['name']) && $inv['name'] !== '/' && in_array($inv['name'], $existingInvoiceNames)): ?>
                                                     <button class="btn-icon" title="Already added to My Debts" disabled
                                                         style="background:none; border:none; cursor:default; color:#16a34a; padding: 4px;">
                                                         <svg width="18" height="18" viewBox="0 0 24 24" fill="none"
@@ -569,10 +569,10 @@ function formatDate($date)
                                                     </button>
                                                 <?php else: ?>
                                                     <button onclick="addToDebts(this)"
-                                                        data-name="<?php echo htmlspecialchars($inv['name']); ?>"
+                                                        data-name="<?php echo htmlspecialchars($inv['name'] ?: 'Draft Invoice'); ?>"
                                                         data-amount="<?php echo $inv['amount_total']; ?>"
                                                         data-currency="<?php echo is_array($inv['currency_id']) ? $inv['currency_id'][1] : 'VND'; ?>"
-                                                        data-desc="<?php echo htmlspecialchars($inv['name'] . ' - ' . (is_array($inv['partner_id']) ? $inv['partner_id'][1] : '')); ?>"
+                                                        data-desc="<?php echo htmlspecialchars(($inv['name'] ?: 'Draft Invoice') . ' - ' . (is_array($inv['partner_id']) ? $inv['partner_id'][1] : '')); ?>"
                                                         data-payment-state="<?php echo $inv['payment_state']; ?>"
                                                         data-write-date="<?php echo htmlspecialchars($paymentDate); ?>"
                                                         data-ref="<?php echo htmlspecialchars($inv['x_studio_project_code'] ?: ($inv['x_studio_project_code_0'] ?? '')); ?>"

@@ -24,6 +24,10 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
 }
 
 $invoiceName = $_POST['invoice_name'] ?? '';
+if (empty($invoiceName) || $invoiceName === '/') {
+    $invoiceName = 'Draft Invoice';
+}
+
 $description = $_POST['description'] ?? '';
 $amount = $_POST['amount'] ?? 0;
 $currency = $_POST['currency'] ?? 'VND';
@@ -35,9 +39,9 @@ $invoiceDateVal = $_POST['invoice_date'] ?? null;
 $teamId = !empty($_POST['team_id']) ? intval($_POST['team_id']) : null;
 
 // Basic validation
-if (empty($invoiceName) || empty($amount)) {
+if (empty($amount)) {
     http_response_code(400);
-    echo json_encode(['error' => 'Invalid invoice data']);
+    echo json_encode(['error' => 'Invalid invoice amount']);
     exit();
 }
 
