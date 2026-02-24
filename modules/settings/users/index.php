@@ -1,0 +1,1126 @@
+<?php
+require_once __DIR__ . '/../../../config/config.php';
+
+// Check session
+if (!isset($_SESSION['user_id'])) {
+    header("Location: /login");
+    exit();
+}
+
+require_once __DIR__ . '/../../../vendor/autoload.php';
+use PHPMailer\PHPMailer\PHPMailer;
+use PHPMailer\PHPMailer\Exception;
+
+$current_user_id = $_SESSION['user_id'];
+$full_name = $_SESSION['full_name'];
+$role = $_SESSION['role'];
+$avatar = $_SESSION['avatar'] ?? null;
+$error_message = '';
+$success_message = '';
+
+// --- AUTO MIGRATE USERS TABLE ---
+// Add essential columns for IT/Tech Company Staff Management
+$alter_queries = [
+    "ADD COLUMN IF NOT EXISTS job_title VARCHAR(100) DEFAULT NULL",
+    "ADD COLUMN IF NOT EXISTS level VARCHAR(50) DEFAULT 'Junior'", // Intern, Fresher, Junior, Middle, Senior, Lead, Principal, CTO
+    "ADD COLUMN IF NOT EXISTS department_id INT DEFAULT NULL",
+    "ADD COLUMN IF NOT EXISTS employee_code VARCHAR(20) DEFAULT NULL UNIQUE",
+    "ADD COLUMN IF NOT EXISTS skills TEXT DEFAULT NULL", // Comma separated tags
+    "ADD COLUMN IF NOT EXISTS join_date DATE DEFAULT NULL",
+    "ADD COLUMN IF NOT EXISTS status ENUM('active', 'inactive', 'resigned', 'on_leave') DEFAULT 'active'",
+    "ADD COLUMN IF NOT EXISTS phone VARCHAR(20) DEFAULT NULL",
+    "ADD COLUMN IF NOT EXISTS can_view_invoice TINYINT(1) DEFAULT 0"
+];
+
+// Columns check helper
+function addColumnIfNotExists($conn, $table, $column, $definition)
+{
+    $check = $conn->query("SHOW COLUMNS FROM $table LIKE '$column'");
+    if ($check->num_rows == 0) {
+        $conn->query("ALTER TABLE $table ADD COLUMN $column $definition");
+    }
+}
+
+addColumnIfNotExists($conn, 'users', 'job_title', "VARCHAR(100) DEFAULT NULL");
+addColumnIfNotExists($conn, 'users', 'level', "VARCHAR(50) DEFAULT 'Junior'");
+addColumnIfNotExists($conn, 'users', 'department_id', "INT DEFAULT NULL");
+addColumnIfNotExists($conn, 'users', 'employee_code', "VARCHAR(20) DEFAULT NULL");
+addColumnIfNotExists($conn, 'users', 'skills', "TEXT DEFAULT NULL");
+addColumnIfNotExists($conn, 'users', 'join_date', "DATE DEFAULT NULL");
+addColumnIfNotExists($conn, 'users', 'status', "ENUM('active', 'inactive', 'resigned', 'on_leave') DEFAULT 'active'");
+addColumnIfNotExists($conn, 'users', 'phone', "VARCHAR(20) DEFAULT NULL");
+addColumnIfNotExists($conn, 'users', 'can_view_invoice', "TINYINT(1) DEFAULT 0");
+addColumnIfNotExists($conn, 'users', 'is_am_bd', "TINYINT(1) DEFAULT 0");
+addColumnIfNotExists($conn, 'users', 'avatar', "VARCHAR(255) DEFAULT NULL"); // Ensure avatar exists
+
+// --- USER SALE TEAMS TABLE ---
+$conn->query("CREATE TABLE IF NOT EXISTS user_sale_teams (
+    user_id INT NOT NULL,
+    team_id INT NOT NULL,
+    PRIMARY KEY (user_id, team_id),
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+    FOREIGN KEY (team_id) REFERENCES sale_teams(id) ON DELETE CASCADE
+)");
+
+// Add FK to Department (Check first)
+$check_fk = $conn->query("SELECT CONSTRAINT_NAME FROM information_schema.KEY_COLUMN_USAGE WHERE TABLE_NAME = 'users' AND
+CONSTRAINT_NAME = 'fk_user_dept'");
+if ($check_fk->num_rows == 0) {
+    // Check if departments table exists
+    $check_table = $conn->query("SHOW TABLES LIKE 'departments'");
+    if ($check_table->num_rows > 0) {
+        $conn->query("ALTER TABLE users ADD CONSTRAINT fk_user_dept FOREIGN KEY (department_id) REFERENCES departments(id) ON
+DELETE SET NULL");
+    }
+}
+
+// --- HANDLE FORM SUBMISSIONS ---
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    if (isset($_POST['action'])) {
+        // ADD USER
+        if ($_POST['action'] === 'add') {
+            $email = trim($_POST['email']);
+            $name = trim($_POST['full_name']);
+            $emp_code = trim($_POST['employee_code']);
+            $job = trim($_POST['job_title']);
+            $level = $_POST['level'];
+            $dept_id = !empty($_POST['department_id']) ? intval($_POST['department_id']) : NULL;
+            $status = $_POST['status'];
+            $join_date = !empty($_POST['join_date']) ? $_POST['join_date'] : NULL;
+            $can_view_invoice = isset($_POST['can_view_invoice']) ? 1 : 0;
+            $is_am_bd = isset($_POST['is_am_bd']) ? 1 : 0;
+            $team_ids = isset($_POST['team_ids']) ? $_POST['team_ids'] : [];
+            $username = trim($_POST['username']);
+            // Auto-generate username from email if empty
+            if (empty($username) && !empty($email)) {
+                $parts = explode('@', $email);
+                $username = $parts[0];
+            }
+
+            // Default password for new user: '123456' (Should be changed later)
+            $password = password_hash('123456', PASSWORD_DEFAULT);
+
+            if (!empty($email) && !empty($name) && !empty($username)) {
+                try {
+                    $stmt = $conn->prepare("INSERT INTO users (username, email, full_name, password, employee_code, job_title, level,
+department_id,
+status, join_date, can_view_invoice, is_am_bd) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+                    $stmt->bind_param(
+                        "sssssssissii",
+                        $username,
+                        $email,
+                        $name,
+                        $password,
+                        $emp_code,
+                        $job,
+                        $level,
+                        $dept_id,
+                        $status,
+                        $join_date,
+                        $can_view_invoice,
+                        $is_am_bd
+                    );
+                    $stmt->execute();
+                    $new_id = $conn->insert_id;
+
+                    // Handle teams
+                    if ($is_am_bd && !empty($team_ids)) {
+                        foreach ($team_ids as $tid) {
+                            $ts = $conn->prepare("INSERT INTO user_sale_teams (user_id, team_id) VALUES (?, ?)");
+                            $ts->bind_param("ii", $new_id, $tid);
+                            $ts->execute();
+                        }
+                    }
+
+                    $success_message = "Member added successfully!";
+                } catch (Exception $e) {
+                    if ($conn->errno == 1062) { // Duplicate entry
+                        $error_message = "Username, Email or Employee Code already exists.";
+                    } else {
+                        $error_message = "Error: " . $e->getMessage();
+                    }
+                }
+            } else {
+                $error_message = "Username, Name and Email are required.";
+            }
+        }
+        // EDIT USER
+        elseif ($_POST['action'] === 'edit') {
+            $id = intval($_POST['id']);
+            $email = trim($_POST['email']);
+            $name = trim($_POST['full_name']);
+            $emp_code = trim($_POST['employee_code']);
+            $job = trim($_POST['job_title']);
+            $level = $_POST['level'];
+            $dept_id = !empty($_POST['department_id']) ? intval($_POST['department_id']) : NULL;
+            $status = $_POST['status'];
+            $join_date = !empty($_POST['join_date']) ? $_POST['join_date'] : NULL;
+            $can_view_invoice = isset($_POST['can_view_invoice']) ? 1 : 0;
+            $is_am_bd = isset($_POST['is_am_bd']) ? 1 : 0;
+            $team_ids = isset($_POST['team_ids']) ? $_POST['team_ids'] : [];
+
+            $username = trim($_POST['username']);
+            if (empty($username) && !empty($email)) {
+                $parts = explode('@', $email);
+                $username = $parts[0];
+            }
+
+            if ($id > 0 && !empty($email)) {
+                try {
+                    $sql = "UPDATE users SET username=?, email=?, full_name=?, employee_code=?, job_title=?, level=?, department_id=?, status=?, join_date=?, can_view_invoice=?, is_am_bd=? WHERE id=?";
+                    $stmt = $conn->prepare($sql);
+                    $stmt->bind_param("ssssssissiii", $username, $email, $name, $emp_code, $job, $level, $dept_id, $status, $join_date, $can_view_invoice, $is_am_bd, $id);
+                    $stmt->execute();
+
+                    // Update Teams
+                    $conn->query("DELETE FROM user_sale_teams WHERE user_id = $id");
+                    if ($is_am_bd && !empty($team_ids)) {
+                        foreach ($team_ids as $tid) {
+                            $ts = $conn->prepare("INSERT INTO user_sale_teams (user_id, team_id) VALUES (?, ?)");
+                            $ts->bind_param("ii", $id, $tid);
+                            $ts->execute();
+                        }
+                    }
+
+                    $success_message = "Member updated!";
+                } catch (Exception $e) {
+                    if ($conn->errno == 1062) {
+                        $error_message = "Email or Employee Code already exists.";
+                    } else {
+                        $error_message = "Error: " . $e->getMessage();
+                    }
+                }
+            }
+        }
+        // SET PASSWORD
+        elseif ($_POST['action'] === 'set_password') {
+            $id = intval($_POST['id']);
+            $new_pass = trim($_POST['new_password']);
+            $should_send_email = isset($_POST['send_email']) ? 1 : 0;
+
+            if ($id > 0 && !empty($new_pass)) {
+                try {
+                    $hashed_pass = password_hash($new_pass, PASSWORD_DEFAULT);
+                    $stmt = $conn->prepare("UPDATE users SET password = ? WHERE id = ?");
+                    $stmt->bind_param("si", $hashed_pass, $id);
+                    if ($stmt->execute()) {
+                        $success_message = "Password updated successfully.";
+
+                        if ($should_send_email) {
+                            // Fetch user info for email
+                            $u_stmt = $conn->prepare("SELECT email, full_name FROM users WHERE id = ?");
+                            $u_stmt->bind_param("i", $id);
+                            $u_stmt->execute();
+                            $user_to_mail = $u_stmt->get_result()->fetch_assoc();
+
+                            if ($user_to_mail) {
+                                $mail = new PHPMailer(true);
+                                // FETCH SMTP CONFIG
+                                $res = $conn->query("SELECT setting_key, setting_value FROM system_settings WHERE setting_key LIKE 'smtp_%'");
+                                $settings = [];
+                                if ($res) {
+                                    while ($r = $res->fetch_assoc())
+                                        $settings[$r['setting_key']] = $r['setting_value'];
+                                }
+
+                                if (!empty($settings['smtp_host'])) {
+                                    $mail->isSMTP();
+                                    $mail->Host = $settings['smtp_host'];
+                                    $mail->SMTPAuth = true;
+                                    $mail->Username = $settings['smtp_user'];
+                                    $mail->Password = $settings['smtp_pass'];
+                                    $mail->SMTPSecure = ($settings['smtp_encryption'] == 'ssl') ? PHPMailer::ENCRYPTION_SMTPS : (($settings['smtp_encryption'] == 'tls') ? PHPMailer::ENCRYPTION_STARTTLS : '');
+                                    $mail->Port = $settings['smtp_port'];
+                                    $mail->CharSet = 'UTF-8';
+
+                                    $from_email = !empty($settings['smtp_from_email']) ? $settings['smtp_from_email'] : 'no-reply@system.com';
+                                    $from_name = !empty($settings['smtp_from_name']) ? $settings['smtp_from_name'] : 'System Admin';
+
+                                    $mail->setFrom($from_email, $from_name);
+                                    $mail->addAddress($user_to_mail['email'], $user_to_mail['full_name']);
+
+                                    $mail->isHTML(true);
+                                    $mail->Subject = 'Your Account Password has been updated';
+                                    $mail->Body = "
+                                        <h2>Password Update Notification</h2>
+                                        <p>Hello <b>" . htmlspecialchars($user_to_mail['full_name']) . "</b>,</p>
+                                        <p>Your password has been updated by the administrator.</p>
+                                        <p>New Password: <strong style='font-size:16px; background:#eee; padding:5px 10px; border-radius:4px;'>$new_pass</strong></p>
+                                        <p>Please change your password immediately after logging in.</p>
+                                        <br>
+                                        <p>Regards,<br>$from_name</p>
+                                    ";
+                                    $mail->send();
+                                    $success_message .= " (Email sent successfully)";
+                                } else {
+                                    $error_message = "SMTP settings not configured. Email could not be sent.";
+                                }
+                            }
+                        }
+                    }
+                } catch (Exception $e) {
+                    $error_message = "Error: " . $e->getMessage();
+                }
+            }
+        }
+        // DELETE USER
+    }
+}
+
+// --- FETCH DATA ---
+$users = [];
+$sql = "SELECT u.*, d.name as department_name, 
+        (SELECT GROUP_CONCAT(st.name) FROM user_sale_teams ust JOIN sale_teams st ON ust.team_id = st.id WHERE ust.user_id = u.id) as team_names,
+        (SELECT GROUP_CONCAT(team_id) FROM user_sale_teams WHERE user_id = u.id) as team_ids
+FROM users u
+LEFT JOIN departments d ON u.department_id = d.id
+ORDER BY u.id DESC";
+$result = $conn->query($sql);
+if ($result) {
+    while ($row = $result->fetch_assoc()) {
+        $users[] = $row;
+    }
+}
+
+// Levels Constant
+$levels = ['Intern', 'Fresher', 'Junior', 'Middle', 'Senior', 'Lead', 'Principal', 'Manager', 'Director', 'CTO'];
+
+// Fetch Sale Teams for Dropdown
+$sale_teams = [];
+$st_res = $conn->query("SELECT id, name FROM sale_teams ORDER BY order_num ASC, name ASC");
+if ($st_res) {
+    while ($r = $st_res->fetch_assoc()) {
+        $sale_teams[] = $r;
+    }
+}
+
+// Fetch Departments for Dropdown
+$depts = [];
+$d_res = $conn->query("SELECT id, name FROM departments ORDER BY name ASC");
+if ($d_res) {
+    while ($r = $d_res->fetch_assoc()) {
+        $depts[] = $r;
+    }
+}
+?>
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>User Management - Settings</title>
+    <link rel="stylesheet" href="/assets/css/dashboard.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Roboto:wght@400;500&display=swap"
+        rel="stylesheet">
+    <style>
+        /* Shared Styles from Departments Module + Custom */
+        .content-wrapper {
+            padding: 1rem;
+            height: calc(100vh - 80px);
+            display: flex;
+            flex-direction: column;
+        }
+
+        .sheet-toolbar {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.5rem 1rem;
+            background: #f8f9fa;
+            border: 1px solid #dadce0;
+            border-bottom: none;
+            border-top-left-radius: 8px;
+            border-top-right-radius: 8px;
+        }
+
+        .btn-toolbar {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            padding: 6px 12px;
+            background: white;
+            border: 1px solid #dadce0;
+            border-radius: 4px;
+            color: #3c4043;
+            font-size: 13px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .btn-toolbar:hover {
+            background: #f1f3f4;
+            color: #202124;
+        }
+
+        .btn-primary-toolbar {
+            background: #1a73e8;
+            color: white;
+            border-color: #1a73e8;
+        }
+
+        .sheet-container {
+            flex: 1;
+            overflow: auto;
+            background: white;
+            border: 1px solid #dadce0;
+            position: relative;
+        }
+
+        .sheet-table {
+            border-collapse: collapse;
+            width: 100%;
+            font-family: 'Roboto', arial, sans-serif;
+            font-size: 13px;
+            color: #202124;
+            min-width: 1200px;
+        }
+
+        .sheet-table th,
+        .sheet-table td {
+            border: 1px solid #e0e0e0;
+            padding: 6px 12px;
+            height: 40px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            vertical-align: middle;
+        }
+
+        .sheet-table th {
+            background-color: #f8f9fa;
+            font-weight: 600;
+            color: #3c4043;
+            text-align: left;
+            position: sticky;
+            top: 0;
+            z-index: 10;
+            border-bottom: 2px solid #dadce0;
+        }
+
+        .sheet-table tr:hover td {
+            background-color: #e8f0fe !important;
+        }
+
+        /* Badges */
+        .badge {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 11px;
+            font-weight: 500;
+        }
+
+        .badge-dept {
+            background: #e8f0fe;
+            color: #1967d2;
+            border: 1px solid #d2e3fc;
+            border-radius: 12px;
+        }
+
+        .badge-level-intern {
+            background: #f1f3f4;
+            color: #5f6368;
+        }
+
+        .badge-level-junior {
+            background: #e6f4ea;
+            color: #137333;
+        }
+
+        .badge-level-middle {
+            background: #e8f0fe;
+            color: #1967d2;
+        }
+
+        .badge-level-senior {
+            background: #fce8e6;
+            color: #c5221f;
+        }
+
+        .badge-level-lead {
+            background: #f3e8fd;
+            color: #9334e6;
+        }
+
+        .badge-status-active {
+            background: #e6f4ea;
+            color: #1e8e3e;
+            border: 1px solid #ceead6;
+        }
+
+        .badge-status-inactive {
+            background: #fce8e6;
+            color: #c5221f;
+            border: 1px solid #fad2cf;
+        }
+
+        .member-info {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .badge-team {
+            background: #e8f0fe;
+            color: #1967d2;
+            border: 1px solid #d2e3fc;
+            font-size: 11px;
+            padding: 2px 8px;
+            margin: 2px;
+            display: inline-block;
+        }
+
+        .member-avatar {
+            width: 28px;
+            height: 28px;
+            border-radius: 50%;
+            object-fit: cover;
+            background: #eee;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 12px;
+            font-weight: bold;
+            color: #5f6368;
+        }
+
+        /* Modal */
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 2000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.5);
+            align-items: center;
+            justify-content: center;
+            backdrop-filter: blur(2px);
+        }
+
+        .modal.show {
+            display: flex;
+        }
+
+        .modal-content {
+            background-color: #fff;
+            padding: 24px;
+            border-radius: 12px;
+            width: 600px;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
+            max-height: 90vh;
+            overflow-y: auto;
+            position: relative;
+            animation: modalSlideIn 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+
+        @keyframes modalSlideIn {
+            from {
+                opacity: 0;
+                transform: translateY(10px) scale(0.98);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0) scale(1);
+            }
+        }
+
+        .form-row {
+            display: flex;
+            gap: 16px;
+            margin-bottom: 16px;
+        }
+
+        .form-group {
+            flex: 1;
+            margin-bottom: 0;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 6px;
+            font-weight: 500;
+            font-size: 13px;
+            color: #3c4043;
+        }
+
+        .form-group input,
+        .form-group select {
+            width: 100%;
+            padding: 8px 10px;
+            border: 1px solid #dadce0;
+            border-radius: 5px;
+            font-size: 13px;
+            transition: border-color 0.2s, box-shadow 0.2s;
+        }
+
+        .form-group input:focus,
+        .form-group select:focus {
+            outline: none;
+            border-color: #1a73e8;
+            box-shadow: 0 0 0 2px rgba(26, 115, 232, 0.2);
+        }
+
+        .modal-section-title {
+            font-size: 13px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            color: #5f6368;
+            margin: 24px 0 12px 0;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .modal-section-title::after {
+            content: "";
+            flex: 1;
+            height: 1px;
+            background: #eee;
+        }
+
+        .permissions-box {
+            background: #f8f9fa;
+            border: 1px solid #dadce0;
+            border-radius: 8px;
+            padding: 16px;
+            margin-top: 8px;
+        }
+
+        .toggle-group {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .toggle-item {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 4px 0;
+        }
+
+        .toggle-item label {
+            margin-bottom: 0;
+            font-weight: 500;
+            cursor: pointer;
+        }
+
+        .toggle-item input[type="checkbox"] {
+            width: 18px;
+            height: 18px;
+            cursor: pointer;
+        }
+
+        .team-select-container {
+            margin-top: 12px;
+            padding-top: 12px;
+            border-top: 1px dashed #dadce0;
+        }
+
+        .modal-footer {
+            margin-top: 24px;
+            display: flex;
+            justify-content: flex-end;
+            gap: 8px;
+        }
+
+        .btn-save {
+            padding: 10px 24px;
+            background: #1a73e8;
+            border: none;
+            border-radius: 6px;
+            color: white;
+            cursor: pointer;
+            font-weight: 600;
+            font-size: 14px;
+            transition: all 0.2s;
+            box-shadow: 0 4px 10px rgba(26, 115, 232, 0.2);
+        }
+
+        .btn-save:hover {
+            background: #1557b0;
+            transform: translateY(-1px);
+            box-shadow: 0 6px 15px rgba(26, 115, 232, 0.3);
+        }
+
+        .btn-cancel {
+            padding: 10px 24px;
+            background: white;
+            border: 1px solid #dadce0;
+            border-radius: 6px;
+            color: #5f6368;
+            cursor: pointer;
+            font-weight: 500;
+            font-size: 14px;
+            transition: all 0.2s;
+        }
+
+        .btn-cancel:hover {
+            background: #f8f9fa;
+            color: #202124;
+            border-color: #bdc1c6;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="dashboard-container">
+        <?php include __DIR__ . '/../../includes/sidebar.php'; ?>
+        <main class="main-content">
+            <?php
+            $page_title = 'User Management';
+            include __DIR__ . '/../../../modules/includes/topbar.php';
+            ?>
+
+            <div class="content-wrapper">
+                <?php if ($success_message): ?>
+                    <div
+                        style="background: #e6f4ea; color: #1e8e3e; padding: 10px; border-radius: 4px; margin-bottom: 10px; font-size: 13px; border: 1px solid #ceead6;">
+                        <?php echo htmlspecialchars($success_message); ?>
+                    </div>
+                <?php endif; ?>
+                <?php if ($error_message): ?>
+                    <div
+                        style="background: #fce8e6; color: #c5221f; padding: 10px; border-radius: 4px; margin-bottom: 10px; font-size: 13px; border: 1px solid #fad2cf;">
+                        <?php echo htmlspecialchars($error_message); ?>
+                    </div>
+                <?php endif; ?>
+
+                <div class="sheet-toolbar">
+                    <button class="btn-toolbar btn-primary-toolbar" onclick="openAddModal()">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="2">
+                            <line x1="12" y1="5" x2="12" y2="19"></line>
+                            <line x1="5" y1="12" x2="19" y2="12"></line>
+                        </svg>
+                        Add User
+                    </button>
+                    <div style="flex:1"></div>
+                    <input type="text" id="searchInput" placeholder="Search member, email, position..."
+                        style="padding: 6px 10px; border: 1px solid #dadce0; border-radius: 4px; font-size: 13px; width: 250px;"
+                        onkeyup="filterTable()">
+                </div>
+
+                <div class="sheet-container">
+                    <table class="sheet-table" id="userTable">
+                        <thead>
+                            <tr>
+                                <th style="width: 40px;">ID</th>
+                                <th style="width: 80px;">Code</th>
+                                <th style="width: 25%;">User Profile</th>
+                                <th style="width: 15%;">Position</th>
+                                <th style="width: 10%;">Level</th>
+                                <th style="width: 15%;">Department</th>
+                                <th style="width: 15%;">Sale Teams</th>
+                                <th style="width: 10%;">Status</th>
+                                <th style="width: 10%;">Joined</th>
+                                <th style="text-align:center;">Action</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <?php foreach ($users as $u):
+                                $level_class = 'badge-level-junior';
+                                if (strpos(strtolower($u['level']), 'senior') !== false)
+                                    $level_class = 'badge-level-senior';
+                                elseif (strpos(strtolower($u['level']), 'lead') !== false)
+                                    $level_class = 'badge-level-lead';
+                                elseif (strpos(strtolower($u['level']), 'middle') !== false)
+                                    $level_class = 'badge-level-middle';
+                                elseif (strpos(strtolower($u['level']), 'intern') !== false)
+                                    $level_class = 'badge-level-intern';
+                                ?>
+                                <tr>
+                                    <td>
+                                        <?php echo $u['id']; ?>
+                                    </td>
+                                    <td style="font-family: monospace; color: #5f6368;">
+                                        <?php echo htmlspecialchars($u['employee_code'] ?? '-'); ?>
+                                    </td>
+                                    <td>
+                                        <div class="member-info">
+                                            <?php if ($u['avatar']): ?>
+                                                <img src="<?php echo htmlspecialchars($u['avatar']); ?>" class="member-avatar">
+                                            <?php else: ?>
+                                                <div class="member-avatar">
+                                                    <?php echo strtoupper(substr($u['full_name'], 0, 1)); ?>
+                                                </div>
+                                            <?php endif; ?>
+                                            <div>
+                                                <div style="font-weight: 500; color: #202124;">
+                                                    <?php echo htmlspecialchars($u['full_name']); ?>
+                                                </div>
+                                                <div style="font-size: 11px; color: #5f6368;">
+                                                    <?php echo htmlspecialchars($u['email']); ?>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </td>
+                                    <td>
+                                        <?php echo htmlspecialchars($u['job_title'] ?? 'N/A'); ?>
+                                    </td>
+                                    <td><span class="badge <?php echo $level_class; ?>">
+                                            <?php echo htmlspecialchars($u['level']); ?>
+                                        </span></td>
+                                    <td>
+                                        <?php if ($u['department_name']): ?>
+                                            <span class="badge badge-dept">
+                                                <?php echo htmlspecialchars($u['department_name']); ?>
+                                            </span>
+                                        <?php endif; ?>
+                                    </td>
+                                    <td>
+                                        <?php if ($u['team_names']): ?>
+                                            <?php
+                                            $teams = explode(',', $u['team_names']);
+                                            foreach ($teams as $team): ?>
+                                                <span class="badge badge-team"><?php echo htmlspecialchars(trim($team)); ?></span>
+                                            <?php endforeach; ?>
+                                        <?php else: ?>
+                                            <span style="color: #9aa0a6; font-size: 11px;">-</span>
+                                        <?php endif; ?>
+                                    </td>
+                                    <td>
+                                        <span
+                                            class="badge <?php echo $u['status'] == 'active' ? 'badge-status-active' : 'badge-status-inactive'; ?>">
+                                            <?php echo ucfirst($u['status']); ?>
+                                        </span>
+                                    </td>
+                                    <td>
+                                        <?php echo $u['join_date'] ? date('M d, Y', strtotime($u['join_date'])) : '-'; ?>
+                                    </td>
+                                    <td style="text-align:center;">
+                                        <a href="#" onclick='openEditModal(<?php echo json_encode($u); ?>); return false;'
+                                            style="display:inline-flex; border:none; background:none; cursor:pointer; color:#1a73e8; text-decoration:none;"
+                                            title="Edit">
+                                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
+                                                stroke="currentColor" stroke-width="2">
+                                                <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+                                                <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+                                            </svg>
+                                        </a>
+                                        <a href="#"
+                                            onclick='openPasswordModal(<?php echo $u['id']; ?>, "<?php echo addslashes($u['full_name']); ?>"); return false;'
+                                            style="display:inline-flex; border:none; background:none; cursor:pointer; color:#f4b400; text-decoration:none; margin-left:8px;"
+                                            title="Set Password">
+                                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
+                                                stroke="currentColor" stroke-width="2">
+                                                <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
+                                                <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+                                            </svg>
+                                        </a>
+                                        <?php if (!empty($u['can_view_invoice'])): ?>
+                                            <span title="Can View Invoices" style="margin-left: 5px; color: #1e8e3e;">
+                                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
+                                                    stroke="currentColor" stroke-width="2">
+                                                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                                                    <polyline points="14 2 14 8 20 8"></polyline>
+                                                    <line x1="12" y1="18" x2="12" y2="12"></line>
+                                                    <line x1="9" y1="15" x2="15" y2="15"></line>
+                                                </svg>
+                                            </span>
+                                        <?php endif; ?>
+                                    </td>
+                                </tr>
+                            <?php endforeach; ?>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- Modal -->
+    <div id="userModal" class="modal">
+        <div class="modal-content">
+            <h2 id="modalTitle" style="margin-top:0; margin-bottom: 20px;">Add User</h2>
+            <form method="POST" id="userForm">
+                <input type="hidden" name="action" id="formAction" value="add">
+                <input type="hidden" name="id" id="userId" value="">
+
+                <div class="modal-section-title">General Information</div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Full Name <span style="color:red">*</span></label>
+                        <input type="text" name="full_name" id="full_name" required placeholder="Enter full name">
+                    </div>
+                </div>
+
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Username <span style="color:red">*</span></label>
+                        <input type="text" name="username" id="username" required placeholder="admin">
+                    </div>
+                    <div class="form-group">
+                        <label>Email <span style="color:red">*</span></label>
+                        <input type="email" name="email" id="email" required placeholder="user@example.com">
+                    </div>
+                </div>
+
+                <div class="modal-section-title">Job Details</div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Employee Code</label>
+                        <input type="text" name="employee_code" id="employee_code" placeholder="E.g. AHT-001">
+                    </div>
+                    <div class="form-group">
+                        <label>Status</label>
+                        <select name="status" id="status">
+                            <option value="active">Active</option>
+                            <option value="inactive">Inactive</option>
+                            <option value="resigned">Resigned</option>
+                            <option value="on_leave">On Leave</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Job Title (Position)</label>
+                        <input type="text" name="job_title" id="job_title" placeholder="e.g. Backend Developer">
+                    </div>
+                    <div class="form-group">
+                        <label>Level</label>
+                        <select name="level" id="level">
+                            <?php foreach ($levels as $l): ?>
+                                <option value="<?php echo $l; ?>">
+                                    <?php echo $l; ?>
+                                </option>
+                            <?php endforeach; ?>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Department</label>
+                        <select name="department_id" id="department_id">
+                            <option value="">-- None --</option>
+                            <?php foreach ($depts as $d): ?>
+                                <option value="<?php echo $d['id']; ?>">
+                                    <?php echo htmlspecialchars($d['name']); ?>
+                                </option>
+                            <?php endforeach; ?>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Join Date</label>
+                        <input type="date" name="join_date" id="join_date">
+                    </div>
+                </div>
+
+                <div class="modal-section-title">Permissions & Teams</div>
+                <div class="permissions-box">
+                    <div class="toggle-group">
+                        <div class="toggle-item">
+                            <label for="can_view_invoice" style="font-size: 13px; color: #3c4043;">Allow View
+                                Invoices</label>
+                            <input type="checkbox" name="can_view_invoice" id="can_view_invoice">
+                        </div>
+                        <div class="toggle-item">
+                            <label for="is_am_bd" style="font-size: 13px; color: #3c4043;">Is AM/BD Member</label>
+                            <input type="checkbox" name="is_am_bd" id="is_am_bd" onchange="toggleTeamSelect()">
+                        </div>
+                    </div>
+
+                    <div id="team_select_row" class="team-select-container" style="display:none;">
+                        <div class="form-group">
+                            <label style="margin-bottom: 8px; color: #5f6368; font-weight: 600;">Assign Sale
+                                Teams</label>
+                            <select name="team_ids[]" id="team_ids" multiple style="height: 120px; border-radius: 6px;">
+                                <?php foreach ($sale_teams as $st): ?>
+                                    <option value="<?php echo $st['id']; ?>"><?php echo htmlspecialchars($st['name']); ?>
+                                    </option>
+                                <?php endforeach; ?>
+                            </select>
+                            <small style="color: #70757a; margin-top: 6px; display: block;">Hold Cmd/Ctrl to select
+                                multiple.</small>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="modal-footer">
+                    <button type="button" class="btn-cancel" onclick="closeModal()">Cancel</button>
+                    <button type="submit" class="btn-save">Save User</button>
+                </div>
+            </form>
+        </div>
+    </div>
+    <!-- Password Modal -->
+    <div id="passwordModal" class="modal">
+        <div class="modal-content" style="width: 400px;">
+            <h2 style="margin-top:0; margin-bottom: 20px;">Set Password</h2>
+            <p id="passwordTargetName" style="font-size: 14px; color: #5f6368; margin-bottom: 20px;"></p>
+            <form method="POST">
+                <input type="hidden" name="action" value="set_password">
+                <input type="hidden" name="id" id="passUserId">
+
+                <div class="form-group">
+                    <label>New Password</label>
+                    <div style="display: flex; gap: 8px;">
+                        <input type="text" name="new_password" id="newPasswordInput" required
+                            placeholder="Strong password">
+                        <button type="button" class="btn-toolbar" onclick="generateStrongPassword()"
+                            style="flex-shrink: 0; padding: 0 12px; height: 38px;">
+                            Auto
+                        </button>
+                    </div>
+                </div>
+
+                <div class="form-row" style="margin-top: 15px;">
+                    <div class="form-group" style="display: flex; align-items: center; gap: 10px;">
+                        <input type="checkbox" name="send_email" id="sendEmailCheckbox" checked style="width: auto;">
+                        <label for="sendEmailCheckbox" style="margin-bottom: 0; cursor: pointer;">Send email to
+                            user</label>
+                    </div>
+                </div>
+
+                <div class="modal-footer" style="margin-top: 30px;">
+                    <button type="button" class="btn-cancel" onclick="closePasswordModal()">Cancel</button>
+                    <button type="submit" class="btn-save">Update Password</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        const modal = document.getElementById('userModal');
+        const modalTitle = document.getElementById('modalTitle');
+        const formAction = document.getElementById('formAction');
+        const userId = document.getElementById('userId');
+
+        // Fields
+        const fullName = document.getElementById('full_name');
+        const username = document.getElementById('username');
+        const email = document.getElementById('email');
+        const empCode = document.getElementById('employee_code');
+        const jobTitle = document.getElementById('job_title');
+        const level = document.getElementById('level');
+        const deptId = document.getElementById('department_id');
+        const status = document.getElementById('status');
+        const joinDate = document.getElementById('join_date');
+        const canViewInvoice = document.getElementById('can_view_invoice');
+
+        function openAddModal() {
+            modalTitle.textContent = 'Add User';
+            formAction.value = 'add';
+            userId.value = '';
+            // Reset form
+            fullName.value = '';
+            username.value = '';
+            email.value = '';
+            empCode.value = '';
+            jobTitle.value = '';
+            level.value = 'Junior';
+            deptId.value = '';
+            status.value = 'active';
+            joinDate.value = '';
+            canViewInvoice.checked = false;
+            document.getElementById('is_am_bd').checked = false;
+            toggleTeamSelect();
+
+            modal.classList.add('show');
+        }
+
+        function openEditModal(user) {
+            modalTitle.textContent = 'Edit User';
+            formAction.value = 'edit';
+            userId.value = user.id;
+
+            fullName.value = user.full_name;
+            username.value = user.username || user.email.split('@')[0]; // Fallback
+            email.value = user.email;
+            empCode.value = user.employee_code || '';
+            jobTitle.value = user.job_title || '';
+            level.value = user.level || 'Junior';
+            deptId.value = user.department_id || '';
+            status.value = user.status || 'active';
+            joinDate.value = user.join_date || '';
+            canViewInvoice.checked = user.can_view_invoice == 1;
+            document.getElementById('is_am_bd').checked = user.is_am_bd == 1;
+
+            // Set teams
+            const teamIdsSelect = document.getElementById('team_ids');
+            for (let option of teamIdsSelect.options) {
+                option.selected = false;
+            }
+            if (user.team_ids) {
+                const ids = user.team_ids.split(',');
+                for (let id of ids) {
+                    const opt = teamIdsSelect.querySelector(`option[value="${id}"]`);
+                    if (opt) opt.selected = true;
+                }
+            }
+            toggleTeamSelect();
+
+            modal.classList.add('show');
+        }
+
+        function closeModal() { modal.classList.remove('show'); }
+        window.onclick = function (event) { if (event.target == modal) closeModal(); }
+
+        function toggleTeamSelect() {
+            const isAmBd = document.getElementById('is_am_bd').checked;
+            document.getElementById('team_select_row').style.display = isAmBd ? 'block' : 'none';
+        }
+
+        function filterTable() {
+            var input, filter, table, tr, td, i;
+            input = document.getElementById("searchInput");
+            filter = input.value.toUpperCase();
+            table = document.getElementById("userTable");
+            tr = table.getElementsByTagName("tr");
+            for (i = 1; i < tr.length; i++) {
+                // Search in Name/Email (col 2), Code (col 1), Position (col 3)
+                var tdCode = tr[i].getElementsByTagName("td")[1];
+                var tdProfile = tr[i].getElementsByTagName("td")[2];
+                var tdPos = tr[i].getElementsByTagName("td")[3];
+
+                if (tdCode || tdProfile || tdPos) {
+                    var txtCode = tdCode.textContent || tdCode.innerText;
+                    var txtProfile = tdProfile.textContent || tdProfile.innerText;
+                    var txtPos = tdPos.textContent || tdPos.innerText;
+
+                    if (txtCode.toUpperCase().indexOf(filter) > -1 ||
+                        txtProfile.toUpperCase().indexOf(filter) > -1 ||
+                        txtPos.toUpperCase().indexOf(filter) > -1) {
+                        tr[i].style.display = "";
+                    } else {
+                        tr[i].style.display = "none";
+                    }
+                }
+            }
+        }
+
+        const passModal = document.getElementById('passwordModal');
+        const passUserId = document.getElementById('passUserId');
+        const passTargetName = document.getElementById('passwordTargetName');
+        const newPasswordInput = document.getElementById('newPasswordInput');
+
+        function openPasswordModal(id, name) {
+            passUserId.value = id;
+            passTargetName.textContent = "Setting password for: " + name;
+            newPasswordInput.value = "";
+            passModal.classList.add('show');
+            generateStrongPassword(); // Auto generate initially
+        }
+
+        function closePasswordModal() { passModal.classList.remove('show'); }
+
+        function generateStrongPassword() {
+            const chars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*()_+";
+            let pass = "";
+            for (let i = 0; i < 12; i++) {
+                pass += chars.charAt(Math.floor(Math.random() * chars.length));
+            }
+            newPasswordInput.value = pass;
+        }
+    </script>
+</body>
+
+</html>

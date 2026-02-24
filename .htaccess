@@ -1,0 +1,68 @@
+# Enable Rewrite Engine
+RewriteEngine On
+RewriteBase /AHT%20KPI/
+
+# Prevent directory browsing
+Options -Indexes
+
+# Protect config directory
+RewriteRule ^config/ - [F,L]
+
+# Protect includes directory
+RewriteRule ^includes/ - [F,L]
+
+# Protect modules directory from direct access
+RewriteRule ^modules/ - [F,L]
+
+# ============================================
+# URL Rewriting Rules - Clean URLs
+# ============================================
+
+# Prevent redirect loop - allow direct access to index.php
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteCond %{REQUEST_FILENAME} !-d
+
+# Login page: /login -> modules/auth/login.php
+RewriteRule ^login/?$ modules/auth/login.php [L]
+
+# Logout: /logout -> modules/auth/logout.php
+RewriteRule ^logout/?$ modules/auth/logout.php [L]
+
+# Dashboard: /dashboard -> modules/dashboard/dashboard.php
+RewriteRule ^dashboard/?$ modules/dashboard/dashboard.php [L]
+
+# Profile: /profile -> modules/profile/index.php
+RewriteRule ^profile/?$ modules/profile/index.php [L]
+RewriteRule ^settings/?$ modules/settings/index.php [L]
+RewriteRule ^settings/departments/?$ modules/settings/departments/index.php [L]
+RewriteRule ^settings/core-members/?$ modules/settings/core_members/index.php [L]
+RewriteRule ^settings/teams/?$ modules/settings/teams/index.php [L]
+
+# Home/Index: / -> index.php (already handled by DirectoryIndex)
+DirectoryIndex index.php
+
+# ============================================
+# Security Headers
+# ============================================
+<IfModule mod_headers.c>
+    Header set X-Content-Type-Options "nosniff"
+    Header set X-Frame-Options "SAMEORIGIN"
+    Header set X-XSS-Protection "1; mode=block"
+</IfModule>
+
+# ============================================
+# PHP Settings
+# ============================================
+<IfModule mod_php.c>
+    php_value upload_max_filesize 10M
+    php_value post_max_size 10M
+    php_value max_execution_time 300
+    php_value max_input_time 300
+</IfModule>
+
+# ============================================
+# Error Pages (optional)
+# ============================================
+# ErrorDocument 404 /404.php
+# ErrorDocument 403 /403.php
+# ErrorDocument 500 /500.php
