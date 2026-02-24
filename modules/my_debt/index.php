@@ -1138,7 +1138,9 @@ function formatDate($date)
                         <div class="form-group">
                             <label>Company</label>
                             <select name="company" id="company">
-                                <option>AHT TECH</option>
+                                <option value="AHT TECH">AHT TECH</option>
+                                <option value="A1VN">A1VN</option>
+                                <option value="A1C MY">A1C MY</option>
                             </select>
                         </div>
                         <div class="form-group">
