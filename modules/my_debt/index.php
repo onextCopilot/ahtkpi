@@ -223,6 +223,21 @@ if ($res_am && $res_am->num_rows > 0) {
     $am_list = ['Emily', 'Ryan', 'Hyun'];
 }
 
+// Fetch Departments for Company / Sale Team Select
+$sale_teams = [];
+$res_dept = $conn->query("SELECT name FROM departments ORDER BY sort_order ASC, name ASC");
+if ($res_dept && $res_dept->num_rows > 0) {
+    while ($row_dept = $res_dept->fetch_assoc()) {
+        $n = trim($row_dept['name']);
+        if (!empty($n) && !in_array($n, $sale_teams)) {
+            $sale_teams[] = $n;
+        }
+    }
+} else {
+    // Fallback if none found
+    $sale_teams = ['AHT TECH', 'A1VN', 'A1C MY'];
+}
+
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -1152,11 +1167,13 @@ if ($res_am && $res_am->num_rows > 0) {
 
                     <div class="form-row">
                         <div class="form-group">
-                            <label>Company</label>
+                            <label>Sale Team / Company</label>
                             <select name="company" id="company">
-                                <option value="AHT TECH">AHT TECH</option>
-                                <option value="A1VN">A1VN</option>
-                                <option value="A1C MY">A1C MY</option>
+                                <?php foreach ($sale_teams as $team): ?>
+                                    <option value="<?php echo htmlspecialchars($team); ?>">
+                                        <?php echo htmlspecialchars($team); ?>
+                                    </option>
+                                <?php endforeach; ?>
                             </select>
                         </div>
                         <div class="form-group">
@@ -1313,7 +1330,23 @@ if ($res_am && $res_am->num_rows > 0) {
                 document.getElementById('btnDelete').style.display = "block";
 
                 // Populate fields
-                document.getElementById('company').value = data.company || 'AHT TECH';
+                // Handle Sale Team / Company Dropdown safely
+                const companySelect = document.getElementById('company');
+                const compVal = data.company || 'AHT TECH';
+                let compExists = false;
+                for (let i = 0; i < companySelect.options.length; i++) {
+                    if (companySelect.options[i].value === compVal) {
+                        compExists = true;
+                        break;
+                    }
+                }
+                if (!compExists && compVal) {
+                    const opt = document.createElement('option');
+                    opt.value = compVal;
+                    opt.text = compVal;
+                    companySelect.add(opt);
+                }
+                companySelect.value = compVal;
 
                 // Handle AM Dropdown safely
                 const amSelect = document.getElementById('am');
