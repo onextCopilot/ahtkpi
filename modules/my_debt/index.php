@@ -1,4 +1,5 @@
 <?php
+// trigger update
 require_once __DIR__ . '/../../config/config.php';
 require_once __DIR__ . '/../../libs/OdooAPI.php';
 
