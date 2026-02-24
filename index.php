@@ -1,22 +1,101 @@
 <?php
 /**
  * AHT KPI Management System
- * Entry Point
+ * Front Controller & Router
  * 
- * This file serves as the main entry point for the application.
- * It redirects users to the appropriate module based on their authentication status.
+ * Handles all requests when using standard web servers (Nginx/Apache)
+ * with a single entry point (e.g., try_files $uri $uri/ /index.php?$query_string;)
  */
 
-// Start session
-session_start();
+// Basic error reporting for debugging
+error_reporting(E_ALL);
+ini_set('display_errors', 0); // Keep disabled in production
 
-// Check if user is already logged in
-if (isset($_SESSION['user_id'])) {
-    // Redirect to dashboard
-    header("Location: dashboard");
-    exit();
-} else {
-    // Redirect to login page
-    header("Location: login");
-    exit();
+// Parse the current URI
+$request_uri = $_SERVER['REQUEST_URI'];
+$parsed_uri = parse_url($request_uri, PHP_URL_PATH);
+$uri = urldecode($parsed_uri);
+
+// Try to auto-detect base path if app is installed in a subdirectory
+$script_name = $_SERVER['SCRIPT_NAME']; // usually /index.php or /subdir/index.php
+$base_path = dirname($script_name);
+if ($base_path !== '/' && $base_path !== '\\' && strpos($uri, $base_path) === 0) {
+    $uri = substr($uri, strlen($base_path));
 }
+
+// Clean up URI
+$uri = rtrim($uri, '/');
+if ($uri === '' || $uri === false) {
+    $uri = '/';
+}
+
+// If root, redirect to login or dashboard based on session
+if ($uri === '/') {
+    session_start();
+    if (isset($_SESSION['user_id'])) {
+        header("Location: " . ($base_path === '/' || $base_path === '\\' ? '' : $base_path) . "/dashboard");
+        exit();
+    } else {
+        header("Location: " . ($base_path === '/' || $base_path === '\\' ? '' : $base_path) . "/login");
+        exit();
+    }
+}
+
+// Route mapping
+$routes = [
+    '/login' => 'modules/auth/login.php',
+    '/logout' => 'modules/auth/logout.php',
+    '/dashboard' => 'modules/dashboard/dashboard.php',
+    '/profile' => 'modules/profile/index.php',
+    '/settings' => 'modules/settings/index.php',
+    '/settings/users' => 'modules/settings/users/index.php',
+    '/settings/users/edit' => 'modules/settings/users/edit.php',
+    '/settings/departments' => 'modules/settings/departments/index.php',
+    '/settings/core_members' => 'modules/settings/core_members/index.php',
+    '/settings/smtp' => 'modules/settings/smtp/index.php',
+    '/settings/odoo' => 'modules/settings/odoo/index.php',
+    '/settings/jira' => 'modules/settings/jira/index.php',
+    '/settings/teams' => 'modules/settings/teams/index.php',
+    '/debt' => 'modules/debt/index.php',
+    '/my-debt' => 'modules/my_debt/index.php',
+    '/customers' => 'modules/customers/index.php',
+    '/invoices' => 'modules/invoices/index.php',
+    '/kpi' => 'modules/kpi/index.php',
+    '/api/kpi_tab_order' => 'api/kpi_tab_order.php',
+    '/api/kpi_monthly_save' => 'api/kpi_monthly_save.php',
+    '/api/kpi_quarterly_save' => 'api/kpi_quarterly_save.php',
+];
+
+// Check if route exists in our mapping
+if (array_key_exists($uri, $routes)) {
+    $file = __DIR__ . '/' . $routes[$uri];
+    if (file_exists($file)) {
+        require $file;
+        exit();
+    }
+}
+
+// 404 - Not found
+http_response_code(404);
+echo "<!DOCTYPE html>
+<html>
+<head>
+    <title>404 - Page Not Found</title>
+    <style>
+        body { font-family: 'Inter', sans-serif; background: #0f172a; color: #f1f5f9; display: flex; align-items: center; justify-content: center; min-height: 100vh; margin: 0; }
+        .error-container { text-align: center; padding: 2rem; }
+        h1 { font-size: 4rem; margin: 0; color: #8b5cf6; }
+        p { font-size: 1.2rem; color: #94a3b8; }
+        a { color: #818cf8; text-decoration: none; }
+        a:hover { text-decoration: underline; }
+    </style>
+</head>
+<body>
+    <div class='error-container'>
+        <h1>404</h1>
+        <p>Page not found</p>
+        <p><a href='" . ($base_path === '/' || $base_path === '\\' ? '/' : $base_path . '/') . "'>Go to Home</a></p>
+    </div>
+</body>
+</html>";
+exit();
