@@ -19,6 +19,49 @@ $total_users_query = "SELECT COUNT(*) as total FROM users";
 $total_users_result = $conn->query($total_users_query);
 $total_users = $total_users_result->fetch_assoc()['total'];
 
+// Fetch Debt Data for Dashboard
+require_once __DIR__ . '/../../libs/OdooAPI.php';
+$odoo = new OdooAPI();
+$total_debts = 0;
+$total_paid_vnd = 0;
+$total_unpaid_vnd = 0;
+$teams_data = [];
+
+$res = $conn->query("SELECT d.amount, d.currency, d.payment_status, d.invoice_date, st.name as team_name FROM debts d LEFT JOIN sale_teams st ON d.sale_team_id = st.id");
+if ($res) {
+    while ($row = $res->fetch_assoc()) {
+        $total_debts++;
+        $curr = $row['currency'] ?: 'USD';
+        $t_name = $row['team_name'] ?: 'Undefined';
+        $p_status = $row['payment_status'] ?: '';
+
+        $date = !empty($row['invoice_date']) ? $row['invoice_date'] : date('Y-m-d');
+        $rate = $odoo->getRate($curr, $date);
+        $vnd_value = ($rate > 0) ? ((float) $row['amount'] / $rate) : (float) $row['amount'];
+
+        if (strcasecmp(trim($p_status), 'Paid') === 0) {
+            $total_paid_vnd += $vnd_value;
+            if (!isset($teams_data[$t_name]['paid']))
+                $teams_data[$t_name]['paid'] = 0;
+            $teams_data[$t_name]['paid'] += $vnd_value;
+        } else {
+            $total_unpaid_vnd += $vnd_value;
+            if (!isset($teams_data[$t_name]['unpaid']))
+                $teams_data[$t_name]['unpaid'] = 0;
+            $teams_data[$t_name]['unpaid'] += $vnd_value;
+        }
+    }
+}
+
+$chart_teams = [];
+$chart_paid = [];
+$chart_unpaid = [];
+foreach ($teams_data as $t => $d) {
+    $chart_teams[] = $t;
+    $chart_paid[] = $d['paid'] ?? 0;
+    $chart_unpaid[] = $d['unpaid'] ?? 0;
+}
+
 // Get recent users
 $recent_users_query = "SELECT id, username, full_name, email, role, created_at FROM users ORDER BY created_at DESC LIMIT 5";
 $recent_users_result = $conn->query($recent_users_query);
@@ -49,6 +92,7 @@ $recent_users_result = $conn->query($recent_users_query);
             ?>
 
             <div class="content-wrapper">
+                <script src="https://cdn.jsdelivr.net/npm/apexcharts"></script>
                 <!-- Stats Cards -->
                 <div class="stats-grid">
                     <div class="stat-card">
@@ -66,21 +110,6 @@ $recent_users_result = $conn->query($recent_users_query);
                             <p class="stat-number">
                                 <?php echo $total_users; ?>
                             </p>
-                            <span class="stat-change positive">+12% from last month</span>
-                        </div>
-                    </div>
-
-                    <div class="stat-card">
-                        <div class="stat-icon green">
-                            <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                                <path d="M22 12H18L15 21L9 3L6 12H2" stroke="currentColor" stroke-width="2"
-                                    stroke-linecap="round" stroke-linejoin="round" />
-                            </svg>
-                        </div>
-                        <div class="stat-content">
-                            <h3>Activity</h3>
-                            <p class="stat-number">1,234</p>
-                            <span class="stat-change positive">+8% from last week</span>
                         </div>
                     </div>
 
@@ -94,14 +123,13 @@ $recent_users_result = $conn->query($recent_users_query);
                             </svg>
                         </div>
                         <div class="stat-content">
-                            <h3>Projects</h3>
-                            <p class="stat-number">24</p>
-                            <span class="stat-change neutral">No change</span>
+                            <h3>Total Debts</h3>
+                            <p class="stat-number"><?php echo $total_debts; ?></p>
                         </div>
                     </div>
 
                     <div class="stat-card">
-                        <div class="stat-icon orange">
+                        <div class="stat-icon green">
                             <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                                 <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="2" />
                                 <path d="M12 6V12L16 14" stroke="currentColor" stroke-width="2"
@@ -109,12 +137,71 @@ $recent_users_result = $conn->query($recent_users_query);
                             </svg>
                         </div>
                         <div class="stat-content">
-                            <h3>Uptime</h3>
-                            <p class="stat-number">99.9%</p>
-                            <span class="stat-change positive">+0.2% from last month</span>
+                            <h3>Total Paid (VND)</h3>
+                            <p class="stat-number" style="font-size: 1.2rem; color: #16a34a;">
+                                <?php echo number_format($total_paid_vnd, 0, ',', '.'); ?> ₫</p>
+                        </div>
+                    </div>
+
+                    <div class="stat-card">
+                        <div class="stat-icon orange">
+                            <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="2" />
+                                <path d="M12 8V12L15 15" stroke="currentColor" stroke-width="2"
+                                    stroke-linecap="round" />
+                            </svg>
+                        </div>
+                        <div class="stat-content">
+                            <h3>Pending (VND)</h3>
+                            <p class="stat-number" style="font-size: 1.2rem; color: #dc2626;">
+                                <?php echo number_format($total_unpaid_vnd, 0, ',', '.'); ?> ₫</p>
                         </div>
                     </div>
                 </div>
+
+                <div style="display: grid; grid-template-columns: 1fr 2fr; gap: 24px; margin-bottom: 24px;">
+                    <div
+                        style="background: white; padding: 20px; border-radius: 12px; border: 1px solid #e2e8f0; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);">
+                        <h3
+                            style="margin-top:0; color: #0f172a; font-size: 1.1rem; border-bottom: 1px solid #e2e8f0; padding-bottom: 10px;">
+                            Global Debt Overview</h3>
+                        <div id="chart-global-pie"></div>
+                    </div>
+                    <div
+                        style="background: white; padding: 20px; border-radius: 12px; border: 1px solid #e2e8f0; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);">
+                        <h3
+                            style="margin-top:0; color: #0f172a; font-size: 1.1rem; border-bottom: 1px solid #e2e8f0; padding-bottom: 10px;">
+                            Debt by Sale Teams</h3>
+                        <div id="chart-teams-bar"></div>
+                    </div>
+                </div>
+
+                <script>
+                    const formatVND = (val) => new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(val);
+                    const teamNames = <?php echo json_encode($chart_teams); ?>;
+                    const dataPaid = <?php echo json_encode($chart_paid); ?>;
+                    const dataNotPaid = <?php echo json_encode($chart_unpaid); ?>;
+
+                    new ApexCharts(document.querySelector("#chart-global-pie"), {
+                        series: [<?php echo $total_paid_vnd; ?>, <?php echo $total_unpaid_vnd; ?>],
+                        chart: { type: 'donut', height: 350 },
+                        labels: ['Paid', 'Not Paid'],
+                        colors: ['#22c55e', '#ef4444'],
+                        dataLabels: { enabled: true, formatter: function (val, opts) { return formatVND(opts.w.globals.series[opts.seriesIndex]) } },
+                        plotOptions: { pie: { donut: { labels: { show: true, total: { show: true, label: 'Total Volume', formatter: function (w) { return formatVND(w.globals.seriesTotals.reduce((a, b) => a + b, 0)) } } } } } }
+                    }).render();
+
+                    new ApexCharts(document.querySelector("#chart-teams-bar"), {
+                        series: [{ name: 'Paid', data: dataPaid }, { name: 'Pending', data: dataNotPaid }],
+                        chart: { type: 'bar', height: 350, stacked: true },
+                        plotOptions: { bar: { borderRadius: 4, dataLabels: { position: 'top' } } },
+                        dataLabels: { enabled: true, formatter: function (val) { return val > 0 ? (val / 1000000).toFixed(0) + "M" : "" }, style: { fontSize: '10px', colors: ["#304758"] } },
+                        xaxis: { categories: teamNames },
+                        colors: ['#22c55e', '#ef4444'],
+                        yaxis: { labels: { formatter: val => (val / 1000000).toFixed(0) + 'M' } },
+                        tooltip: { y: { formatter: val => formatVND(val) } }
+                    }).render();
+                </script>
 
                 <!-- Recent Users Table -->
                 <div class="table-card">

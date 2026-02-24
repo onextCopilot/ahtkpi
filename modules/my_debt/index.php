@@ -170,6 +170,11 @@ if ($res) {
         }
 
         // Grouping
+        $row['amount_original'] = $amount;
+        $row['currency_original'] = $curr;
+        $row['amount'] = $vnd_value;
+        $row['currency'] = 'VND';
+
         $mKey = !empty($row['invoice_date']) ? date('m/Y', strtotime($row['invoice_date'])) : 'No Date';
         $groupedDebts[$mKey][] = $row;
         if (!isset($monthTotals[$mKey]))
