@@ -26,6 +26,7 @@ if ($table_check->num_rows == 0) {
     $sql = "CREATE TABLE debts (
         id INT AUTO_INCREMENT PRIMARY KEY,
         company VARCHAR(50) DEFAULT 'AHT TECH',
+        sale_team VARCHAR(100),
         am VARCHAR(100),
         client_name VARCHAR(255),
         project_name VARCHAR(255),
@@ -56,6 +57,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     // ADD & EDIT
     if (isset($_POST['action']) && ($_POST['action'] === 'add' || $_POST['action'] === 'edit')) {
         $company = $_POST['company'] ?? 'AHT TECH';
+        $sale_team = $_POST['sale_team'] ?? '';
         $am = $_POST['am'];
         $client = $_POST['client_name'];
         $project = $_POST['project_name'];
@@ -79,13 +81,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $prod_stat = $_POST['production_status'] ?? '';
 
         if ($_POST['action'] === 'add') {
-            $stmt = $conn->prepare("INSERT INTO debts (company, am, client_name, project_name, payment_milestone, expected_prod_date, expected_payment_date, invoice_status_class, amount, currency, invoice_status, vat_invoice, invoice_date, payment_status, payment_month, weekly_update, am_notes, delivery_notes, production_status, pl_class) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
-            $stmt->bind_param("ssssssssdsssssssssss", $company, $am, $client, $project, $milestone, $prod_date, $pay_date, $inv_class, $amount, $currency_val, $inv_stat, $vat, $invoice_date_val, $pay_stat, $pay_month, $weekly, $am_note, $del_note, $prod_stat, $pl);
+            $stmt = $conn->prepare("INSERT INTO debts (company, sale_team, am, client_name, project_name, payment_milestone, expected_prod_date, expected_payment_date, invoice_status_class, amount, currency, invoice_status, vat_invoice, invoice_date, payment_status, payment_month, weekly_update, am_notes, delivery_notes, production_status, pl_class) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+            $stmt->bind_param("ssssssssssdsssssssssss", $company, $sale_team, $am, $client, $project, $milestone, $prod_date, $pay_date, $inv_class, $amount, $currency_val, $inv_stat, $vat, $invoice_date_val, $pay_stat, $pay_month, $weekly, $am_note, $del_note, $prod_stat, $pl);
         } else {
             // Edit
             $id = intval($_POST['id']);
-            $stmt = $conn->prepare("UPDATE debts SET company=?, am=?, client_name=?, project_name=?, payment_milestone=?, expected_prod_date=?, expected_payment_date=?, invoice_status_class=?, amount=?, currency=?, invoice_status=?, vat_invoice=?, invoice_date=?, payment_status=?, payment_month=?, weekly_update=?, am_notes=?, delivery_notes=?, production_status=?, pl_class=? WHERE id=?");
-            $stmt->bind_param("ssssssssdsssssssssssi", $company, $am, $client, $project, $milestone, $prod_date, $pay_date, $inv_class, $amount, $currency_val, $inv_stat, $vat, $invoice_date_val, $pay_stat, $pay_month, $weekly, $am_note, $del_note, $prod_stat, $pl, $id);
+            $stmt = $conn->prepare("UPDATE debts SET company=?, sale_team=?, am=?, client_name=?, project_name=?, payment_milestone=?, expected_prod_date=?, expected_payment_date=?, invoice_status_class=?, amount=?, currency=?, invoice_status=?, vat_invoice=?, invoice_date=?, payment_status=?, payment_month=?, weekly_update=?, am_notes=?, delivery_notes=?, production_status=?, pl_class=? WHERE id=?");
+            $stmt->bind_param("ssssssssssdsssssssssssi", $company, $sale_team, $am, $client, $project, $milestone, $prod_date, $pay_date, $inv_class, $amount, $currency_val, $inv_stat, $vat, $invoice_date_val, $pay_stat, $pay_month, $weekly, $am_note, $del_note, $prod_stat, $pl, $id);
         }
 
         if ($stmt->execute()) {
@@ -917,6 +919,7 @@ if ($res_dept && $res_dept->num_rows > 0) {
                                     #</th>
                                 <th style="text-align:center; width: 80px;">Action</th>
                                 <th>CTY</th>
+                                <th>Sale Team</th>
                                 <th>AM</th>
                                 <th>Tên<br>khách hàng</th>
                                 <th>Tên dự án</th>
@@ -941,7 +944,7 @@ if ($res_dept && $res_dept->num_rows > 0) {
                             <?php $globalIdx = 1; ?>
                             <?php foreach ($groupedDebts as $monthName => $monthItems): ?>
                                 <tr class="group-header">
-                                    <td colspan="19">
+                                    <td colspan="20">
                                         Tháng <?php echo $monthName; ?>
                                         <span class="group-total">(Total:
                                             <?php echo formatVND($monthTotals[$monthName]); ?>)</span>
@@ -991,6 +994,7 @@ if ($res_dept && $res_dept->num_rows > 0) {
                                             </form>
                                         </td>
                                         <td class="cell-company"><?php echo htmlspecialchars($d['company']); ?></td>
+                                        <td><?php echo htmlspecialchars($d['sale_team'] ?? ''); ?></td>
                                         <td>
                                             <?php
                                             // Format AM Badge
@@ -1165,10 +1169,17 @@ if ($res_dept && $res_dept->num_rows > 0) {
                     <input type="hidden" name="delivery_notes" id="delivery_notes_input">
                     <input type="hidden" name="invoice_status" id="invoice_status_input">
 
-                    <div class="form-row">
                         <div class="form-group">
-                            <label>Sale Team / Company</label>
+                            <label>Company</label>
                             <select name="company" id="company">
+                                <option value="AHT TECH">AHT TECH</option>
+                                <option value="A1VN">A1VN</option>
+                                <option value="A1C MY">A1C MY</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label>Sale Team</label>
+                            <select name="sale_team" id="sale_team">
                                 <?php foreach ($sale_teams as $team): ?>
                                     <option value="<?php echo htmlspecialchars($team); ?>">
                                         <?php echo htmlspecialchars($team); ?>
@@ -1176,6 +1187,9 @@ if ($res_dept && $res_dept->num_rows > 0) {
                                 <?php endforeach; ?>
                             </select>
                         </div>
+                    </div>
+
+                    <div class="form-row">
                         <div class="form-group">
                             <label>AM</label>
                             <select name="am" id="am">
@@ -1330,23 +1344,25 @@ if ($res_dept && $res_dept->num_rows > 0) {
                 document.getElementById('btnDelete').style.display = "block";
 
                 // Populate fields
-                // Handle Sale Team / Company Dropdown safely
-                const companySelect = document.getElementById('company');
-                const compVal = data.company || 'AHT TECH';
-                let compExists = false;
-                for (let i = 0; i < companySelect.options.length; i++) {
-                    if (companySelect.options[i].value === compVal) {
-                        compExists = true;
+                document.getElementById('company').value = data.company || 'AHT TECH';
+
+                // Handle Sale Team Dropdown safely
+                const saleTeamSelect = document.getElementById('sale_team');
+                const stVal = data.sale_team || '';
+                let stExists = false;
+                for (let i = 0; i < saleTeamSelect.options.length; i++) {
+                    if (saleTeamSelect.options[i].value === stVal) {
+                        stExists = true;
                         break;
                     }
                 }
-                if (!compExists && compVal) {
+                if (!stExists && stVal) {
                     const opt = document.createElement('option');
-                    opt.value = compVal;
-                    opt.text = compVal;
-                    companySelect.add(opt);
+                    opt.value = stVal;
+                    opt.text = stVal;
+                    saleTeamSelect.add(opt);
                 }
-                companySelect.value = compVal;
+                saleTeamSelect.value = stVal;
 
                 // Handle AM Dropdown safely
                 const amSelect = document.getElementById('am');
