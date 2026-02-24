@@ -225,7 +225,7 @@ if ($res_am && $res_am->num_rows > 0) {
 
 // Fetch Departments for Company / Sale Team Select
 $sale_teams = [];
-$res_dept = $conn->query("SELECT name FROM departments ORDER BY sort_order ASC, name ASC");
+$res_dept = $conn->query("SELECT name FROM sale_teams ORDER BY order_num ASC, id DESC");
 if ($res_dept && $res_dept->num_rows > 0) {
     while ($row_dept = $res_dept->fetch_assoc()) {
         $n = trim($row_dept['name']);
