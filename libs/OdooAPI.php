@@ -15,15 +15,18 @@ class OdooAPI
 
     private function loadSettings()
     {
-        // Use absolute path from project root
-        $db_path = __DIR__ . '/../modules/data/db.sqlite';
-        if (!file_exists($db_path)) {
-            throw new Exception("Odoo settings not configured. Please configure in Settings > Odoo API.");
+        global $conn;
+        if (!isset($conn)) {
+            require_once __DIR__ . '/../config/config.php';
         }
 
-        $pdo = new PDO('sqlite:' . $db_path);
-        $stmt = $pdo->query("SELECT * FROM odoo_settings ORDER BY id DESC LIMIT 1");
-        $settings = $stmt->fetch(PDO::FETCH_ASSOC);
+        $result = $conn->query("SELECT * FROM odoo_settings ORDER BY id DESC LIMIT 1");
+
+        if ($result && $result->num_rows > 0) {
+            $settings = $result->fetch_assoc();
+        } else {
+            $settings = null;
+        }
 
         if (!$settings) {
             throw new Exception("Odoo settings not found. Please configure in Settings > Odoo API.");

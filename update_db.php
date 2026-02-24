@@ -56,6 +56,14 @@ $base_tables = [
         setting_value TEXT,
         description VARCHAR(255),
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+    )",
+    "CREATE TABLE IF NOT EXISTS odoo_settings (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        odoo_url TEXT NOT NULL,
+        odoo_database TEXT NOT NULL,
+        odoo_username TEXT NOT NULL,
+        odoo_api_key TEXT NOT NULL,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
     )"
 ];
 

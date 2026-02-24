@@ -6,23 +6,13 @@ if (!isset($_SESSION['user_id'])) {
     exit();
 }
 
-$db_path = __DIR__ . '/../../data/db.sqlite';
-$db_dir = dirname($db_path);
-if (!is_dir($db_dir)) {
-    mkdir($db_dir, 0777, true);
-}
-
-$pdo = new PDO('sqlite:' . $db_path);
-$pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
-
-// Create settings table
-$pdo->exec("CREATE TABLE IF NOT EXISTS odoo_settings (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
+$conn->query("CREATE TABLE IF NOT EXISTS odoo_settings (
+    id INT AUTO_INCREMENT PRIMARY KEY,
     odoo_url TEXT NOT NULL,
     odoo_database TEXT NOT NULL,
     odoo_username TEXT NOT NULL,
     odoo_api_key TEXT NOT NULL,
-    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 )");
 
 $full_name = $_SESSION['full_name'] ?? 'User';
@@ -121,17 +111,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && (!isset($_POST['action']) || $_POST
 
     try {
         // Check if settings exist
-        $stmt = $pdo->query("SELECT COUNT(*) FROM odoo_settings");
-        $count = $stmt->fetchColumn();
+        $result = $conn->query("SELECT COUNT(*) as count FROM odoo_settings");
+        $count = $result->fetch_assoc()['count'];
 
         if ($count > 0) {
             // Update existing settings
-            $stmt = $pdo->prepare("UPDATE odoo_settings SET odoo_url = ?, odoo_database = ?, odoo_username = ?, odoo_api_key = ?, updated_at = CURRENT_TIMESTAMP WHERE id = 1");
-            $stmt->execute([$odoo_url, $odoo_database, $odoo_username, $odoo_api_key]);
+            $stmt = $conn->prepare("UPDATE odoo_settings SET odoo_url = ?, odoo_database = ?, odoo_username = ?, odoo_api_key = ? WHERE id = 1");
+            $stmt->bind_param("ssss", $odoo_url, $odoo_database, $odoo_username, $odoo_api_key);
+            $stmt->execute();
         } else {
             // Insert new settings
-            $stmt = $pdo->prepare("INSERT INTO odoo_settings (odoo_url, odoo_database, odoo_username, odoo_api_key) VALUES (?, ?, ?, ?)");
-            $stmt->execute([$odoo_url, $odoo_database, $odoo_username, $odoo_api_key]);
+            $stmt = $conn->prepare("INSERT INTO odoo_settings (odoo_url, odoo_database, odoo_username, odoo_api_key) VALUES (?, ?, ?, ?)");
+            $stmt->bind_param("ssss", $odoo_url, $odoo_database, $odoo_username, $odoo_api_key);
+            $stmt->execute();
         }
 
         $success_message = "Cài đặt Odoo API đã được lưu thành công!";
@@ -141,8 +133,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && (!isset($_POST['action']) || $_POST
 }
 
 // Fetch current settings
-$stmt = $pdo->query("SELECT * FROM odoo_settings ORDER BY id DESC LIMIT 1");
-$settings = $stmt->fetch(PDO::FETCH_ASSOC);
+$result = $conn->query("SELECT * FROM odoo_settings ORDER BY id DESC LIMIT 1");
+if ($result && $result->num_rows > 0) {
+    $settings = $result->fetch_assoc();
+} else {
+    $settings = [];
+}
 ?>
 <!DOCTYPE html>
 <html lang="vi">
