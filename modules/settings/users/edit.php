@@ -55,6 +55,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $status = $_POST['status'];
         $join_date = !empty($_POST['join_date']) ? $_POST['join_date'] : NULL;
         $is_am_bd = isset($_POST['is_am_bd']) ? 1 : 0;
+        $can_view_invoice = isset($_POST['can_view_invoice']) ? 1 : 0;
         $team_ids = isset($_POST['team_ids']) ? $_POST['team_ids'] : [];
 
         $username = trim($_POST['username']);
@@ -72,10 +73,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 if ($check->get_result()->num_rows > 0) {
                     $error_message = "Email or Employee Code already exists.";
                 } else {
-                    $sql = "UPDATE users SET username=?, email=?, full_name=?, employee_code=?, job_title=?, level=?, department_id=?, status=?, join_date=?, is_am_bd=? WHERE id=?";
+                    $sql = "UPDATE users SET username=?, email=?, full_name=?, employee_code=?, job_title=?, level=?, department_id=?, status=?, join_date=?, is_am_bd=?, can_view_invoice=? WHERE id=?";
                     $stmt = $conn->prepare($sql);
-                    $stmt->bind_param("ssssssissii", $username, $email, $name, $emp_code, $job, $level, $dept_id, $status, $join_date, $is_am_bd, $id);
+                    $stmt->bind_param("ssssssissiii", $username, $email, $name, $emp_code, $job, $level, $dept_id, $status, $join_date, $is_am_bd, $can_view_invoice, $id);
                     $stmt->execute();
+                    
+                    // Update session if editing self
+                    if ($id == $_SESSION['user_id']) {
+                        $_SESSION['can_view_invoice'] = $can_view_invoice;
+                    }
                     
                     // Update Teams
                     $conn->prepare("DELETE FROM user_sale_teams WHERE user_id = ?")->execute([$id]);
@@ -588,7 +594,10 @@ while ($r = $ut_res_result->fetch_assoc()) {
                                         <label for="is_am_bd">Is AM/BD Member</label>
                                         <input type="checkbox" name="is_am_bd" id="is_am_bd" <?php echo $user['is_am_bd'] ? 'checked' : ''; ?> onchange="toggleTeamSelect()">
                                     </div>
-                                    <!-- Potential for more permissions here later -->
+                                    <div class="toggle-item">
+                                        <label for="can_view_invoice">Can View Invoices</label>
+                                        <input type="checkbox" name="can_view_invoice" id="can_view_invoice" <?php echo $user['can_view_invoice'] ? 'checked' : ''; ?>>
+                                    </div>
                                 </div>
 
                                 <div id="team_select_row" class="team-select-container" style="display: <?php echo $user['is_am_bd'] ? 'block' : 'none'; ?>;">
