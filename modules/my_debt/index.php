@@ -625,46 +625,58 @@ if ($res_dept && $res_dept->num_rows > 0) {
             border-radius: 6px;
         }
 
-        /* Modal */
+        /* Professional Modal Styling */
         .modal {
             display: none;
             position: fixed;
-            z-index: 1000;
+            z-index: 9999;
             left: 0;
             top: 0;
             width: 100%;
             height: 100%;
-            overflow: auto;
-            background-color: rgba(0, 0, 0, 0.6);
-            backdrop-filter: blur(2px);
+            overflow: hidden;
+            background-color: rgba(15, 23, 42, 0.5);
+            /* Darker backdrop */
+            backdrop-filter: blur(6px);
+            /* Glassmorphism background effect */
+            align-items: center;
+            justify-content: center;
         }
 
         .modal-content {
-            background-color: #fff;
-            margin: 4vh auto;
-            padding: 0;
-            border: none;
-            width: 600px;
-            border-radius: 12px;
-            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
-            animation: slideIn 0.2s ease-out;
+            background-color: #ffffff;
+            margin: auto;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            width: 100%;
+            max-width: 680px;
+            /* Wider for better 2-column spacing */
+            max-height: 90vh;
+            /* Keeps it inside viewport */
+            border-radius: 16px;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+            animation: modalScaleIn 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+            display: flex;
+            flex-direction: column;
+            position: relative;
         }
 
-        @keyframes slideIn {
+        @keyframes modalScaleIn {
             from {
                 opacity: 0;
-                transform: translateY(-20px);
+                transform: scale(0.95) translateY(-10px);
             }
 
             to {
                 opacity: 1;
-                transform: translateY(0);
+                transform: scale(1) translateY(0);
             }
         }
 
         .modal-header {
-            padding: 1.5rem;
+            padding: 1.5rem 2rem;
             border-bottom: 1px solid #e2e8f0;
+            background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
+            border-radius: 16px 16px 0 0;
             display: flex;
             justify-content: space-between;
             align-items: center;
@@ -672,32 +684,54 @@ if ($res_dept && $res_dept->num_rows > 0) {
 
         .modal-header h2 {
             margin: 0;
-            font-size: 1.25rem;
+            font-size: 1.3rem;
+            font-weight: 700;
             color: #0f172a;
+            display: flex;
+            align-items: center;
+            gap: 8px;
         }
 
         .close {
-            font-size: 1.5rem;
+            font-size: 1.75rem;
             color: #94a3b8;
             cursor: pointer;
-            transition: color 0.2s;
+            transition: color 0.2s, transform 0.2s;
+            line-height: 1;
         }
 
         .close:hover {
-            color: #0f172a;
+            color: #ef4444;
+            transform: scale(1.1);
         }
 
         .modal-body {
-            padding: 1.5rem;
-            max-height: 70vh;
+            padding: 2rem;
             overflow-y: auto;
+            flex: 1;
+            /* allow it to take up remaining space */
+            background-color: #ffffff;
+        }
+
+        /* Customize scrollbar for modal-body */
+        .modal-body::-webkit-scrollbar {
+            width: 6px;
+        }
+
+        .modal-body::-webkit-scrollbar-thumb {
+            background: #cbd5e1;
+            border-radius: 4px;
+        }
+
+        .modal-body::-webkit-scrollbar-thumb:hover {
+            background: #94a3b8;
         }
 
         .modal-footer {
-            padding: 1.5rem;
+            padding: 1.25rem 2rem;
             border-top: 1px solid #e2e8f0;
             background: #f8fafc;
-            border-radius: 0 0 12px 12px;
+            border-radius: 0 0 16px 16px;
             display: flex;
             justify-content: space-between;
             align-items: center;
@@ -706,67 +740,105 @@ if ($res_dept && $res_dept->num_rows > 0) {
         .form-row {
             display: grid;
             grid-template-columns: 1fr 1fr;
-            gap: 1rem;
-            margin-bottom: 1rem;
+            gap: 1.5rem;
+            margin-bottom: 1.25rem;
         }
 
         .form-group label {
             display: block;
-            margin-bottom: 0.5rem;
-            font-weight: 500;
-            font-size: 0.875rem;
-            color: #475569;
+            margin-bottom: 0.4rem;
+            font-weight: 600;
+            font-size: 0.8rem;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            color: #64748b;
         }
 
         .form-group input,
         .form-group select,
         .form-group textarea {
             width: 100%;
-            padding: 0.6rem 0.8rem;
-            border: 1px solid #cbd5e1;
-            border-radius: 6px;
+            padding: 0.75rem 1rem;
+            background-color: #f8fafc;
+            border: 1px solid #e2e8f0;
+            border-radius: 8px;
             font-size: 0.95rem;
-            transition: border-color 0.2s;
+            color: #1e293b;
+            font-weight: 500;
+            transition: all 0.2s ease-in-out;
+            font-family: inherit;
+        }
+
+        .form-group textarea {
+            resize: vertical;
+            min-height: 80px;
         }
 
         .form-group input:focus,
-        .form-group select:focus {
+        .form-group select:focus,
+        .form-group textarea:focus {
+            background-color: #ffffff;
             border-color: #3b82f6;
             outline: none;
+            box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.1);
         }
 
         .btn-cancel {
-            padding: 0.6rem 1.2rem;
-            background: white;
+            padding: 0.7rem 1.5rem;
+            background: #ffffff;
             border: 1px solid #cbd5e1;
-            border-radius: 6px;
-            color: #475569;
-            font-weight: 500;
+            border-radius: 8px;
+            color: #64748b;
+            font-weight: 600;
+            font-size: 0.95rem;
             cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .btn-cancel:hover {
+            background: #f1f5f9;
+            color: #0f172a;
+            border-color: #94a3b8;
         }
 
         .btn-submit {
-            padding: 0.6rem 1.5rem;
-            background: #2563eb;
-            color: white;
+            padding: 0.7rem 2rem;
+            background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+            color: #ffffff;
             border: none;
-            border-radius: 6px;
+            border-radius: 8px;
             font-weight: 600;
+            font-size: 0.95rem;
             cursor: pointer;
             box-shadow: 0 4px 6px -1px rgba(37, 99, 235, 0.2);
+            transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+
+        .btn-submit:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 15px -3px rgba(37, 99, 235, 0.3);
+            background: linear-gradient(135deg, #60a5fa 0%, #3b82f6 100%);
+        }
+
+        .btn-submit:active {
+            transform: translateY(0);
         }
 
         .btn-delete {
             color: #ef4444;
-            background: none;
+            background: rgba(239, 68, 68, 0.1);
             border: none;
-            font-weight: 500;
+            padding: 0.5rem 1rem;
+            border-radius: 6px;
+            font-weight: 600;
             cursor: pointer;
             font-size: 0.9rem;
+            transition: all 0.2s;
         }
 
         .btn-delete:hover {
-            text-decoration: underline;
+            background: #ef4444;
+            color: #ffffff;
         }
 
         /* Actions Column */
@@ -1169,6 +1241,7 @@ if ($res_dept && $res_dept->num_rows > 0) {
                     <input type="hidden" name="delivery_notes" id="delivery_notes_input">
                     <input type="hidden" name="invoice_status" id="invoice_status_input">
 
+                    <div class="form-row">
                         <div class="form-group">
                             <label>Company</label>
                             <select name="company" id="company">
@@ -1201,9 +1274,14 @@ if ($res_dept && $res_dept->num_rows > 0) {
                                 <option value="Other">Other</option>
                             </select>
                         </div>
+                        <div class="form-group">
+                            <label>Payment Milestone</label>
+                            <input type="text" name="payment_milestone" id="payment_milestone"
+                                placeholder="e.g. Inv 08.2023">
+                        </div>
                     </div>
 
-                    <div class="form-row">
+                    <div class="form-row" style="grid-template-columns: 2fr 1fr;">
                         <div class="form-group autocomplete-container">
                             <label>Client Name</label>
                             <input type="text" name="client_name" id="client_name" required autocomplete="off"
@@ -1216,13 +1294,13 @@ if ($res_dept && $res_dept->num_rows > 0) {
                         </div>
                     </div>
 
-                    <div class="form-row">
-                        <div class="form-group" style="flex: 2;">
+                    <div class="form-row" style="grid-template-columns: 2fr 1fr 2fr;">
+                        <div class="form-group">
                             <label>Payment Milestone</label>
                             <input type="text" name="payment_milestone" id="payment_milestone"
                                 placeholder="e.g. Inv 08.2023">
                         </div>
-                        <div class="form-group" style="flex: 1;">
+                        <div class="form-group">
                             <label>Currency</label>
                             <select name="currency" id="currency">
                                 <option value="USD">USD</option>
@@ -1231,7 +1309,7 @@ if ($res_dept && $res_dept->num_rows > 0) {
                                 <option value="JPY">JPY</option>
                             </select>
                         </div>
-                        <div class="form-group" style="flex: 2;">
+                        <div class="form-group">
                             <label>Amount</label>
                             <input type="number" step="0.01" name="amount" id="amount" required>
                         </div>
@@ -1277,9 +1355,6 @@ if ($res_dept && $res_dept->num_rows > 0) {
                                 <option value="Tốt">Tốt (Good)</option>
                             </select>
                         </div>
-                    </div>
-
-                    <div class="form-row">
                         <div class="form-group">
                             <label>Payment Status</label>
                             <select name="payment_status" id="payment_status">
@@ -1287,22 +1362,26 @@ if ($res_dept && $res_dept->num_rows > 0) {
                                 <option value="Paid">Paid</option>
                             </select>
                         </div>
+                    </div>
+
+                    <div class="form-row">
                         <div class="form-group">
                             <label>Production Status</label>
                             <input type="text" name="production_status" id="production_status"
                                 placeholder="e.g. DC1, DC5 ONFIT">
                         </div>
+                        <div class="form-group">
+                            <label>AM Notes</label>
+                            <textarea name="am_notes" id="am_notes" rows="1"
+                                style="min-height: 44px; padding: 0.75rem 1rem;"></textarea>
+                        </div>
                     </div>
-
-                    <div class="form-group">
-                        <label>AM Notes</label>
-                        <textarea name="am_notes" id="am_notes" rows="2"></textarea>
-                    </div>
-                </div>
+                </div> <!-- end modal-body -->
 
                 <div class="modal-footer">
                     <button type="button" class="btn-delete" id="btnDelete" onclick="deleteItem()"
-                        style="display:none;">Delete this record</button>
+                        style="display:none;">Delete
+                        this record</button>
                     <div style="margin-left:auto; display:flex; gap:10px;">
                         <button type="button" class="btn-cancel" onclick="closeModal()">Cancel</button>
                         <button type="submit" class="btn-submit">Save Record</button>
@@ -1325,7 +1404,7 @@ if ($res_dept && $res_dept->num_rows > 0) {
         const form = document.getElementById('mainForm');
 
         function openModal(mode, id = null) {
-            modal.style.display = "block";
+            modal.style.display = "flex"; // Changed from block to flex to support centering
 
             if (mode === 'add') {
                 document.getElementById('modalTitle').innerText = "Add New Record";
