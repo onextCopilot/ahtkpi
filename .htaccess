@@ -1,44 +1,61 @@
 # Enable Rewrite Engine
 RewriteEngine On
-RewriteBase /AHT%20KPI/
+RewriteBase /
 
 # Prevent directory browsing
 Options -Indexes
 
-# Protect config directory
+# Protect config directory (only forbid direct requests)
+RewriteCond %{ENV:REDIRECT_STATUS} ^$
 RewriteRule ^config/ - [F,L]
 
 # Protect includes directory
+RewriteCond %{ENV:REDIRECT_STATUS} ^$
 RewriteRule ^includes/ - [F,L]
 
 # Protect modules directory from direct access
+RewriteCond %{ENV:REDIRECT_STATUS} ^$
 RewriteRule ^modules/ - [F,L]
 
 # ============================================
 # URL Rewriting Rules - Clean URLs
 # ============================================
 
-# Prevent redirect loop - allow direct access to index.php
-RewriteCond %{REQUEST_FILENAME} !-f
-RewriteCond %{REQUEST_FILENAME} !-d
+# Prevent rewrite loop for actual files
+RewriteCond %{REQUEST_FILENAME} -f [OR]
+RewriteCond %{REQUEST_FILENAME} -d
+RewriteRule ^ - [L]
 
-# Login page: /login -> modules/auth/login.php
+# Main Pages
 RewriteRule ^login/?$ modules/auth/login.php [L]
-
-# Logout: /logout -> modules/auth/logout.php
 RewriteRule ^logout/?$ modules/auth/logout.php [L]
-
-# Dashboard: /dashboard -> modules/dashboard/dashboard.php
 RewriteRule ^dashboard/?$ modules/dashboard/dashboard.php [L]
-
-# Profile: /profile -> modules/profile/index.php
 RewriteRule ^profile/?$ modules/profile/index.php [L]
+
+# Settings Pages
 RewriteRule ^settings/?$ modules/settings/index.php [L]
+RewriteRule ^settings/users/?$ modules/settings/users/index.php [L]
+RewriteRule ^settings/users/edit/?$ modules/settings/users/edit.php [L]
 RewriteRule ^settings/departments/?$ modules/settings/departments/index.php [L]
-RewriteRule ^settings/core-members/?$ modules/settings/core_members/index.php [L]
+RewriteRule ^settings/core(-|_)members/?$ modules/settings/core_members/index.php [L]
+RewriteRule ^settings/smtp/?$ modules/settings/smtp/index.php [L]
+RewriteRule ^settings/odoo/?$ modules/settings/odoo/index.php [L]
+RewriteRule ^settings/jira/?$ modules/settings/jira/index.php [L]
 RewriteRule ^settings/teams/?$ modules/settings/teams/index.php [L]
 
-# Home/Index: / -> index.php (already handled by DirectoryIndex)
+# Application Modules
+RewriteRule ^debt/?$ modules/debt/index.php [L]
+RewriteRule ^my-debt/?$ modules/my_debt/index.php [L]
+RewriteRule ^customers/?$ modules/customers/index.php [L]
+RewriteRule ^invoices/?$ modules/invoices/index.php [L]
+RewriteRule ^kpi/?$ modules/kpi/index.php [L]
+
+# APIs
+RewriteRule ^api/kpi_tab_order/?$ api/kpi_tab_order.php [L]
+RewriteRule ^api/kpi_monthly_save/?$ api/kpi_monthly_save.php [L]
+RewriteRule ^api/kpi_quarterly_save/?$ api/kpi_quarterly_save.php [L]
+
+# Home/Index: / -> index.php
 DirectoryIndex index.php
 
 # ============================================
