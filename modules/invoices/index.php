@@ -42,8 +42,14 @@ try {
     ];
 
     // Enforce "My Invoices" for ALL users (including admins)
-    if (isset($_SESSION['email'])) {
-        $filters['owner_email'] = $_SESSION['email'];
+    // Fetch email dynamically from DB if not in session to avoid forcing relog
+    $u_id = (int) $_SESSION['user_id'];
+    $stmt = $conn->prepare("SELECT email FROM users WHERE id = ?");
+    $stmt->bind_param("i", $u_id);
+    $stmt->execute();
+    $res = $stmt->get_result();
+    if ($row = $res->fetch_assoc()) {
+        $filters['owner_email'] = $row['email'];
     }
 
     $result = $odoo->getInvoices($limit, $offset, $filters);
