@@ -33,6 +33,11 @@ $conn->query("CREATE TABLE IF NOT EXISTS kpi_definitions (
     FOREIGN KEY (created_by)    REFERENCES users(id) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
 
+// Add unit column to kpi_definitions if missing
+if ($conn->query("SHOW COLUMNS FROM kpi_definitions LIKE 'unit'")->num_rows === 0) {
+    $conn->query("ALTER TABLE kpi_definitions ADD COLUMN unit VARCHAR(50) DEFAULT NULL AFTER target_base");
+}
+
 // Level 2: Quarterly targets
 $conn->query("CREATE TABLE IF NOT EXISTS kpi_quarterly (
     id            INT AUTO_INCREMENT PRIMARY KEY,
