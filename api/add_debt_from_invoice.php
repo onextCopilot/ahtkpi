@@ -17,8 +17,13 @@ if ($check->num_rows == 0) {
     $conn->query("ALTER TABLE debts ADD sale_team_id INT DEFAULT NULL AFTER am");
 }
 $check2 = $conn->query("SHOW COLUMNS FROM debts LIKE 'odoo_invoice_id'");
-if ($check2->num_rows == 0) {
+if ($check2 && $check2->num_rows == 0) {
     $conn->query("ALTER TABLE debts ADD odoo_invoice_id INT DEFAULT NULL");
+}
+
+$check3 = $conn->query("SHOW COLUMNS FROM debts LIKE 'original_amount'");
+if ($check3 && $check3->num_rows == 0) {
+    $conn->query("ALTER TABLE debts ADD original_amount DECIMAL(15,2) DEFAULT NULL");
 }
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
@@ -114,8 +119,8 @@ $amName = $_SESSION['full_name'];
 
 try {
     $stmt = $conn->prepare("INSERT INTO debts 
-        (company, am, sale_team_id, client_name, project_name, amount, currency, vat_invoice, invoice_date, payment_status, am_notes, pl_class, invoice_status_class, payment_month, weekly_update, odoo_invoice_id, created_at) 
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())");
+        (company, am, sale_team_id, client_name, project_name, amount, original_amount, currency, vat_invoice, invoice_date, payment_status, am_notes, pl_class, invoice_status_class, payment_month, weekly_update, odoo_invoice_id, created_at) 
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())");
 
     if (!$stmt) {
         throw new Exception("Prepare failed: " . $conn->error);
@@ -131,12 +136,13 @@ try {
     $notes = "Added from Invoice: " . $invoiceName . " (" . $currency . ")";
 
     $stmt->bind_param(
-        "ssissdsssssssssi",
+        "ssissddsssssssssi",
         $defaultCompany,
         $amName,
         $teamId,
         $clientName,
         $projectName,
+        $amount,
         $amount,
         $currency,
         $invoiceName,

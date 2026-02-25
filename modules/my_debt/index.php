@@ -1009,6 +1009,7 @@ if ($team_res && $team_res->num_rows > 0) {
                                 <th>Ngày DK<br>hoàn thành SX</th>
                                 <th>Ngày DK<br>khách TT</th>
                                 <th>Phân loại<br>hóa đơn</th>
+                                <th>Số tiền<br>ban đầu</th>
                                 <th>Số tiền</th>
                                 <th>P&L</th>
                                 <th>Hóa đơn</th>
@@ -1025,7 +1026,7 @@ if ($team_res && $team_res->num_rows > 0) {
                             <?php $globalIdx = 1; ?>
                             <?php foreach ($groupedDebts as $monthName => $monthItems): ?>
                                 <tr class="group-header">
-                                    <td colspan="20">
+                                    <td colspan="23">
                                         Tháng <?php echo $monthName; ?>
                                         <span class="group-total">(Total:
                                             <?php echo formatVND($monthTotals[$monthName]); ?>)</span>
@@ -1158,6 +1159,9 @@ if ($team_res && $team_res->num_rows > 0) {
                                                 <?php
                                             }
                                             ?>
+                                        </td>
+                                        <td class="cell-amount" style="color: #64748b;">
+                                            <?php echo !empty($d['original_amount']) ? formatCurrency($d['original_amount'], $d['currency'] ?? 'USD') : '-'; ?>
                                         </td>
                                         <td class="cell-amount">
                                             <?php echo formatCurrency($d['amount'] ?? 0, $d['currency'] ?? 'USD'); ?>
