@@ -431,13 +431,19 @@ function formatDate($date)
                                 <?php
                                 // Fetch existing debts to check for duplicates
                                 $existingInvoiceNames = [];
+                                $existingInvoiceIds = [];
                                 try {
                                     if (isset($conn)) {
-                                        $checkDebtSql = "SELECT DISTINCT vat_invoice FROM debts WHERE vat_invoice IS NOT NULL AND vat_invoice != ''";
+                                        $checkDebtSql = "SELECT vat_invoice, odoo_invoice_id FROM debts WHERE (vat_invoice IS NOT NULL AND vat_invoice != '') OR odoo_invoice_id IS NOT NULL";
                                         $debtRes = $conn->query($checkDebtSql);
                                         if ($debtRes) {
                                             while ($row = $debtRes->fetch_assoc()) {
-                                                $existingInvoiceNames[] = $row['vat_invoice'];
+                                                if (!empty($row['vat_invoice'])) {
+                                                    $existingInvoiceNames[] = $row['vat_invoice'];
+                                                }
+                                                if (!empty($row['odoo_invoice_id'])) {
+                                                    $existingInvoiceIds[] = $row['odoo_invoice_id'];
+                                                }
                                             }
                                         }
                                     }
@@ -559,7 +565,10 @@ function formatDate($date)
                                                     }
                                                 }
                                                 ?>
-                                                <?php if (!empty($inv['name']) && $inv['name'] !== '/' && in_array($inv['name'], $existingInvoiceNames)): ?>
+                                                <?php
+                                                $isAlreadyAdded = in_array($inv['id'], $existingInvoiceIds) || (!empty($inv['name']) && $inv['name'] !== '/' && in_array($inv['name'], $existingInvoiceNames));
+                                                if ($isAlreadyAdded):
+                                                    ?>
                                                     <button class="btn-icon" title="Already added to My Debts" disabled
                                                         style="background:none; border:none; cursor:default; color:#16a34a; padding: 4px;">
                                                         <svg width="18" height="18" viewBox="0 0 24 24" fill="none"
@@ -577,6 +586,7 @@ function formatDate($date)
                                                         data-write-date="<?php echo htmlspecialchars($paymentDate); ?>"
                                                         data-ref="<?php echo htmlspecialchars($inv['x_studio_project_code'] ?: ($inv['x_studio_project_code_0'] ?? '')); ?>"
                                                         data-invoice-date="<?php echo $inv['invoice_date'] ?: $inv['date']; ?>"
+                                                        data-odoo-id="<?php echo $inv['id']; ?>"
                                                         style="background:none; border:none; cursor:pointer; color:#2563eb; padding: 4px; border-radius: 4px;"
                                                         onmouseover="this.style.backgroundColor='#eff6ff'"
                                                         onmouseout="this.style.backgroundColor='transparent'" title="Add to My Debts">
@@ -791,6 +801,7 @@ function formatDate($date)
             const writeDate = btn.getAttribute('data-write-date');
             const ref = btn.getAttribute('data-ref');
             const invoiceDate = btn.getAttribute('data-invoice-date');
+            const odooId = btn.getAttribute('data-odoo-id');
 
             const formData = new FormData();
             formData.append('invoice_name', name);
@@ -801,6 +812,7 @@ function formatDate($date)
             formData.append('write_date', writeDate);
             formData.append('project_code', ref);
             formData.append('invoice_date', invoiceDate);
+            formData.append('odoo_invoice_id', odooId);
             formData.append('team_id', teamId);
             formData.append('status', 'Planning');
 

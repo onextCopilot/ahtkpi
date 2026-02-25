@@ -16,6 +16,10 @@ $check = $conn->query("SHOW COLUMNS FROM debts LIKE 'sale_team_id'");
 if ($check->num_rows == 0) {
     $conn->query("ALTER TABLE debts ADD sale_team_id INT DEFAULT NULL AFTER am");
 }
+$check2 = $conn->query("SHOW COLUMNS FROM debts LIKE 'odoo_invoice_id'");
+if ($check2->num_rows == 0) {
+    $conn->query("ALTER TABLE debts ADD odoo_invoice_id INT DEFAULT NULL");
+}
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     http_response_code(405);
@@ -37,6 +41,7 @@ $writeDate = $_POST['write_date'] ?? '';
 $projectCode = $_POST['project_code'] ?? '';
 $invoiceDateVal = $_POST['invoice_date'] ?? null;
 $teamId = !empty($_POST['team_id']) ? intval($_POST['team_id']) : null;
+$odooInvoiceId = !empty($_POST['odoo_invoice_id']) ? intval($_POST['odoo_invoice_id']) : null;
 
 // Basic validation
 if (empty($amount)) {
@@ -109,8 +114,8 @@ $amName = $_SESSION['full_name'];
 
 try {
     $stmt = $conn->prepare("INSERT INTO debts 
-        (company, am, sale_team_id, client_name, project_name, amount, currency, vat_invoice, invoice_date, payment_status, am_notes, pl_class, invoice_status_class, payment_month, weekly_update, created_at) 
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())");
+        (company, am, sale_team_id, client_name, project_name, amount, currency, vat_invoice, invoice_date, payment_status, am_notes, pl_class, invoice_status_class, payment_month, weekly_update, odoo_invoice_id, created_at) 
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())");
 
     if (!$stmt) {
         throw new Exception("Prepare failed: " . $conn->error);
@@ -126,7 +131,7 @@ try {
     $notes = "Added from Invoice: " . $invoiceName . " (" . $currency . ")";
 
     $stmt->bind_param(
-        "ssissdsssssssss",
+        "ssissdsssssssssi",
         $defaultCompany,
         $amName,
         $teamId,
@@ -141,7 +146,8 @@ try {
         $plClass,
         $invoiceStatusClass,
         $paymentMonth,
-        $weeklyUpdate
+        $weeklyUpdate,
+        $odooInvoiceId
     );
 
     if ($stmt->execute()) {
