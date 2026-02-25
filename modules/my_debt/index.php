@@ -345,6 +345,34 @@ if ($team_res && $team_res->num_rows > 0) {
             color: #333;
         }
 
+        /* Sticky Columns */
+        table.debt-table th:nth-child(1), table.debt-table tr:not(.group-header) td:nth-child(1) { box-sizing: border-box; position: sticky; left: 0; z-index: 8; width: 40px; min-width: 40px; max-width: 40px; }
+        table.debt-table th:nth-child(2), table.debt-table tr:not(.group-header) td:nth-child(2) { box-sizing: border-box; position: sticky; left: 40px; z-index: 8; width: 80px; min-width: 80px; max-width: 80px; text-align: center; }
+        table.debt-table th:nth-child(3), table.debt-table tr:not(.group-header) td:nth-child(3) { box-sizing: border-box; position: sticky; left: 120px; z-index: 8; width: 80px; min-width: 80px; max-width: 80px; }
+        table.debt-table th:nth-child(4), table.debt-table tr:not(.group-header) td:nth-child(4) { box-sizing: border-box; position: sticky; left: 200px; z-index: 8; width: 100px; min-width: 100px; max-width: 100px; }
+        table.debt-table th:nth-child(5), table.debt-table tr:not(.group-header) td:nth-child(5) { box-sizing: border-box; position: sticky; left: 300px; z-index: 8; width: 160px; min-width: 160px; max-width: 160px; border-right: 1px solid #cbd5e1 !important; box-shadow: 2px 0 5px -2px rgba(0,0,0,0.1); }
+
+        table.debt-table tr:not(.group-header) td:nth-child(1), 
+        table.debt-table tr:not(.group-header) td:nth-child(2), 
+        table.debt-table tr:not(.group-header) td:nth-child(3), 
+        table.debt-table tr:not(.group-header) td:nth-child(4), 
+        table.debt-table tr:not(.group-header) td:nth-child(5) {
+            background-color: inherit;
+        }
+
+        table.debt-table th:nth-child(1), table.debt-table th:nth-child(2), table.debt-table th:nth-child(3), table.debt-table th:nth-child(4), table.debt-table th:nth-child(5) {
+            z-index: 12;
+            background-color: #004b75; 
+        }
+
+        table.debt-table tbody {
+            background-color: #fff;
+        }
+
+        table.debt-table tbody tr {
+            background-color: #fff;
+        }
+
         /* Row Stripes */
         table.debt-table tbody tr:nth-child(even) {
             background-color: #f8fafc;
@@ -995,10 +1023,8 @@ if ($team_res && $team_res->num_rows > 0) {
                     <table class="debt-table">
                         <thead>
                             <tr>
-                                <th
-                                    style="width: 30px !important; min-width: 30px !important; max-width: 30px !important; padding: 0 4px; text-align: center;">
-                                    #</th>
-                                <th style="text-align:center; width: 80px;">Action</th>
+                                <th>#</th>
+                                <th>Action</th>
                                 <th>CTY</th>
                                 <th>Sale Team</th>
                                 <th>AM</th>
@@ -1035,7 +1061,7 @@ if ($team_res && $team_res->num_rows > 0) {
                                 <?php foreach ($monthItems as $d): ?>
                                     <tr ondblclick="openModal('edit', <?php echo $d['id']; ?>)">
                                         <td style="text-align: center; padding: 4px;"><?php echo $globalIdx++; ?></td>
-                                        <td style="text-align:center; white-space: nowrap;">
+                                        <td style="text-align:center; white-space: nowrap; padding: 0;">
                                             <button class="btn-sync-row"
                                                 onclick="syncDebt(<?php echo $d['id']; ?>, '<?php echo htmlspecialchars($d['vat_invoice']); ?>', this); event.stopPropagation();"
                                                 title="Sync from Odoo"
