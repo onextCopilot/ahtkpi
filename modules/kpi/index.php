@@ -182,7 +182,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
 // ── Fetch KPI definitions for selected year ───────
 $defs = [];
-$filter_dept = intval($_GET['dept'] ?? 0);
+$filter_dept = isset($_GET['dept']) ? intval($_GET['dept']) : (!empty($departments) ? $departments[0]['id'] : 0);
 $where = "WHERE k.year = $year" . ($filter_dept ? " AND k.department_id = $filter_dept" : "");
 $r = $conn->query("SELECT k.*, d.name dept_name, u.full_name owner_name, u.avatar owner_avatar
     FROM kpi_definitions k
@@ -931,24 +931,10 @@ $status_map = ['draft' => ['#F1F5F9', '#64748B'], 'active' => ['#DBEAFE', '#1D4E
                             <polyline points="9 18 15 12 9 6" />
                         </svg>
                     </button>
-                    <div class="sf-divider"></div>
-                    <button class="sf-nav-btn" title="Tất cả phòng ban" onclick="sfScrollToActive()">
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                            stroke-width="2">
-                            <rect x="3" y="3" width="7" height="4" rx="1" />
-                            <rect x="14" y="3" width="7" height="4" rx="1" />
-                            <rect x="3" y="10" width="7" height="4" rx="1" />
-                            <rect x="14" y="10" width="7" height="4" rx="1" />
-                        </svg>
-                    </button>
                 </div>
                 <!-- Tab strip (JS-scrolled) -->
                 <div class="sf-strip" id="sfStrip">
                     <div class="sf-tabs" id="sfTabs">
-                        <a href="?tab=<?= $tab ?>&year=<?= $year ?>&dept=0"
-                            class="sheet-tab <?= $filter_dept === 0 ? 'active' : '' ?>" data-id="0">
-                            🏢 Tất cả <span class="tab-badge"><?= $all_year_total ?></span>
-                        </a>
                         <?php foreach ($departments as $dpt):
                             $cnt = $dept_kpi_count[$dpt['id']] ?? 0;
                             ?>
