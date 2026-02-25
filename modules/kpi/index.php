@@ -62,36 +62,30 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     // --- DEFINITIONS ---
     if ($action === 'add_def' || $action === 'edit_def') {
-        $dept_id = !empty($_POST['department_id']) ? intval($_POST['department_id']) : null;
         if ($_SESSION['role'] !== 'admin') {
-            $dept_id = $_SESSION['department_id'] ?? null;
-        }
-        $yr = intval($_POST['year'] ?? $year);
-        $group = trim($_POST['kpi_group'] ?? '');
-        $name = trim($_POST['kpi_name'] ?? '');
-        $target = trim($_POST['target_base'] ?? '');
-        $unit = trim($_POST['unit'] ?? '');
-        $weight = floatval($_POST['weight'] ?? 0);
-        $owner_id = !empty($_POST['kpi_owner_id']) ? intval($_POST['kpi_owner_id']) : null;
-        $is_cond = isset($_POST['is_condition']) ? 1 : 0;
-        $notes = trim($_POST['notes'] ?? '');
-
-        if (empty($name)) {
-            $msg_err = "Tên KPI không được để trống.";
+            $msg_err = "Chỉ admin mới có quyền tạo hoặc sửa KPI năm.";
         } else {
-            if ($action === 'add_def') {
-                $stmt = $conn->prepare("INSERT INTO kpi_definitions (year,department_id,kpi_group,kpi_name,target_base,unit,weight,kpi_owner_id,is_condition,notes,created_by) VALUES (?,?,?,?,?,?,?,?,?,?,?)");
-                // i=year, i=dept, s=group, s=name, s=target, s=unit, d=weight, i=owner, i=is_cond, s=notes, i=created_by
-                $stmt->bind_param("iissssdisis", $yr, $dept_id, $group, $name, $target, $unit, $weight, $owner_id, $is_cond, $notes, $_SESSION['user_id']);
-                $stmt->execute() ? $msg_ok = "Đã lưu KPI!" : $msg_err = $conn->error;
+            $dept_id = !empty($_POST['department_id']) ? intval($_POST['department_id']) : null;
+            $yr = intval($_POST['year'] ?? $year);
+            $group = trim($_POST['kpi_group'] ?? '');
+            $name = trim($_POST['kpi_name'] ?? '');
+            $target = trim($_POST['target_base'] ?? '');
+            $unit = trim($_POST['unit'] ?? '');
+            $weight = floatval($_POST['weight'] ?? 0);
+            $owner_id = !empty($_POST['kpi_owner_id']) ? intval($_POST['kpi_owner_id']) : null;
+            $is_cond = isset($_POST['is_condition']) ? 1 : 0;
+            $notes = trim($_POST['notes'] ?? '');
+
+            if (empty($name)) {
+                $msg_err = "Tên KPI không được để trống.";
             } else {
-                $id = intval($_POST['id']);
-                // Auth check
-                $chk = $conn->query("SELECT kpi_owner_id FROM kpi_definitions WHERE id = $id");
-                $curr_owner = $chk && $chk->num_rows > 0 ? $chk->fetch_assoc()['kpi_owner_id'] : null;
-                if ($_SESSION['role'] !== 'admin' && $_SESSION['user_id'] != $curr_owner) {
-                    $msg_err = "Bạn không có quyền sửa KPI này.";
+                if ($action === 'add_def') {
+                    $stmt = $conn->prepare("INSERT INTO kpi_definitions (year,department_id,kpi_group,kpi_name,target_base,unit,weight,kpi_owner_id,is_condition,notes,created_by) VALUES (?,?,?,?,?,?,?,?,?,?,?)");
+                    // i=year, i=dept, s=group, s=name, s=target, s=unit, d=weight, i=owner, i=is_cond, s=notes, i=created_by
+                    $stmt->bind_param("iissssdisis", $yr, $dept_id, $group, $name, $target, $unit, $weight, $owner_id, $is_cond, $notes, $_SESSION['user_id']);
+                    $stmt->execute() ? $msg_ok = "Đã lưu KPI!" : $msg_err = $conn->error;
                 } else {
+                    $id = intval($_POST['id']);
                     $stmt = $conn->prepare("UPDATE kpi_definitions SET year=?,department_id=?,kpi_group=?,kpi_name=?,target_base=?,unit=?,weight=?,kpi_owner_id=?,is_condition=?,notes=? WHERE id=?");
                     // i=year, i=dept, s=group, s=name, s=target, s=unit, d=weight, i=owner, i=is_cond, s=notes, i=id
                     $stmt->bind_param("iissssdiisi", $yr, $dept_id, $group, $name, $target, $unit, $weight, $owner_id, $is_cond, $notes, $id);
@@ -101,13 +95,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
     }
     if ($action === 'del_def') {
-        $id = intval($_POST['id']);
-        // Auth check
-        $chk = $conn->query("SELECT kpi_owner_id FROM kpi_definitions WHERE id = $id");
-        $curr_owner = $chk && $chk->num_rows > 0 ? $chk->fetch_assoc()['kpi_owner_id'] : null;
-        if ($_SESSION['role'] !== 'admin' && $_SESSION['user_id'] != $curr_owner) {
-            $msg_err = "Bạn không có quyền xoá KPI này.";
+        if ($_SESSION['role'] !== 'admin') {
+            $msg_err = "Chỉ admin mới có quyền xoá KPI năm.";
         } else {
+            $id = intval($_POST['id']);
             $stmt = $conn->prepare("DELETE FROM kpi_definitions WHERE id=?");
             $stmt->bind_param("i", $id);
             $stmt->execute() ? $msg_ok = "Đã xoá!" : $msg_err = $conn->error;

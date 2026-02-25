@@ -96,6 +96,7 @@ function calcProgress($actualSum, $targetNum)
 $COLS = 14; // STT+Nhóm+Tên+TargetNăm+CảNăm+Tỷtrọng+Q1+Q2+Q3+Q4+Owner+Dept+Ghichú+Act
 ?>
 <div class="toolbar">
+    <?php if ($_SESSION['role'] === 'admin'): ?>
     <button class="btn btn-blue" onclick="openAddDef()">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
             <line x1="12" y1="5" x2="12" y2="19" />
@@ -103,6 +104,7 @@ $COLS = 14; // STT+Nhóm+Tên+TargetNăm+CảNăm+Tỷtrọng+Q1+Q2+Q3+Q4+Owner+
         </svg>
         Thêm KPI
     </button>
+    <?php endif; ?>
     <button class="btn" onclick="window.print()">🖨 In</button>
     <button class="btn" onclick="exportCSV('defTable')">⬇ CSV</button>
     <div style="flex:1"></div>
@@ -292,7 +294,7 @@ $COLS = 14; // STT+Nhóm+Tên+TargetNăm+CảNăm+Tỷtrọng+Q1+Q2+Q3+Q4+Owner+
                     </td>
                     <!-- Actions -->
                     <td class="col-act">
-                        <?php if ($_SESSION['role'] === 'admin' || $_SESSION['user_id'] == $d['kpi_owner_id']): ?>
+                        <?php if ($_SESSION['role'] === 'admin'): ?>
                         <div style="display:flex;justify-content:center;gap:3px">
                             <button onclick='openEditDef(<?= htmlspecialchars(json_encode($d)) ?>)' class="btn btn-sm"
                                 title="Sửa">✏️</button>
