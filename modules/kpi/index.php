@@ -341,8 +341,8 @@ $status_map = ['draft' => ['#F1F5F9', '#64748B'], 'active' => ['#DBEAFE', '#1D4E
         table.sheet th,
         table.sheet td {
             border: 1px solid #E5E7EB;
-            padding: 5px 9px;
-            height: 33px;
+            padding: 3px 6px;
+            height: 28px;
             box-sizing: border-box;
             overflow: hidden;
             text-overflow: ellipsis;
@@ -413,10 +413,12 @@ $status_map = ['draft' => ['#F1F5F9', '#64748B'], 'active' => ['#DBEAFE', '#1D4E
         /* Badges */
         .badge {
             display: inline-block;
-            padding: 2px 8px;
-            border-radius: 12px;
-            font-size: 11px;
-            font-weight: 500
+            padding: 2px 4px;
+            border-radius: 4px;
+            font-size: 10px;
+            font-weight: 600;
+            background: #E5E7EB;
+            color: #374151
         }
 
         .badge-owner {
@@ -1012,7 +1014,8 @@ $status_map = ['draft' => ['#F1F5F9', '#64748B'], 'active' => ['#DBEAFE', '#1D4E
                     </div>
                     <div class="fg">
                         <label>Đơn vị tính (DVT)</label>
-                        <input type="text" name="unit" id="def_unit" placeholder="VD: Tỷ, %, Người..." list="unitOptions" autocomplete="off">
+                        <input type="text" name="unit" id="def_unit" placeholder="VD: Tỷ, %, Người..."
+                            list="unitOptions" autocomplete="off">
                         <datalist id="unitOptions">
                             <option value="Tỷ">
                             <option value="%">

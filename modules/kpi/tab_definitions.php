@@ -174,18 +174,18 @@ $COLS = 14; // STT+Nhóm+Tên+TargetNăm+CảNăm+Tỷtrọng+Q1+Q2+Q3+Q4+Owner+
                     <!-- 🏁 Cả năm — donut chart -->
                     <?php
                     // SVG donut params
-                    $r = 22;           // radius
-                    $cx = 30;
-                    $cy = 30; // center
-                    $sw = 7;            // stroke-width
-                    $circ = round(2 * M_PI * $r, 2); // circumference ≈ 138.23
+                    $r = 16;           // radius
+                    $cx = 20;
+                    $cy = 20; // center
+                    $sw = 5;            // stroke-width
+                    $circ = round(2 * M_PI * $r, 2); // circumference
                     ?>
                     <td
-                        style="padding:6px 8px;background:#EFF6FF;vertical-align:middle;border-left:2px solid #BFDBFE;border-right:2px solid #BFDBFE;text-align:center">
+                        style="padding:2px 4px;background:#EFF6FF;vertical-align:middle;border-left:2px solid #BFDBFE;border-right:2px solid #BFDBFE;text-align:center">
                         <?php if ($yrTot && !$yrTot['mixed']): ?>
-                            <div style="display:flex;align-items:center;gap:8px">
+                            <div style="display:flex;align-items:center;gap:6px">
                                 <!-- SVG donut -->
-                                <svg width="60" height="60" viewBox="0 0 60 60" style="flex-shrink:0">
+                                <svg width="40" height="40" viewBox="0 0 40 40" style="flex-shrink:0">
                                     <!-- track -->
                                     <circle cx="<?= $cx ?>" cy="<?= $cy ?>" r="<?= $r ?>" fill="none" stroke="#DBEAFE"
                                         stroke-width="<?= $sw ?>" />
@@ -218,9 +218,9 @@ $COLS = 14; // STT+Nhóm+Tên+TargetNăm+CảNăm+Tỷtrọng+Q1+Q2+Q3+Q4+Owner+
                             <span style="font-size:10px;color:#9CA3AF">Hỗn hợp</span>
                         <?php else: ?>
                             <!-- Empty donut -->
-                            <svg width="44" height="44" viewBox="0 0 44 44">
-                                <circle cx="22" cy="22" r="<?= $r ?>" fill="none" stroke="#E5E7EB" stroke-width="<?= $sw ?>" />
-                                <text x="22" y="23" text-anchor="middle" dominant-baseline="central" font-size="9"
+                            <svg width="40" height="40" viewBox="0 0 40 40">
+                                <circle cx="20" cy="20" r="<?= $r ?>" fill="none" stroke="#E5E7EB" stroke-width="<?= $sw ?>" />
+                                <text x="20" y="21" text-anchor="middle" dominant-baseline="central" font-size="9"
                                     fill="#D1D5DB">—</text>
                             </svg>
                         <?php endif; ?>
@@ -243,7 +243,7 @@ $COLS = 14; // STT+Nhóm+Tên+TargetNăm+CảNăm+Tỷtrọng+Q1+Q2+Q3+Q4+Owner+
                             $qPlan = $baseNum / 4;
                         $qProg = ($tot && !$tot['mixed'] && $qPlan) ? calcProgress($tot['sum'], $qPlan) : null;
                         ?>
-                        <td style="padding:5px 7px;background:<?= $qc['bg'] ?>;vertical-align:top">
+                        <td style="padding:2px 4px;background:<?= $qc['bg'] ?>;vertical-align:top">
                             <?php if ($tot && !$tot['mixed']): ?>
                                 <div style="font-size:12px;font-weight:700;color:<?= $qc['head'] ?>;margin-bottom:3px">
                                     <?= $tot['fmt'] ?>

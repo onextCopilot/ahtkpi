@@ -128,8 +128,9 @@ function fmtDisplayTarget($val)
                         <?php if ($d['is_condition']): ?><span class="badge badge-cond">ĐK</span><?php endif; ?>
                     </td>
                     <td style="font-size:12px;color:#6B7280;white-space:nowrap">
-                        <?= htmlspecialchars($d['target_base'] ?? '—') ?>    <?php if (!empty($d['unit'])): ?><span
-                                style="font-weight: 500;"><?= htmlspecialchars($d['unit']) ?></span><?php endif; ?></td>
+                        <?= htmlspecialchars($d['target_base'] ?? '—') ?>     <?php if (!empty($d['unit'])): ?><span
+                                style="font-weight: 500;"><?= htmlspecialchars($d['unit']) ?></span><?php endif; ?>
+                    </td>
                     <td style="text-align:right;font-weight:600"><?= number_format($d['weight'], 1) ?>%</td>
 
                     <?php foreach ($q_labels as $qi => $ql):
@@ -161,8 +162,8 @@ function fmtDisplayTarget($val)
                         }
                         $barPct = $pct !== null ? min(100, $pct) : 0;
                         ?>
-                        <td style="padding:4px 6px;background:<?= $bgCol ?>;vertical-align:top">
-                            <div style="display:flex;flex-direction:column;gap:4px">
+                        <td style="padding:2px 4px;background:<?= $bgCol ?>;vertical-align:top">
+                            <div style="display:flex;flex-direction:column;gap:2px">
 
                                 <!-- Label -->
                                 <div
@@ -174,10 +175,10 @@ function fmtDisplayTarget($val)
                                     <input type="text" class="qs-input" data-def="<?= $d['id'] ?>" data-quarter="<?= $qi ?>"
                                         data-year="<?= $year ?>" placeholder="Nhập target Q<?= $qi ?>"
                                         value="<?= htmlspecialchars(fmtDisplayTarget($qrow['target_value'] ?? '')) ?>"
-                                        style="width:100%;padding:4px 7px;border:1px solid #D1D5DB;border-radius:5px;font-size:12px;background:#fff;box-sizing:border-box">
+                                        style="width:100%;padding:2px 5px;border:1px solid #D1D5DB;border-radius:3px;font-size:11px;background:#fff;box-sizing:border-box">
                                 <?php else: ?>
                                     <div
-                                        style="width:100%;padding:4px 7px;border:1px solid transparent;font-size:12px;box-sizing:border-box;color:#111827;font-weight:600">
+                                        style="width:100%;padding:2px 5px;border:1px solid transparent;font-size:11px;box-sizing:border-box;color:#111827;font-weight:600">
                                         <?= htmlspecialchars(fmtDisplayTarget($qrow['target_value'] ?? '')) ?: '—' ?>
                                     </div>
                                 <?php endif; ?>
@@ -187,7 +188,7 @@ function fmtDisplayTarget($val)
 
                                 <!-- Actual + Progress -->
                                 <div
-                                    style="padding:4px 6px;background:rgba(0,0,0,.04);border-radius:5px;border-left:3px solid <?= $headCol ?>">
+                                    style="padding:2px 4px;background:rgba(0,0,0,.04);border-radius:4px;border-left:3px solid <?= $headCol ?>">
                                     <div
                                         style="font-size:9px;color:#6B7280;font-weight:600;text-transform:uppercase;letter-spacing:.04em;margin-bottom:2px">
                                         Thực tế (<?= $total ? $total['count'] : 0 ?>/3 tháng)
@@ -213,7 +214,8 @@ function fmtDisplayTarget($val)
                                         <?php if ($pct !== null): ?>
                                             <span style="font-size:10px;color:#6B7280">
                                                 <?= htmlspecialchars($total['fmt'] ?? '0') ?> /
-                                                <?= number_format($targetNum, 0, ',', '.') ?>            <?php if (!empty($d['unit'])): ?><span><?= htmlspecialchars($d['unit']) ?></span><?php endif; ?>
+                                                <?= number_format($targetNum, 0, ',', '.') ?>
+                                                <?php if (!empty($d['unit'])): ?><span><?= htmlspecialchars($d['unit']) ?></span><?php endif; ?>
                                             </span>
                                             <span style="font-size:12px;font-weight:800;color:<?= $textColor ?>"><?= $pct ?>%</span>
                                         <?php elseif ($targetNum === null && ($qrow['target_value'] ?? '') !== ''): ?>
