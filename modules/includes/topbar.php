@@ -12,7 +12,11 @@ $full_name = $_SESSION['full_name'];
 $role = $_SESSION['role'];
 
 // Track last online activity
-$conn->query("ALTER TABLE users ADD COLUMN IF NOT EXISTS last_active DATETIME DEFAULT CURRENT_TIMESTAMP");
+$check_col = $conn->query("SHOW COLUMNS FROM users LIKE 'last_active'");
+if ($check_col && $check_col->num_rows == 0) {
+    // Suppress error in case of concurrent execution
+    @$conn->query("ALTER TABLE users ADD COLUMN last_active DATETIME DEFAULT CURRENT_TIMESTAMP");
+}
 $stmt = $conn->prepare("UPDATE users SET last_active = NOW() WHERE id = ?");
 if ($stmt) {
     $stmt->bind_param("i", $current_user_id);
