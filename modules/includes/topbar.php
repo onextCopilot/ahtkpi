@@ -15,7 +15,7 @@ $role = $_SESSION['role'];
 $check_col = $conn->query("SHOW COLUMNS FROM users LIKE 'last_active'");
 if ($check_col && $check_col->num_rows == 0) {
     // Suppress error in case of concurrent execution
-    @$conn->query("ALTER TABLE users ADD COLUMN last_active DATETIME DEFAULT CURRENT_TIMESTAMP");
+    @$conn->query("ALTER TABLE users ADD COLUMN last_active DATETIME NULL DEFAULT NULL");
 }
 $stmt = $conn->prepare("UPDATE users SET last_active = NOW() WHERE id = ?");
 if ($stmt) {
