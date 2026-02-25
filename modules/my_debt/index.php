@@ -1283,7 +1283,6 @@ if ($team_res && $team_res->num_rows > 0) {
                                         <?php echo htmlspecialchars($am_name); ?>
                                     </option>
                                 <?php endforeach; ?>
-                                <option value="Other">Other</option>
                             </select>
                         </div>
                         <div class="form-group">
