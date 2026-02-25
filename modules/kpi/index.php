@@ -176,7 +176,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 $defs = [];
 $filter_dept = isset($_GET['dept']) ? intval($_GET['dept']) : (!empty($departments) ? $departments[0]['id'] : 0);
 $where = "WHERE k.year = $year" . ($filter_dept ? " AND k.department_id = $filter_dept" : "");
-$r = $conn->query("SELECT k.*, d.name dept_name, u.full_name owner_name, u.avatar owner_avatar
+$r = $conn->query("SELECT k.*, d.name dept_name, u.full_name owner_name, u.avatar owner_avatar, d.owner_id as dept_owner_id, d.manager_id as dept_manager_id
     FROM kpi_definitions k
     LEFT JOIN departments d ON k.department_id=d.id
     LEFT JOIN users u ON k.kpi_owner_id=u.id

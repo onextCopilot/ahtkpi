@@ -27,9 +27,19 @@ if ($def_id <= 0 || $year < 2000 || $month < 1 || $month > 12) {
     exit();
 }
 
-$chk = $conn->query("SELECT kpi_owner_id FROM kpi_definitions WHERE id = " . $def_id);
+$chk = $conn->query("
+    SELECT k.kpi_owner_id, d.owner_id as dept_owner_id, d.manager_id as dept_manager_id 
+    FROM kpi_definitions k 
+    LEFT JOIN departments d ON k.department_id = d.id 
+    WHERE k.id = " . $def_id
+);
 if ($chk && $row = $chk->fetch_assoc()) {
-    if ($_SESSION['role'] !== 'admin' && $_SESSION['user_id'] != $row['kpi_owner_id']) {
+    $can_edit = ($_SESSION['role'] === 'admin'
+        || $_SESSION['user_id'] == $row['kpi_owner_id']
+        || $_SESSION['user_id'] == $row['dept_owner_id']
+        || $_SESSION['user_id'] == $row['dept_manager_id']);
+
+    if (!$can_edit) {
         http_response_code(403);
         echo json_encode(['error' => 'Permission denied: Bạn không có quyền cập nhật KPI này']);
         exit();

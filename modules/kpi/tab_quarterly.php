@@ -171,7 +171,7 @@ function fmtDisplayTarget($val)
                                     Kế hoạch Q<?= $qi ?></div>
 
                                 <!-- Target input -->
-                                <?php if ($_SESSION['role'] === 'admin' || $_SESSION['user_id'] == $d['kpi_owner_id']): ?>
+                                <?php if ($_SESSION['role'] === 'admin' || $_SESSION['user_id'] == $d['kpi_owner_id'] || $_SESSION['user_id'] == $d['dept_owner_id'] || $_SESSION['user_id'] == $d['dept_manager_id']): ?>
                                     <input type="text" class="qs-input" data-def="<?= $d['id'] ?>" data-quarter="<?= $qi ?>"
                                         data-year="<?= $year ?>" placeholder="Nhập target Q<?= $qi ?>"
                                         value="<?= htmlspecialchars(fmtDisplayTarget($qrow['target_value'] ?? '')) ?>"

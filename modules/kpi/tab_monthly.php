@@ -129,12 +129,13 @@ $q_border = [1 => '#BFDBFE', 2 => '#BFDBFE', 3 => '#BFDBFE', 4 => '#A7F3D0', 5 =
                         ?>
                         <td class="as-cell <?= $isCur ? 'cur-month-col' : '' ?>"
                             style="background:<?= $q_bg[$m] ?>;padding:3px 4px">
-                            <?php if ($_SESSION['role'] === 'admin' || $_SESSION['user_id'] == $d['kpi_owner_id']): ?>
+                            <?php if ($_SESSION['role'] === 'admin' || $_SESSION['user_id'] == $d['kpi_owner_id'] || $_SESSION['user_id'] == $d['dept_owner_id'] || $_SESSION['user_id'] == $d['dept_manager_id']): ?>
                                 <input type="text" class="as-input" data-def="<?= $did ?>" data-year="<?= $year ?>"
                                     data-month="<?= $m ?>" placeholder="Thực tế T<?= $m ?>" value="<?= fmtDisplay($act) ?>">
                             <?php else: ?>
                                 <div style="font-size:12px;padding:4px 7px;font-weight:600;color:#111827">
-                                    <?= fmtDisplay($act) ?: '—' ?></div>
+                                    <?= fmtDisplay($act) ?: '—' ?>
+                                </div>
                             <?php endif; ?>
                         </td>
                     <?php endfor; ?>
