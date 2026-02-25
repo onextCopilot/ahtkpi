@@ -1009,7 +1009,7 @@ if ($team_res && $team_res->num_rows > 0) {
                                 <th>Ngày DK<br>hoàn thành SX</th>
                                 <th>Ngày DK<br>khách TT</th>
                                 <th>Phân loại<br>hóa đơn</th>
-                                <th>Số tiền<br>ban đầu</th>
+                                <th>Tiền</th>
                                 <th>Số tiền</th>
                                 <th>P&L</th>
                                 <th>Hóa đơn</th>
@@ -1161,7 +1161,7 @@ if ($team_res && $team_res->num_rows > 0) {
                                             ?>
                                         </td>
                                         <td class="cell-amount" style="color: #64748b;">
-                                            <?php echo !empty($d['original_amount']) ? formatCurrency($d['original_amount'], $d['currency'] ?? 'USD') : '-'; ?>
+                                            <?php echo !empty($d['original_amount']) ? formatCurrency($d['original_amount'], $d['original_currency'] ?? $d['currency'] ?? 'USD') : '-'; ?>
                                         </td>
                                         <td class="cell-amount">
                                             <?php echo formatCurrency($d['amount'] ?? 0, $d['currency'] ?? 'USD'); ?>

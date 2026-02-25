@@ -26,6 +26,11 @@ if ($check3 && $check3->num_rows == 0) {
     $conn->query("ALTER TABLE debts ADD original_amount DECIMAL(15,2) DEFAULT NULL");
 }
 
+$check4 = $conn->query("SHOW COLUMNS FROM debts LIKE 'original_currency'");
+if ($check4 && $check4->num_rows == 0) {
+    $conn->query("ALTER TABLE debts ADD original_currency VARCHAR(10) DEFAULT NULL");
+}
+
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     http_response_code(405);
     echo json_encode(['error' => 'Method Not Allowed']);
@@ -119,8 +124,8 @@ $amName = $_SESSION['full_name'];
 
 try {
     $stmt = $conn->prepare("INSERT INTO debts 
-        (company, am, sale_team_id, client_name, project_name, amount, original_amount, currency, vat_invoice, invoice_date, payment_status, am_notes, pl_class, invoice_status_class, payment_month, weekly_update, odoo_invoice_id, created_at) 
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())");
+        (company, am, sale_team_id, client_name, project_name, amount, original_amount, currency, original_currency, vat_invoice, invoice_date, payment_status, am_notes, pl_class, invoice_status_class, payment_month, weekly_update, odoo_invoice_id, created_at) 
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())");
 
     if (!$stmt) {
         throw new Exception("Prepare failed: " . $conn->error);
@@ -136,7 +141,7 @@ try {
     $notes = "Added from Invoice: " . $invoiceName . " (" . $currency . ")";
 
     $stmt->bind_param(
-        "ssissddsssssssssi",
+        "ssissddssssssssssi",
         $defaultCompany,
         $amName,
         $teamId,
@@ -144,6 +149,7 @@ try {
         $projectName,
         $amount,
         $amount,
+        $currency,
         $currency,
         $invoiceName,
         $invoiceDateVal,
