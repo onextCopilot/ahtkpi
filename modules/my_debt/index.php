@@ -1149,10 +1149,11 @@ if ($team_res && $team_res->num_rows > 0) {
                                                     <option value="Trắng" <?php echo ($st === 'Trắng') ? 'selected' : ''; ?>>Trắng
                                                     </option>
                                                     <option value="Xanh" <?php echo ($st === 'Xanh' || $st === 'Tốt') ? 'selected' : ''; ?>>Xanh</option>
+                                                    <option value="Tím" <?php echo ($st === 'Tím') ? 'selected' : ''; ?>>Tím</option>
                                                     <option value="PP" <?php echo ($st === 'PP') ? 'selected' : ''; ?>>PP</option>
                                                     <option value="Draft" <?php echo ($st === 'Draft') ? 'selected' : ''; ?>>Draft
                                                     </option>
-                                                    <option value="Chưa xác định" <?php echo ($st === 'Chưa xác định' || ($st !== 'Trắng' && $st !== 'Xanh' && $st !== 'Tốt' && $st !== 'PP' && $st !== 'Draft')) ? 'selected' : ''; ?>>Chưa xác định</option>
+                                                    <option value="Chưa xác định" <?php echo ($st === 'Chưa xác định' || ($st !== 'Trắng' && $st !== 'Xanh' && $st !== 'Tốt' && $st !== 'PP' && $st !== 'Draft' && $st !== 'Tím')) ? 'selected' : ''; ?>>Chưa xác định</option>
                                                 </select>
                                                 <?php
                                             }
