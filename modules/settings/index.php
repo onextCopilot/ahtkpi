@@ -18,10 +18,9 @@ $full_name = $_SESSION['full_name'];
 $role = $_SESSION['role'];
 $avatar = $_SESSION['avatar'] ?? null;
 
-// Fetch online users (active within the last 5 minutes)
-$time_limit = date('Y-m-d H:i:s', strtotime('-5 minutes'));
+// Fetch online users (active within the last 15 minutes)
 $online_users = [];
-$res = $conn->query("SELECT id, full_name, email, role, avatar, last_active FROM users WHERE last_active >= '$time_limit' ORDER BY last_active DESC");
+$res = $conn->query("SELECT id, full_name, email, role, avatar, last_active FROM users WHERE last_active >= NOW() - INTERVAL 15 MINUTE ORDER BY last_active DESC");
 if ($res) {
     while ($row = $res->fetch_assoc()) {
         $online_users[] = $row;
@@ -316,6 +315,9 @@ if ($res) {
                         <span
                             style="display: inline-block; width: 10px; height: 10px; border-radius: 50%; background: #10B981; box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.2); animation: pulse 2s infinite;"></span>
                         Online Users (<?php echo count($online_users); ?>)
+                        <span
+                            style="font-size: 0.8rem; font-weight: normal; color: var(--text-secondary); margin-left: auto;">(Active
+                            in the last 15m)</span>
                     </h3>
 
                     <style>
