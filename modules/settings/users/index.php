@@ -90,6 +90,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $can_view_invoice = isset($_POST['can_view_invoice']) ? 1 : 0;
             $is_am_bd = isset($_POST['is_am_bd']) ? 1 : 0;
             $team_ids = isset($_POST['team_ids']) ? $_POST['team_ids'] : [];
+            $role_val = $_POST['role'] ?? 'user';
             $username = trim($_POST['username']);
             // Auto-generate username from email if empty
             if (empty($username) && !empty($email)) {
@@ -104,9 +105,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 try {
                     $stmt = $conn->prepare("INSERT INTO users (username, email, full_name, password, employee_code, job_title, level,
 department_id,
-status, join_date, can_view_invoice, is_am_bd) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+status, join_date, can_view_invoice, is_am_bd, role) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
                     $stmt->bind_param(
-                        "sssssssissii",
+                        "sssssssissiis",
                         $username,
                         $email,
                         $name,
@@ -118,7 +119,8 @@ status, join_date, can_view_invoice, is_am_bd) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?
                         $status,
                         $join_date,
                         $can_view_invoice,
-                        $is_am_bd
+                        $is_am_bd,
+                        $role_val
                     );
                     $stmt->execute();
                     $new_id = $conn->insert_id;
@@ -158,6 +160,7 @@ status, join_date, can_view_invoice, is_am_bd) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?
             $can_view_invoice = isset($_POST['can_view_invoice']) ? 1 : 0;
             $is_am_bd = isset($_POST['is_am_bd']) ? 1 : 0;
             $team_ids = isset($_POST['team_ids']) ? $_POST['team_ids'] : [];
+            $role_val = $_POST['role'] ?? 'user';
 
             $username = trim($_POST['username']);
             if (empty($username) && !empty($email)) {
@@ -167,9 +170,9 @@ status, join_date, can_view_invoice, is_am_bd) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?
 
             if ($id > 0 && !empty($email)) {
                 try {
-                    $sql = "UPDATE users SET username=?, email=?, full_name=?, employee_code=?, job_title=?, level=?, department_id=?, status=?, join_date=?, can_view_invoice=?, is_am_bd=? WHERE id=?";
+                    $sql = "UPDATE users SET username=?, email=?, full_name=?, employee_code=?, job_title=?, level=?, department_id=?, status=?, join_date=?, can_view_invoice=?, is_am_bd=?, role=? WHERE id=?";
                     $stmt = $conn->prepare($sql);
-                    $stmt->bind_param("ssssssissiii", $username, $email, $name, $emp_code, $job, $level, $dept_id, $status, $join_date, $can_view_invoice, $is_am_bd, $id);
+                    $stmt->bind_param("ssssssissiisi", $username, $email, $name, $emp_code, $job, $level, $dept_id, $status, $join_date, $can_view_invoice, $is_am_bd, $role_val, $id);
                     $stmt->execute();
 
                     // Update Teams
@@ -849,6 +852,13 @@ if ($d_res) {
                         <label>Full Name <span style="color:red">*</span></label>
                         <input type="text" name="full_name" id="full_name" required placeholder="Enter full name">
                     </div>
+                    <div class="form-group">
+                        <label>Role</label>
+                        <select name="role" id="role">
+                            <option value="user">User</option>
+                            <option value="admin">Admin</option>
+                        </select>
+                    </div>
                 </div>
 
                 <div class="form-row">
@@ -1005,6 +1015,7 @@ if ($d_res) {
         const status = document.getElementById('status');
         const joinDate = document.getElementById('join_date');
         const canViewInvoice = document.getElementById('can_view_invoice');
+        const role = document.getElementById('role');
 
         function openAddModal() {
             modalTitle.textContent = 'Add User';
@@ -1019,6 +1030,7 @@ if ($d_res) {
             level.value = 'Junior';
             deptId.value = '';
             status.value = 'active';
+            role.value = 'user';
             joinDate.value = '';
             canViewInvoice.checked = false;
             document.getElementById('is_am_bd').checked = false;
@@ -1040,6 +1052,7 @@ if ($d_res) {
             level.value = user.level || 'Junior';
             deptId.value = user.department_id || '';
             status.value = user.status || 'active';
+            role.value = user.role || 'user';
             joinDate.value = user.join_date || '';
             canViewInvoice.checked = user.can_view_invoice == 1;
             document.getElementById('is_am_bd').checked = user.is_am_bd == 1;

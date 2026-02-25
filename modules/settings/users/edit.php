@@ -57,6 +57,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $is_am_bd = isset($_POST['is_am_bd']) ? 1 : 0;
         $can_view_invoice = isset($_POST['can_view_invoice']) ? 1 : 0;
         $team_ids = isset($_POST['team_ids']) ? $_POST['team_ids'] : [];
+        $role_val = $_POST['role'] ?? 'user';
 
         $username = trim($_POST['username']);
         if (empty($username) && !empty($email)) {
@@ -73,9 +74,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 if ($check->get_result()->num_rows > 0) {
                     $error_message = "Email or Employee Code already exists.";
                 } else {
-                    $sql = "UPDATE users SET username=?, email=?, full_name=?, employee_code=?, job_title=?, level=?, department_id=?, status=?, join_date=?, is_am_bd=?, can_view_invoice=? WHERE id=?";
+                    $sql = "UPDATE users SET username=?, email=?, full_name=?, employee_code=?, job_title=?, level=?, department_id=?, status=?, join_date=?, is_am_bd=?, can_view_invoice=?, role=? WHERE id=?";
                     $stmt = $conn->prepare($sql);
-                    $stmt->bind_param("ssssssissiii", $username, $email, $name, $emp_code, $job, $level, $dept_id, $status, $join_date, $is_am_bd, $can_view_invoice, $id);
+                    $stmt->bind_param("ssssssissiisi", $username, $email, $name, $emp_code, $job, $level, $dept_id, $status, $join_date, $is_am_bd, $can_view_invoice, $role_val, $id);
                     $stmt->execute();
                     
                     // Update session if editing self
@@ -522,6 +523,13 @@ while ($r = $ut_res_result->fetch_assoc()) {
                                 <div class="form-group" style="grid-column: span 2;">
                                     <label>Full Name <span style="color:red">*</span></label>
                                     <input type="text" name="full_name" value="<?php echo htmlspecialchars($user['full_name']); ?>" required>
+                                </div>
+                                <div class="form-group" style="grid-column: span 2;">
+                                    <label>System Role</label>
+                                    <select name="role">
+                                        <option value="user" <?php echo ($user['role'] == 'user' || empty($user['role'])) ? 'selected' : ''; ?>>User</option>
+                                        <option value="admin" <?php echo ($user['role'] == 'admin') ? 'selected' : ''; ?>>Admin</option>
+                                    </select>
                                 </div>
                                 <div class="form-group">
                                     <label>Username <span style="color:red">*</span></label>
