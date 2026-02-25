@@ -350,19 +350,36 @@ if ($team_res && $team_res->num_rows > 0) {
         table.debt-table th:nth-child(2), table.debt-table tr:not(.group-header) td:nth-child(2) { box-sizing: border-box; position: sticky; left: 40px; z-index: 8; width: 80px; min-width: 80px; max-width: 80px; text-align: center; }
         table.debt-table th:nth-child(3), table.debt-table tr:not(.group-header) td:nth-child(3) { box-sizing: border-box; position: sticky; left: 120px; z-index: 8; width: 80px; min-width: 80px; max-width: 80px; }
         table.debt-table th:nth-child(4), table.debt-table tr:not(.group-header) td:nth-child(4) { box-sizing: border-box; position: sticky; left: 200px; z-index: 8; width: 100px; min-width: 100px; max-width: 100px; }
-        table.debt-table th:nth-child(5), table.debt-table tr:not(.group-header) td:nth-child(5) { box-sizing: border-box; position: sticky; left: 300px; z-index: 8; width: 160px; min-width: 160px; max-width: 160px; border-right: 1px solid #cbd5e1 !important; box-shadow: 2px 0 5px -2px rgba(0,0,0,0.1); }
+        table.debt-table th:nth-child(5), table.debt-table tr:not(.group-header) td:nth-child(5) { box-sizing: border-box; position: sticky; left: 300px; z-index: 8; width: 140px; min-width: 140px; max-width: 140px; }
+        table.debt-table th:nth-child(6), table.debt-table tr:not(.group-header) td:nth-child(6) { box-sizing: border-box; position: sticky; left: 440px; z-index: 8; width: 220px; min-width: 220px; max-width: 220px; }
+        table.debt-table th:nth-child(7), table.debt-table tr:not(.group-header) td:nth-child(7) { box-sizing: border-box; position: sticky; left: 660px; z-index: 8; width: 220px; min-width: 220px; max-width: 220px; border-right: 1px solid #cbd5e1 !important; box-shadow: 2px 0 5px -2px rgba(0,0,0,0.1); }
 
         table.debt-table tr:not(.group-header) td:nth-child(1), 
         table.debt-table tr:not(.group-header) td:nth-child(2), 
         table.debt-table tr:not(.group-header) td:nth-child(3), 
         table.debt-table tr:not(.group-header) td:nth-child(4), 
-        table.debt-table tr:not(.group-header) td:nth-child(5) {
+        table.debt-table tr:not(.group-header) td:nth-child(5),
+        table.debt-table tr:not(.group-header) td:nth-child(6),
+        table.debt-table tr:not(.group-header) td:nth-child(7) {
             background-color: inherit;
         }
 
-        table.debt-table th:nth-child(1), table.debt-table th:nth-child(2), table.debt-table th:nth-child(3), table.debt-table th:nth-child(4), table.debt-table th:nth-child(5) {
+        table.debt-table th:nth-child(1), 
+        table.debt-table th:nth-child(2), 
+        table.debt-table th:nth-child(3), 
+        table.debt-table th:nth-child(4), 
+        table.debt-table th:nth-child(5),
+        table.debt-table th:nth-child(6),
+        table.debt-table th:nth-child(7) {
             z-index: 12;
             background-color: #004b75; 
+        }
+
+        /* Sticky group total */
+        table.debt-table tr.group-header td {
+            position: sticky;
+            left: 0;
+            z-index: 11;
         }
 
         table.debt-table tbody {
