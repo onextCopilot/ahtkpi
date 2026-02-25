@@ -996,7 +996,9 @@ $status_map = ['draft' => ['#F1F5F9', '#64748B'], 'active' => ['#DBEAFE', '#1D4E
                         <label>Nhóm KPI</label>
                         <select name="kpi_group" id="def_group">
                             <option value="">-- Chọn nhóm --</option>
-                            <?php foreach ($kpi_groups as $g): ?>
+                            <?php
+                            $template_groups = array_unique(array_filter(array_column($kpi_templates, 'kpi_group')));
+                            foreach ($template_groups as $g): ?>
                                 <option value="<?= htmlspecialchars($g) ?>"><?= htmlspecialchars($g) ?></option>
                             <?php endforeach; ?>
                         </select>
@@ -1073,6 +1075,23 @@ $status_map = ['draft' => ['#F1F5F9', '#64748B'], 'active' => ['#DBEAFE', '#1D4E
         }
         function closeDefModal() { document.getElementById('defModal').classList.remove('show') }
         document.getElementById('defModal').addEventListener('click', function (e) { if (e.target === this) closeDefModal() });
+
+        // Filter KPI name datalist based on selected group
+        const allKpiTemplates = <?= json_encode($kpi_templates) ?>;
+        document.getElementById('def_group').addEventListener('change', function () {
+            const selectedGroup = this.value;
+            const datalist = document.getElementById('kpiNameOptions');
+            datalist.innerHTML = ''; // clear current options
+
+            allKpiTemplates.forEach(tpl => {
+                if (!selectedGroup || tpl.kpi_group === selectedGroup) {
+                    const opt = document.createElement('option');
+                    opt.value = tpl.name;
+                    opt.setAttribute('data-group', tpl.kpi_group || '');
+                    datalist.appendChild(opt);
+                }
+            });
+        });
 
         // Auto-select KPI group based on template
         document.getElementById('def_name').addEventListener('input', function (e) {
