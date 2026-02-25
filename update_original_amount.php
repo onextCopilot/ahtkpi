@@ -20,7 +20,7 @@ if ($checkColCurr && $checkColCurr->num_rows == 0) {
 $sql1 = "UPDATE debts 
          SET original_amount = amount, original_currency = currency 
          WHERE odoo_invoice_id IS NOT NULL 
-           AND original_amount IS NULL";
+           AND (original_amount IS NULL OR original_currency IS NULL)";
 
 // Cập nhật thêm dựa theo vat_invoice nếu trước đây odoo_invoice_id chưa được lưu 
 // (đối với các dòng đồng bộ từ hoá đơn trước đó tạo bằng mã VAT)
@@ -28,7 +28,7 @@ $sql2 = "UPDATE debts
          SET original_amount = amount, original_currency = currency 
          WHERE vat_invoice IS NOT NULL 
            AND vat_invoice != '' 
-           AND original_amount IS NULL";
+           AND (original_amount IS NULL OR original_currency IS NULL)";
 
 $updated = 0;
 
