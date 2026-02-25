@@ -1,6 +1,14 @@
 <?php
 require_once __DIR__ . '/config/config.php';
 
+// Kiểm tra và tạo cột nếu trên Live Server chưa có
+$checkCol = $conn->query("SHOW COLUMNS FROM debts LIKE 'original_amount'");
+if ($checkCol && $checkCol->num_rows == 0) {
+    if (!$conn->query("ALTER TABLE debts ADD original_amount DECIMAL(15,2) DEFAULT NULL")) {
+        die("Lỗi tạo cột: " . $conn->error);
+    }
+}
+
 // Cập nhật original_amount cho các khoản nợ đã có odoo_invoice_id
 $sql1 = "UPDATE debts 
          SET original_amount = amount 
