@@ -169,10 +169,7 @@ $COLS = 14; // STT+Nhóm+Tên+TargetNăm+CảNăm+Tỷtrọng+Q1+Q2+Q3+Q4+Owner+
                     </td>
 
                     <!-- Target năm -->
-                    <td style="font-size:12px;white-space:nowrap">
-                        <?= fmtTargetBase($d['target_base'] ?? '') ?>
-                        <?php if(!empty($d['unit'])): ?><span style="color:#6B7280; font-size:11px; margin-left:3px; font-weight: 500;"><?= htmlspecialchars($d['unit']) ?></span><?php endif; ?>
-                    </td>
+                    <td style="font-size:12px;white-space:nowrap"><?= fmtTargetBase($d['target_base'] ?? '') ?><?php if(!empty($d['unit'])): ?><span style="color:#6B7280; font-size:11px; font-weight: 500;"><?= htmlspecialchars($d['unit']) ?></span><?php endif; ?></td>
 
                     <!-- 🏁 Cả năm — donut chart -->
                     <?php

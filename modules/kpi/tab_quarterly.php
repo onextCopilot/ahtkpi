@@ -128,10 +128,8 @@ function fmtDisplayTarget($val)
                         <?php if ($d['is_condition']): ?><span class="badge badge-cond">ĐK</span><?php endif; ?>
                     </td>
                     <td style="font-size:12px;color:#6B7280;white-space:nowrap">
-                        <?= htmlspecialchars($d['target_base'] ?? '—') ?>
-                        <?php if (!empty($d['unit'])): ?><span
-                                style="margin-left:3px; font-weight: 500;"><?= htmlspecialchars($d['unit']) ?></span><?php endif; ?>
-                    </td>
+                        <?= htmlspecialchars($d['target_base'] ?? '—') ?>    <?php if (!empty($d['unit'])): ?><span
+                                style="font-weight: 500;"><?= htmlspecialchars($d['unit']) ?></span><?php endif; ?></td>
                     <td style="text-align:right;font-weight:600"><?= number_format($d['weight'], 1) ?>%</td>
 
                     <?php foreach ($q_labels as $qi => $ql):
@@ -215,9 +213,7 @@ function fmtDisplayTarget($val)
                                         <?php if ($pct !== null): ?>
                                             <span style="font-size:10px;color:#6B7280">
                                                 <?= htmlspecialchars($total['fmt'] ?? '0') ?> /
-                                                <?= number_format($targetNum, 0, ',', '.') ?>
-                                                <?php if (!empty($d['unit'])): ?><span
-                                                        style="margin-left:2px;"><?= htmlspecialchars($d['unit']) ?></span><?php endif; ?>
+                                                <?= number_format($targetNum, 0, ',', '.') ?>            <?php if (!empty($d['unit'])): ?><span><?= htmlspecialchars($d['unit']) ?></span><?php endif; ?>
                                             </span>
                                             <span style="font-size:12px;font-weight:800;color:<?= $textColor ?>"><?= $pct ?>%</span>
                                         <?php elseif ($targetNum === null && ($qrow['target_value'] ?? '') !== ''): ?>
