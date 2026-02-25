@@ -1238,7 +1238,8 @@ if ($team_res && $team_res->num_rows > 0) {
                 <span class="close" onclick="closeModal()">&times;</span>
             </div>
 
-            <form method="POST" id="mainForm">
+            <form method="POST" id="mainForm"
+                style="display: flex; flex-direction: column; flex: 1; min-height: 0; overflow: hidden;">
                 <div class="modal-body">
                     <input type="hidden" name="action" id="formAction" value="add">
                     <input type="hidden" name="id" id="editId" value="">
@@ -1264,10 +1265,10 @@ if ($team_res && $team_res->num_rows > 0) {
                             <select name="sale_team_id" id="sale_team_id">
                                 <option value="">-- Select Team
                                     --</option>
-                            <?php foreach ($all_teams as $team): ?>
+                                <?php foreach ($all_teams as $team): ?>
                                     <option value="<?php echo htmlspecialchars($team['id']); ?>">
                                         <?php echo htmlspecialchars($team['name']); ?>
-                                        </option>
+                                    </option>
                                 <?php endforeach; ?>
                             </select>
                         </div>
@@ -1277,10 +1278,10 @@ if ($team_res && $team_res->num_rows > 0) {
                         <div class="form-group">
                             <label>AM</label>
                             <select name="am" id="am">
-                            <?php foreach ($am_list as $am_name): ?>
+                                <?php foreach ($am_list as $am_name): ?>
                                     <option value="<?php echo htmlspecialchars($am_name); ?>">
                                         <?php echo htmlspecialchars($am_name); ?>
-                                        </option>
+                                    </option>
                                 <?php endforeach; ?>
                                 <option value="Other">Other</option>
                             </select>
@@ -1305,12 +1306,7 @@ if ($team_res && $team_res->num_rows > 0) {
                         </div>
                     </div>
 
-                    <div class="form-row" style="grid-template-columns: 2fr 1fr 2fr;">
-                        <div class="form-group">
-                            <label>Payment Milestone</label>
-                            <input type="text" name="payment_milestone" id="payment_milestone"
-                                placeholder="e.g. Inv 08.2023">
-                        </div>
+                    <div class="form-row">
                         <div class="form-group">
                             <label>Currency</label>
                             <select name="currency" id="currency">
