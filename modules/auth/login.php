@@ -136,15 +136,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                 </button>
             </form>
 
-            <div class="login-footer">
-                <p class="demo-info">
-                    <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                        <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="2" />
-                        <path d="M12 16V12M12 8H12.01" stroke="currentColor" stroke-width="2" stroke-linecap="round" />
-                    </svg>
-                    Demo account: <strong>admin</strong> / <strong>@admin123</strong>
-                </p>
-            </div>
+
         </div>
     </div>
 
