@@ -3,13 +3,20 @@
 require_once __DIR__ . '/../../config/config.php';
 
 if (!isset($_SESSION['user_id'])) {
-header("Location: /login");
-exit();
+    header("Location: /login");
+    exit();
 }
 
 $current_user_id = $_SESSION['user_id'];
 $full_name = $_SESSION['full_name'];
 $role = $_SESSION['role'];
+
+// Track last online activity
+$conn->query("ALTER TABLE users ADD COLUMN IF NOT EXISTS last_active DATETIME DEFAULT CURRENT_TIMESTAMP");
+$stmt = $conn->prepare("UPDATE users SET last_active = NOW() WHERE id = ?");
+$stmt->bind_param("i", $current_user_id);
+$stmt->execute();
+$stmt->close();
 
 // Fetch latest avatar from DB to ensure it's up to date
 $stmt = $conn->prepare("SELECT avatar FROM users WHERE id = ?");
@@ -17,17 +24,17 @@ $stmt->bind_param("i", $current_user_id);
 $stmt->execute();
 $res = $stmt->get_result();
 if ($row = $res->fetch_assoc()) {
-$avatar = $row['avatar'];
-$_SESSION['avatar'] = $avatar; // Sync session
+    $avatar = $row['avatar'];
+    $_SESSION['avatar'] = $avatar; // Sync session
 } else {
-$avatar = $_SESSION['avatar'] ?? null;
+    $avatar = $_SESSION['avatar'] ?? null;
 }
 
 // Default title/subtitle if not set
 if (!isset($page_title))
-$page_title = 'Management System';
+    $page_title = 'Management System';
 if (!isset($page_subtitle))
-$page_subtitle = '';
+    $page_subtitle = '';
 
 ?>
 <header class="top-bar">

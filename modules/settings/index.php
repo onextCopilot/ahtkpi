@@ -18,6 +18,15 @@ $full_name = $_SESSION['full_name'];
 $role = $_SESSION['role'];
 $avatar = $_SESSION['avatar'] ?? null;
 
+// Fetch online users (active within the last 5 minutes)
+$time_limit = date('Y-m-d H:i:s', strtotime('-5 minutes'));
+$online_users = [];
+$res = $conn->query("SELECT id, full_name, email, role, avatar, last_active FROM users WHERE last_active >= '$time_limit' ORDER BY last_active DESC");
+if ($res) {
+    while ($row = $res->fetch_assoc()) {
+        $online_users[] = $row;
+    }
+}
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -298,6 +307,97 @@ $avatar = $_SESSION['avatar'] ?? null;
                         </div>
                     </a>
                 </div>
+
+                <!-- Online Users Block -->
+                <div
+                    style="margin-top: 3rem; background: white; border-radius: 16px; padding: 1.5rem; border: 1px solid var(--border-color);">
+                    <h3
+                        style="font-size: 1.1rem; font-weight: 600; margin-bottom: 1.5rem; color: var(--text-primary); display: flex; align-items: center; gap: 10px;">
+                        <span
+                            style="display: inline-block; width: 10px; height: 10px; border-radius: 50%; background: #10B981; box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.2); animation: pulse 2s infinite;"></span>
+                        Online Users (<?php echo count($online_users); ?>)
+                    </h3>
+
+                    <style>
+                        @keyframes pulse {
+                            0% {
+                                box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.4);
+                            }
+
+                            70% {
+                                box-shadow: 0 0 0 6px rgba(16, 185, 129, 0);
+                            }
+
+                            100% {
+                                box-shadow: 0 0 0 0 rgba(16, 185, 129, 0);
+                            }
+                        }
+
+                        .online-user-card {
+                            display: flex;
+                            align-items: center;
+                            gap: 12px;
+                            padding: 10px 14px;
+                            background: var(--bg-secondary);
+                            border-radius: 12px;
+                            border: 1px solid var(--border-color);
+                        }
+
+                        .ou-avatar {
+                            width: 36px;
+                            height: 36px;
+                            border-radius: 50%;
+                            object-fit: cover;
+                            background: var(--primary-color);
+                            color: white;
+                            display: flex;
+                            align-items: center;
+                            justify-content: center;
+                            font-weight: 600;
+                            font-size: 14px;
+                        }
+
+                        .ou-info {
+                            display: flex;
+                            flex-direction: column;
+                        }
+
+                        .ou-name {
+                            font-size: 0.95rem;
+                            font-weight: 500;
+                            color: var(--text-primary);
+                        }
+
+                        .ou-role {
+                            font-size: 0.75rem;
+                            color: var(--text-secondary);
+                            text-transform: capitalize;
+                        }
+                    </style>
+
+                    <div style="display: flex; flex-wrap: wrap; gap: 1rem;">
+                        <?php foreach ($online_users as $ou): ?>
+                            <div class="online-user-card">
+                                <?php if (!empty($ou['avatar'])): ?>
+                                    <img src="<?php echo htmlspecialchars($ou['avatar']); ?>" class="ou-avatar" alt="Avatar">
+                                <?php else: ?>
+                                    <div class="ou-avatar">
+                                        <?php echo strtoupper(substr($ou['full_name'], 0, 1)); ?>
+                                    </div>
+                                <?php endif; ?>
+                                <div class="ou-info">
+                                    <span class="ou-name"><?php echo htmlspecialchars($ou['full_name']); ?></span>
+                                    <span class="ou-role"><?php echo htmlspecialchars($ou['role']); ?> &bull; Active just
+                                        now</span>
+                                </div>
+                            </div>
+                        <?php endforeach; ?>
+                        <?php if (empty($online_users)): ?>
+                            <span style="color: var(--text-secondary); font-size: 0.9rem;">No users online right now.</span>
+                        <?php endif; ?>
+                    </div>
+                </div>
+
             </div>
         </main>
     </div>
