@@ -28,6 +28,7 @@ if ($table_check->num_rows == 0) {
         id INT AUTO_INCREMENT PRIMARY KEY,
         company VARCHAR(50) DEFAULT 'AHT TECH',
         sale_team VARCHAR(100),
+        sale_team_id INT DEFAULT NULL,
         am VARCHAR(100),
         client_name VARCHAR(255),
         project_name VARCHAR(255),
@@ -51,6 +52,12 @@ if ($table_check->num_rows == 0) {
     if (!$conn->query($sql)) {
         die("Error creating table: " . $conn->error);
     }
+} else {
+    // Check and add sale_team_id if not exists
+    $check_col = $conn->query("SHOW COLUMNS FROM debts LIKE 'sale_team_id'");
+    if ($check_col->num_rows == 0) {
+        $conn->query("ALTER TABLE debts ADD COLUMN sale_team_id INT DEFAULT NULL AFTER am");
+    }
 }
 
 // --- HANDLE POST (Add/Edit/Delete) ---
@@ -58,7 +65,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     // ADD & EDIT
     if (isset($_POST['action']) && ($_POST['action'] === 'add' || $_POST['action'] === 'edit')) {
         $company = $_POST['company'] ?? 'AHT TECH';
-        $sale_team = $_POST['sale_team'] ?? '';
+        $sale_team_id = !empty($_POST['sale_team_id']) ? intval($_POST['sale_team_id']) : NULL;
         $am = $_POST['am'];
         $client = $_POST['client_name'];
         $project = $_POST['project_name'];
@@ -82,13 +89,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $prod_stat = $_POST['production_status'] ?? '';
 
         if ($_POST['action'] === 'add') {
-            $stmt = $conn->prepare("INSERT INTO debts (company, sale_team, am, client_name, project_name, payment_milestone, expected_prod_date, expected_payment_date, invoice_status_class, amount, currency, invoice_status, vat_invoice, invoice_date, payment_status, payment_month, weekly_update, am_notes, delivery_notes, production_status, pl_class) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
-            $stmt->bind_param("ssssssssssdsssssssssss", $company, $sale_team, $am, $client, $project, $milestone, $prod_date, $pay_date, $inv_class, $amount, $currency_val, $inv_stat, $vat, $invoice_date_val, $pay_stat, $pay_month, $weekly, $am_note, $del_note, $prod_stat, $pl);
+            $stmt = $conn->prepare("INSERT INTO debts (company, sale_team_id, am, client_name, project_name, payment_milestone, expected_prod_date, expected_payment_date, invoice_status_class, amount, currency, invoice_status, vat_invoice, invoice_date, payment_status, payment_month, weekly_update, am_notes, delivery_notes, production_status, pl_class) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+            $stmt->bind_param("sisssssssssdsssssssssss", $company, $sale_team_id, $am, $client, $project, $milestone, $prod_date, $pay_date, $inv_class, $amount, $currency_val, $inv_stat, $vat, $invoice_date_val, $pay_stat, $pay_month, $weekly, $am_note, $del_note, $prod_stat, $pl);
         } else {
             // Edit
             $id = intval($_POST['id']);
-            $stmt = $conn->prepare("UPDATE debts SET company=?, sale_team=?, am=?, client_name=?, project_name=?, payment_milestone=?, expected_prod_date=?, expected_payment_date=?, invoice_status_class=?, amount=?, currency=?, invoice_status=?, vat_invoice=?, invoice_date=?, payment_status=?, payment_month=?, weekly_update=?, am_notes=?, delivery_notes=?, production_status=?, pl_class=? WHERE id=?");
-            $stmt->bind_param("ssssssssssdsssssssssssi", $company, $sale_team, $am, $client, $project, $milestone, $prod_date, $pay_date, $inv_class, $amount, $currency_val, $inv_stat, $vat, $invoice_date_val, $pay_stat, $pay_month, $weekly, $am_note, $del_note, $prod_stat, $pl, $id);
+            $stmt = $conn->prepare("UPDATE debts SET company=?, sale_team_id=?, am=?, client_name=?, project_name=?, payment_milestone=?, expected_prod_date=?, expected_payment_date=?, invoice_status_class=?, amount=?, currency=?, invoice_status=?, vat_invoice=?, invoice_date=?, payment_status=?, payment_month=?, weekly_update=?, am_notes=?, delivery_notes=?, production_status=?, pl_class=? WHERE id=?");
+            $stmt->bind_param("sisssssssssdsssssssssssi", $company, $sale_team_id, $am, $client, $project, $milestone, $prod_date, $pay_date, $inv_class, $amount, $currency_val, $inv_stat, $vat, $invoice_date_val, $pay_stat, $pay_month, $weekly, $am_note, $del_note, $prod_stat, $pl, $id);
         }
 
         if ($stmt->execute()) {
@@ -112,38 +119,38 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 $where_clauses = [];
 // Force filter by current user's first name
 $user_first = explode(' ', trim($_SESSION['full_name']))[0];
-$where_clauses[] = "am LIKE '%" . $conn->real_escape_string($user_first) . "%'";
+$where_clauses[] = "d.am LIKE '%" . $conn->real_escape_string($user_first) . "%'";
 
 if (!empty($_GET['status'])) {
     $status_filter = $conn->real_escape_string($_GET['status']);
-    $where_clauses[] = "payment_status = '$status_filter'";
+    $where_clauses[] = "d.payment_status = '$status_filter'";
 }
 
 if (!empty($_GET['q'])) {
     $search = $conn->real_escape_string($_GET['q']);
-    $where_clauses[] = "(client_name LIKE '%$search%' OR project_name LIKE '%$search%' OR vat_invoice LIKE '%$search%')";
+    $where_clauses[] = "(d.client_name LIKE '%$search%' OR d.project_name LIKE '%$search%' OR d.vat_invoice LIKE '%$search%')";
 }
 
 if (!empty($_GET['year'])) {
     $year = intval($_GET['year']);
-    $where_clauses[] = "YEAR(invoice_date) = $year";
+    $where_clauses[] = "YEAR(d.invoice_date) = $year";
 }
 
 if (!empty($_GET['quarter'])) {
     $qtr = intval($_GET['quarter']);
     if ($qtr == 1)
-        $where_clauses[] = "MONTH(invoice_date) IN (1,2,3)";
+        $where_clauses[] = "MONTH(d.invoice_date) IN (1,2,3)";
     elseif ($qtr == 2)
-        $where_clauses[] = "MONTH(invoice_date) IN (4,5,6)";
+        $where_clauses[] = "MONTH(d.invoice_date) IN (4,5,6)";
     elseif ($qtr == 3)
-        $where_clauses[] = "MONTH(invoice_date) IN (7,8,9)";
+        $where_clauses[] = "MONTH(d.invoice_date) IN (7,8,9)";
     elseif ($qtr == 4)
-        $where_clauses[] = "MONTH(invoice_date) IN (10,11,12)";
+        $where_clauses[] = "MONTH(d.invoice_date) IN (10,11,12)";
 }
 
 if (!empty($_GET['month'])) {
     $month = intval($_GET['month']);
-    $where_clauses[] = "MONTH(invoice_date) = $month";
+    $where_clauses[] = "MONTH(d.invoice_date) = $month";
 }
 
 $where_sql = "";
@@ -156,7 +163,7 @@ $monthTotals = [];
 $total_amount_usd = 0;
 $total_amount_vnd = 0;
 
-$res = $conn->query("SELECT * FROM debts $where_sql ORDER BY invoice_date DESC, id DESC");
+$res = $conn->query("SELECT d.*, st.name as team_name FROM debts d LEFT JOIN sale_teams st ON d.sale_team_id = st.id $where_sql ORDER BY d.invoice_date DESC, d.id DESC");
 if ($res) {
     while ($row = $res->fetch_assoc()) {
         $amount = (float) $row['amount'];
@@ -227,18 +234,19 @@ if ($res_am && $res_am->num_rows > 0) {
 }
 
 // Fetch Departments for Company / Sale Team Select
-$sale_teams = [];
-$res_dept = $conn->query("SELECT name FROM sale_teams ORDER BY order_num ASC, id DESC");
-if ($res_dept && $res_dept->num_rows > 0) {
-    while ($row_dept = $res_dept->fetch_assoc()) {
-        $n = trim($row_dept['name']);
-        if (!empty($n) && !in_array($n, $sale_teams)) {
-            $sale_teams[] = $n;
-        }
+$all_teams = [];
+$team_res = $conn->query("SELECT * FROM sale_teams ORDER BY order_num ASC, id DESC");
+if ($team_res && $team_res->num_rows > 0) {
+    while ($tr = $team_res->fetch_assoc()) {
+        $all_teams[] = $tr;
     }
 } else {
     // Fallback if none found
-    $sale_teams = ['AHT TECH', 'A1VN', 'A1C MY'];
+    $all_teams = [
+        ['id' => null, 'name' => 'AHT TECH'],
+        ['id' => null, 'name' => 'A1VN'],
+        ['id' => null, 'name' => 'A1C MY']
+    ];
 }
 
 ?>
@@ -1067,7 +1075,7 @@ if ($res_dept && $res_dept->num_rows > 0) {
                                             </form>
                                         </td>
                                         <td class="cell-company"><?php echo htmlspecialchars($d['company']); ?></td>
-                                        <td><?php echo htmlspecialchars($d['sale_team'] ?? ''); ?></td>
+                                        <td><?php echo htmlspecialchars($d['team_name'] ?? ''); ?></td>
                                         <td>
                                             <?php
                                             // Format AM Badge
@@ -1253,11 +1261,13 @@ if ($res_dept && $res_dept->num_rows > 0) {
                         </div>
                         <div class="form-group">
                             <label>Sale Team</label>
-                            <select name="sale_team" id="sale_team">
-                                <?php foreach ($sale_teams as $team): ?>
-                                    <option value="<?php echo htmlspecialchars($team); ?>">
-                                        <?php echo htmlspecialchars($team); ?>
-                                    </option>
+                            <select name="sale_team_id" id="sale_team_id">
+                                <option value="">-- Select Team
+                                    --</option>
+                            <?php foreach ($all_teams as $team): ?>
+                                    <option value="<?php echo htmlspecialchars($team['id']); ?>">
+                                        <?php echo htmlspecialchars($team['name']); ?>
+                                        </option>
                                 <?php endforeach; ?>
                             </select>
                         </div>
@@ -1267,10 +1277,10 @@ if ($res_dept && $res_dept->num_rows > 0) {
                         <div class="form-group">
                             <label>AM</label>
                             <select name="am" id="am">
-                                <?php foreach ($am_list as $am_name): ?>
+                            <?php foreach ($am_list as $am_name): ?>
                                     <option value="<?php echo htmlspecialchars($am_name); ?>">
                                         <?php echo htmlspecialchars($am_name); ?>
-                                    </option>
+                                        </option>
                                 <?php endforeach; ?>
                                 <option value="Other">Other</option>
                             </select>
@@ -1427,22 +1437,8 @@ if ($res_dept && $res_dept->num_rows > 0) {
                 document.getElementById('company').value = data.company || 'AHT TECH';
 
                 // Handle Sale Team Dropdown safely
-                const saleTeamSelect = document.getElementById('sale_team');
-                const stVal = data.sale_team || '';
-                let stExists = false;
-                for (let i = 0; i < saleTeamSelect.options.length; i++) {
-                    if (saleTeamSelect.options[i].value === stVal) {
-                        stExists = true;
-                        break;
-                    }
-                }
-                if (!stExists && stVal) {
-                    const opt = document.createElement('option');
-                    opt.value = stVal;
-                    opt.text = stVal;
-                    saleTeamSelect.add(opt);
-                }
-                saleTeamSelect.value = stVal;
+                const saleTeamSelect = document.getElementById('sale_team_id');
+                saleTeamSelect.value = data.sale_team_id || '';
 
                 // Handle AM Dropdown safely
                 const amSelect = document.getElementById('am');
