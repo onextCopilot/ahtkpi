@@ -6,6 +6,11 @@ if (!isset($_SESSION['user_id'])) {
     exit();
 }
 
+if ($_SESSION['role'] !== 'admin') {
+    header("Location: /dashboard");
+    exit();
+}
+
 $conn->query("CREATE TABLE IF NOT EXISTS odoo_settings (
     id INT AUTO_INCREMENT PRIMARY KEY,
     odoo_url TEXT NOT NULL,

@@ -7,11 +7,11 @@ if (!isset($_SESSION['user_id'])) {
     exit();
 }
 
-// Check if user has admin privileges (optional, depending on requirements)
-// if ($_SESSION['role'] !== 'admin') {
-//     header("Location: /dashboard");
-//     exit();
-// }
+// Check if user has admin privileges
+if ($_SESSION['role'] !== 'admin') {
+    header("Location: /dashboard");
+    exit();
+}
 
 $user_id = $_SESSION['user_id'];
 $full_name = $_SESSION['full_name'];

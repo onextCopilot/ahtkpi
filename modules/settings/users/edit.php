@@ -11,6 +11,11 @@ if (!isset($_SESSION['user_id'])) {
     exit();
 }
 
+if ($_SESSION['role'] !== 'admin') {
+    header("Location: /dashboard");
+    exit();
+}
+
 $current_user_id = $_SESSION['user_id'];
 $full_name = $_SESSION['full_name'];
 $role = $_SESSION['role'];

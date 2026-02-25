@@ -5,6 +5,11 @@ if (!isset($_SESSION['user_id'])) {
     header("Location: /login");
     exit();
 }
+
+if ($_SESSION['role'] !== 'admin') {
+    header("Location: /dashboard");
+    exit();
+}
 $full_name = $_SESSION['full_name'];
 $role = $_SESSION['role'];
 $avatar = $_SESSION['avatar'] ?? null;
