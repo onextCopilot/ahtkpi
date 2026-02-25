@@ -21,6 +21,7 @@ $conn->query("CREATE TABLE IF NOT EXISTS kpi_definitions (
     kpi_group     VARCHAR(100),
     kpi_name      VARCHAR(255) NOT NULL,
     target_base   VARCHAR(255),
+    unit          VARCHAR(50) DEFAULT NULL,
     weight        DECIMAL(5,2) DEFAULT 0,
     kpi_owner_id  INT,
     is_condition  TINYINT(1) DEFAULT 0,

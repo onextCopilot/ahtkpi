@@ -70,6 +70,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $group = trim($_POST['kpi_group'] ?? '');
         $name = trim($_POST['kpi_name'] ?? '');
         $target = trim($_POST['target_base'] ?? '');
+        $unit = trim($_POST['unit'] ?? '');
         $weight = floatval($_POST['weight'] ?? 0);
         $owner_id = !empty($_POST['kpi_owner_id']) ? intval($_POST['kpi_owner_id']) : null;
         $is_cond = isset($_POST['is_condition']) ? 1 : 0;
@@ -79,9 +80,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $msg_err = "Tên KPI không được để trống.";
         } else {
             if ($action === 'add_def') {
-                $stmt = $conn->prepare("INSERT INTO kpi_definitions (year,department_id,kpi_group,kpi_name,target_base,weight,kpi_owner_id,is_condition,notes,created_by) VALUES (?,?,?,?,?,?,?,?,?,?)");
-                // i=year, i=dept, s=group, s=name, s=target, d=weight, i=owner, i=is_cond, s=notes, i=created_by
-                $stmt->bind_param("iisssdisis", $yr, $dept_id, $group, $name, $target, $weight, $owner_id, $is_cond, $notes, $_SESSION['user_id']);
+                $stmt = $conn->prepare("INSERT INTO kpi_definitions (year,department_id,kpi_group,kpi_name,target_base,unit,weight,kpi_owner_id,is_condition,notes,created_by) VALUES (?,?,?,?,?,?,?,?,?,?,?)");
+                // i=year, i=dept, s=group, s=name, s=target, s=unit, d=weight, i=owner, i=is_cond, s=notes, i=created_by
+                $stmt->bind_param("iissssdisis", $yr, $dept_id, $group, $name, $target, $unit, $weight, $owner_id, $is_cond, $notes, $_SESSION['user_id']);
                 $stmt->execute() ? $msg_ok = "Đã lưu KPI!" : $msg_err = $conn->error;
             } else {
                 $id = intval($_POST['id']);
@@ -91,9 +92,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 if ($_SESSION['role'] !== 'admin' && $_SESSION['user_id'] != $curr_owner) {
                     $msg_err = "Bạn không có quyền sửa KPI này.";
                 } else {
-                    $stmt = $conn->prepare("UPDATE kpi_definitions SET year=?,department_id=?,kpi_group=?,kpi_name=?,target_base=?,weight=?,kpi_owner_id=?,is_condition=?,notes=? WHERE id=?");
-                    // i=year, i=dept, s=group, s=name, s=target, d=weight, i=owner, i=is_cond, s=notes, i=id
-                    $stmt->bind_param("iisssdiisi", $yr, $dept_id, $group, $name, $target, $weight, $owner_id, $is_cond, $notes, $id);
+                    $stmt = $conn->prepare("UPDATE kpi_definitions SET year=?,department_id=?,kpi_group=?,kpi_name=?,target_base=?,unit=?,weight=?,kpi_owner_id=?,is_condition=?,notes=? WHERE id=?");
+                    // i=year, i=dept, s=group, s=name, s=target, s=unit, d=weight, i=owner, i=is_cond, s=notes, i=id
+                    $stmt->bind_param("iissssdiisi", $yr, $dept_id, $group, $name, $target, $unit, $weight, $owner_id, $is_cond, $notes, $id);
                     $stmt->execute() ? $msg_ok = "Đã lưu KPI!" : $msg_err = $conn->error;
                 }
             }
@@ -1007,8 +1008,22 @@ $status_map = ['draft' => ['#F1F5F9', '#64748B'], 'active' => ['#DBEAFE', '#1D4E
                 <div class="fg2">
                     <div class="fg">
                         <label>Target BASE</label>
-                        <input type="text" name="target_base" id="def_target" placeholder="VD: 135 tỷ, ≥15% DT">
+                        <input type="text" name="target_base" id="def_target" placeholder="VD: 135, ≥15">
                     </div>
+                    <div class="fg">
+                        <label>Đơn vị tính (DVT)</label>
+                        <input type="text" name="unit" id="def_unit" placeholder="VD: Tỷ, %, Người..." list="unitOptions" autocomplete="off">
+                        <datalist id="unitOptions">
+                            <option value="Tỷ">
+                            <option value="%">
+                            <option value="Ngày">
+                            <option value="Người">
+                            <option value="Lần">
+                            <option value="Triệu">
+                        </datalist>
+                    </div>
+                </div>
+                <div class="fg2">
                     <div class="fg">
                         <label>Tỷ trọng (%)</label>
                         <input type="number" name="weight" id="def_weight" step="0.1" min="0" max="100"
@@ -1040,6 +1055,7 @@ $status_map = ['draft' => ['#F1F5F9', '#64748B'], 'active' => ['#DBEAFE', '#1D4E
             document.getElementById('defAction').value = 'add_def';
             document.getElementById('defId').value = '';
             document.getElementById('defForm').reset();
+            document.getElementById('def_unit').value = '';
             document.getElementById('def_year').value = <?= $year ?>;
             document.getElementById('def_dept').value = '<?= $_SESSION['role'] !== 'admin' ? ($_SESSION['department_id'] ?? '') : '' ?>';
             document.getElementById('defModal').classList.add('show');
@@ -1053,6 +1069,7 @@ $status_map = ['draft' => ['#F1F5F9', '#64748B'], 'active' => ['#DBEAFE', '#1D4E
             document.getElementById('def_group').value = d.kpi_group || '';
             document.getElementById('def_name').value = d.kpi_name || '';
             document.getElementById('def_target').value = d.target_base || '';
+            document.getElementById('def_unit').value = d.unit || '';
             document.getElementById('def_weight').value = d.weight || '';
             document.getElementById('def_owner').value = d.kpi_owner_id || '';
             document.getElementById('def_notes').value = d.notes || '';
