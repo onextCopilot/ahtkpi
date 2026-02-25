@@ -24,7 +24,10 @@ if (empty($order) || !is_array($order)) {
 }
 
 // Ensure sort_order column exists
-$conn->query("ALTER TABLE departments ADD COLUMN IF NOT EXISTS sort_order INT DEFAULT 0");
+$check_col = $conn->query("SHOW COLUMNS FROM departments LIKE 'sort_order'");
+if ($check_col->num_rows == 0) {
+    $conn->query("ALTER TABLE departments ADD COLUMN sort_order INT DEFAULT 0");
+}
 
 $stmt = $conn->prepare("UPDATE departments SET sort_order = ? WHERE id = ?");
 foreach ($order as $position => $dept_id) {
