@@ -426,6 +426,22 @@ if ($team_res && $team_res->num_rows > 0) {
             box-shadow: 2px 0 5px -2px rgba(0, 0, 0, 0.1);
         }
 
+        .col-resizer {
+            width: 6px;
+            height: 100%;
+            position: absolute;
+            right: 0;
+            top: 0;
+            cursor: col-resize;
+            z-index: 15;
+            transition: background 0.2s;
+        }
+
+        .col-resizer:hover,
+        .col-resizer:active {
+            background-color: rgba(255, 255, 255, 0.4);
+        }
+
         table.debt-table tr:not(.group-header) td:nth-child(1),
         table.debt-table tr:not(.group-header) td:nth-child(2),
         table.debt-table tr:not(.group-header) td:nth-child(3),
@@ -1102,7 +1118,7 @@ if ($team_res && $team_res->num_rows > 0) {
                 </div>
 
                 <div class="data-table-wrapper">
-                    <table class="debt-table">
+                    <table class="debt-table" id="myDebtsTable">
                         <thead>
                             <tr>
                                 <th>#</th>
@@ -1961,6 +1977,94 @@ if ($team_res && $team_res->num_rows > 0) {
                     if (el) el.style.backgroundColor = '#fee2e2';
                 });
         }
+
+        document.addEventListener("DOMContentLoaded", function () {
+            const tableId = "myDebtsTable";
+            const table = document.getElementById(tableId);
+            if (!table) return;
+
+            const storeKey = "my_debts_col_widths";
+            let widths = {};
+            try {
+                widths = JSON.parse(localStorage.getItem(storeKey)) || {};
+            } catch (e) { }
+
+            const cols = table.querySelectorAll('thead th');
+            const styleEl = document.createElement('style');
+            document.head.appendChild(styleEl);
+
+            const defaultStickyWidths = [40, 80, 80, 100, 140, 220, 220];
+
+            function renderStyles() {
+                let css = "";
+                let runningLeft = 0;
+
+                cols.forEach((th, index) => {
+                    const colIndex = index + 1;
+                    const isSticky = colIndex <= 7;
+                    let w = widths[colIndex];
+
+                    if (isSticky) {
+                        let actualW = w || defaultStickyWidths[index];
+                        css += `\n#${tableId} th:nth-child(${colIndex}), #${tableId} tr:not(.group-header) td:nth-child(${colIndex}) { left: ${runningLeft}px !important; }`;
+                        if (w) {
+                            css += `\n#${tableId} th:nth-child(${colIndex}), #${tableId} tr:not(.group-header) td:nth-child(${colIndex}) { width: ${w}px !important; min-width: ${w}px !important; max-width: ${w}px !important; }`;
+                        }
+                        runningLeft += actualW;
+                    } else {
+                        if (w) {
+                            css += `\n#${tableId} th:nth-child(${colIndex}), #${tableId} tr:not(.group-header) td:nth-child(${colIndex}) { width: ${w}px !important; min-width: ${w}px !important; max-width: ${w}px !important; }`;
+                        }
+                    }
+                });
+
+                styleEl.innerHTML = css;
+            }
+
+            renderStyles();
+
+            cols.forEach((th, index) => {
+                const colIndex = index + 1;
+
+                const resizer = document.createElement('div');
+                resizer.className = 'col-resizer';
+                th.appendChild(resizer);
+
+                let x = 0;
+                let w = 0;
+
+                const mouseDownHandler = function (e) {
+                    x = e.clientX;
+                    w = th.getBoundingClientRect().width;
+
+                    document.addEventListener('mousemove', mouseMoveHandler);
+                    document.addEventListener('mouseup', mouseUpHandler);
+                    document.body.style.cursor = 'col-resize';
+                    e.stopPropagation();
+                };
+
+                const mouseMoveHandler = function (e) {
+                    const dx = e.clientX - x;
+                    let newW = w + dx;
+                    if (newW < 30) newW = 30; // Min width
+
+                    widths[colIndex] = newW;
+                    renderStyles();
+                    e.stopPropagation();
+                    e.preventDefault();
+                };
+
+                const mouseUpHandler = function () {
+                    document.removeEventListener('mousemove', mouseMoveHandler);
+                    document.removeEventListener('mouseup', mouseUpHandler);
+                    document.body.style.cursor = '';
+
+                    localStorage.setItem(storeKey, JSON.stringify(widths));
+                };
+
+                resizer.addEventListener('mousedown', mouseDownHandler);
+            });
+        });
 
     </script>
 </body>
