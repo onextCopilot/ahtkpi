@@ -19,6 +19,10 @@ $total_users_query = "SELECT COUNT(*) as total FROM users";
 $total_users_result = $conn->query($total_users_query);
 $total_users = $total_users_result->fetch_assoc()['total'];
 
+// Filter parameters
+$filter_year = isset($_GET['year']) ? (int) $_GET['year'] : (int) date('Y');
+$filter_month = isset($_GET['month']) ? (int) $_GET['month'] : 0; // 0 for all
+
 // Fetch Debt Data for Dashboard
 require_once __DIR__ . '/../../libs/OdooAPI.php';
 $odoo = new OdooAPI();
@@ -27,7 +31,16 @@ $total_paid_vnd = 0;
 $total_unpaid_vnd = 0;
 $teams_data = [];
 
-$res = $conn->query("SELECT d.amount, d.currency, d.payment_status, d.invoice_date, st.name as team_name FROM debts d LEFT JOIN sale_teams st ON d.sale_team_id = st.id");
+$debt_conditions = ["1=1"];
+if ($filter_year > 0) {
+    $debt_conditions[] = "YEAR(d.invoice_date) = $filter_year";
+}
+if ($filter_month > 0) {
+    $debt_conditions[] = "MONTH(d.invoice_date) = $filter_month";
+}
+$debt_where = implode(" AND ", $debt_conditions);
+
+$res = $conn->query("SELECT d.amount, d.currency, d.payment_status, d.invoice_date, st.name as team_name FROM debts d LEFT JOIN sale_teams st ON d.sale_team_id = st.id WHERE $debt_where");
 if ($res) {
     while ($row = $res->fetch_assoc()) {
         $total_debts++;
@@ -71,7 +84,7 @@ $res_kpi = $conn->query("
            COUNT(k.id) AS total_kpi,
            COALESCE(SUM(k.weight), 0) AS total_weight
     FROM departments d
-    LEFT JOIN kpi_definitions k ON d.id = k.department_id AND k.year = YEAR(CURDATE())
+    LEFT JOIN kpi_definitions k ON d.id = k.department_id AND k.year = $filter_year
     GROUP BY d.id
     ORDER BY d.sort_order ASC, d.id ASC
 ");
@@ -111,6 +124,51 @@ if ($res_kpi) {
 
             <div class="content-wrapper">
                 <script src="https://cdn.jsdelivr.net/npm/apexcharts"></script>
+
+                <!-- Filter Form -->
+                <div
+                    style="background: white; padding: 15px 20px; border-radius: 8px; border: 1px solid #e2e8f0; margin-bottom: 24px; display: flex; align-items: center; gap: 15px;">
+                    <form method="GET" action=""
+                        style="display: flex; gap: 15px; align-items: center; width: 100%; margin: 0;">
+                        <strong style="color: #334155;">Filter Dashboard:</strong>
+
+                        <select name="year"
+                            style="padding: 8px 12px; border: 1px solid #cbd5e1; border-radius: 6px; outline: none; background: #f8fafc; font-weight: 500; color: #1e293b; cursor: pointer;">
+                            <?php
+                            $start_year = 2024;
+                            $cur_year = (int) date('Y') + 1;
+                            for ($y = $cur_year; $y >= $start_year; $y--) {
+                                $sel = ($y == $filter_year) ? 'selected' : '';
+                                echo "<option value=\"$y\" $sel>Year $y</option>";
+                            }
+                            ?>
+                        </select>
+
+                        <select name="month"
+                            style="padding: 8px 12px; border: 1px solid #cbd5e1; border-radius: 6px; outline: none; background: #f8fafc; font-weight: 500; color: #1e293b; cursor: pointer;">
+                            <option value="0">All Months</option>
+                            <?php
+                            for ($m = 1; $m <= 12; $m++) {
+                                $sel = ($m == $filter_month) ? 'selected' : '';
+                                $m_pad = str_pad($m, 2, '0', STR_PAD_LEFT);
+                                echo "<option value=\"$m\" $sel>Month $m_pad</option>";
+                            }
+                            ?>
+                        </select>
+
+                        <button type="submit"
+                            style="padding: 8px 16px; background: #0f172a; color: white; border: none; border-radius: 6px; cursor: pointer; font-weight: 600; transition: 0.2s;">
+                            Apply
+                        </button>
+
+                        <?php if ($filter_month > 0 || $filter_year != date('Y')): ?>
+                            <a href="/dashboard"
+                                style="color: #64748b; text-decoration: none; font-size: 14px; margin-left: auto;">Reset
+                                Filters</a>
+                        <?php endif; ?>
+                    </form>
+                </div>
+
                 <!-- Stats Cards -->
                 <div class="stats-grid">
                     <div class="stat-card">
