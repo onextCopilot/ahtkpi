@@ -2,7 +2,7 @@
 session_start();
 header('Content-Type: application/json');
 
-if (!isset($_SESSION['user_id'])) {
+if (!isset($_SESSION['user_id']) || empty($_SESSION['can_view_invoice'])) {
     http_response_code(401);
     echo json_encode(['error' => 'Unauthorized']);
     exit;

@@ -4,6 +4,10 @@ if (!isset($_SESSION['user_id'])) {
     header('Location: /login.php');
     exit;
 }
+if (empty($_SESSION['can_view_invoice'])) {
+    header('Location: /dashboard');
+    exit;
+}
 
 $full_name = $_SESSION['full_name'] ?? 'User';
 $avatar = $_SESSION['avatar'] ?? '';

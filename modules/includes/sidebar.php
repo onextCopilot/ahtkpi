@@ -62,16 +62,18 @@ function isMenuItemActive($path, $current_uri)
         </div>
 
         <!-- Customers -->
-        <a href="/customers" class="nav-item <?php echo ($current_uri === '/customers') ? 'active' : ''; ?>">
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-                stroke-linecap="round" stroke-linejoin="round">
-                <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
-                <circle cx="9" cy="7" r="4"></circle>
-                <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
-                <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
-            </svg>
-            <span>Quản lý Khách hàng</span>
-        </a>
+        <?php if (!empty($_SESSION['can_view_invoice'])): ?>
+            <a href="/customers" class="nav-item <?php echo ($current_uri === '/customers') ? 'active' : ''; ?>">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                    stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
+                    <circle cx="9" cy="7" r="4"></circle>
+                    <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
+                    <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
+                </svg>
+                <span>Quản lý Khách hàng</span>
+            </a>
+        <?php endif; ?>
 
         <!-- Invoices -->
         <?php if (!empty($_SESSION['can_view_invoice'])): ?>
