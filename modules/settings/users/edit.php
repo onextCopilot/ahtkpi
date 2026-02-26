@@ -61,6 +61,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $join_date = !empty($_POST['join_date']) ? $_POST['join_date'] : NULL;
         $is_am_bd = isset($_POST['is_am_bd']) ? 1 : 0;
         $can_view_invoice = isset($_POST['can_view_invoice']) ? 1 : 0;
+        $can_view_all_debts = isset($_POST['can_view_all_debts']) ? 1 : 0;
         $team_ids = isset($_POST['team_ids']) ? $_POST['team_ids'] : [];
         $role_val = $_POST['role'] ?? 'user';
 
@@ -79,14 +80,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 if ($check->get_result()->num_rows > 0) {
                     $error_message = "Email or Employee Code already exists.";
                 } else {
-                    $sql = "UPDATE users SET username=?, email=?, full_name=?, employee_code=?, job_title=?, level=?, department_id=?, status=?, join_date=?, is_am_bd=?, can_view_invoice=?, role=? WHERE id=?";
+                    $sql = "UPDATE users SET username=?, email=?, full_name=?, employee_code=?, job_title=?, level=?, department_id=?, status=?, join_date=?, is_am_bd=?, can_view_invoice=?, can_view_all_debts=?, role=? WHERE id=?";
                     $stmt = $conn->prepare($sql);
-                    $stmt->bind_param("ssssssissiisi", $username, $email, $name, $emp_code, $job, $level, $dept_id, $status, $join_date, $is_am_bd, $can_view_invoice, $role_val, $id);
+                    $stmt->bind_param("ssssssissiiisi", $username, $email, $name, $emp_code, $job, $level, $dept_id, $status, $join_date, $is_am_bd, $can_view_invoice, $can_view_all_debts, $role_val, $id);
                     $stmt->execute();
                     
                     // Update session if editing self
                     if ($id == $_SESSION['user_id']) {
                         $_SESSION['can_view_invoice'] = $can_view_invoice;
+                        $_SESSION['can_view_all_debts'] = $can_view_all_debts;
                     }
                     
                     // Update Teams
@@ -610,6 +612,10 @@ while ($r = $ut_res_result->fetch_assoc()) {
                                     <div class="toggle-item">
                                         <label for="can_view_invoice">Can View Invoices</label>
                                         <input type="checkbox" name="can_view_invoice" id="can_view_invoice" <?php echo $user['can_view_invoice'] ? 'checked' : ''; ?>>
+                                    </div>
+                                    <div class="toggle-item">
+                                        <label for="can_view_all_debts">Can View All Debts</label>
+                                        <input type="checkbox" name="can_view_all_debts" id="can_view_all_debts" <?php echo $user['can_view_all_debts'] ? 'checked' : ''; ?>>
                                     </div>
                                 </div>
 

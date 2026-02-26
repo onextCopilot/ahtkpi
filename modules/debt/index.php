@@ -134,6 +134,31 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
 // --- FILTERING & FETCH DATA ---
 $where_clauses = [];
+
+// ACL
+$can_view_all_debts = isset($_SESSION['can_view_all_debts']) && $_SESSION['can_view_all_debts'] == 1;
+if ($_SESSION['role'] === 'admin') {
+    $can_view_all_debts = true;
+}
+
+$user_teams = [];
+if (!$can_view_all_debts) {
+    $ut_res = $conn->prepare("SELECT team_id FROM user_sale_teams WHERE user_id = ?");
+    $ut_res->bind_param("i", $current_user_id);
+    $ut_res->execute();
+    $ut_result = $ut_res->get_result();
+    while ($r = $ut_result->fetch_assoc()) {
+        $user_teams[] = $r['team_id'];
+    }
+
+    if (count($user_teams) > 0) {
+        $in_teams = implode(',', $user_teams);
+        $where_clauses[] = "d.sale_team_id IN ($in_teams)";
+    } else {
+        $where_clauses[] = "1=0"; // No access to any team's data
+    }
+}
+
 if (!empty($_GET['am'])) {
     $am_filter = $conn->real_escape_string($_GET['am']);
     $where_clauses[] = "d.am = '$am_filter'";
@@ -171,6 +196,13 @@ if (!empty($_GET['month'])) {
 }
 
 $selected_team = $_GET['team'] ?? 'dashboard'; // Default to dashboard as requested
+
+if (!$can_view_all_debts && !in_array($selected_team, ['dashboard', 'analytics'])) {
+    if (!in_array($selected_team, $user_teams)) {
+        $selected_team = 'dashboard';
+    }
+}
+
 if ($selected_team !== 'all' && $selected_team !== 'dashboard' && $selected_team !== 'analytics') {
     if ($selected_team === 'undefined') {
         $where_clauses[] = "d.sale_team_id IS NULL";
@@ -1117,6 +1149,9 @@ function formatDate($date)
 
                     // 3. Teams
                     foreach ($all_teams as $t) {
+                        if (!$can_view_all_debts && !in_array($t['id'], $user_teams)) {
+                            continue;
+                        }
                         $tabs_data[$t['id']] = [
                             'id' => $t['id'],
                             'label' => $t['name'],
@@ -1126,12 +1161,14 @@ function formatDate($date)
                     }
 
                     // 4. Undefined
-                    $tabs_data['undefined'] = [
-                        'id' => 'undefined',
-                        'label' => 'Undefined',
-                        'url' => getTabUrl('undefined'),
-                        'count' => $counts['undefined'] ?? 0
-                    ];
+                    if ($can_view_all_debts) {
+                        $tabs_data['undefined'] = [
+                            'id' => 'undefined',
+                            'label' => 'Undefined',
+                            'url' => getTabUrl('undefined'),
+                            'count' => $counts['undefined'] ?? 0
+                        ];
+                    }
 
                     // Sorting Logic based on Cookie
                     $ordered_tabs = [];

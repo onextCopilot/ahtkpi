@@ -17,7 +17,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     if (empty($username) || empty($password)) {
         $error = 'Please enter all required information';
     } else {
-        $stmt = $conn->prepare("SELECT id, username, password, full_name, role, can_view_invoice FROM users WHERE username = ?");
+        $stmt = $conn->prepare("SELECT id, username, password, full_name, role, can_view_invoice, can_view_all_debts FROM users WHERE username = ?");
         $stmt->bind_param("s", $username);
         $stmt->execute();
         $result = $stmt->get_result();
@@ -32,6 +32,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                 $_SESSION['full_name'] = $user['full_name'];
                 $_SESSION['role'] = $user['role'];
                 $_SESSION['can_view_invoice'] = $user['can_view_invoice'];
+                $_SESSION['can_view_all_debts'] = $user['can_view_all_debts'];
 
                 header("Location: /dashboard");
                 exit();

@@ -34,7 +34,8 @@ $alter_queries = [
     "ADD COLUMN IF NOT EXISTS join_date DATE DEFAULT NULL",
     "ADD COLUMN IF NOT EXISTS status ENUM('active', 'inactive', 'resigned', 'on_leave') DEFAULT 'active'",
     "ADD COLUMN IF NOT EXISTS phone VARCHAR(20) DEFAULT NULL",
-    "ADD COLUMN IF NOT EXISTS can_view_invoice TINYINT(1) DEFAULT 0"
+    "ADD COLUMN IF NOT EXISTS can_view_invoice TINYINT(1) DEFAULT 0",
+    "ADD COLUMN IF NOT EXISTS can_view_all_debts TINYINT(1) DEFAULT 0"
 ];
 
 // Columns check helper
@@ -55,6 +56,7 @@ addColumnIfNotExists($conn, 'users', 'join_date', "DATE DEFAULT NULL");
 addColumnIfNotExists($conn, 'users', 'status', "ENUM('active', 'inactive', 'resigned', 'on_leave') DEFAULT 'active'");
 addColumnIfNotExists($conn, 'users', 'phone', "VARCHAR(20) DEFAULT NULL");
 addColumnIfNotExists($conn, 'users', 'can_view_invoice', "TINYINT(1) DEFAULT 0");
+addColumnIfNotExists($conn, 'users', 'can_view_all_debts', "TINYINT(1) DEFAULT 0");
 addColumnIfNotExists($conn, 'users', 'is_am_bd', "TINYINT(1) DEFAULT 0");
 addColumnIfNotExists($conn, 'users', 'avatar', "VARCHAR(255) DEFAULT NULL"); // Ensure avatar exists
 
@@ -93,6 +95,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $status = $_POST['status'];
             $join_date = !empty($_POST['join_date']) ? $_POST['join_date'] : NULL;
             $can_view_invoice = isset($_POST['can_view_invoice']) ? 1 : 0;
+            $can_view_all_debts = isset($_POST['can_view_all_debts']) ? 1 : 0;
             $is_am_bd = isset($_POST['is_am_bd']) ? 1 : 0;
             $team_ids = isset($_POST['team_ids']) ? $_POST['team_ids'] : [];
             $role_val = $_POST['role'] ?? 'user';
@@ -110,9 +113,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 try {
                     $stmt = $conn->prepare("INSERT INTO users (username, email, full_name, password, employee_code, job_title, level,
 department_id,
-status, join_date, can_view_invoice, is_am_bd, role) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+status, join_date, can_view_invoice, can_view_all_debts, is_am_bd, role) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
                     $stmt->bind_param(
-                        "sssssssissiis",
+                        "sssssssissiiss",
                         $username,
                         $email,
                         $name,
@@ -124,6 +127,7 @@ status, join_date, can_view_invoice, is_am_bd, role) VALUES (?, ?, ?, ?, ?, ?, ?
                         $status,
                         $join_date,
                         $can_view_invoice,
+                        $can_view_all_debts,
                         $is_am_bd,
                         $role_val
                     );
@@ -163,6 +167,7 @@ status, join_date, can_view_invoice, is_am_bd, role) VALUES (?, ?, ?, ?, ?, ?, ?
             $status = $_POST['status'];
             $join_date = !empty($_POST['join_date']) ? $_POST['join_date'] : NULL;
             $can_view_invoice = isset($_POST['can_view_invoice']) ? 1 : 0;
+            $can_view_all_debts = isset($_POST['can_view_all_debts']) ? 1 : 0;
             $is_am_bd = isset($_POST['is_am_bd']) ? 1 : 0;
             $team_ids = isset($_POST['team_ids']) ? $_POST['team_ids'] : [];
             $role_val = $_POST['role'] ?? 'user';
@@ -175,9 +180,9 @@ status, join_date, can_view_invoice, is_am_bd, role) VALUES (?, ?, ?, ?, ?, ?, ?
 
             if ($id > 0 && !empty($email)) {
                 try {
-                    $sql = "UPDATE users SET username=?, email=?, full_name=?, employee_code=?, job_title=?, level=?, department_id=?, status=?, join_date=?, can_view_invoice=?, is_am_bd=?, role=? WHERE id=?";
+                    $sql = "UPDATE users SET username=?, email=?, full_name=?, employee_code=?, job_title=?, level=?, department_id=?, status=?, join_date=?, can_view_invoice=?, can_view_all_debts=?, is_am_bd=?, role=? WHERE id=?";
                     $stmt = $conn->prepare($sql);
-                    $stmt->bind_param("ssssssissiisi", $username, $email, $name, $emp_code, $job, $level, $dept_id, $status, $join_date, $can_view_invoice, $is_am_bd, $role_val, $id);
+                    $stmt->bind_param("ssssssissiiisi", $username, $email, $name, $emp_code, $job, $level, $dept_id, $status, $join_date, $can_view_invoice, $can_view_all_debts, $is_am_bd, $role_val, $id);
                     $stmt->execute();
 
                     // Update Teams
@@ -938,6 +943,11 @@ if ($d_res) {
                             <input type="checkbox" name="can_view_invoice" id="can_view_invoice">
                         </div>
                         <div class="toggle-item">
+                            <label for="can_view_all_debts" style="font-size: 13px; color: #3c4043;">Can View All
+                                Debts</label>
+                            <input type="checkbox" name="can_view_all_debts" id="can_view_all_debts">
+                        </div>
+                        <div class="toggle-item">
                             <label for="is_am_bd" style="font-size: 13px; color: #3c4043;">Is AM/BD Member</label>
                             <input type="checkbox" name="is_am_bd" id="is_am_bd" onchange="toggleTeamSelect()">
                         </div>
@@ -1020,6 +1030,7 @@ if ($d_res) {
         const status = document.getElementById('status');
         const joinDate = document.getElementById('join_date');
         const canViewInvoice = document.getElementById('can_view_invoice');
+        const canViewAllDebts = document.getElementById('can_view_all_debts');
         const role = document.getElementById('role');
 
         function openAddModal() {
@@ -1038,6 +1049,7 @@ if ($d_res) {
             role.value = 'user';
             joinDate.value = '';
             canViewInvoice.checked = false;
+            canViewAllDebts.checked = false;
             document.getElementById('is_am_bd').checked = false;
             toggleTeamSelect();
 
@@ -1060,6 +1072,7 @@ if ($d_res) {
             role.value = user.role || 'user';
             joinDate.value = user.join_date || '';
             canViewInvoice.checked = user.can_view_invoice == 1;
+            canViewAllDebts.checked = user.can_view_all_debts == 1;
             document.getElementById('is_am_bd').checked = user.is_am_bd == 1;
 
             // Set teams
