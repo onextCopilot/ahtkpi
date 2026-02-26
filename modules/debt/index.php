@@ -1660,10 +1660,45 @@ function formatDate($date)
                             return $b['total'] <=> $a['total'];
                         });
                         $top5 = array_slice($topTeams, 0, 5);
+
+                        // Extract Monthly Debt Data
+                        $monthlyData = [];
+                        foreach ($monthTotals as $mKey => $total) {
+                            if ($mKey === 'No Date')
+                                continue;
+                            $parts = explode('/', $mKey); // mm/yyyy
+                            if (count($parts) === 2) {
+                                $sortKey = $parts[1] . str_pad($parts[0], 2, '0', STR_PAD_LEFT);
+                                $monthlyData[$sortKey] = [
+                                    'label' => $mKey,
+                                    'total' => $total
+                                ];
+                            }
+                        }
+                        ksort($monthlyData);
+                        if (isset($monthTotals['No Date'])) {
+                            $monthlyData['999999'] = [
+                                'label' => 'No Date',
+                                'total' => $monthTotals['No Date']
+                            ];
+                        }
+
+                        $chartMonthlyLabels = array_map(function ($item) {
+                            return $item['label']; }, $monthlyData);
+                        $chartMonthlyTotals = array_map(function ($item) {
+                            return $item['total']; }, $monthlyData);
                         ?>
                         <div
                             style="padding: 20px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">
                             <script src="https://cdn.jsdelivr.net/npm/apexcharts"></script>
+
+                            <!-- Chart 0: Total Debt by Month -->
+                            <div
+                                style="background: white; padding: 20px; border-radius: 8px; border: 1px solid #f0f0f0; box-shadow: 0 2px 8px rgba(0,0,0,0.04); margin-bottom: 24px;">
+                                <h3 style="margin-top:0; color:#262626; font-size:16px;">Total Debt By Month</h3>
+                                <div id="chart-monthly-debt"></div>
+                            </div>
+
                             <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 24px;">
                                 <!-- Chart 1: Paid vs Not Paid (Global) -->
                                 <div
@@ -1707,7 +1742,23 @@ function formatDate($date)
 
                             const statusLabels = <?php echo json_encode($statusLabels); ?>;
                             const statusCounts = <?php echo json_encode(array_values($statusCount)); ?>;
-                            const statusAmounts = <?php echo json_encode(array_values($statusPaid)); // Using paid amounts for simplification or could sum paid+notpaid ?>;
+                            const statusAmounts = <?php echo json_encode(array_values($statusPaid)); ?>;
+
+                            const monthlyLabels = <?php echo json_encode(array_values($chartMonthlyLabels)); ?>;
+                            const monthlyTotals = <?php echo json_encode(array_values($chartMonthlyTotals)); ?>;
+
+                            // 0. Monthly Debt Area Chart
+                            new ApexCharts(document.querySelector("#chart-monthly-debt"), {
+                                series: [{ name: 'Total Debt', data: monthlyTotals }],
+                                chart: { type: 'area', height: 350, toolbar: { show: false } },
+                                dataLabels: { enabled: true, formatter: function (val) { return val > 0 ? (val / 1000000).toFixed(0) + "M" : "" }, style: { fontSize: '10px' } },
+                                stroke: { curve: 'smooth', width: 2 },
+                                colors: ['#0ea5e9'],
+                                xaxis: { categories: monthlyLabels },
+                                yaxis: { labels: { formatter: val => (val / 1000000).toFixed(0) + 'M' } },
+                                tooltip: { y: { formatter: val => formatVND(val) } },
+                                fill: { type: 'gradient', gradient: { shadeIntensity: 1, opacityFrom: 0.7, opacityTo: 0.9, stops: [0, 90, 100] } },
+                            }).render();
 
                             // 1. Global Pie
                             new ApexCharts(document.querySelector("#chart-global-pie"), {
