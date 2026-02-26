@@ -79,15 +79,20 @@ foreach ($teams_data as $t => $d) {
 $kpi_dept_names = [];
 $kpi_counts = [];
 $kpi_weights = [];
+$kpi_join_condition = "d.id = k.department_id";
+if ($filter_year > 0) {
+    $kpi_join_condition .= " AND k.year = $filter_year";
+}
+
 $res_kpi = $conn->query("
-    SELECT d.name AS dept_name, 
-           COUNT(k.id) AS total_kpi,
-           COALESCE(SUM(k.weight), 0) AS total_weight
-    FROM departments d
-    LEFT JOIN kpi_definitions k ON d.id = k.department_id AND k.year = $filter_year
-    GROUP BY d.id
-    ORDER BY d.sort_order ASC, d.id ASC
-");
+        SELECT d.name AS dept_name, 
+               COUNT(k.id) AS total_kpi,
+               COALESCE(SUM(k.weight), 0) AS total_weight
+        FROM departments d
+        LEFT JOIN kpi_definitions k ON $kpi_join_condition
+        GROUP BY d.id
+        ORDER BY d.sort_order ASC, d.id ASC
+    ");
 if ($res_kpi) {
     while ($row = $res_kpi->fetch_assoc()) {
         $kpi_dept_names[] = $row['dept_name'];
@@ -134,6 +139,7 @@ if ($res_kpi) {
 
                         <select name="year"
                             style="padding: 8px 12px; border: 1px solid #cbd5e1; border-radius: 6px; outline: none; background: #f8fafc; font-weight: 500; color: #1e293b; cursor: pointer;">
+                            <option value="0" <?php echo ($filter_year == 0) ? 'selected' : ''; ?>>All Years</option>
                             <?php
                             $start_year = 2024;
                             $cur_year = (int) date('Y') + 1;
@@ -161,7 +167,7 @@ if ($res_kpi) {
                             Apply
                         </button>
 
-                        <?php if ($filter_month > 0 || $filter_year != date('Y')): ?>
+                        <?php if ($filter_month > 0 || ($filter_year != date('Y') && isset($_GET['year']))): ?>
                             <a href="/dashboard"
                                 style="color: #64748b; text-decoration: none; font-size: 14px; margin-left: auto;">Reset
                                 Filters</a>
