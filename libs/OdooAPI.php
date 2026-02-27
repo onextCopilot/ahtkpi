@@ -325,18 +325,47 @@ class OdooAPI
                 'invoice_payments_widget' // JSON blob with payment info
             ];
 
+            // Load existing cache if available
+            $existingInvoices = [];
+            if (file_exists($this->invoiceCacheFile)) {
+                $content = file_get_contents($this->invoiceCacheFile);
+                $json = str_replace('<?php exit; ?>', '', $content);
+                $decoded = json_decode($json, true);
+                if (is_array($decoded)) {
+                    foreach ($decoded as $inv) {
+                        if (isset($inv['id'])) {
+                            $existingInvoices[$inv['id']] = $inv;
+                        }
+                    }
+                }
+            }
+
+            // Domain to get recent invoices (last 15 days)
+            $dateLimit = gmdate('Y-m-d H:i:s', strtotime('-15 days')); // Odoo returns/expects dates in UTC
+
             // Get customer invoices
             $domain = [
                 ['move_type', '=', 'out_invoice'],
-                ['state', '!=', 'cancel'] // Optionally exclude cancelled invoices
+                // Include cancelled invoices in recent fetch so their state updates to 'cancel' in the cache
+                ['write_date', '>=', $dateLimit] // Only fetch last 15 days of updates to improve speed
             ];
 
-            // Fetch unlimited (or high limit)
-            $allInvoices = $this->searchRead('account.move', $domain, $fields, 0, 0);
+            // Fetch unlimited (or high limit) recent invoices
+            $recentInvoices = $this->searchRead('account.move', $domain, $fields, 0, 0);
 
-            if (!is_array($allInvoices)) {
-                $allInvoices = [];
+            if (!is_array($recentInvoices)) {
+                $recentInvoices = [];
             }
+
+            // Merge into existing cache
+            foreach ($recentInvoices as $inv) {
+                if (isset($inv['id'])) {
+                    $existingInvoices[$inv['id']] = $inv; // Adds new, updates existing
+                }
+            }
+
+            // Convert back to sequential array
+            $allInvoices = array_values($existingInvoices);
 
             // Save to cache
             if (!is_dir(dirname($this->invoiceCacheFile))) {
