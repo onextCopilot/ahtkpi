@@ -149,7 +149,7 @@ usort($new_customers, function($a, $b) {
 
 // Calculate pagination for new customers
 $cpage = isset($_GET['cpage']) ? max(1, (int)$_GET['cpage']) : 1;
-$climit = 30;
+$climit = 10;
 $total_new = count($new_customers);
 $total_cpages = ceil($total_new / $climit);
 if ($total_cpages > 0 && $cpage > $total_cpages) $cpage = $total_cpages;
