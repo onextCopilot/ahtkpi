@@ -140,9 +140,23 @@ foreach ($all_customers as $c) {
         $new_customers[] = $c;
     }
 }
-usort($new_customers, function ($a, $b) {
-    return strtotime($b['create_date']) < strtotime($a['create_date']) ? 1 : -1;
+usort($new_customers, function($a, $b) {
+    $timeA = strtotime($a['create_date']);
+    $timeB = strtotime($b['create_date']);
+    if ($timeA == $timeB) return 0;
+    return ($timeA > $timeB) ? -1 : 1;
 });
+
+// Calculate pagination for new customers
+$cpage = isset($_GET['cpage']) ? max(1, (int)$_GET['cpage']) : 1;
+$climit = 30;
+$total_new = count($new_customers);
+$total_cpages = ceil($total_new / $climit);
+if ($total_cpages > 0 && $cpage > $total_cpages) $cpage = $total_cpages;
+$coffset = ($cpage - 1) * $climit;
+
+$paged_customers = array_slice($new_customers, $coffset, $climit);
+
 
 ?>
 <!DOCTYPE html>
@@ -363,7 +377,7 @@ usort($new_customers, function ($a, $b) {
                                         </td>
                                     </tr>
                                 <?php else: ?>
-                                    <?php foreach ($new_customers as $c): ?>
+                                    <?php foreach ($paged_customers as $c): ?>
                                         <tr style="border-bottom: 1px solid #e2e8f0;">
                                             <td style="padding: 12px; color: #0f172a; font-weight: 500;">
                                                 <?php echo htmlspecialchars($c['name'] ?? ''); ?>
@@ -388,6 +402,31 @@ usort($new_customers, function ($a, $b) {
                                 <?php endif; ?>
                             </tbody>
                         </table>
+                    </div>
+
+                    <!-- Pagination -->
+                    <?php if ($total_cpages > 1): ?>
+                        <div style="display: flex; justify-content: flex-end; align-items: center; margin-top: 15px; gap: 10px;">
+                            <?php 
+                                $buildQuery = function($p) use ($filter_year, $filter_month, $customer_period) {
+                                    return "?year=$filter_year&month=$filter_month&customer_period=$customer_period&cpage=$p#new-customers-section";
+                                };
+                            ?>
+                            <?php if ($cpage > 1): ?>
+                                <a href="<?php echo $buildQuery($cpage - 1); ?>" style="padding: 6px 12px; border: 1px solid #cbd5e1; border-radius: 6px; text-decoration: none; color: #475569; font-size: 14px; background: white;">&lsaquo; Prev</a>
+                            <?php else: ?>
+                                <span style="padding: 6px 12px; border: 1px solid #e2e8f0; border-radius: 6px; color: #94a3b8; font-size: 14px; background: #f8fafc; cursor: not-allowed;">&lsaquo; Prev</span>
+                            <?php endif; ?>
+
+                            <span style="font-size: 14px; color: #475569;">Page <strong><?php echo $cpage; ?></strong> of <?php echo $total_cpages; ?></span>
+
+                            <?php if ($cpage < $total_cpages): ?>
+                                <a href="<?php echo $buildQuery($cpage + 1); ?>" style="padding: 6px 12px; border: 1px solid #cbd5e1; border-radius: 6px; text-decoration: none; color: #475569; font-size: 14px; background: white;">Next &rsaquo;</a>
+                            <?php else: ?>
+                                <span style="padding: 6px 12px; border: 1px solid #e2e8f0; border-radius: 6px; color: #94a3b8; font-size: 14px; background: #f8fafc; cursor: not-allowed;">Next &rsaquo;</span>
+                            <?php endif; ?>
+                        </div>
+                    <?php endif; ?>
                     </div>
                 </div>
 
