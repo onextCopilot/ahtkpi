@@ -101,6 +101,49 @@ if ($res_kpi) {
     }
 }
 
+// Fetch New Customers
+$customer_period = isset($_GET['customer_period']) ? $_GET['customer_period'] : 'month'; // 'month', 'quarter', 'year'
+$customers_result = [];
+try {
+    $customers_result = $odoo->getCustomers(10000);
+} catch (Exception $e) {
+}
+
+$all_customers = $customers_result['customers'] ?? [];
+$new_customers = [];
+
+$cur_year = (int) date('Y');
+$cur_month = (int) date('n');
+$cur_quarter = ceil($cur_month / 3);
+
+foreach ($all_customers as $c) {
+    if (empty($c['create_date']))
+        continue;
+    $c_time = strtotime($c['create_date']);
+    $c_year = (int) date('Y', $c_time);
+    $c_month = (int) date('n', $c_time);
+    $c_quarter = ceil($c_month / 3);
+
+    $match = false;
+    if ($customer_period === 'month') {
+        if ($c_year === $cur_year && $c_month === $cur_month)
+            $match = true;
+    } elseif ($customer_period === 'quarter') {
+        if ($c_year === $cur_year && $c_quarter === $cur_quarter)
+            $match = true;
+    } elseif ($customer_period === 'year') {
+        if ($c_year === $cur_year)
+            $match = true;
+    }
+
+    if ($match) {
+        $new_customers[] = $c;
+    }
+}
+usort($new_customers, function ($a, $b) {
+    return strtotime($b['create_date']) < strtotime($a['create_date']) ? 1 : -1;
+});
+
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -274,6 +317,77 @@ if ($res_kpi) {
                             style="margin-top:0; color: #0f172a; font-size: 1.1rem; border-bottom: 1px solid #e2e8f0; padding-bottom: 10px;">
                             Total KPI Weights by Department (YTD)</h3>
                         <div id="chart-kpis-weight"></div>
+                    </div>
+                </div>
+
+                <!-- New Customers Section -->
+                <div id="new-customers-section"
+                    style="background: white; padding: 20px; border-radius: 12px; border: 1px solid #e2e8f0; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05); margin-bottom: 24px;">
+                    <div
+                        style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #e2e8f0; padding-bottom: 10px; margin-bottom: 15px;">
+                        <h3 style="margin:0; color: #0f172a; font-size: 1.1rem;">
+                            New Customers
+                        </h3>
+                        <form method="GET" action="#new-customers-section"
+                            style="margin: 0; display: flex; gap: 10px; align-items: center;">
+                            <input type="hidden" name="year" value="<?php echo htmlspecialchars($filter_year); ?>">
+                            <input type="hidden" name="month" value="<?php echo htmlspecialchars($filter_month); ?>">
+                            <span style="font-size: 14px; color: #64748b;">Filter:</span>
+                            <select name="customer_period" onchange="this.form.submit()"
+                                style="padding: 6px 12px; border: 1px solid #cbd5e1; border-radius: 6px; outline: none; background: #f8fafc; font-weight: 500; color: #1e293b; cursor: pointer;">
+                                <option value="month" <?php echo $customer_period === 'month' ? 'selected' : ''; ?>>This
+                                    Month</option>
+                                <option value="quarter" <?php echo $customer_period === 'quarter' ? 'selected' : ''; ?>>
+                                    This Quarter</option>
+                                <option value="year" <?php echo $customer_period === 'year' ? 'selected' : ''; ?>>This
+                                    Year</option>
+                            </select>
+                        </form>
+                    </div>
+
+                    <div style="overflow-x: auto;">
+                        <table style="width: 100%; border-collapse: collapse; text-align: left; font-size: 14px;">
+                            <thead>
+                                <tr style="background: #f8fafc; border-bottom: 1px solid #e2e8f0;">
+                                    <th style="padding: 12px; font-weight: 600; color: #475569;">Customer Name</th>
+                                    <th style="padding: 12px; font-weight: 600; color: #475569;">Email</th>
+                                    <th style="padding: 12px; font-weight: 600; color: #475569;">Phone</th>
+                                    <th style="padding: 12px; font-weight: 600; color: #475569;">Created Date</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <?php if (empty($new_customers)): ?>
+                                    <tr>
+                                        <td colspan="4" style="padding: 20px; text-align: center; color: #64748b;">
+                                            No new customers found for the selected period.
+                                        </td>
+                                    </tr>
+                                <?php else: ?>
+                                    <?php foreach ($new_customers as $c): ?>
+                                        <tr style="border-bottom: 1px solid #e2e8f0;">
+                                            <td style="padding: 12px; color: #0f172a; font-weight: 500;">
+                                                <?php echo htmlspecialchars($c['name'] ?? ''); ?>
+                                            </td>
+                                            <td style="padding: 12px; color: #475569;">
+                                                <?php echo htmlspecialchars($c['email'] ?: '-'); ?>
+                                            </td>
+                                            <td style="padding: 12px; color: #475569;">
+                                                <?php echo htmlspecialchars($c['phone'] ?: ($c['mobile'] ?: '-')); ?>
+                                            </td>
+                                            <td style="padding: 12px; color: #475569;">
+                                                <?php
+                                                if (!empty($c['create_date'])) {
+                                                    echo date('d/m/Y H:i', strtotime($c['create_date']));
+                                                } else {
+                                                    echo '-';
+                                                }
+                                                ?>
+                                            </td>
+                                        </tr>
+                                    <?php endforeach; ?>
+                                <?php endif; ?>
+                            </tbody>
+                        </table>
                     </div>
                 </div>
 

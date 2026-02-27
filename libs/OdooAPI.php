@@ -175,7 +175,8 @@ class OdooAPI
                 'industry_id',
                 'comment',
                 'active',
-                'is_company'
+                'is_company',
+                'create_date'
             ];
 
             // Get ALL customers (companies) from Odoo
