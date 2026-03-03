@@ -42,6 +42,7 @@ RewriteRule ^settings/smtp/?$ modules/settings/smtp/index.php [L]
 RewriteRule ^settings/odoo/?$ modules/settings/odoo/index.php [L]
 RewriteRule ^settings/jira/?$ modules/settings/jira/index.php [L]
 RewriteRule ^settings/teams/?$ modules/settings/teams/index.php [L]
+RewriteRule ^settings/sale-levels/?$ modules/settings/sale-levels/index.php [L]
 
 # Application Modules
 RewriteRule ^debt/?$ modules/debt/index.php [L]
