@@ -73,7 +73,7 @@ function isMenuItemActive($path, $current_uri)
                     <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
                     <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
                 </svg>
-                <span>Quản lý Khách hàng</span>
+                <span>Customer Management</span>
             </a>
         <?php endif; ?>
 
@@ -101,7 +101,7 @@ function isMenuItemActive($path, $current_uri)
                 <line x1="6" y1="20" x2="6" y2="14"></line>
                 <rect x="3" y="2" width="18" height="20" rx="2" ry="2" stroke="none" fill="none"></rect>
             </svg>
-            <span>Quản lý KPI Chung</span>
+            <span>General KPI Management</span>
         </a>
 
         <a href="/profile" class="nav-item <?php echo isMenuItemActive('/profile', $current_uri); ?>">
