@@ -101,7 +101,7 @@ function isMenuItemActive($path, $current_uri)
                 <line x1="6" y1="20" x2="6" y2="14"></line>
                 <rect x="3" y="2" width="18" height="20" rx="2" ry="2" stroke="none" fill="none"></rect>
             </svg>
-            <span>Quản lý KPI</span>
+            <span>Quản lý KPI Chung</span>
         </a>
 
         <a href="/profile" class="nav-item <?php echo isMenuItemActive('/profile', $current_uri); ?>">
