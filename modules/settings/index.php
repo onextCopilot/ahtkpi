@@ -293,11 +293,35 @@ if ($res) {
                             </svg>
                         </div>
                         <div class="setting-info">
-                            <h3>Setup Team setup</h3>
+                            <h3>Setup Sale Team setup</h3>
                             <p>Configure sales teams, ordering, and team membership.</p>
                         </div>
                         <div class="setting-arrow">
                             Manage Sale Teams
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <line x1="5" y1="12" x2="19" y2="12"></line>
+                                <polyline points="12 5 19 12 12 19"></polyline>
+                            </svg>
+                        </div>
+                    </a>
+
+                    <!-- Sale Level Setup Module -->
+                    <a href="/settings/sale-levels" class="setting-card">
+                        <div class="setting-icon">
+                            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <line x1="12" y1="20" x2="12" y2="10"></line>
+                                <line x1="18" y1="20" x2="18" y2="4"></line>
+                                <line x1="6" y1="20" x2="6" y2="16"></line>
+                            </svg>
+                        </div>
+                        <div class="setting-info">
+                            <h3>Sale Level Setup</h3>
+                            <p>Configure sale levels, targets, and criteria.</p>
+                        </div>
+                        <div class="setting-arrow">
+                            Manage Sale Levels
                             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
                                 stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                                 <line x1="5" y1="12" x2="19" y2="12"></line>
