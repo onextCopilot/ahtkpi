@@ -124,9 +124,15 @@ try {
         $inv_year = (int) date('Y', strtotime($date));
         $inv_month = (int) date('n', strtotime($date));
 
-        $curr = is_array($inv['currency_id']) ? $inv['currency_id'][1] : 'VND';
-        $rate = $odoo->getRate($curr, $date);
-        $vnd_value = ($rate > 0) ? ((float) $inv['amount_total'] / $rate) : (float) $inv['amount_total'];
+        // Use amount_total_signed for 100% accuracy from Odoo
+        $vnd_value = isset($inv['amount_total_signed']) ? abs((float) $inv['amount_total_signed']) : 0;
+
+        // Fallback to manual conversion if missing
+        if ($vnd_value == 0 && $inv['amount_total'] > 0) {
+            $curr = is_array($inv['currency_id']) ? $inv['currency_id'][1] : 'VND';
+            $rate = $odoo->getRate($curr, $date);
+            $vnd_value = ($rate > 0) ? ((float) $inv['amount_total'] / $rate) : (float) $inv['amount_total'];
+        }
 
         $is_paid = (($inv['payment_state'] ?? '') === 'paid');
         $t_name = 'Odoo Invoices'; // Or try to map if possible
@@ -140,6 +146,7 @@ try {
                 $teams_data[$t_name]['paid'] += $vnd_value;
             }
         } else {
+            // Pending: include all outstanding balance up to the end of the filtered period
             $filter_date_limit = date('Y-m-t', strtotime("$filter_year-" . ($filter_month ?: 12) . "-01"));
             if ($date <= $filter_date_limit) {
                 $total_unpaid_vnd += $vnd_value;

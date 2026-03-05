@@ -147,11 +147,17 @@ foreach ($invoices as &$inv) {
         continue;
     }
 
-    // Determine VND Amount (using static rate approach for simplicity, like invoice list)
-    $currencyCode = is_array($inv['currency_id']) ? $inv['currency_id'][1] : 'VND';
-    $rateSource = $odoo->getRate($currencyCode, $inv_date_str) ?: 1.0;
-    $rateVnd = $odoo->getRate('VND', $inv_date_str);
-    $amountVnd = $inv['amount_total'] * ($rateVnd / $rateSource);
+    // Use amount_total_signed for 100% accuracy from Odoo
+    $amountVnd = isset($inv['amount_total_signed']) ? (float) $inv['amount_total_signed'] : 0;
+
+    // Fallback if missing
+    if ($amountVnd == 0 && $inv['amount_total'] > 0) {
+        $currencyCode = is_array($inv['currency_id']) ? $inv['currency_id'][1] : 'VND';
+        $rateSource = $odoo->getRate($currencyCode, $inv_date_str) ?: 1.0;
+        $rateVnd = $odoo->getRate('VND', $inv_date_str) ?: 1.0;
+        $amountVnd = $inv['amount_total'] * ($rateVnd / $rateSource);
+    }
+
     $inv['calc_amount_vnd'] = $amountVnd;
     $total_vnd += $amountVnd;
 

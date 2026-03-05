@@ -478,21 +478,17 @@ function formatDate($date)
                                         $groupedInvoices[$sortKey]['label'] = $key;
                                         $groupedInvoices[$sortKey]['items'][] = $inv;
 
-                                        // Calculate total in VND using historical rates
-                                        $currencyCode = is_array($inv['currency_id']) ? $inv['currency_id'][1] : 'VND';
-                                        $invoiceDate = $inv['date'] ?: $inv['invoice_date'];
+                                        // Use amount_total_signed for 100% accuracy from Odoo
+                                        $amountVnd = isset($inv['amount_total_signed']) ? (float) $inv['amount_total_signed'] : 0;
 
-                                        // Get rate for the specific invoice date
-                                        $rateSource = $odoo->getRate($currencyCode, $invoiceDate);
-                                        $rateVnd = $odoo->getRate('VND', $invoiceDate);
-
-                                        // Avoid division by zero
-                                        if ($rateSource == 0)
-                                            $rateSource = 1.0;
-
-                                        // Convert to VND: Amount_VND = Amount_Source * (Rate_VND / Rate_Source)
-                                        $amountVnd = $inv['amount_total'] * ($rateVnd / $rateSource);
-
+                                        // Fallback to manual rate calculation if amount_total_signed is missing or 0 (unlikely in Odoo 18)
+                                        if ($amountVnd == 0 && $inv['amount_total'] > 0) {
+                                            $currencyCode = is_array($inv['currency_id']) ? $inv['currency_id'][1] : 'VND';
+                                            $invoiceDate = $inv['date'] ?: $inv['invoice_date'];
+                                            $rateSource = $odoo->getRate($currencyCode, $invoiceDate) ?: 1.0;
+                                            $rateVnd = $odoo->getRate('VND', $invoiceDate) ?: 1.0;
+                                            $amountVnd = $inv['amount_total'] * ($rateVnd / $rateSource);
+                                        }
                                         if (!isset($groupedInvoices[$sortKey]['total_vnd'])) {
                                             $groupedInvoices[$sortKey]['total_vnd'] = 0;
                                         }
@@ -506,16 +502,14 @@ function formatDate($date)
                                     // Calculate totals for the single group
                                     $groupedInvoices['all']['total_vnd'] = 0;
                                     foreach ($invoices as $inv) {
-                                        $currencyCode = is_array($inv['currency_id']) ? $inv['currency_id'][1] : 'VND';
-                                        $invoiceDate = $inv['date'] ?: $inv['invoice_date'];
-
-                                        $rateSource = $odoo->getRate($currencyCode, $invoiceDate);
-                                        $rateVnd = $odoo->getRate('VND', $invoiceDate);
-
-                                        if ($rateSource == 0)
-                                            $rateSource = 1.0;
-
-                                        $amountVnd = $inv['amount_total'] * ($rateVnd / $rateSource);
+                                        $amountVnd = isset($inv['amount_total_signed']) ? (float) $inv['amount_total_signed'] : 0;
+                                        if ($amountVnd == 0 && $inv['amount_total'] > 0) {
+                                            $currencyCode = is_array($inv['currency_id']) ? $inv['currency_id'][1] : 'VND';
+                                            $invoiceDate = $inv['date'] ?: $inv['invoice_date'];
+                                            $rateSource = $odoo->getRate($currencyCode, $invoiceDate) ?: 1.0;
+                                            $rateVnd = $odoo->getRate('VND', $invoiceDate) ?: 1.0;
+                                            $amountVnd = $inv['amount_total'] * ($rateVnd / $rateSource);
+                                        }
                                         $groupedInvoices['all']['total_vnd'] += $amountVnd;
                                     }
                                 }
