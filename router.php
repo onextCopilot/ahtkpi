@@ -36,12 +36,18 @@ $routes = [
     '/settings/sale-levels' => 'modules/settings/sale-levels/index.php',
     '/debt' => 'modules/debt/index.php',
     '/my-debt' => 'modules/my_debt/index.php',
+    '/debt-warning' => 'modules/debt_warning/index.php',
     '/customers' => 'modules/customers/index.php',
     '/invoices' => 'modules/invoices/index.php',
     '/kpi' => 'modules/kpi/index.php',
     '/api/kpi_tab_order' => 'api/kpi_tab_order.php',
+    '/api/kpi_sort' => 'api/kpi_sort.php',
     '/api/kpi_monthly_save' => 'api/kpi_monthly_save.php',
     '/api/kpi_quarterly_save' => 'api/kpi_quarterly_save.php',
+    '/api/mark_notification_read' => 'api/mark_notification_read.php',
+    '/sale-orders' => 'modules/sale_orders/index.php',
+    '/api/sale_orders' => 'api/sale_orders.php',
+    '/sale-reports' => 'modules/sale_reports/index.php',
 ];
 
 // Check if route exists
