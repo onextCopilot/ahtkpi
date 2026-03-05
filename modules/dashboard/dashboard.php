@@ -20,56 +20,70 @@ $total_users_result = $conn->query($total_users_query);
 $total_users = $total_users_result->fetch_assoc()['total'];
 
 // Filter parameters
-// Filter parameters
-$filter_year = isset($_GET['year']) ? (int) $_GET['year'] : (int) date('Y');
-$filter_month = isset($_GET['month']) ? (int) $_GET['month'] : 0; // 0 for all
+$filter_year = isset($_GET['year']) ? (int) $_GET['year'] : 0;
+$filter_month = isset($_GET['month']) ? (int) $_GET['month'] : 0;
+
+// Access Control Logic (Consistent with All Debts module)
+$can_view_all_debts = ($role === 'admin');
+$user_teams = [];
+$where_clauses = [];
+
+if (!$can_view_all_debts) {
+    if (isset($_SESSION['is_am_bd']) && $_SESSION['is_am_bd'] == 1) {
+        $am_name_esc = $conn->real_escape_string($_SESSION['full_name']);
+        $where_clauses[] = "d.am = '$am_name_esc'";
+    } else {
+        $ut_res = $conn->prepare("SELECT team_id FROM user_sale_teams WHERE user_id = ?");
+        $ut_res->bind_param("i", $user_id);
+        $ut_res->execute();
+        $ut_result = $ut_res->get_result();
+        while ($r = $ut_result->fetch_assoc()) {
+            $user_teams[] = $r['team_id'];
+        }
+        if (count($user_teams) > 0) {
+            $in_teams = implode(',', $user_teams);
+            $where_clauses[] = "d.sale_team_id IN ($in_teams)";
+        } else {
+            $where_clauses[] = "1=0";
+        }
+    }
+}
+
+// Period Filtering
+if ($filter_year > 0) {
+    $where_clauses[] = "YEAR(d.invoice_date) = $filter_year";
+}
+if ($filter_month > 0) {
+    $where_clauses[] = "MONTH(d.invoice_date) = $filter_month";
+}
+
+$where_sql = count($where_clauses) > 0 ? "WHERE " . implode(" AND ", $where_clauses) : "";
 
 // Fetch Debt Data for Dashboard
 require_once __DIR__ . '/../../libs/OdooAPI.php';
 $odoo = new OdooAPI();
 
-// ACL for data view
-$isAdmin = ($role === 'admin');
-$isAM = (isset($_SESSION['is_am_bd']) && $_SESSION['is_am_bd'] == 1);
-$user_email = '';
-if (!$isAdmin) {
-    $stmt = $conn->prepare("SELECT email FROM users WHERE id = ?");
-    $stmt->bind_param("i", $user_id);
-    $stmt->execute();
-    $res_email = $stmt->get_result();
-    $user_email = $res_email->fetch_assoc()['email'] ?? '';
-}
-
 $total_debts = 0;
 $total_paid_vnd = 0;
 $total_unpaid_vnd = 0;
 $teams_data = [];
-$processed_odoo_ids = [];
 
-// 1. Fetch from Local Debts Table
-$debt_where = "1=1";
-if (!$isAdmin && !empty($user_email)) {
-    // Only show debts where this user is the AM (approximated by email)
-    // Most debts have 'am' as Name, but we can try to match or just show global if desired.
-    // However, the user said numbers are "incorrect", likely because they expect personal view or better global view.
-    // Let's keep it global for now as it's the main dashboard, but fix the calculation.
-}
-
-$res = $conn->query("SELECT d.amount, d.currency, d.payment_status, d.invoice_date, d.odoo_invoice_id, st.name as team_name
-                    FROM debts d
-                    LEFT JOIN sale_teams st ON d.sale_team_id = st.id");
+$res = $conn->query("SELECT d.amount, d.currency, d.payment_status, d.invoice_date, d.odoo_invoice_id, st.name as team_name 
+                    FROM debts d 
+                    LEFT JOIN sale_teams st ON d.sale_team_id = st.id
+                    $where_sql");
 
 $odoo_map = $odoo->getInvoiceMap();
+$rateVndDefault = $odoo->getRate('VND', date('Y-m-d')) ?: 1.0;
 
 if ($res) {
     while ($row = $res->fetch_assoc()) {
+        $amount = (float) $row['amount'];
         $curr = $row['currency'] ?: 'USD';
-        $t_name = $row['team_name'] ?: 'Undefined';
         $p_status = $row['payment_status'] ?: '';
         $date = !empty($row['invoice_date']) ? $row['invoice_date'] : date('Y-m-d');
-        $inv_year = (int) date('Y', strtotime($date));
-        $inv_month = (int) date('n', strtotime($date));
         $oid = $row['odoo_invoice_id'];
+        $t_name = $row['team_name'] ?: 'Undefined';
 
         // Convert to VND using Odoo ratio if available
         $vnd_value = 0;
@@ -79,41 +93,32 @@ if ($res) {
             $odoo_signed = abs((float) $odoo_inv['amount_total_signed']);
 
             if ($odoo_total > 0) {
-                // Apply proportional ratio
-                $vnd_value = ((float) $row['amount']) * ($odoo_signed / $odoo_total);
+                // Apply the exact conversion ratio from Odoo to the debt amount
+                $vnd_value = $amount * ($odoo_signed / $odoo_total);
             }
         }
 
-        // Fallback to manual rate calculation
+        // Fallback to manual rate calculation using robust ratio method
         if ($vnd_value <= 0) {
-            $rate = $odoo->getRate($curr, $date);
-            $vnd_value = ($rate > 0) ? ((float) $row['amount'] / $rate) : (float) $row['amount'];
+            $rateSource = $odoo->getRate($curr, $date) ?: 1.0;
+            $rateVnd = $odoo->getRate('VND', $date) ?: $rateVndDefault;
+            $vnd_value = $amount * ($rateVnd / $rateSource);
         }
 
-        // Tracking processed Odoo IDs (optional for stats here since we aren't merging anymore)
-        if (!empty($oid)) {
-            $processed_odoo_ids[] = $oid;
-        }
+        $total_debts++; // Count every record in the filtered result
 
         $is_paid = (strcasecmp(trim($p_status), 'Paid') === 0);
-
-        // Standard Period Filtering (Consistent with All Debts module)
-        $match_period = ($filter_year === 0 || $inv_year === $filter_year) && ($filter_month === 0 || $inv_month === $filter_month);
-
-        if ($match_period) {
-            $total_debts++; // All records in period
-            if ($is_paid) {
-                $total_paid_vnd += $vnd_value;
-                if (!isset($teams_data[$t_name]['paid']))
-                    $teams_data[$t_name]['paid'] = 0;
-                $teams_data[$t_name]['paid'] += $vnd_value;
-            } else {
-                // Any status other than 'Paid' is considered Pending
-                $total_unpaid_vnd += $vnd_value;
-                if (!isset($teams_data[$t_name]['unpaid']))
-                    $teams_data[$t_name]['unpaid'] = 0;
-                $teams_data[$t_name]['unpaid'] += $vnd_value;
-            }
+        if ($is_paid) {
+            $total_paid_vnd += $vnd_value;
+            if (!isset($teams_data[$t_name]['paid']))
+                $teams_data[$t_name]['paid'] = 0;
+            $teams_data[$t_name]['paid'] += $vnd_value;
+        } else {
+            // Any status other than 'Paid' is considered Pending
+            $total_unpaid_vnd += $vnd_value;
+            if (!isset($teams_data[$t_name]['unpaid']))
+                $teams_data[$t_name]['unpaid'] = 0;
+            $teams_data[$t_name]['unpaid'] += $vnd_value;
         }
     }
 }
