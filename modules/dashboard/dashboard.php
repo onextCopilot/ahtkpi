@@ -101,6 +101,7 @@ if ($res) {
         if ($is_paid) {
             if ($inv_year === $filter_year && ($filter_month === 0 || $inv_month === $filter_month)) {
                 $total_paid_vnd += $vnd_value;
+                $total_debts++;
                 if (!isset($teams_data[$t_name]['paid']))
                     $teams_data[$t_name]['paid'] = 0;
                 $teams_data[$t_name]['paid'] += $vnd_value;
@@ -111,6 +112,7 @@ if ($res) {
             $filter_date_limit = date('Y-m-t', strtotime("$filter_year-" . ($filter_month ?: 12) . "-01"));
             if ($date <= $filter_date_limit) {
                 $total_unpaid_vnd += $vnd_value;
+                $total_debts++;
                 if (!isset($teams_data[$t_name]['unpaid']))
                     $teams_data[$t_name]['unpaid'] = 0;
                 $teams_data[$t_name]['unpaid'] += $vnd_value;
@@ -321,7 +323,7 @@ $paged_customers = array_slice($new_customers, $coffset, $climit);
                         </div>
                         <div class="stat-content">
                             <h3>All Debts</h3>
-                            <p class="stat-number"><?php echo number_format($total_debts_vnd, 0, ',', '.'); ?> ₫</p>
+                            <p class="stat-number"><?php echo $total_debts; ?></p>
                         </div>
                     </div>
 
