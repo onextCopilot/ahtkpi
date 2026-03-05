@@ -208,30 +208,40 @@ function formatMoney($amount, $currency_code)
             display: flex;
             overflow-x: auto;
             border-bottom: 2px solid #e2e8f0;
-            margin-bottom: 1rem;
+            margin-bottom: 1.5rem;
+            padding-bottom: 0px;
         }
 
         .quarter-tab {
-            padding: 10px 20px;
-            font-weight: 500;
+            padding: 10px 24px;
+            font-weight: 600;
+            font-size: 14px;
             color: #64748b;
+            background-color: #f8fafc;
+            border: 1px solid #e2e8f0;
+            border-bottom: none;
             text-decoration: none;
-            border-bottom: 2px solid transparent;
-            margin-bottom: -2px;
+            margin-right: 4px;
+            border-top-left-radius: 8px;
+            border-top-right-radius: 8px;
             white-space: nowrap;
             transition: all 0.2s;
         }
 
         .quarter-tab:hover {
             color: #0f172a;
-            background: rgba(0, 0, 0, 0.02);
-            border-top-left-radius: 6px;
-            border-top-right-radius: 6px;
+            background-color: #f1f5f9;
         }
 
         .quarter-tab.active {
             color: #2563eb;
-            border-bottom-color: #2563eb;
+            background-color: #ffffff;
+            border-color: #e2e8f0;
+            border-bottom: 2px solid #ffffff;
+            margin-bottom: -2px;
+            /* Pull down to overlay container's bottom border */
+            position: relative;
+            z-index: 10;
         }
 
         table.report-table {
@@ -351,7 +361,7 @@ function formatMoney($amount, $currency_code)
         <?php include __DIR__ . '/../includes/sidebar.php'; ?>
         <main class="main-content">
             <?php
-            $page_title = 'Sale Reports';
+            $page_title = 'Sale Reports - ' . str_replace('_', ' ', $active_tab);
             include __DIR__ . '/../includes/topbar.php';
             ?>
 
