@@ -1047,6 +1047,9 @@ if ($res_am && $res_am->num_rows > 0) {
         <main class="main-content">
             <?php
             $page_title = 'Debts Warning';
+
+$active_tab = isset($_GET['tab']) ? $_GET['tab'] : '60_days';
+
             include __DIR__ . '/../includes/topbar.php';
             ?>
 
@@ -1132,51 +1135,55 @@ if ($res_am && $res_am->num_rows > 0) {
                 </div>
 
                 
-                        <table class="debt-table">
-                            <thead>
-                                <tr>
-                                    <th style="width: 30px !important; text-align: center;">#</th>
-                                    <th>CTY</th>
-                                    <th>AM</th>
-                                    <th>Sale Team</th>
-                                    <th>Tên khách hàng</th>
-                                    <th>Tên dự án</th>
-                                    <th>Ngày hóa đơn</th>
-                                    <th>Mốc thanh toán</th>
-                                    <th>Exp. Prod Date</th>
-                                    <th>Exp. Pay Date</th>
-                                    <th>Phân loại HĐ</th>
-                                    <th>Số tiền</th>
-                                    <th>P&L</th>
-                                    <th>Hóa đơn</th>
-                                    <th>HĐ VAT</th>
-                                    <th>Trạng thái TT</th>
-                                    <th>Tháng TT</th>
-                                    <th>Cập nhật tuần</th>
-                                    <th>Ghi chú AM</th>
-                                    <th>Ghi chú Delivery</th>
-                                    <th>Trạng thái SX</th>
-                                </tr>
-                            </thead>
-                            <tbody>
+                        <div class="team-tabs">
 <?php
-$warning_categories = [
-    'Nợ xấu > 60 ngày' => ['data' => $warningLevel60, 'total' => $total_warning_60, 'color' => '#dc2626', 'bg' => '#fef2f2'],
-    'Quá hạn 30 ngày' => ['data' => $warningLevel30, 'total' => $total_warning_30, 'color' => '#ea580c', 'bg' => '#fff7ed'],
-    'Chưa có ngày thanh toán' => ['data' => $warningEmpty, 'total' => $total_warning_empty, 'color' => '#475569', 'bg' => '#f8fafc'],
+$tabs = [
+    '60_days' => ['title' => 'Nợ xấu > 60 ngày', 'data' => $warningLevel60, 'total' => $total_warning_60],
+    '30_days' => ['title' => 'Quá hạn 30 ngày', 'data' => $warningLevel30, 'total' => $total_warning_30],
+    'empty' => ['title' => 'Chưa có ngày thanh toán', 'data' => $warningEmpty, 'total' => $total_warning_empty],
 ];
+?>
+    <?php foreach ($tabs as $key => $tab): ?>
+        <a href="?<?php echo http_build_query(array_merge($_GET, ['tab' => $key])); ?>" 
+           class="team-tab <?php echo ($active_tab === $key) ? 'active' : ''; ?>">
+           <?php echo $tab['title']; ?> (<?php echo count($tab['data']); ?>)
+        </a>
+    <?php endforeach; ?>
+</div>
+
+<table class="debt-table">
+    <thead>
+        <tr>
+            <th style="width: 30px !important; text-align: center;">#</th>
+            <th>CTY</th>
+            <th>AM</th>
+            <th>Sale Team</th>
+            <th>Tên khách hàng</th>
+            <th>Tên dự án</th>
+            <th>Ngày hóa đơn</th>
+            <th>Mốc thanh toán</th>
+            <th>Exp. Prod Date</th>
+            <th>Exp. Pay Date</th>
+            <th>Phân loại HĐ</th>
+            <th>Số tiền</th>
+            <th>P&L</th>
+            <th>Hóa đơn</th>
+            <th>HĐ VAT</th>
+            <th>Trạng thái TT</th>
+            <th>Tháng TT</th>
+            <th>Cập nhật tuần</th>
+            <th>Ghi chú AM</th>
+            <th>Ghi chú Delivery</th>
+            <th>Trạng thái SX</th>
+        </tr>
+    </thead>
+    <tbody>
+<?php
+$current_data = $tabs[$active_tab]['data'];
 $globalIdx = 1;
 ?>
-
-<?php foreach ($warning_categories as $cat_title => $cat_info): ?>
-    <?php if (count($cat_info['data']) > 0): ?>
-        <tr class="group-header" style="background-color: <?php echo $cat_info['bg']; ?> !important;">
-            <td colspan="22" style="color: <?php echo $cat_info['color']; ?>; font-size: 14px; font-weight: 800; padding: 12px 16px;">
-                <?php echo $cat_title; ?> <span style="font-weight: 500; font-size: 12px;">(<?php echo count($cat_info['data']); ?> debts)</span> 
-                <span class="group-total" style="color: <?php echo $cat_info['color']; ?>; margin-left: 20px;">(Total Amount: <?php echo formatVND($cat_info['total']); ?>)</span>
-            </td>
-        </tr>
-        <?php foreach ($cat_info['data'] as $item): ?>
+    <?php if (count($current_data) > 0): ?>
+        <?php foreach ($current_data as $item): ?>
             <tr style="user-select: none;">
                 <td style="text-align: center; color: #94a3b8; font-weight: 500;"><?php echo $globalIdx++; ?></td>
                 <td class="cell-company"><?php echo htmlspecialchars($item['company'] ?? ''); ?></td>
@@ -1255,10 +1262,15 @@ $globalIdx = 1;
                 </td>
             </tr>
         <?php endforeach; ?>
+    <?php else: ?>
+        <tr>
+            <td colspan="21" style="text-align: center; padding: 20px; color: #64748b;">
+                Không có dữ liệu
+            </td>
+        </tr>
     <?php endif; ?>
-<?php endforeach; ?>
-</tbody>
-                        </table>
+    </tbody>
+</table>
                 </div>
             </div>
         </main>
