@@ -90,7 +90,7 @@ if ($res) {
             $vnd_value = ($rate > 0) ? ((float) $row['amount'] / $rate) : (float) $row['amount'];
         }
 
-        // Tracking processed Odoo IDs to avoid double counting
+        // Tracking processed Odoo IDs (optional for stats here since we aren't merging anymore)
         if (!empty($oid)) {
             $processed_odoo_ids[] = $oid;
         }
@@ -101,7 +101,6 @@ if ($res) {
         if ($is_paid) {
             if ($inv_year === $filter_year && ($filter_month === 0 || $inv_month === $filter_month)) {
                 $total_paid_vnd += $vnd_value;
-                $total_debts++;
                 if (!isset($teams_data[$t_name]['paid']))
                     $teams_data[$t_name]['paid'] = 0;
                 $teams_data[$t_name]['paid'] += $vnd_value;
@@ -112,7 +111,6 @@ if ($res) {
             $filter_date_limit = date('Y-m-t', strtotime("$filter_year-" . ($filter_month ?: 12) . "-01"));
             if ($date <= $filter_date_limit) {
                 $total_unpaid_vnd += $vnd_value;
-                $total_debts++;
                 if (!isset($teams_data[$t_name]['unpaid']))
                     $teams_data[$t_name]['unpaid'] = 0;
                 $teams_data[$t_name]['unpaid'] += $vnd_value;
@@ -121,64 +119,8 @@ if ($res) {
     }
 }
 
-// 2. Fetch from Odoo Invoices (Merge into totals)
-try {
-    $inv_filters = [];
-    if (!$isAdmin && !empty($user_email)) {
-        $inv_filters['owner_email'] = $user_email;
-    }
-
-    $odoo_res = $odoo->getInvoices(5000, 0, $inv_filters);
-    $invoices = $odoo_res['invoices'] ?? [];
-
-    foreach ($invoices as $inv) {
-        $oid = $inv['id'];
-        if (in_array($oid, $processed_odoo_ids))
-            continue; // Already counted from local manual tracker
-
-        $date = $inv['invoice_date'] ?: $inv['date'];
-        if (!$date)
-            continue;
-
-        $inv_year = (int) date('Y', strtotime($date));
-        $inv_month = (int) date('n', strtotime($date));
-
-        // Use amount_total_signed for 100% accuracy from Odoo
-        $vnd_value = isset($inv['amount_total_signed']) ? abs((float) $inv['amount_total_signed']) : 0;
-
-        // Fallback to manual conversion if missing
-        if ($vnd_value == 0 && $inv['amount_total'] > 0) {
-            $curr = is_array($inv['currency_id']) ? $inv['currency_id'][1] : 'VND';
-            $rate = $odoo->getRate($curr, $date);
-            $vnd_value = ($rate > 0) ? ((float) $inv['amount_total'] / $rate) : (float) $inv['amount_total'];
-        }
-
-        $is_paid = (($inv['payment_state'] ?? '') === 'paid');
-        $t_name = 'Odoo Invoices'; // Or try to map if possible
-
-        if ($is_paid) {
-            if ($inv_year === $filter_year && ($filter_month === 0 || $inv_month === $filter_month)) {
-                $total_paid_vnd += $vnd_value;
-                $total_debts++;
-                if (!isset($teams_data[$t_name]['paid']))
-                    $teams_data[$t_name]['paid'] = 0;
-                $teams_data[$t_name]['paid'] += $vnd_value;
-            }
-        } else {
-            // Pending: include all outstanding balance up to the end of the filtered period
-            $filter_date_limit = date('Y-m-t', strtotime("$filter_year-" . ($filter_month ?: 12) . "-01"));
-            if ($date <= $filter_date_limit) {
-                $total_unpaid_vnd += $vnd_value;
-                $total_debts++;
-                if (!isset($teams_data[$t_name]['unpaid']))
-                    $teams_data[$t_name]['unpaid'] = 0;
-                $teams_data[$t_name]['unpaid'] += $vnd_value;
-            }
-        }
-    }
-} catch (Exception $e) {
-    // If Odoo fails, just rely on local data
-}
+// Calculate Total Debts as the sum of everything (matching "All Debts" overview)
+$total_debts_vnd = $total_paid_vnd + $total_unpaid_vnd;
 
 $chart_teams = [];
 $chart_paid = [];
@@ -379,7 +321,7 @@ $paged_customers = array_slice($new_customers, $coffset, $climit);
                         </div>
                         <div class="stat-content">
                             <h3>Total Debts</h3>
-                            <p class="stat-number"><?php echo $total_debts; ?></p>
+                            <p class="stat-number"><?php echo number_format($total_debts_vnd, 0, ',', '.'); ?> ₫</p>
                         </div>
                     </div>
 
