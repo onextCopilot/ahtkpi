@@ -78,6 +78,18 @@ if (isset($_SESSION['is_am_bd']) && $_SESSION['is_am_bd'] == 1) {
 
     // Now filter out the ones already read
     if (count($raw_notifs) > 0) {
+        // Auto-create table if not exists
+        $conn->query("CREATE TABLE IF NOT EXISTS debt_notifications_read (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            user_id INT NOT NULL,
+            debt_id INT NOT NULL,
+            warning_level INT NOT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE KEY (user_id, debt_id, warning_level),
+            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+            FOREIGN KEY (debt_id) REFERENCES debts(id) ON DELETE CASCADE
+        )");
+
         $read_stmt = $conn->prepare("SELECT debt_id, warning_level FROM debt_notifications_read WHERE user_id = ?");
         $read_stmt->bind_param("i", $current_user_id);
         $read_stmt->execute();
