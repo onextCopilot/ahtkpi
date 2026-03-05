@@ -49,6 +49,26 @@ foreach ($needed_cols as $col => $def) {
     }
 }
 
+// ── MIGRATE NOTES for ALL levels by position_type ────────────────────────────
+$note_bde = "1. BD đảm bảo tỷ lệ doanh thu từ khách hàng mới (new accounts) chiếm tỷ trọng > 70%\n2. Nếu tỷ lệ tổng doanh thu từ khách hàng cũ > 70% tổng doanh thu và tổng doanh thu từ khách hàng cũ >= KPI AM/CSM Level 1 thì BD sẽ được move sang vị trí là AM/CSM\n3. Tổng kết 2 quý 1 lần, nếu BD không đạt 80% KPI tại Level của mình thì BD sẽ bị giảm level về Level tương ứng với KPI đã đạt trong 2 quý trước. Nếu BD đạt KPI của 2 quý vượt KPI của Level cao hơn thì BD sẽ được cân nhắc và đánh giá để tăng lên level cao hơn và KPI cao hơn tương ứng.";
+
+$note_am = "1. AM/CSM đảm bảo tỷ lệ doanh thu từ khách hàng cũ (Existed Accounts) chiếm tỷ trọng > 50% tổng doanh thu\n2. AM/CSM vẫn có nhiệm vụ tìm kiếm thêm khách hàng mới thông qua các mối quan hệ khách hàng cũ/được gắn thêm khách mới/tự tìm thêm các khách mới\n3. Tổng kết 2 quý 1 lần, nếu AM/CSM không đạt 80% KPI tại Level của mình thì AM/CSM sẽ bị giảm level về Level tương ứng với KPI đã đạt trong 2 quý trước. Nếu AM/CSM đạt KPI của 2 quý vượt KPI của Level cao hơn thì AM/CSM sẽ được cân nhắc và đánh giá để tăng lên level cao hơn và KPI cao hơn tương ứng.";
+
+$note_ss = "1. Sales Support KPI được tính theo KPI tổng doanh thu các dự án/PO mà Sales support tham gia hỗ trợ các BD/AM chính khác\n2. Sales Support là vị trí kiêm nhiệm thêm của các BD/AM\n3. KPI của Sales support được đánh giá 2 quý / 1 lần. --> Lương của add on sales support cũng sẽ thay đổi khi KPI được update.";
+
+$note_so = "1. Sales Operation KPI được tính theo KPI tổng của các Team BD/AM hoặc tổng KPI của các BD/AM gộp lại\n2. Sales Operation có thể được bổ nhiệm làm BD/AM/CSM, nếu Sales Operation mong muốn thay đổi vị trí và được BD leader phê duyệt, hoặc do BD leader yêu cầu và Sales Operation chấp nhận\n3. Sales Operation được tăng level theo kỳ Performance của công ty và tính trên tổng KPI 2 quý của tổng các BD/AM mà mình support gộp lại\n4. Sales Operation sẽ được thưởng 10% * Lương tháng, nếu tổng kết KPI quý của các team mình phụ trách đạt >=100% KPI";
+
+$note_migrations = [
+    "BDE/BCE"                     => $note_bde,
+    "AM/CSM"                      => $note_am,
+    "Sales Support"               => $note_ss,
+    "Sales Operation"             => $note_so,
+];
+foreach ($note_migrations as $pos => $note) {
+    $upd = $conn->prepare("UPDATE sale_levels SET notes=? WHERE position_type=? AND (notes IS NULL OR notes='' OR notes LIKE '%&#10;%')");
+    if ($upd) { $upd->bind_param("ss", $note, $pos); $upd->execute(); }
+}
+
 // ── SEED DEFAULT DATA if table is empty ──────────────────────────────────────
 $cnt = $conn->query("SELECT COUNT(*) c FROM sale_levels")->fetch_assoc()['c'];
 if ((int) $cnt === 0) {
@@ -487,114 +507,59 @@ function fmtUSD($n)
                             <?php
                             $posOrder = ['BDE/BCE', 'AM/CSM', 'Sales Support', 'Sales Operation', 'Pre-sales/Senior Consultant'];
                             $stt = 0;
-                            foreach ($posOrder as $pos):
-                                if (empty($grouped[$pos]))
-                                    continue;
-                                $pc = $POSITION_COLORS[$pos] ?? ['bg' => '#F9FAFB', 'head' => '#374151', 'badge' => '#6B7280'];
-                                ?>
-                                <tr>
-                                    <td colspan="11" style="background:<?= $pc['bg'] ?>;padding:6px 12px;">
-                                        <span class="pos-badge"
-                                            style="background:<?= $pc['badge'] ?>"><?= htmlspecialchars($pos) ?></span>
-                                    </td>
-                                </tr>
-                                <?php foreach ($grouped[$pos] as $l):
-                                    $stt++; ?>
-                                    <tr>
-                                        <td class="col-num"><?= $stt ?></td>
-                                        <td>
-                                            <span class="pos-badge" style="background:<?= $pc['badge'] ?>;font-size:10px">
-                                                <?= htmlspecialchars($l['position_type']) ?>
-                                            </span>
-                                        </td>
-                                        <td style="font-weight:600"><?= htmlspecialchars($l['level_name']) ?></td>
-                                        <td class="num-cell"><?= fmtVND($l['fixed_monthly']) ?></td>
-                                        <td class="num-cell"><?= fmtVND($l['total_salary_yearly']) ?></td>
-                                        <td class="num-cell" style="color:#1D4ED8;font-weight:600">
-                                            <?= fmtVND($l['kpi_yearly_vnd']) ?></td>
-                                        <td class="num-cell"><?= fmtVND($l['kpi_quarter_vnd']) ?></td>
-                                        <td class="num-cell" style="color:#065F46;font-weight:600">
-                                            <?= fmtUSD($l['kpi_yearly_usd']) ?></td>
-                                        <td class="num-cell"><?= fmtUSD($l['kpi_quarter_usd']) ?></td>
-                                        <td class="notes-cell"><?= nl2br(htmlspecialchars($l['notes'] ?? '')) ?></td>
-                                        <td class="col-act">
-                                            <div style="display:flex;justify-content:center;gap:6px">
-                                                <button onclick='openEdit(<?= json_encode($l) ?>)'
-                                                    style="border:none;background:none;cursor:pointer;color:#3B82F6"
-                                                    title="Sửa">
-                                                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none"
-                                                        stroke="currentColor" stroke-width="2">
-                                                        <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
-                                                        <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
-                                                    </svg>
-                                                </button>
-                                                <form method="POST" style="display:inline"
-                                                    onsubmit="return confirm('Xác nhận xoá?')">
-                                                    <input type="hidden" name="action" value="delete">
-                                                    <input type="hidden" name="id" value="<?= $l['id'] ?>">
-                                                    <button type="submit"
-                                                        style="border:none;background:none;cursor:pointer;color:#EF4444"
-                                                        title="Xoá">
-                                                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none"
-                                                            stroke="currentColor" stroke-width="2">
-                                                            <polyline points="3 6 5 6 21 6" />
-                                                            <path
-                                                                d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
-                                                        </svg>
-                                                    </button>
-                                                </form>
-                                            </div>
-                                        </td>
-                                    </tr>
-                                <?php endforeach; ?>
+                            // Merge both posOrder + any extra groups
+                            $allGroups = [];
+                            foreach ($posOrder as $p) { if (!empty($grouped[$p])) $allGroups[$p] = $grouped[$p]; }
+                            foreach ($grouped as $p => $rows) { if (!in_array($p, $posOrder)) $allGroups[$p] = $rows; }
+
+                            foreach ($allGroups as $pos => $rows):
+                                $pc = $POSITION_COLORS[$pos] ?? ['bg'=>'#F9FAFB','head'=>'#374151','badge'=>'#6B7280'];
+                                $groupCount = count($rows);
+                                $groupNote  = $rows[0]['notes'] ?? ''; // same note for group
+                            ?>
+                            <!-- Group header -->
+                            <tr>
+                                <td colspan="11" style="background:<?= $pc['bg'] ?>;padding:5px 12px;">
+                                    <span class="pos-badge" style="background:<?= $pc['badge'] ?>"><?= htmlspecialchars($pos) ?></span>
+                                </td>
+                            </tr>
+                            <?php foreach ($rows as $idx => $l): $stt++; $isFirst = ($idx === 0); ?>
+                            <tr>
+                                <td class="col-num"><?= $stt ?></td>
+                                <td style="font-weight:600"><?= htmlspecialchars($l['level_name']) ?></td>
+                                <td class="num-cell"><?= fmtVND($l['fixed_monthly']) ?></td>
+                                <td class="num-cell"><?= fmtVND($l['total_salary_yearly']) ?></td>
+                                <td class="num-cell" style="color:#1D4ED8;font-weight:600"><?= fmtVND($l['kpi_yearly_vnd']) ?></td>
+                                <td class="num-cell"><?= fmtVND($l['kpi_quarter_vnd']) ?></td>
+                                <td class="num-cell" style="color:#065F46;font-weight:600"><?= fmtUSD($l['kpi_yearly_usd']) ?></td>
+                                <td class="num-cell"><?= fmtUSD($l['kpi_quarter_usd']) ?></td>
+                                <?php if ($isFirst && $groupNote): ?>
+                                <td class="notes-cell" rowspan="<?= $groupCount ?>"
+                                    style="vertical-align:top;border-left:3px solid <?= $pc['badge'] ?>;background:<?= $pc['bg'] ?>">
+                                    <?= nl2br(htmlspecialchars($groupNote)) ?>
+                                </td>
+                                <?php elseif ($isFirst): ?>
+                                <td class="notes-cell" rowspan="<?= $groupCount ?>">—</td>
+                                <?php endif; ?>
+                                <td class="col-act">
+                                    <div style="display:flex;justify-content:center;gap:6px">
+                                        <button onclick='openEdit(<?= json_encode($l) ?>)' style="border:none;background:none;cursor:pointer;color:#3B82F6" title="Sửa">
+                                            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                                        </button>
+                                        <form method="POST" style="display:inline" onsubmit="return confirm('Xác nhận xoá?')">
+                                            <input type="hidden" name="action" value="delete">
+                                            <input type="hidden" name="id" value="<?= $l['id'] ?>">
+                                            <button type="submit" style="border:none;background:none;cursor:pointer;color:#EF4444" title="Xoá">
+                                                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2 2v2"/></svg>
+                                            </button>
+                                        </form>
+                                    </div>
+                                </td>
+                            </tr>
                             <?php endforeach; ?>
-                            <!-- any extra position types not in order -->
-                            <?php foreach ($grouped as $pos => $rows):
-                                if (in_array($pos, $posOrder))
-                                    continue;
-                                $pc = ['bg' => '#F9FAFB', 'head' => '#374151', 'badge' => '#6B7280'];
-                                ?>
-                                <tr>
-                                    <td colspan="11" style="background:<?= $pc['bg'] ?>;padding:6px 12px">
-                                        <span class="pos-badge"
-                                            style="background:<?= $pc['badge'] ?>"><?= htmlspecialchars($pos) ?></span>
-                                    </td>
-                                </tr>
-                                <?php foreach ($rows as $l):
-                                    $stt++; ?>
-                                    <tr>
-                                        <td class="col-num"><?= $stt ?></td>
-                                        <td><span class="pos-badge"
-                                                style="background:<?= $pc['badge'] ?>;font-size:10px"><?= he($l['position_type']) ?></span>
-                                        </td>
-                                        <td style="font-weight:600"><?= htmlspecialchars($l['level_name']) ?></td>
-                                        <td class="num-cell"><?= fmtVND($l['fixed_monthly']) ?></td>
-                                        <td class="num-cell"><?= fmtVND($l['total_salary_yearly']) ?></td>
-                                        <td class="num-cell"><?= fmtVND($l['kpi_yearly_vnd']) ?></td>
-                                        <td class="num-cell"><?= fmtVND($l['kpi_quarter_vnd']) ?></td>
-                                        <td class="num-cell"><?= fmtUSD($l['kpi_yearly_usd']) ?></td>
-                                        <td class="num-cell"><?= fmtUSD($l['kpi_quarter_usd']) ?></td>
-                                        <td class="notes-cell"><?= nl2br(htmlspecialchars($l['notes'] ?? '')) ?></td>
-                                        <td class="col-act">
-                                            <div style="display:flex;justify-content:center;gap:6px">
-                                                <button onclick='openEdit(<?= json_encode($l) ?>)'
-                                                    style="border:none;background:none;cursor:pointer;color:#3B82F6">
-                                                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none"
-                                                        stroke="currentColor" stroke-width="2">
-                                                        <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
-                                                        <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
-                                                    </svg>
-                                                </button>
-                                            </div>
-                                        </td>
-                                    </tr>
-                                <?php endforeach; ?>
                             <?php endforeach; ?>
                             <?php if (empty($levels)): ?>
-                                <tr>
-                                    <td colspan="11" style="text-align:center;padding:40px;color:#9CA3AF">Chưa có dữ liệu
-                                    </td>
-                                </tr>
+                                <tr><td colspan="11" style="text-align:center;padding:40px;color:#9CA3AF">Chưa có dữ liệu</td></tr>
                             <?php endif; ?>
                         </tbody>
                     </table>
