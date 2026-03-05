@@ -164,7 +164,7 @@ if (!empty($_GET['month'])) {
 
 if (!empty($_GET['week'])) {
     $week = intval($_GET['week']);
-    $where_clauses[] = "WEEK(d.invoice_date, 1) = $week";
+    $where_clauses[] = "CEIL(DAY(d.invoice_date) / 7) = $week";
 }
 
 $where_sql = "";
@@ -1131,7 +1131,7 @@ if ($team_res && $team_res->num_rows > 0) {
                         <select name="week" class="filter-select" onchange="this.form.submit()">
                             <option value="">Week: All</option>
                             <?php
-                            for ($w = 1; $w <= 53; $w++) {
+                            for ($w = 1; $w <= 5; $w++) {
                                 $sel = (isset($_GET['week']) && $_GET['week'] == $w) ? 'selected' : '';
                                 echo "<option value='$w' $sel>W$w</option>";
                             }
