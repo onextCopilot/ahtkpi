@@ -143,19 +143,24 @@ if ($_SESSION['role'] === 'admin') {
 
 $user_teams = [];
 if (!$can_view_all_debts) {
-    $ut_res = $conn->prepare("SELECT team_id FROM user_sale_teams WHERE user_id = ?");
-    $ut_res->bind_param("i", $current_user_id);
-    $ut_res->execute();
-    $ut_result = $ut_res->get_result();
-    while ($r = $ut_result->fetch_assoc()) {
-        $user_teams[] = $r['team_id'];
-    }
-
-    if (count($user_teams) > 0) {
-        $in_teams = implode(',', $user_teams);
-        $where_clauses[] = "d.sale_team_id IN ($in_teams)";
+    if (isset($_SESSION['is_am_bd']) && $_SESSION['is_am_bd'] == 1) {
+        $am_name_esc = $conn->real_escape_string($_SESSION['full_name']);
+        $where_clauses[] = "d.am = '$am_name_esc'";
     } else {
-        $where_clauses[] = "1=0"; // No access to any team's data
+        $ut_res = $conn->prepare("SELECT team_id FROM user_sale_teams WHERE user_id = ?");
+        $ut_res->bind_param("i", $current_user_id);
+        $ut_res->execute();
+        $ut_result = $ut_res->get_result();
+        while ($r = $ut_result->fetch_assoc()) {
+            $user_teams[] = $r['team_id'];
+        }
+
+        if (count($user_teams) > 0) {
+            $in_teams = implode(',', $user_teams);
+            $where_clauses[] = "d.sale_team_id IN ($in_teams)";
+        } else {
+            $where_clauses[] = "1=0"; // No access to any team's data
+        }
     }
 }
 
