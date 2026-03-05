@@ -138,46 +138,156 @@ function formatMoney($amount, $currency_code)
     <link rel="stylesheet" href="/assets/css/dashboard.css">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <style>
+        @keyframes spin {
+            100% {
+                transform: rotate(360deg);
+            }
+        }
+
+        /* Prevent horizontal scroll on page */
+        body {
+            overflow-x: hidden;
+        }
+
+        .main-content {
+            overflow-x: hidden;
+        }
+
         .report-wrapper {
-            padding: 1.5rem;
+            padding: 1rem;
+            max-width: 100%;
+            height: calc(100vh - 80px);
+            /* Fill screen */
+            display: flex;
+            flex-direction: column;
+            overflow-x: hidden;
+            /* Prevent horizontal scroll on container */
         }
 
         .table-card {
-            background: white;
-            border: 1px solid #c0c0c0;
+            border: 1px solid #ccc;
+            flex: 1;
             overflow-x: auto;
-            max-height: calc(100vh - 200px);
+            /* Horizontal scroll */
+            overflow-y: auto;
+            /* Vertical scroll */
+            position: relative;
+            background: white;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
         }
 
-        table {
-            width: 100%;
-            border-collapse: collapse;
-            font-family: Arial, sans-serif;
+        table.report-table {
+            width: max-content;
+            /* Allow table to be wider than container */
+            min-width: 100%;
+            /* But at least 100% */
+            border-collapse: separate;
+            border-spacing: 0;
             font-size: 13px;
-            color: #000;
-            min-width: 1800px;
+            white-space: nowrap;
         }
 
-        th {
-            background: #fce8cd;
-            color: #333;
-            font-weight: bold;
-            text-align: left;
-            padding: 6px 8px;
-            border: 1px solid #c0c0c0;
-            white-space: nowrap;
+        /* Sticky Header */
+        table.report-table thead th {
             position: sticky;
             top: 0;
+            background-color: #004b75;
+            /* Darker Blue */
+            color: white;
+            font-weight: 600;
+            padding: 10px 12px;
+            text-align: left;
+            border-bottom: 2px solid #003655;
             z-index: 10;
-        }
-
-        td {
-            padding: 4px 8px;
-            border: 1px solid #e0e0e0;
+            white-space: normal;
+            line-height: 1.3;
             vertical-align: middle;
+            min-width: 100px;
+            max-height: 52px;
+            overflow: hidden;
         }
 
-        tr:hover td {
+        /* Column borders in header */
+        table.report-table thead th:not(:last-child) {
+            border-right: 1px solid rgba(255, 255, 255, 0.2);
+        }
+
+        table.report-table tbody td {
+            padding: 8px 10px;
+            border-bottom: 1px solid #e0e0e0;
+            border-right: 1px solid #f0f0f0;
+            vertical-align: middle;
+            color: #333;
+        }
+
+        /* Sticky Columns */
+        table.report-table th:nth-child(1),
+        table.report-table tr td:nth-child(1) {
+            box-sizing: border-box;
+            position: sticky;
+            left: 0;
+            z-index: 8;
+            width: 40px;
+            min-width: 40px;
+            max-width: 40px;
+            text-align: center;
+        }
+
+        table.report-table th:nth-child(2),
+        table.report-table tr td:nth-child(2) {
+            box-sizing: border-box;
+            position: sticky;
+            left: 40px;
+            z-index: 8;
+            width: 150px;
+            min-width: 150px;
+            max-width: 150px;
+        }
+
+        table.report-table th:nth-child(3),
+        table.report-table tr td:nth-child(3) {
+            box-sizing: border-box;
+            position: sticky;
+            left: 190px;
+            z-index: 8;
+            width: 150px;
+            min-width: 150px;
+            max-width: 150px;
+        }
+
+        table.report-table th:nth-child(4),
+        table.report-table tr td:nth-child(4) {
+            box-sizing: border-box;
+            position: sticky;
+            left: 340px;
+            z-index: 8;
+            width: 120px;
+            min-width: 120px;
+            max-width: 120px;
+            border-right: 1px solid #cbd5e1 !important;
+            box-shadow: 2px 0 5px -2px rgba(0, 0, 0, 0.1);
+        }
+
+        /* Ensure z-index is correct for sticky headers of sticky columns */
+        table.report-table thead th:nth-child(1),
+        table.report-table thead th:nth-child(2),
+        table.report-table thead th:nth-child(3),
+        table.report-table thead th:nth-child(4) {
+            z-index: 11;
+        }
+
+        /* Make sure alternating or hover rows keep background on sticky */
+        table.report-table tr td i,
+        table.report-table tr td,
+        table.report-table tr:hover td {
+            background-color: inherit;
+        }
+
+        table.report-table tr {
+            background-color: white;
+        }
+
+        table.report-table tr:hover {
             background-color: #f1f3f4;
         }
 
@@ -196,10 +306,11 @@ function formatMoney($amount, $currency_code)
             padding: 4px;
             border: 1px solid #1a73e8;
             border-radius: 4px;
-            font-size: 12px;
+            font-size: 13px;
             outline: none;
             box-sizing: border-box;
             background: #fff;
+            color: #333;
         }
 
         .header-controls {
@@ -260,7 +371,7 @@ function formatMoney($amount, $currency_code)
                 </div>
 
                 <div class="table-card" id="scrollArea">
-                    <table>
+                    <table class="report-table">
                         <thead>
                             <tr>
                                 <th style="width: 40px; text-align: center;">STT</th>
