@@ -121,6 +121,15 @@ $where_clauses = [];
 $user_first = explode(' ', trim($_SESSION['full_name']))[0];
 $where_clauses[] = "d.am LIKE '%" . $conn->real_escape_string($user_first) . "%'";
 
+if (!empty($_GET['invoice_status_class'])) {
+    $inv_class_filter = $conn->real_escape_string($_GET['invoice_status_class']);
+    if ($inv_class_filter === 'Xanh') {
+        $where_clauses[] = "(d.invoice_status_class = 'Xanh' OR d.invoice_status_class = 'Tốt')";
+    } else {
+        $where_clauses[] = "d.invoice_status_class = '$inv_class_filter'";
+    }
+}
+
 if (!empty($_GET['status'])) {
     $status_filter = $conn->real_escape_string($_GET['status']);
     $where_clauses[] = "d.payment_status = '$status_filter'";
@@ -1069,6 +1078,19 @@ if ($team_res && $team_res->num_rows > 0) {
                             <option value="">Status: All</option>
                             <option value="Not paid" <?php echo (isset($_GET['status']) && $_GET['status'] == 'Not paid') ? 'selected' : ''; ?>>Not paid</option>
                             <option value="Paid" <?php echo (isset($_GET['status']) && $_GET['status'] == 'Paid') ? 'selected' : ''; ?>>Paid</option>
+                        </select>
+
+                        <select name="invoice_status_class" class="filter-select" onchange="this.form.submit()">
+                            <option value="">Phân loại HĐ: All</option>
+                            <option value="Trắng" <?php echo (isset($_GET['invoice_status_class']) && $_GET['invoice_status_class'] == 'Trắng') ? 'selected' : ''; ?>>Trắng</option>
+                            <option value="Xanh" <?php echo (isset($_GET['invoice_status_class']) && $_GET['invoice_status_class'] == 'Xanh') ? 'selected' : ''; ?>>Xanh (Tốt)</option>
+                            <option value="Tím" <?php echo (isset($_GET['invoice_status_class']) && $_GET['invoice_status_class'] == 'Tím') ? 'selected' : ''; ?>>Tím</option>
+                            <option value="Đỏ" <?php echo (isset($_GET['invoice_status_class']) && $_GET['invoice_status_class'] == 'Đỏ') ? 'selected' : ''; ?>>Đỏ</option>
+                            <option value="PP" <?php echo (isset($_GET['invoice_status_class']) && $_GET['invoice_status_class'] == 'PP') ? 'selected' : ''; ?>>PP</option>
+                            <option value="Draft" <?php echo (isset($_GET['invoice_status_class']) && $_GET['invoice_status_class'] == 'Draft') ? 'selected' : ''; ?>>Draft</option>
+                            <option value="Done" <?php echo (isset($_GET['invoice_status_class']) && $_GET['invoice_status_class'] == 'Done') ? 'selected' : ''; ?>>Done</option>
+                            <option value="Chưa xác định" <?php echo (isset($_GET['invoice_status_class']) && $_GET['invoice_status_class'] == 'Chưa xác định') ? 'selected' : ''; ?>>Chưa xác định
+                            </option>
                         </select>
 
                         <select name="year" class="filter-select" onchange="this.form.submit()">
