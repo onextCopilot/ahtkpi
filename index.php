@@ -68,6 +68,8 @@ $routes = [
     '/api/kpi_monthly_save' => 'api/kpi_monthly_save.php',
     '/api/kpi_quarterly_save' => 'api/kpi_quarterly_save.php',
     '/api/mark_notification_read' => 'api/mark_notification_read.php',
+    '/sale-orders' => 'modules/sale_orders/index.php',
+    '/api/sale_orders' => 'api/sale_orders.php',
 ];
 
 // Check if route exists in our mapping

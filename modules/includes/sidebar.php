@@ -96,6 +96,20 @@ function isMenuItemActive($path, $current_uri)
             </a>
         <?php endif; ?>
 
+        <!-- Sale Order Management -->
+        <?php if (!empty($_SESSION['can_view_invoice']) || $_SESSION['role'] === 'admin'): ?>
+            <a href="/sale-orders"
+                class="nav-item <?php echo (strpos($current_uri, '/sale-orders') !== false) ? 'active' : ''; ?>">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                    stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"></path>
+                    <line x1="3" y1="6" x2="21" y2="6"></line>
+                    <path d="M16 10a4 4 0 0 1-8 0"></path>
+                </svg>
+                <span>Sale Order Management</span>
+            </a>
+        <?php endif; ?>
+
         <!-- KPI Management -->
         <a href="/kpi" class="nav-item <?php echo (strpos($current_uri, '/kpi') !== false) ? 'active' : ''; ?>">
             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
