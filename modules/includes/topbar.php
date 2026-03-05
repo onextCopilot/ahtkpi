@@ -63,6 +63,20 @@ if (!isset($page_subtitle))
                 <?php echo htmlspecialchars($role); ?>
             </span>
         </div>
+
+        <!-- Notification Bell -->
+        <a href="#" class="notification-bell"
+            style="position: relative; color: #64748b; margin-right: 8px; text-decoration: none; display: flex; align-items: center; justify-content: center; width: 36px; height: 36px; border-radius: 50%; transition: background-color 0.2s;"
+            onmouseover="this.style.backgroundColor='#f1f5f9'" onmouseout="this.style.backgroundColor='transparent'">
+            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none"
+                stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path>
+                <path d="M13.73 21a2 2 0 0 1-3.46 0"></path>
+            </svg>
+            <!-- Optional Notification Badge (can be shown dynamically later) -->
+            <!-- <span style="position: absolute; top: 6px; right: 6px; width: 8px; height: 8px; background-color: #ef4444; border-radius: 50%; border: 2px solid white;"></span> -->
+        </a>
+
         <a href="/modules/profile" class="user-avatar"
             style="text-decoration: none; display: flex; align-items: center; justify-content: center; width: 36px; height: 36px; border-radius: 50%; overflow: hidden; background: #3b82f6; color: white; font-weight: bold; border: 2px solid white; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
             <?php if ($avatar): ?>
