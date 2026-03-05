@@ -273,7 +273,7 @@ if ($res) {
         $row['currency'] = 'VND';
 
         $exp_date_str = $row['expected_payment_date'];
-        if (empty($exp_date_str) || $exp_date_str === '0000-00-00') {
+        if (empty($exp_date_str) || trim($exp_date_str) === '' || $exp_date_str === '0000-00-00' || is_null($exp_date_str)) {
             $warningEmpty[] = $row;
             $total_warning_empty += $vnd_value;
         } else {
@@ -1135,7 +1135,8 @@ $active_tab = isset($_GET['tab']) ? $_GET['tab'] : '60_days';
                 </div>
 
                 
-                        <div class="team-tabs">
+                        <div class="table-responsive" style="overflow: visible; padding-bottom: 10px; border: none; background: transparent; box-shadow: none;">
+                <div class="team-tabs" style="margin-bottom: 20px; display: flex; gap: 10px; flex-wrap: wrap;">
 <?php
 $tabs = [
     '60_days' => ['title' => 'Nợ xấu > 60 ngày', 'data' => $warningLevel60, 'total' => $total_warning_60],
@@ -1150,7 +1151,8 @@ $tabs = [
         </a>
     <?php endforeach; ?>
 </div>
-
+</div>
+<div class="table-responsive">
 <table class="debt-table">
     <thead>
         <tr>
