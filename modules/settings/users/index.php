@@ -284,11 +284,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
 // --- FETCH DATA ---
 $users = [];
-$sql = "SELECT u.*, d.name as department_name, 
+$sql = "SELECT u.*, d.name as department_name,
+        sl.level_name as sale_level_name, sl.position_type as sale_position_type, sl.color_badge as sale_color_badge,
         (SELECT GROUP_CONCAT(st.name) FROM user_sale_teams ust JOIN sale_teams st ON ust.team_id = st.id WHERE ust.user_id = u.id) as team_names,
         (SELECT GROUP_CONCAT(team_id) FROM user_sale_teams WHERE user_id = u.id) as team_ids
 FROM users u
 LEFT JOIN departments d ON u.department_id = d.id
+LEFT JOIN sale_levels sl ON u.sale_level_id = sl.id
 ORDER BY u.id DESC";
 $result = $conn->query($sql);
 if ($result) {
@@ -751,13 +753,14 @@ if ($sl_tbl && $sl_tbl->num_rows > 0) {
                             <tr>
                                 <th style="width: 40px;">ID</th>
                                 <th style="width: 80px;">Code</th>
-                                <th style="width: 25%;">User Profile</th>
-                                <th style="width: 15%;">Position</th>
-                                <th style="width: 10%;">Level</th>
-                                <th style="width: 15%;">Department</th>
-                                <th style="width: 15%;">Sale Teams</th>
-                                <th style="width: 10%;">Status</th>
-                                <th style="width: 10%;">Joined</th>
+                                <th style="width: 20%;">User Profile</th>
+                                <th style="width: 13%;">Position</th>
+                                <th style="width: 8%;">Level</th>
+                                <th style="width: 12%;">Department</th>
+                                <th style="width: 12%;">Sale Teams</th>
+                                <th style="width: 14%;">Sale Level</th>
+                                <th style="width: 8%;">Status</th>
+                                <th style="width: 8%;">Joined</th>
                                 <th style="text-align:center;">Action</th>
                             </tr>
                         </thead>
@@ -821,6 +824,22 @@ if ($sl_tbl && $sl_tbl->num_rows > 0) {
                                             <?php endforeach; ?>
                                         <?php else: ?>
                                             <span style="color: #9aa0a6; font-size: 11px;">-</span>
+                                        <?php endif; ?>
+                                    </td>
+                                    <td>
+                                        <?php if (!empty($u['sale_level_name'])): ?>
+                                            <span style="
+                                                display:inline-block; padding:2px 8px;
+                                                border-radius:10px; font-size:11px; font-weight:600;
+                                                background:<?= htmlspecialchars($u['sale_color_badge'] ?? '#1D4ED8') ?>22;
+                                                color:<?= htmlspecialchars($u['sale_color_badge'] ?? '#1D4ED8') ?>;
+                                                border:1px solid <?= htmlspecialchars($u['sale_color_badge'] ?? '#1D4ED8') ?>44;
+                                                white-space:nowrap;
+                                            ">
+                                                <?= htmlspecialchars($u['sale_level_name']) ?>
+                                            </span>
+                                        <?php else: ?>
+                                            <span style="color:#9aa0a6; font-size:11px;">-</span>
                                         <?php endif; ?>
                                     </td>
                                     <td>
