@@ -1129,8 +1129,16 @@ if ($res_am && $res_am->num_rows > 0) {
                         </select>
                         <button type="submit" style="display:none;"></button>
                     </form>
+                    <?php
+                    $tabs = [
+                        '60_days' => ['title' => 'Nợ xấu > 60 ngày', 'data' => $warningLevel60, 'total' => $total_warning_60],
+                        '30_days' => ['title' => 'Quá hạn 30 ngày', 'data' => $warningLevel30, 'total' => $total_warning_30],
+                        'empty' => ['title' => 'Chưa có ngày thanh toán', 'data' => $warningEmpty, 'total' => $total_warning_empty],
+                    ];
+                    $current_tab_total = isset($tabs[$active_tab]) ? $tabs[$active_tab]['total'] : $total_amount_vnd;
+                    ?>
                     <div class="total-badge">
-                        Total: <?php echo formatVND($total_amount_vnd); ?>
+                        Total: <?php echo formatVND($current_tab_total); ?>
                     </div>
                 </div>
 
@@ -1138,13 +1146,6 @@ if ($res_am && $res_am->num_rows > 0) {
                 <div class="table-wrapper"
                     style="overflow: visible; padding-bottom: 10px; border: none; background: transparent; box-shadow: none;">
                     <div class="team-tabs" style="margin-bottom: 20px; display: flex; gap: 10px; flex-wrap: wrap;">
-                        <?php
-                        $tabs = [
-                            '60_days' => ['title' => 'Nợ xấu > 60 ngày', 'data' => $warningLevel60, 'total' => $total_warning_60],
-                            '30_days' => ['title' => 'Quá hạn 30 ngày', 'data' => $warningLevel30, 'total' => $total_warning_30],
-                            'empty' => ['title' => 'Chưa có ngày thanh toán', 'data' => $warningEmpty, 'total' => $total_warning_empty],
-                        ];
-                        ?>
                         <?php foreach ($tabs as $key => $tab): ?>
                             <a href="?<?php echo http_build_query(array_merge($_GET, ['tab' => $key])); ?>"
                                 class="team-tab <?php echo ($active_tab === $key) ? 'active' : ''; ?>">
