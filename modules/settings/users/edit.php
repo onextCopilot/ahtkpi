@@ -91,13 +91,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $stmt = $conn->prepare($sql);
                     $stmt->bind_param("ssssssissiiisii", $username, $email, $name, $emp_code, $job, $level, $dept_id, $status, $join_date, $is_am_bd, $can_view_invoice, $can_view_all_debts, $role_val, $sale_level_id, $id);
                     $stmt->execute();
-                    
+
                     // Update session if editing self
                     if ($id == $_SESSION['user_id']) {
                         $_SESSION['can_view_invoice'] = $can_view_invoice;
                         $_SESSION['can_view_all_debts'] = $can_view_all_debts;
                     }
-                    
+
                     // Update Teams
                     $conn->prepare("DELETE FROM user_sale_teams WHERE user_id = ?")->execute([$id]);
                     if ($is_am_bd && !empty($team_ids)) {
@@ -134,8 +134,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $mail = new PHPMailer(true);
                 try {
                     // FETCH SMTP CONFIG
-                    $smtp_host = ''; 
-                    $smtp_user = ''; 
+                    $smtp_host = '';
+                    $smtp_user = '';
                     $smtp_pass = '';
                     $smtp_port = '';
                     $smtp_enc = '';
@@ -144,8 +144,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
                     $res = $conn->query("SELECT setting_key, setting_value FROM system_settings WHERE setting_key LIKE 'smtp_%'");
                     $settings = [];
-                    if($res) {
-                        while($r = $res->fetch_assoc()) $settings[$r['setting_key']] = $r['setting_value'];
+                    if ($res) {
+                        while ($r = $res->fetch_assoc())
+                            $settings[$r['setting_key']] = $r['setting_value'];
                     }
 
                     if (empty($settings['smtp_host']) || empty($settings['smtp_user'])) {
@@ -153,25 +154,25 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     }
 
                     $mail->isSMTP();
-                    $mail->Host       = $settings['smtp_host'];
-                    $mail->SMTPAuth   = true;
-                    $mail->Username   = $settings['smtp_user'];
-                    $mail->Password   = $settings['smtp_pass']; 
+                    $mail->Host = $settings['smtp_host'];
+                    $mail->SMTPAuth = true;
+                    $mail->Username = $settings['smtp_user'];
+                    $mail->Password = $settings['smtp_pass'];
                     $mail->SMTPSecure = ($settings['smtp_encryption'] == 'ssl') ? PHPMailer::ENCRYPTION_SMTPS : (($settings['smtp_encryption'] == 'tls') ? PHPMailer::ENCRYPTION_STARTTLS : '');
-                    $mail->Port       = $settings['smtp_port'];
-                    $mail->CharSet    = 'UTF-8';
+                    $mail->Port = $settings['smtp_port'];
+                    $mail->CharSet = 'UTF-8';
 
                     //Recipients
                     $from_email = !empty($settings['smtp_from_email']) ? $settings['smtp_from_email'] : 'no-reply@system.com';
                     $from_name = !empty($settings['smtp_from_name']) ? $settings['smtp_from_name'] : 'System Admin';
-                    
+
                     $mail->setFrom($from_email, $from_name);
                     $mail->addAddress($user['email'], $user['full_name']);
 
                     //Content
                     $mail->isHTML(true);
                     $mail->Subject = 'Password Reset Notification';
-                    $mail->Body    = "
+                    $mail->Body = "
                         <h2>Password Reset Notification</h2>
                         <p>Hello <b>" . htmlspecialchars($user['full_name']) . "</b>,</p>
                         <p>Your password has been reset by the administrator.</p>
@@ -226,43 +227,62 @@ while ($r = $ut_res_result->fetch_assoc()) {
 }
 
 // Fetch Sale Levels grouped by position_type
+// Ensure sale_levels table + required columns exist (safe for live server)
 $sale_levels_grouped = [];
-$sl_res = $conn->query("SELECT id, position_type, level_name FROM sale_levels ORDER BY position_type, order_num, id");
-if ($sl_res) {
-    while ($r = $sl_res->fetch_assoc()) {
-        $sale_levels_grouped[$r['position_type']][] = $r;
+$sale_levels_flat = [];
+$sl_table_check = $conn->query("SHOW TABLES LIKE 'sale_levels'");
+if ($sl_table_check && $sl_table_check->num_rows > 0) {
+    // Ensure position_type column exists
+    $pt_chk = $conn->query("SHOW COLUMNS FROM sale_levels LIKE 'position_type'");
+    if ($pt_chk && $pt_chk->num_rows == 0) {
+        $conn->query("ALTER TABLE sale_levels ADD COLUMN position_type VARCHAR(100) NOT NULL DEFAULT 'BDE/BCE'");
+    }
+    // Ensure order_num column exists
+    $on_chk = $conn->query("SHOW COLUMNS FROM sale_levels LIKE 'order_num'");
+    if ($on_chk && $on_chk->num_rows == 0) {
+        $conn->query("ALTER TABLE sale_levels ADD COLUMN order_num INT DEFAULT 0");
+    }
+    $sl_res = $conn->query("SELECT id, position_type, level_name FROM sale_levels ORDER BY position_type, order_num, id");
+    if ($sl_res) {
+        while ($r = $sl_res->fetch_assoc()) {
+            $sale_levels_grouped[$r['position_type']][] = $r;
+            $sale_levels_flat[] = $r;
+        }
     }
 }
 ?>
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Edit User - Settings</title>
     <link rel="stylesheet" href="/assets/css/dashboard.css">
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Roboto:wght@400;500&display=swap" rel="stylesheet">
+    <link
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Roboto:wght@400;500&display=swap"
+        rel="stylesheet">
     <style>
         .content-wrapper {
             padding: 2rem;
             max-width: 1000px;
             margin: 0 auto;
         }
-        
+
         .page-header {
             margin-bottom: 2rem;
             display: flex;
             align-items: center;
             justify-content: space-between;
         }
-        
+
         .edit-layout {
             display: grid;
             grid-template-columns: 280px 1fr;
             gap: 2rem;
             align-items: start;
         }
-        
+
         .avatar-card {
             background: white;
             border-radius: 16px;
@@ -271,7 +291,7 @@ if ($sl_res) {
             text-align: center;
             box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
         }
-        
+
         .avatar-large {
             width: 120px;
             height: 120px;
@@ -287,13 +307,13 @@ if ($sl_res) {
             box-shadow: 0 10px 15px -3px rgba(37, 99, 235, 0.2);
             overflow: hidden;
         }
-        
+
         .avatar-large img {
             width: 100%;
             height: 100%;
             object-fit: cover;
         }
-        
+
         .user-status-badge {
             display: inline-block;
             padding: 0.25rem 0.75rem;
@@ -304,12 +324,27 @@ if ($sl_res) {
             letter-spacing: 0.05em;
             margin-top: 0.5rem;
         }
-        
-        .status-active { background: #dcfce7; color: #166534; }
-        .status-inactive { background: #fee2e2; color: #991b1b; }
-        .status-resigned { background: #f3f4f6; color: #374151; }
-        .status-on_leave { background: #fef3c7; color: #92400e; }
-        
+
+        .status-active {
+            background: #dcfce7;
+            color: #166534;
+        }
+
+        .status-inactive {
+            background: #fee2e2;
+            color: #991b1b;
+        }
+
+        .status-resigned {
+            background: #f3f4f6;
+            color: #374151;
+        }
+
+        .status-on_leave {
+            background: #fef3c7;
+            color: #92400e;
+        }
+
         .form-card {
             background: white;
             border-radius: 16px;
@@ -317,7 +352,7 @@ if ($sl_res) {
             padding: 2rem;
             box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
         }
-        
+
         .section-title {
             font-size: 1.125rem;
             font-weight: 600;
@@ -329,7 +364,7 @@ if ($sl_res) {
             align-items: center;
             gap: 0.5rem;
         }
-        
+
         .form-grid {
             display: grid;
             grid-template-columns: repeat(2, 1fr);
@@ -358,7 +393,9 @@ if ($sl_res) {
             border-bottom: 1px dashed #eee;
         }
 
-        .toggle-item:last-child { border-bottom: none; }
+        .toggle-item:last-child {
+            border-bottom: none;
+        }
 
         .toggle-item label {
             margin-bottom: 0;
@@ -378,11 +415,11 @@ if ($sl_res) {
             padding-top: 1.5rem;
             border-top: 1px solid #eee;
         }
-        
+
         .form-group {
             margin-bottom: 0;
         }
-        
+
         .form-group label {
             display: block;
             margin-bottom: 0.5rem;
@@ -390,8 +427,9 @@ if ($sl_res) {
             font-size: 0.875rem;
             color: var(--text-secondary);
         }
-        
-        .form-group input, .form-group select {
+
+        .form-group input,
+        .form-group select {
             width: 100%;
             padding: 0.75rem;
             border: 1px solid var(--border-color);
@@ -400,7 +438,7 @@ if ($sl_res) {
             background: #fff;
             transition: all 0.2s;
         }
-        
+
         .btn-actions {
             display: flex;
             justify-content: flex-end;
@@ -409,7 +447,7 @@ if ($sl_res) {
             padding-top: 1.5rem;
             border-top: 1px solid var(--border-light);
         }
-        
+
         .btn-cancel {
             padding: 0.75rem 1.5rem;
             background: white;
@@ -420,7 +458,7 @@ if ($sl_res) {
             font-weight: 500;
             transition: all 0.2s;
         }
-        
+
         .btn-save {
             padding: 0.75rem 1.5rem;
             background: var(--primary-color);
@@ -432,7 +470,7 @@ if ($sl_res) {
             box-shadow: 0 4px 6px -1px rgba(37, 99, 235, 0.2);
             transition: all 0.2s;
         }
-        
+
         .btn-reset {
             width: 100%;
             margin-top: 1rem;
@@ -445,70 +483,96 @@ if ($sl_res) {
             cursor: pointer;
             transition: all 0.2s;
         }
-        
+
         .btn-reset:hover {
             background: #fef2f2;
             border-color: #fca5a5;
         }
-        
+
         .alert {
             padding: 1rem;
             border-radius: 8px;
             margin-bottom: 1.5rem;
             font-size: 0.95rem;
         }
-        .alert-success { background: #dcfce7; color: #166534; border: 1px solid #bbf7d0; }
-        .alert-error { background: #fee2e2; color: #991b1b; border: 1px solid #fecaca; }
-        
+
+        .alert-success {
+            background: #dcfce7;
+            color: #166534;
+            border: 1px solid #bbf7d0;
+        }
+
+        .alert-error {
+            background: #fee2e2;
+            color: #991b1b;
+            border: 1px solid #fecaca;
+        }
+
         @media (max-width: 1024px) {
-            .edit-layout { grid-template-columns: 1fr; }
-            .avatar-card { display: flex; align-items: center; gap: 2rem; text-align: left; }
+            .edit-layout {
+                grid-template-columns: 1fr;
+            }
+
+            .avatar-card {
+                display: flex;
+                align-items: center;
+                gap: 2rem;
+                text-align: left;
+            }
         }
     </style>
 </head>
+
 <body>
     <div class="dashboard-container">
         <?php include __DIR__ . '/../../includes/sidebar.php'; ?>
         <main class="main-content">
-            <?php 
+            <?php
             $page_title = 'Edit User';
             $page_subtitle = 'Manage user profile and account access';
-            include __DIR__ . '/../../../modules/includes/topbar.php'; 
+            include __DIR__ . '/../../../modules/includes/topbar.php';
             ?>
 
             <div class="content-wrapper">
                 <div class="page-header">
                     <div style="display:flex; align-items:center; gap:1rem;">
-                        <a href="/settings/users" class="btn-cancel" style="padding:0.5rem 1rem; display:flex; align-items:center; gap:0.5rem;">
-                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="12" x2="5" y2="12"></line><polyline points="12 19 5 12 12 5"></polyline></svg>
+                        <a href="/settings/users" class="btn-cancel"
+                            style="padding:0.5rem 1rem; display:flex; align-items:center; gap:0.5rem;">
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <line x1="19" y1="12" x2="5" y2="12"></line>
+                                <polyline points="12 19 5 12 12 5"></polyline>
+                            </svg>
                             Back to Users
                         </a>
                     </div>
                 </div>
 
                 <?php if ($success_message): ?>
-                        <div class="alert alert-success"><?php echo $success_message; ?></div>
+                    <div class="alert alert-success"><?php echo $success_message; ?></div>
                 <?php endif; ?>
                 <?php if ($reset_success_message): ?>
-                        <div class="alert alert-success"><?php echo $reset_success_message; ?></div>
+                    <div class="alert alert-success"><?php echo $reset_success_message; ?></div>
                 <?php endif; ?>
                 <?php if ($error_message): ?>
-                        <div class="alert alert-error"><?php echo $error_message; ?></div>
+                    <div class="alert alert-error"><?php echo $error_message; ?></div>
                 <?php endif; ?>
-                
+
                 <div class="edit-layout">
                     <!-- Sidebar Column -->
                     <div style="display:flex; flex-direction:column; gap:1.5rem;">
                         <div class="avatar-card">
                             <div class="avatar-large">
                                 <?php if (!empty($user['avatar'])): ?>
-                                        <img src="<?php echo htmlspecialchars($user['avatar']); ?>" alt="Profile">
+                                    <img src="<?php echo htmlspecialchars($user['avatar']); ?>" alt="Profile">
                                 <?php else: ?>
-                                        <?php echo strtoupper(substr($user['full_name'], 0, 1)); ?>
+                                    <?php echo strtoupper(substr($user['full_name'], 0, 1)); ?>
                                 <?php endif; ?>
                             </div>
-                            <h2 style="font-size:1.25rem; color:var(--text-primary); margin-bottom:0.25rem;"><?php echo htmlspecialchars($user['full_name']); ?></h2>
-                            <p style="color:var(--text-secondary); font-size:0.9rem; margin-bottom:1rem;"><?php echo htmlspecialchars($user['email']); ?></p>
+                            <h2 style="font-size:1.25rem; color:var(--text-primary); margin-bottom:0.25rem;">
+                                <?php echo htmlspecialchars($user['full_name']); ?></h2>
+                            <p style="color:var(--text-secondary); font-size:0.9rem; margin-bottom:1rem;">
+                                <?php echo htmlspecialchars($user['email']); ?></p>
                             <span class="user-status-badge status-<?php echo $user['status']; ?>">
                                 <?php echo ucfirst(str_replace('_', ' ', $user['status'])); ?>
                             </span>
@@ -516,13 +580,18 @@ if ($sl_res) {
 
                         <div class="form-card">
                             <div class="section-title">
-                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
+                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                    stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                    <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
+                                    <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+                                </svg>
                                 Security
                             </div>
                             <p style="font-size:0.9rem; color:var(--text-secondary); margin-bottom:1rem;">
                                 Send a reset email to the user with a new password.
                             </p>
-                            <form method="POST" onsubmit="return confirm('Are you sure you want to reset the password for this user?');">
+                            <form method="POST"
+                                onsubmit="return confirm('Are you sure you want to reset the password for this user?');">
                                 <input type="hidden" name="reset_password" value="1">
                                 <button type="submit" class="btn-reset">
                                     Reset Password
@@ -534,7 +603,11 @@ if ($sl_res) {
                     <!-- Form Column -->
                     <div class="form-card">
                         <div class="section-title">
-                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
+                                <circle cx="12" cy="7" r="4"></circle>
+                            </svg>
                             Account Information
                         </div>
 
@@ -545,46 +618,58 @@ if ($sl_res) {
                             <div class="form-grid">
                                 <div class="form-group" style="grid-column: span 2;">
                                     <label>Full Name <span style="color:red">*</span></label>
-                                    <input type="text" name="full_name" value="<?php echo htmlspecialchars($user['full_name']); ?>" required>
+                                    <input type="text" name="full_name"
+                                        value="<?php echo htmlspecialchars($user['full_name']); ?>" required>
                                 </div>
                                 <div class="form-group" style="grid-column: span 2;">
                                     <label>System Role</label>
                                     <select name="role">
                                         <option value="user" <?php echo ($user['role'] == 'user' || empty($user['role'])) ? 'selected' : ''; ?>>User</option>
-                                        <option value="admin" <?php echo ($user['role'] == 'admin') ? 'selected' : ''; ?>>Admin</option>
+                                        <option value="admin" <?php echo ($user['role'] == 'admin') ? 'selected' : ''; ?>>
+                                            Admin</option>
                                     </select>
                                 </div>
                                 <div class="form-group">
                                     <label>Username <span style="color:red">*</span></label>
-                                    <input type="text" name="username" value="<?php echo htmlspecialchars($user['username']); ?>" required>
+                                    <input type="text" name="username"
+                                        value="<?php echo htmlspecialchars($user['username']); ?>" required>
                                 </div>
                                 <div class="form-group">
                                     <label>Employee Code</label>
-                                    <input type="text" name="employee_code" value="<?php echo htmlspecialchars($user['employee_code'] ?? ''); ?>" placeholder="e.g. EMP-001">
+                                    <input type="text" name="employee_code"
+                                        value="<?php echo htmlspecialchars($user['employee_code'] ?? ''); ?>"
+                                        placeholder="e.g. EMP-001">
                                 </div>
                                 <div class="form-group" style="grid-column: span 2;">
                                     <label>Email Address <span style="color:red">*</span></label>
-                                    <input type="email" name="email" value="<?php echo htmlspecialchars($user['email']); ?>" required>
+                                    <input type="email" name="email"
+                                        value="<?php echo htmlspecialchars($user['email']); ?>" required>
                                 </div>
                             </div>
 
                             <div class="section-title" style="margin-top:2rem;">
-                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="14" rx="2" ry="2"></rect><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"></path></svg>
+                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                    stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                    <rect x="2" y="7" width="20" height="14" rx="2" ry="2"></rect>
+                                    <path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"></path>
+                                </svg>
                                 Employment Details
                             </div>
 
                             <div class="form-grid">
                                 <div class="form-group">
                                     <label>Job Title</label>
-                                    <input type="text" name="job_title" value="<?php echo htmlspecialchars($user['job_title'] ?? ''); ?>" placeholder="e.g. Software Engineer">
+                                    <input type="text" name="job_title"
+                                        value="<?php echo htmlspecialchars($user['job_title'] ?? ''); ?>"
+                                        placeholder="e.g. Software Engineer">
                                 </div>
                                 <div class="form-group">
                                     <label>Level</label>
                                     <select name="level">
                                         <?php foreach ($levels as $l): ?>
-                                                <option value="<?php echo $l; ?>" <?php echo ($user['level'] == $l) ? 'selected' : ''; ?>>
-                                                    <?php echo $l; ?>
-                                                </option>
+                                            <option value="<?php echo $l; ?>" <?php echo ($user['level'] == $l) ? 'selected' : ''; ?>>
+                                                <?php echo $l; ?>
+                                            </option>
                                         <?php endforeach; ?>
                                     </select>
                                 </div>
@@ -593,9 +678,9 @@ if ($sl_res) {
                                     <select name="department_id">
                                         <option value="">-- No Department --</option>
                                         <?php foreach ($depts as $d): ?>
-                                                <option value="<?php echo $d['id']; ?>" <?php echo ($user['department_id'] == $d['id']) ? 'selected' : ''; ?>>
-                                                    <?php echo htmlspecialchars($d['name']); ?>
-                                                </option>
+                                            <option value="<?php echo $d['id']; ?>" <?php echo ($user['department_id'] == $d['id']) ? 'selected' : ''; ?>>
+                                                <?php echo htmlspecialchars($d['name']); ?>
+                                            </option>
                                         <?php endforeach; ?>
                                     </select>
                                 </div>
@@ -615,7 +700,10 @@ if ($sl_res) {
                             </div>
 
                             <div class="section-title" style="margin-top:2rem;">
-                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg>
+                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                    stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                    <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
+                                </svg>
                                 Permissions & Teams
                             </div>
 
@@ -635,37 +723,54 @@ if ($sl_res) {
                                     </div>
                                 </div>
 
-                                <div id="team_select_row" class="team-select-container" style="display: <?php echo $user['is_am_bd'] ? 'block' : 'none'; ?>;">
+                                <div id="team_select_row" class="team-select-container"
+                                    style="display: <?php echo $user['is_am_bd'] ? 'block' : 'none'; ?>;">
                                     <div class="form-group" style="margin-bottom:1rem">
-                                        <label style="font-weight: 600; color: var(--text-secondary); margin-bottom: 0.5rem;">Assigned Sale Teams</label>
-                                        <select name="team_ids[]" id="team_ids" multiple style="height: 150px; border-radius: 8px;">
+                                        <label
+                                            style="font-weight: 600; color: var(--text-secondary); margin-bottom: 0.5rem;">Assigned
+                                            Sale Teams</label>
+                                        <select name="team_ids[]" id="team_ids" multiple
+                                            style="height: 150px; border-radius: 8px;">
                                             <?php foreach ($sale_teams as $st): ?>
                                                 <option value="<?php echo $st['id']; ?>" <?php echo in_array($st['id'], $user_teams) ? 'selected' : ''; ?>>
                                                     <?php echo htmlspecialchars($st['name']); ?>
                                                 </option>
                                             <?php endforeach; ?>
                                         </select>
-                                        <small style="color: var(--text-secondary); margin-top: 0.5rem; display: block;">Hold Command (Mac) or Control (Windows) to select multiple teams.</small>
+                                        <small
+                                            style="color: var(--text-secondary); margin-top: 0.5rem; display: block;">Hold
+                                            Command (Mac) or Control (Windows) to select multiple teams.</small>
                                     </div>
 
                                     <div class="form-group">
-                                        <label style="font-weight: 600; color: var(--text-secondary); margin-bottom: 0.5rem;">
+                                        <label
+                                            style="font-weight: 600; color: var(--text-secondary); margin-bottom: 0.5rem;">
                                             📊 Sale Level (KPI Level)
                                         </label>
-                                        <select name="sale_level_id" id="sale_level_id" style="border-radius: 8px; width:100%; padding:0.6rem;">
+                                        <select name="sale_level_id" id="sale_level_id"
+                                            style="border-radius: 8px; width:100%; padding:0.6rem; border:1px solid #D1D5DB; font-size:13px; color:#374151;">
                                             <option value="">-- Chưa chọn level --</option>
-                                            <?php foreach ($sale_levels_grouped as $pos_type => $pos_levels): ?>
-                                                <optgroup label="<?php echo htmlspecialchars($pos_type) ?>">
-                                                    <?php foreach ($pos_levels as $sl): ?>
-                                                        <option value="<?php echo $sl['id'] ?>"
-                                                            <?php echo ($user['sale_level_id'] == $sl['id']) ? 'selected' : '' ?>>
-                                                            <?php echo htmlspecialchars($sl['level_name']) ?>
-                                                        </option>
-                                                    <?php endforeach; ?>
-                                                </optgroup>
-                                            <?php endforeach; ?>
+                                            <?php if (!empty($sale_levels_grouped)): ?>
+                                                <?php foreach ($sale_levels_grouped as $pos_type => $pos_levels): ?>
+                                                    <optgroup label="<?php echo htmlspecialchars($pos_type) ?>">
+                                                        <?php foreach ($pos_levels as $sl): ?>
+                                                            <option value="<?php echo $sl['id'] ?>" <?php echo ($user['sale_level_id'] == $sl['id']) ? 'selected' : '' ?>>
+                                                                <?php echo htmlspecialchars($sl['level_name']) ?>
+                                                            </option>
+                                                        <?php endforeach; ?>
+                                                    </optgroup>
+                                                <?php endforeach; ?>
+                                            <?php endif; ?>
                                         </select>
-                                        <small style="color: var(--text-secondary); margin-top: 0.5rem; display: block;">Chọn level KPI phù hợp với vị trí của thành viên này.</small>
+                                        <?php if (empty($sale_levels_flat)): ?>
+                                            <small style="color:#EF4444; margin-top:0.5rem; display:block;">
+                                                ⚠️ Chưa có Sale Level nào. Vui lòng vào
+                                                <a href="/settings/sale-levels" target="_blank" style="color:#1D4ED8">Settings → Sale Level Setup</a>
+                                                để khởi tạo dữ liệu.
+                                            </small>
+                                        <?php else: ?>
+                                            <small style="color: var(--text-secondary); margin-top: 0.5rem; display: block;">Chọn level KPI phù hợp với vị trí của thành viên này.</small>
+                                        <?php endif; ?>
                                     </div>
                                 </div>
                             </div>
