@@ -210,6 +210,8 @@ function formatMoney($amount, $currency_code)
             border-bottom: 2px solid #e2e8f0;
             margin-bottom: 1.5rem;
             padding-bottom: 0px;
+            flex-shrink: 0;
+            min-height: 48px;
         }
 
         .quarter-tab {
