@@ -108,19 +108,57 @@ if ($res_local) {
     }
 }
 
-// Pre-process list and sum totals
+// Generate Quarters for the last 2 years
+$current_year = (int) date('Y');
+$years = [$current_year, $current_year - 1];
+$tabs = [];
+// Generate in descending order: Q4 to Q1
+foreach ($years as $y) {
+    for ($q = 4; $q >= 1; $q--) {
+        $tabs[] = "Q{$q}_{$y}";
+    }
+}
+
+$current_q = ceil(date('n') / 3);
+$default_tab = "Q{$current_q}_{$current_year}";
+$active_tab = $_GET['quarter'] ?? $default_tab;
+
+// Parse active tab date range
+if (preg_match('/Q(\d+)_(\d+)/', $active_tab, $matches)) {
+    $q = (int) $matches[1];
+    $y = (int) $matches[2];
+    $start_month = ($q - 1) * 3 + 1;
+    $end_month = $q * 3;
+    $start_date = "$y-" . str_pad($start_month, 2, '0', STR_PAD_LEFT) . "-01";
+    $end_date = date('Y-m-t', strtotime("$y-" . str_pad($end_month, 2, '0', STR_PAD_LEFT) . "-01"));
+} else {
+    $start_date = '1970-01-01';
+    $end_date = '2099-12-31';
+}
+
 $total_vnd = 0;
+$filtered_invoices = [];
+
 foreach ($invoices as &$inv) {
+    $inv_date_str = $inv['invoice_date'] ?: $inv['date'];
+
+    // Filter by quarter date
+    if (!$inv_date_str || $inv_date_str < $start_date || $inv_date_str > $end_date) {
+        continue;
+    }
+
     // Determine VND Amount (using static rate approach for simplicity, like invoice list)
     $currencyCode = is_array($inv['currency_id']) ? $inv['currency_id'][1] : 'VND';
-    $invoiceDate = $inv['date'] ?: $inv['invoice_date'];
-    $rateSource = $odoo->getRate($currencyCode, $invoiceDate) ?: 1.0;
-    $rateVnd = $odoo->getRate('VND', $invoiceDate);
+    $rateSource = $odoo->getRate($currencyCode, $inv_date_str) ?: 1.0;
+    $rateVnd = $odoo->getRate('VND', $inv_date_str);
     $amountVnd = $inv['amount_total'] * ($rateVnd / $rateSource);
     $inv['calc_amount_vnd'] = $amountVnd;
     $total_vnd += $amountVnd;
+
+    $filtered_invoices[] = $inv;
 }
 unset($inv);
+$invoices = $filtered_invoices;
 
 // Helper
 function formatMoney($amount, $currency_code)
@@ -156,17 +194,51 @@ function formatMoney($amount, $currency_code)
         .report-wrapper {
             padding: 1rem;
             max-width: 100%;
-            height: calc(100vh - 80px); /* Fill screen */
+            height: calc(100vh - 80px);
+            /* Fill screen */
             display: flex;
             flex-direction: column;
-            overflow-x: auto; /* Allow horizontal scroll on wrapper now */
+            overflow-x: auto;
+            /* Allow horizontal scroll on wrapper now */
             overflow-y: auto;
             position: relative;
         }
 
+        .tabs-container {
+            display: flex;
+            overflow-x: auto;
+            border-bottom: 2px solid #e2e8f0;
+            margin-bottom: 1rem;
+        }
+
+        .quarter-tab {
+            padding: 10px 20px;
+            font-weight: 500;
+            color: #64748b;
+            text-decoration: none;
+            border-bottom: 2px solid transparent;
+            margin-bottom: -2px;
+            white-space: nowrap;
+            transition: all 0.2s;
+        }
+
+        .quarter-tab:hover {
+            color: #0f172a;
+            background: rgba(0, 0, 0, 0.02);
+            border-top-left-radius: 6px;
+            border-top-right-radius: 6px;
+        }
+
+        .quarter-tab.active {
+            color: #2563eb;
+            border-bottom-color: #2563eb;
+        }
+
         table.report-table {
-            width: max-content; /* Allow table to be wider than container */
-            min-width: 100%; /* But at least 100% */
+            width: max-content;
+            /* Allow table to be wider than container */
+            min-width: 100%;
+            /* But at least 100% */
             border-collapse: separate;
             border-spacing: 0;
             font-size: 13px;
@@ -180,7 +252,8 @@ function formatMoney($amount, $currency_code)
         table.report-table thead th {
             position: sticky;
             top: 0;
-            background-color: #004b75; /* Darker Blue */
+            background-color: #004b75;
+            /* Darker Blue */
             color: white;
             font-weight: 600;
             padding: 10px 12px;
@@ -209,12 +282,13 @@ function formatMoney($amount, $currency_code)
         }
 
         /* Removed Sticky Columns as requested */
-        
+
         table.report-table tr {
-           background-color: white; 
+            background-color: white;
         }
+
         table.report-table tr:hover {
-           background-color: #f1f3f4;
+            background-color: #f1f3f4;
         }
 
         .editable-cell {
@@ -282,8 +356,18 @@ function formatMoney($amount, $currency_code)
             ?>
 
             <div class="report-wrapper">
+                <div class="tabs-container">
+                    <?php foreach ($tabs as $tab): ?>
+                        <a href="?quarter=<?= urlencode($tab) ?><?= $search ? '&search=' . urlencode($search) : '' ?>"
+                            class="quarter-tab <?= $active_tab === $tab ? 'active' : '' ?>">
+                            <?= str_replace('_', ' ', $tab) ?>
+                        </a>
+                    <?php endforeach; ?>
+                </div>
+
                 <div class="header-controls">
                     <form method="GET" style="display: flex; gap: 1rem;">
+                        <input type="hidden" name="quarter" value="<?= htmlspecialchars($active_tab) ?>">
                         <input type="text" name="search" placeholder="Search Invoices..."
                             value="<?= htmlspecialchars($search) ?>"
                             style="padding: 0.5rem 1rem; border: 1px solid #cbd5e1; border-radius: 6px; width: 300px;">
