@@ -97,22 +97,19 @@ if ($res) {
 
         $is_paid = (strcasecmp(trim($p_status), 'Paid') === 0);
 
-        // Logic: Paid counts in the selected period. Unpaid counts as long as it's not from the future.
-        if ($is_paid) {
-            if ($inv_year === $filter_year && ($filter_month === 0 || $inv_month === $filter_month)) {
+        // Standard Period Filtering (Consistent with All Debts module)
+        $match_period = ($filter_year === 0 || $inv_year === $filter_year) && ($filter_month === 0 || $inv_month === $filter_month);
+
+        if ($match_period) {
+            $total_debts++; // All records in period
+            if ($is_paid) {
                 $total_paid_vnd += $vnd_value;
-                $total_debts++;
                 if (!isset($teams_data[$t_name]['paid']))
                     $teams_data[$t_name]['paid'] = 0;
                 $teams_data[$t_name]['paid'] += $vnd_value;
-            }
-        } else {
-            // Pending: include all outstanding balance up to the end of the filtered period
-            // Avoid future invoices if a specific month is selected
-            $filter_date_limit = date('Y-m-t', strtotime("$filter_year-" . ($filter_month ?: 12) . "-01"));
-            if ($date <= $filter_date_limit) {
+            } else {
+                // Any status other than 'Paid' is considered Pending
                 $total_unpaid_vnd += $vnd_value;
-                $total_debts++;
                 if (!isset($teams_data[$t_name]['unpaid']))
                     $teams_data[$t_name]['unpaid'] = 0;
                 $teams_data[$t_name]['unpaid'] += $vnd_value;
