@@ -99,6 +99,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $is_am_bd = isset($_POST['is_am_bd']) ? 1 : 0;
             $team_ids = isset($_POST['team_ids']) ? $_POST['team_ids'] : [];
             $role_val = $_POST['role'] ?? 'user';
+            $sale_level_id = ($is_am_bd && !empty($_POST['sale_level_id'])) ? intval($_POST['sale_level_id']) : null;
             $username = trim($_POST['username']);
             // Auto-generate username from email if empty
             if (empty($username) && !empty($email)) {
@@ -111,11 +112,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
             if (!empty($email) && !empty($name) && !empty($username)) {
                 try {
-                    $stmt = $conn->prepare("INSERT INTO users (username, email, full_name, password, employee_code, job_title, level,
-department_id,
-status, join_date, can_view_invoice, can_view_all_debts, is_am_bd, role) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+                    $stmt = $conn->prepare("INSERT INTO users (username, email, full_name, password, employee_code, job_title, level, department_id, status, join_date, can_view_invoice, can_view_all_debts, is_am_bd, role, sale_level_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
                     $stmt->bind_param(
-                        "sssssssissiiss",
+                        "sssssssissiissi",
                         $username,
                         $email,
                         $name,
@@ -129,7 +128,8 @@ status, join_date, can_view_invoice, can_view_all_debts, is_am_bd, role) VALUES 
                         $can_view_invoice,
                         $can_view_all_debts,
                         $is_am_bd,
-                        $role_val
+                        $role_val,
+                        $sale_level_id
                     );
                     $stmt->execute();
                     $new_id = $conn->insert_id;
@@ -171,6 +171,7 @@ status, join_date, can_view_invoice, can_view_all_debts, is_am_bd, role) VALUES 
             $is_am_bd = isset($_POST['is_am_bd']) ? 1 : 0;
             $team_ids = isset($_POST['team_ids']) ? $_POST['team_ids'] : [];
             $role_val = $_POST['role'] ?? 'user';
+            $sale_level_id = ($is_am_bd && !empty($_POST['sale_level_id'])) ? intval($_POST['sale_level_id']) : null;
 
             $username = trim($_POST['username']);
             if (empty($username) && !empty($email)) {
@@ -180,9 +181,10 @@ status, join_date, can_view_invoice, can_view_all_debts, is_am_bd, role) VALUES 
 
             if ($id > 0 && !empty($email)) {
                 try {
-                    $sql = "UPDATE users SET username=?, email=?, full_name=?, employee_code=?, job_title=?, level=?, department_id=?, status=?, join_date=?, can_view_invoice=?, can_view_all_debts=?, is_am_bd=?, role=? WHERE id=?";
+                    $sql = "UPDATE users SET username=?, email=?, full_name=?, employee_code=?, job_title=?, level=?, department_id=?, status=?, join_date=?, can_view_invoice=?, can_view_all_debts=?, is_am_bd=?, role=?, sale_level_id=? WHERE id=?";
                     $stmt = $conn->prepare($sql);
-                    $stmt->bind_param("ssssssissiiisi", $username, $email, $name, $emp_code, $job, $level, $dept_id, $status, $join_date, $can_view_invoice, $can_view_all_debts, $is_am_bd, $role_val, $id);
+                    $stmt->bind_param("ssssssissiiisii", $username, $email, $name, $emp_code, $job, $level, $dept_id, $status, $join_date, $can_view_invoice, $can_view_all_debts, $is_am_bd, $role_val, $sale_level_id, $id);
+                    ;
                     $stmt->execute();
 
                     // Update Teams
@@ -313,6 +315,29 @@ $d_res = $conn->query("SELECT id, name FROM departments ORDER BY name ASC");
 if ($d_res) {
     while ($r = $d_res->fetch_assoc()) {
         $depts[] = $r;
+    }
+}
+
+// Migrate sale_level_id in users table
+addColumnIfNotExists($conn, 'users', 'sale_level_id', 'INT DEFAULT NULL');
+
+// Fetch Sale Levels for Dropdown
+$sale_levels_grouped = [];
+$sl_tbl = $conn->query("SHOW TABLES LIKE 'sale_levels'");
+if ($sl_tbl && $sl_tbl->num_rows > 0) {
+    $pt_chk = $conn->query("SHOW COLUMNS FROM sale_levels LIKE 'position_type'");
+    if ($pt_chk && $pt_chk->num_rows == 0) {
+        $conn->query("ALTER TABLE sale_levels ADD COLUMN position_type VARCHAR(100) NOT NULL DEFAULT 'BDE/BCE'");
+    }
+    $on_chk = $conn->query("SHOW COLUMNS FROM sale_levels LIKE 'order_num'");
+    if ($on_chk && $on_chk->num_rows == 0) {
+        $conn->query("ALTER TABLE sale_levels ADD COLUMN order_num INT DEFAULT 0");
+    }
+    $sl_res = $conn->query("SELECT id, position_type, level_name FROM sale_levels ORDER BY position_type, order_num, id");
+    if ($sl_res) {
+        while ($r = $sl_res->fetch_assoc()) {
+            $sale_levels_grouped[$r['position_type']][] = $r;
+        }
     }
 }
 ?>
@@ -954,7 +979,7 @@ if ($d_res) {
                     </div>
 
                     <div id="team_select_row" class="team-select-container" style="display:none;">
-                        <div class="form-group">
+                        <div class="form-group" style="margin-bottom:12px">
                             <label style="margin-bottom: 8px; color: #5f6368; font-weight: 600;">Assign Sale
                                 Teams</label>
                             <select name="team_ids[]" id="team_ids" multiple style="height: 120px; border-radius: 6px;">
@@ -965,6 +990,27 @@ if ($d_res) {
                             </select>
                             <small style="color: #70757a; margin-top: 6px; display: block;">Hold Cmd/Ctrl to select
                                 multiple.</small>
+                        </div>
+                        <div class="form-group">
+                            <label style="margin-bottom: 8px; color: #5f6368; font-weight: 600;">📊 Sale Level (KPI
+                                Level)</label>
+                            <select name="sale_level_id" id="sale_level_id"
+                                style="width:100%; border-radius:6px; padding:8px 10px; border:1px solid #dadce0; font-size:13px; color:#202124;">
+                                <option value="">-- Chưa chọn level --</option>
+                                <?php if (!empty($sale_levels_grouped)): ?>
+                                    <?php foreach ($sale_levels_grouped as $pos_type => $pos_levels): ?>
+                                        <optgroup label="<?= htmlspecialchars($pos_type) ?>">
+                                            <?php foreach ($pos_levels as $sl): ?>
+                                                <option value="<?= $sl['id'] ?>"><?= htmlspecialchars($sl['level_name']) ?></option>
+                                            <?php endforeach; ?>
+                                        </optgroup>
+                                    <?php endforeach; ?>
+                                <?php else: ?>
+                                    <option disabled>⚠️ Chưa có data — vào Settings > Sale Level Setup</option>
+                                <?php endif; ?>
+                            </select>
+                            <small style="color:#70757a; margin-top:6px; display:block;">Chọn level KPI phù hợp với vị
+                                trí.</small>
                         </div>
                     </div>
                 </div>
@@ -1077,9 +1123,7 @@ if ($d_res) {
 
             // Set teams
             const teamIdsSelect = document.getElementById('team_ids');
-            for (let option of teamIdsSelect.options) {
-                option.selected = false;
-            }
+            for (let option of teamIdsSelect.options) { option.selected = false; }
             if (user.team_ids) {
                 const ids = user.team_ids.split(',');
                 for (let id of ids) {
@@ -1087,6 +1131,9 @@ if ($d_res) {
                     if (opt) opt.selected = true;
                 }
             }
+            // Set sale level
+            const saleLevelSel = document.getElementById('sale_level_id');
+            if (saleLevelSel) saleLevelSel.value = user.sale_level_id || '';
             toggleTeamSelect();
 
             modal.classList.add('show');
