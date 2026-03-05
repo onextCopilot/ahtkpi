@@ -20,50 +20,138 @@ $total_users_result = $conn->query($total_users_query);
 $total_users = $total_users_result->fetch_assoc()['total'];
 
 // Filter parameters
+// Filter parameters
 $filter_year = isset($_GET['year']) ? (int) $_GET['year'] : (int) date('Y');
 $filter_month = isset($_GET['month']) ? (int) $_GET['month'] : 0; // 0 for all
 
 // Fetch Debt Data for Dashboard
 require_once __DIR__ . '/../../libs/OdooAPI.php';
 $odoo = new OdooAPI();
+
+// ACL for data view
+$isAdmin = ($role === 'admin');
+$isAM = (isset($_SESSION['is_am_bd']) && $_SESSION['is_am_bd'] == 1);
+$user_email = '';
+if (!$isAdmin) {
+    $stmt = $conn->prepare("SELECT email FROM users WHERE id = ?");
+    $stmt->bind_param("i", $user_id);
+    $stmt->execute();
+    $res_email = $stmt->get_result();
+    $user_email = $res_email->fetch_assoc()['email'] ?? '';
+}
+
 $total_debts = 0;
 $total_paid_vnd = 0;
 $total_unpaid_vnd = 0;
 $teams_data = [];
+$processed_odoo_ids = [];
 
-$debt_conditions = ["1=1"];
-if ($filter_year > 0) {
-    $debt_conditions[] = "YEAR(d.invoice_date) = $filter_year";
+// 1. Fetch from Local Debts Table
+$debt_where = "1=1";
+if (!$isAdmin && !empty($user_email)) {
+    // Only show debts where this user is the AM (approximated by email)
+    // Most debts have 'am' as Name, but we can try to match or just show global if desired.
+    // However, the user said numbers are "incorrect", likely because they expect personal view or better global view.
+    // Let's keep it global for now as it's the main dashboard, but fix the calculation.
 }
-if ($filter_month > 0) {
-    $debt_conditions[] = "MONTH(d.invoice_date) = $filter_month";
-}
-$debt_where = implode(" AND ", $debt_conditions);
 
-$res = $conn->query("SELECT d.amount, d.currency, d.payment_status, d.invoice_date, st.name as team_name FROM debts d LEFT JOIN sale_teams st ON d.sale_team_id = st.id WHERE $debt_where");
+$res = $conn->query("SELECT d.amount, d.currency, d.payment_status, d.invoice_date, d.odoo_invoice_id, st.name as team_name 
+                    FROM debts d 
+                    LEFT JOIN sale_teams st ON d.sale_team_id = st.id");
+
 if ($res) {
     while ($row = $res->fetch_assoc()) {
-        $total_debts++;
         $curr = $row['currency'] ?: 'USD';
         $t_name = $row['team_name'] ?: 'Undefined';
         $p_status = $row['payment_status'] ?: '';
-
         $date = !empty($row['invoice_date']) ? $row['invoice_date'] : date('Y-m-d');
+        $inv_year = (int) date('Y', strtotime($date));
+        $inv_month = (int) date('n', strtotime($date));
+
         $rate = $odoo->getRate($curr, $date);
         $vnd_value = ($rate > 0) ? ((float) $row['amount'] / $rate) : (float) $row['amount'];
 
-        if (strcasecmp(trim($p_status), 'Paid') === 0) {
-            $total_paid_vnd += $vnd_value;
-            if (!isset($teams_data[$t_name]['paid']))
-                $teams_data[$t_name]['paid'] = 0;
-            $teams_data[$t_name]['paid'] += $vnd_value;
+        // Tracking processed Odoo IDs to avoid double counting
+        if (!empty($row['odoo_invoice_id'])) {
+            $processed_odoo_ids[] = $row['odoo_invoice_id'];
+        }
+
+        $is_paid = (strcasecmp(trim($p_status), 'Paid') === 0);
+
+        // Logic: Paid counts in the selected period. Unpaid counts as long as it's not from the future.
+        if ($is_paid) {
+            if ($inv_year === $filter_year && ($filter_month === 0 || $inv_month === $filter_month)) {
+                $total_paid_vnd += $vnd_value;
+                $total_debts++;
+                if (!isset($teams_data[$t_name]['paid']))
+                    $teams_data[$t_name]['paid'] = 0;
+                $teams_data[$t_name]['paid'] += $vnd_value;
+            }
         } else {
-            $total_unpaid_vnd += $vnd_value;
-            if (!isset($teams_data[$t_name]['unpaid']))
-                $teams_data[$t_name]['unpaid'] = 0;
-            $teams_data[$t_name]['unpaid'] += $vnd_value;
+            // Pending: include all outstanding balance up to the end of the filtered period
+            // Avoid future invoices if a specific month is selected
+            $filter_date_limit = date('Y-m-t', strtotime("$filter_year-" . ($filter_month ?: 12) . "-01"));
+            if ($date <= $filter_date_limit) {
+                $total_unpaid_vnd += $vnd_value;
+                $total_debts++;
+                if (!isset($teams_data[$t_name]['unpaid']))
+                    $teams_data[$t_name]['unpaid'] = 0;
+                $teams_data[$t_name]['unpaid'] += $vnd_value;
+            }
         }
     }
+}
+
+// 2. Fetch from Odoo Invoices (Merge into totals)
+try {
+    $inv_filters = [];
+    if (!$isAdmin && !empty($user_email)) {
+        $inv_filters['owner_email'] = $user_email;
+    }
+
+    $odoo_res = $odoo->getInvoices(5000, 0, $inv_filters);
+    $invoices = $odoo_res['invoices'] ?? [];
+
+    foreach ($invoices as $inv) {
+        $oid = $inv['id'];
+        if (in_array($oid, $processed_odoo_ids))
+            continue; // Already counted from local manual tracker
+
+        $date = $inv['invoice_date'] ?: $inv['date'];
+        if (!$date)
+            continue;
+
+        $inv_year = (int) date('Y', strtotime($date));
+        $inv_month = (int) date('n', strtotime($date));
+
+        $curr = is_array($inv['currency_id']) ? $inv['currency_id'][1] : 'VND';
+        $rate = $odoo->getRate($curr, $date);
+        $vnd_value = ($rate > 0) ? ((float) $inv['amount_total'] / $rate) : (float) $inv['amount_total'];
+
+        $is_paid = (($inv['payment_state'] ?? '') === 'paid');
+        $t_name = 'Odoo Invoices'; // Or try to map if possible
+
+        if ($is_paid) {
+            if ($inv_year === $filter_year && ($filter_month === 0 || $inv_month === $filter_month)) {
+                $total_paid_vnd += $vnd_value;
+                $total_debts++;
+                if (!isset($teams_data[$t_name]['paid']))
+                    $teams_data[$t_name]['paid'] = 0;
+                $teams_data[$t_name]['paid'] += $vnd_value;
+            }
+        } else {
+            $filter_date_limit = date('Y-m-t', strtotime("$filter_year-" . ($filter_month ?: 12) . "-01"));
+            if ($date <= $filter_date_limit) {
+                $total_unpaid_vnd += $vnd_value;
+                $total_debts++;
+                if (!isset($teams_data[$t_name]['unpaid']))
+                    $teams_data[$t_name]['unpaid'] = 0;
+                $teams_data[$t_name]['unpaid'] += $vnd_value;
+            }
+        }
+    }
+} catch (Exception $e) {
+    // If Odoo fails, just rely on local data
 }
 
 $chart_teams = [];
@@ -140,19 +228,21 @@ foreach ($all_customers as $c) {
         $new_customers[] = $c;
     }
 }
-usort($new_customers, function($a, $b) {
+usort($new_customers, function ($a, $b) {
     $timeA = strtotime($a['create_date']);
     $timeB = strtotime($b['create_date']);
-    if ($timeA == $timeB) return 0;
+    if ($timeA == $timeB)
+        return 0;
     return ($timeA > $timeB) ? -1 : 1;
 });
 
 // Calculate pagination for new customers
-$cpage = isset($_GET['cpage']) ? max(1, (int)$_GET['cpage']) : 1;
+$cpage = isset($_GET['cpage']) ? max(1, (int) $_GET['cpage']) : 1;
 $climit = 10;
 $total_new = count($new_customers);
 $total_cpages = ceil($total_new / $climit);
-if ($total_cpages > 0 && $cpage > $total_cpages) $cpage = $total_cpages;
+if ($total_cpages > 0 && $cpage > $total_cpages)
+    $cpage = $total_cpages;
 $coffset = ($cpage - 1) * $climit;
 
 $paged_customers = array_slice($new_customers, $coffset, $climit);
@@ -406,82 +496,92 @@ $paged_customers = array_slice($new_customers, $coffset, $climit);
 
                     <!-- Pagination -->
                     <?php if ($total_cpages > 1): ?>
-                        <div style="display: flex; justify-content: flex-end; align-items: center; margin-top: 15px; gap: 10px;">
-                            <?php 
-                                $buildQuery = function($p) use ($filter_year, $filter_month, $customer_period) {
-                                    return "?year=$filter_year&month=$filter_month&customer_period=$customer_period&cpage=$p#new-customers-section";
-                                };
+                        <div
+                            style="display: flex; justify-content: flex-end; align-items: center; margin-top: 15px; gap: 10px;">
+                            <?php
+                            $buildQuery = function ($p) use ($filter_year, $filter_month, $customer_period) {
+                                return "?year=$filter_year&month=$filter_month&customer_period=$customer_period&cpage=$p#new-customers-section";
+                            };
                             ?>
                             <?php if ($cpage > 1): ?>
-                                <a href="<?php echo $buildQuery($cpage - 1); ?>" style="padding: 6px 12px; border: 1px solid #cbd5e1; border-radius: 6px; text-decoration: none; color: #475569; font-size: 14px; background: white;">&lsaquo; Prev</a>
+                                <a href="<?php echo $buildQuery($cpage - 1); ?>"
+                                    style="padding: 6px 12px; border: 1px solid #cbd5e1; border-radius: 6px; text-decoration: none; color: #475569; font-size: 14px; background: white;">&lsaquo;
+                                    Prev</a>
                             <?php else: ?>
-                                <span style="padding: 6px 12px; border: 1px solid #e2e8f0; border-radius: 6px; color: #94a3b8; font-size: 14px; background: #f8fafc; cursor: not-allowed;">&lsaquo; Prev</span>
+                                <span
+                                    style="padding: 6px 12px; border: 1px solid #e2e8f0; border-radius: 6px; color: #94a3b8; font-size: 14px; background: #f8fafc; cursor: not-allowed;">&lsaquo;
+                                    Prev</span>
                             <?php endif; ?>
 
-                            <span style="font-size: 14px; color: #475569;">Page <strong><?php echo $cpage; ?></strong> of <?php echo $total_cpages; ?></span>
+                            <span style="font-size: 14px; color: #475569;">Page <strong><?php echo $cpage; ?></strong> of
+                                <?php echo $total_cpages; ?></span>
 
                             <?php if ($cpage < $total_cpages): ?>
-                                <a href="<?php echo $buildQuery($cpage + 1); ?>" style="padding: 6px 12px; border: 1px solid #cbd5e1; border-radius: 6px; text-decoration: none; color: #475569; font-size: 14px; background: white;">Next &rsaquo;</a>
+                                <a href="<?php echo $buildQuery($cpage + 1); ?>"
+                                    style="padding: 6px 12px; border: 1px solid #cbd5e1; border-radius: 6px; text-decoration: none; color: #475569; font-size: 14px; background: white;">Next
+                                    &rsaquo;</a>
                             <?php else: ?>
-                                <span style="padding: 6px 12px; border: 1px solid #e2e8f0; border-radius: 6px; color: #94a3b8; font-size: 14px; background: #f8fafc; cursor: not-allowed;">Next &rsaquo;</span>
+                                <span
+                                    style="padding: 6px 12px; border: 1px solid #e2e8f0; border-radius: 6px; color: #94a3b8; font-size: 14px; background: #f8fafc; cursor: not-allowed;">Next
+                                    &rsaquo;</span>
                             <?php endif; ?>
                         </div>
                     <?php endif; ?>
-                    </div>
                 </div>
-
-                <script>
-                    const formatVND = (val) => new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(val);
-                    const teamNames = <?php echo json_encode($chart_teams); ?>;
-                    const dataPaid = <?php echo json_encode($chart_paid); ?>;
-                    const dataNotPaid = <?php echo json_encode($chart_unpaid); ?>;
-
-                    new ApexCharts(document.querySelector("#chart-global-pie"), {
-                        series: [<?php echo $total_paid_vnd; ?>, <?php echo $total_unpaid_vnd; ?>],
-                        chart: { type: 'donut', height: 350 },
-                        labels: ['Paid', 'Not Paid'],
-                        colors: ['#22c55e', '#ef4444'],
-                        dataLabels: { enabled: true, formatter: function (val, opts) { return formatVND(opts.w.globals.series[opts.seriesIndex]) } },
-                        plotOptions: { pie: { donut: { labels: { show: true, total: { show: true, label: 'Total Volume', formatter: function (w) { return formatVND(w.globals.seriesTotals.reduce((a, b) => a + b, 0)) } } } } } }
-                    }).render();
-
-                    new ApexCharts(document.querySelector("#chart-teams-bar"), {
-                        series: [{ name: 'Paid', data: dataPaid }, { name: 'Pending', data: dataNotPaid }],
-                        chart: { type: 'bar', height: 350, stacked: true },
-                        plotOptions: { bar: { borderRadius: 4, dataLabels: { position: 'top' } } },
-                        dataLabels: { enabled: true, formatter: function (val) { return val > 0 ? (val / 1000000).toFixed(0) + "M" : "" }, style: { fontSize: '10px', colors: ["#304758"] } },
-                        xaxis: { categories: teamNames },
-                        colors: ['#22c55e', '#ef4444'],
-                        yaxis: { labels: { formatter: val => (val / 1000000).toFixed(0) + 'M' } },
-                        tooltip: { y: { formatter: val => formatVND(val) } }
-                    }).render();
-
-                    const kpiDeptNames = <?php echo json_encode($kpi_dept_names); ?>;
-                    const kpiCounts = <?php echo json_encode($kpi_counts); ?>;
-                    const kpiWeights = <?php echo json_encode($kpi_weights); ?>;
-
-                    new ApexCharts(document.querySelector("#chart-kpis-count"), {
-                        series: [{ name: 'KPI Count', data: kpiCounts }],
-                        chart: { type: 'bar', height: 350 },
-                        plotOptions: { bar: { borderRadius: 4, distributed: true, dataLabels: { position: 'top' } } },
-                        dataLabels: { enabled: true, style: { fontSize: '12px', colors: ["#304758"] } },
-                        xaxis: { categories: kpiDeptNames, labels: { show: false } }, // Hide x-axis labels to save space since we have legend/tooltip
-                        colors: ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#14b8a6', '#f97316'],
-                        tooltip: { theme: 'light' }
-                    }).render();
-
-                    new ApexCharts(document.querySelector("#chart-kpis-weight"), {
-                        series: [{ name: 'Total Weight', data: kpiWeights }],
-                        chart: { type: 'bar', height: 350 },
-                        plotOptions: { bar: { borderRadius: 4, distributed: true, dataLabels: { position: 'top' } } },
-                        dataLabels: { enabled: true, formatter: function (val) { return val + "%" }, style: { fontSize: '12px', colors: ["#304758"] } },
-                        xaxis: { categories: kpiDeptNames, labels: { show: false } }, // Hide x-axis labels to save space since we have legend/tooltip
-                        colors: ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#14b8a6', '#f97316'],
-                        tooltip: { theme: 'light', y: { formatter: val => val + "%" } }
-                    }).render();
-                </script>
             </div>
-        </main>
+
+            <script>
+                const formatVND = (val) => new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(val);
+                const teamNames = <?php echo json_encode($chart_teams); ?>;
+                const dataPaid = <?php echo json_encode($chart_paid); ?>;
+                const dataNotPaid = <?php echo json_encode($chart_unpaid); ?>;
+
+                new ApexCharts(document.querySelector("#chart-global-pie"), {
+                    series: [<?php echo $total_paid_vnd; ?>, <?php echo $total_unpaid_vnd; ?>],
+                    chart: { type: 'donut', height: 350 },
+                    labels: ['Paid', 'Not Paid'],
+                    colors: ['#22c55e', '#ef4444'],
+                    dataLabels: { enabled: true, formatter: function (val, opts) { return formatVND(opts.w.globals.series[opts.seriesIndex]) } },
+                    plotOptions: { pie: { donut: { labels: { show: true, total: { show: true, label: 'Total Volume', formatter: function (w) { return formatVND(w.globals.seriesTotals.reduce((a, b) => a + b, 0)) } } } } } }
+                }).render();
+
+                new ApexCharts(document.querySelector("#chart-teams-bar"), {
+                    series: [{ name: 'Paid', data: dataPaid }, { name: 'Pending', data: dataNotPaid }],
+                    chart: { type: 'bar', height: 350, stacked: true },
+                    plotOptions: { bar: { borderRadius: 4, dataLabels: { position: 'top' } } },
+                    dataLabels: { enabled: true, formatter: function (val) { return val > 0 ? (val / 1000000).toFixed(0) + "M" : "" }, style: { fontSize: '10px', colors: ["#304758"] } },
+                    xaxis: { categories: teamNames },
+                    colors: ['#22c55e', '#ef4444'],
+                    yaxis: { labels: { formatter: val => (val / 1000000).toFixed(0) + 'M' } },
+                    tooltip: { y: { formatter: val => formatVND(val) } }
+                }).render();
+
+                const kpiDeptNames = <?php echo json_encode($kpi_dept_names); ?>;
+                const kpiCounts = <?php echo json_encode($kpi_counts); ?>;
+                const kpiWeights = <?php echo json_encode($kpi_weights); ?>;
+
+                new ApexCharts(document.querySelector("#chart-kpis-count"), {
+                    series: [{ name: 'KPI Count', data: kpiCounts }],
+                    chart: { type: 'bar', height: 350 },
+                    plotOptions: { bar: { borderRadius: 4, distributed: true, dataLabels: { position: 'top' } } },
+                    dataLabels: { enabled: true, style: { fontSize: '12px', colors: ["#304758"] } },
+                    xaxis: { categories: kpiDeptNames, labels: { show: false } }, // Hide x-axis labels to save space since we have legend/tooltip
+                    colors: ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#14b8a6', '#f97316'],
+                    tooltip: { theme: 'light' }
+                }).render();
+
+                new ApexCharts(document.querySelector("#chart-kpis-weight"), {
+                    series: [{ name: 'Total Weight', data: kpiWeights }],
+                    chart: { type: 'bar', height: 350 },
+                    plotOptions: { bar: { borderRadius: 4, distributed: true, dataLabels: { position: 'top' } } },
+                    dataLabels: { enabled: true, formatter: function (val) { return val + "%" }, style: { fontSize: '12px', colors: ["#304758"] } },
+                    xaxis: { categories: kpiDeptNames, labels: { show: false } }, // Hide x-axis labels to save space since we have legend/tooltip
+                    colors: ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#14b8a6', '#f97316'],
+                    tooltip: { theme: 'light', y: { formatter: val => val + "%" } }
+                }).render();
+            </script>
+    </div>
+    </main>
     </div>
 
     <script src="../../assets/js/dashboard.js"></script>
