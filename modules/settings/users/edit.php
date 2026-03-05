@@ -31,6 +31,12 @@ if ($edit_id <= 0) {
     exit();
 }
 
+// Auto-migrate sale_level_id column
+$chk = $conn->query("SHOW COLUMNS FROM users LIKE 'sale_level_id'");
+if ($chk && $chk->num_rows == 0) {
+    $conn->query("ALTER TABLE users ADD COLUMN sale_level_id INT DEFAULT NULL");
+}
+
 // Fetch User Data
 function fetchUserData($conn, $id)
 {
@@ -63,6 +69,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $can_view_invoice = isset($_POST['can_view_invoice']) ? 1 : 0;
         $can_view_all_debts = isset($_POST['can_view_all_debts']) ? 1 : 0;
         $team_ids = isset($_POST['team_ids']) ? $_POST['team_ids'] : [];
+        $sale_level_id = ($is_am_bd && !empty($_POST['sale_level_id'])) ? intval($_POST['sale_level_id']) : null;
         $role_val = $_POST['role'] ?? 'user';
 
         $username = trim($_POST['username']);
@@ -80,9 +87,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 if ($check->get_result()->num_rows > 0) {
                     $error_message = "Email or Employee Code already exists.";
                 } else {
-                    $sql = "UPDATE users SET username=?, email=?, full_name=?, employee_code=?, job_title=?, level=?, department_id=?, status=?, join_date=?, is_am_bd=?, can_view_invoice=?, can_view_all_debts=?, role=? WHERE id=?";
+                    $sql = "UPDATE users SET username=?, email=?, full_name=?, employee_code=?, job_title=?, level=?, department_id=?, status=?, join_date=?, is_am_bd=?, can_view_invoice=?, can_view_all_debts=?, role=?, sale_level_id=? WHERE id=?";
                     $stmt = $conn->prepare($sql);
-                    $stmt->bind_param("ssssssissiiisi", $username, $email, $name, $emp_code, $job, $level, $dept_id, $status, $join_date, $is_am_bd, $can_view_invoice, $can_view_all_debts, $role_val, $id);
+                    $stmt->bind_param("ssssssissiiisii", $username, $email, $name, $emp_code, $job, $level, $dept_id, $status, $join_date, $is_am_bd, $can_view_invoice, $can_view_all_debts, $role_val, $sale_level_id, $id);
                     $stmt->execute();
                     
                     // Update session if editing self
@@ -216,6 +223,15 @@ $ut_res->execute();
 $ut_res_result = $ut_res->get_result();
 while ($r = $ut_res_result->fetch_assoc()) {
     $user_teams[] = $r['team_id'];
+}
+
+// Fetch Sale Levels grouped by position_type
+$sale_levels_grouped = [];
+$sl_res = $conn->query("SELECT id, position_type, level_name FROM sale_levels ORDER BY position_type, order_num, id");
+if ($sl_res) {
+    while ($r = $sl_res->fetch_assoc()) {
+        $sale_levels_grouped[$r['position_type']][] = $r;
+    }
 }
 ?>
 <!DOCTYPE html>
@@ -620,7 +636,7 @@ while ($r = $ut_res_result->fetch_assoc()) {
                                 </div>
 
                                 <div id="team_select_row" class="team-select-container" style="display: <?php echo $user['is_am_bd'] ? 'block' : 'none'; ?>;">
-                                    <div class="form-group">
+                                    <div class="form-group" style="margin-bottom:1rem">
                                         <label style="font-weight: 600; color: var(--text-secondary); margin-bottom: 0.5rem;">Assigned Sale Teams</label>
                                         <select name="team_ids[]" id="team_ids" multiple style="height: 150px; border-radius: 8px;">
                                             <?php foreach ($sale_teams as $st): ?>
@@ -630,6 +646,26 @@ while ($r = $ut_res_result->fetch_assoc()) {
                                             <?php endforeach; ?>
                                         </select>
                                         <small style="color: var(--text-secondary); margin-top: 0.5rem; display: block;">Hold Command (Mac) or Control (Windows) to select multiple teams.</small>
+                                    </div>
+
+                                    <div class="form-group">
+                                        <label style="font-weight: 600; color: var(--text-secondary); margin-bottom: 0.5rem;">
+                                            📊 Sale Level (KPI Level)
+                                        </label>
+                                        <select name="sale_level_id" id="sale_level_id" style="border-radius: 8px; width:100%; padding:0.6rem;">
+                                            <option value="">-- Chưa chọn level --</option>
+                                            <?php foreach ($sale_levels_grouped as $pos_type => $pos_levels): ?>
+                                                <optgroup label="<?php echo htmlspecialchars($pos_type) ?>">
+                                                    <?php foreach ($pos_levels as $sl): ?>
+                                                        <option value="<?php echo $sl['id'] ?>"
+                                                            <?php echo ($user['sale_level_id'] == $sl['id']) ? 'selected' : '' ?>>
+                                                            <?php echo htmlspecialchars($sl['level_name']) ?>
+                                                        </option>
+                                                    <?php endforeach; ?>
+                                                </optgroup>
+                                            <?php endforeach; ?>
+                                        </select>
+                                        <small style="color: var(--text-secondary); margin-top: 0.5rem; display: block;">Chọn level KPI phù hợp với vị trí của thành viên này.</small>
                                     </div>
                                 </div>
                             </div>
@@ -648,6 +684,8 @@ while ($r = $ut_res_result->fetch_assoc()) {
         function toggleTeamSelect() {
             const isAmBd = document.getElementById('is_am_bd').checked;
             document.getElementById('team_select_row').style.display = isAmBd ? 'block' : 'none';
+            // Reset sale level if unchecking
+            if (!isAmBd) document.getElementById('sale_level_id').value = '';
         }
     </script>
 </body>
