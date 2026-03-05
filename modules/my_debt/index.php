@@ -163,8 +163,8 @@ if (!empty($_GET['month'])) {
 }
 
 if (!empty($_GET['week'])) {
-    $week = intval($_GET['week']);
-    $where_clauses[] = "(d.weekly_update LIKE '%W$week%' OR d.weekly_update LIKE '%w$week%' OR d.weekly_update = '$week')";
+    $week_number = intval($_GET['week']);
+    $where_clauses[] = "(d.weekly_update LIKE '%Tuần $week_number%' OR d.weekly_update LIKE '%tuần $week_number%' OR d.weekly_update = '$week_number' OR d.weekly_update LIKE '%W$week_number%' OR d.weekly_update LIKE '%w$week_number%')";
 }
 
 $where_sql = "";
@@ -1129,11 +1129,11 @@ if ($team_res && $team_res->num_rows > 0) {
                         </select>
 
                         <select name="week" class="filter-select" onchange="this.form.submit()">
-                            <option value="">Week: All</option>
+                            <option value="">Tuần: All</option>
                             <?php
                             for ($w = 1; $w <= 5; $w++) {
                                 $sel = (isset($_GET['week']) && $_GET['week'] == $w) ? 'selected' : '';
-                                echo "<option value='$w' $sel>W$w</option>";
+                                echo "<option value='$w' $sel>Tuần $w</option>";
                             }
                             ?>
                         </select>
