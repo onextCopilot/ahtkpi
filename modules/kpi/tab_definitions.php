@@ -10,7 +10,7 @@ if (!function_exists('stripThousands')) {
     }
 }
 if (!function_exists('qTotalForDef')) {
-    function qTotalForDef($monthly_map, $def_id, array $months)
+    function qTotalForDef($monthly_map, $def_id, array $months, $calc_method = 'sum')
     {
         $sum = 0;
         $count = 0;
@@ -30,7 +30,8 @@ if (!function_exists('qTotalForDef')) {
         }
         if ($count === 0)
             return null;
-        return ['sum' => $sum, 'fmt' => number_format($sum, 0, ',', '.'), 'count' => $count, 'mixed' => $mixed];
+        $display = ($calc_method === 'avg' && !$mixed && $count > 0) ? $sum / $count : $sum;
+        return ['sum' => $display, 'fmt' => number_format($display, 0, ',', '.'), 'count' => $count, 'mixed' => $mixed, 'raw_sum' => $sum];
     }
 }
 
@@ -56,24 +57,38 @@ function fmtTargetBase($val)
 $def_q_totals = [];
 $def_yr_totals = [];
 foreach ($defs as $d) {
-    $yrSum = 0;
+    $method = $d['calc_method'] ?? 'sum';
+    $yrRawSum = 0;
     $yrCount = 0;
     $yrMixed = false;
     foreach ($q_months_def as $qi => $months) {
-        $t = qTotalForDef($monthly_map, $d['id'], $months);
+        $t = qTotalForDef($monthly_map, $d['id'], $months, $method);
         $def_q_totals[$d['id']][$qi] = $t;
         if ($t) {
             if ($t['mixed'])
                 $yrMixed = true;
             else {
-                $yrSum += $t['sum'];
+                $yrRawSum += $t['raw_sum'] ?? $t['sum'];
                 $yrCount++;
             }
         }
     }
-    $def_yr_totals[$d['id']] = ($yrCount > 0 || $yrMixed)
-        ? ['sum' => $yrSum, 'fmt' => number_format($yrSum, 0, ',', '.'), 'count' => $yrCount, 'mixed' => $yrMixed]
-        : null;
+    if ($yrCount > 0 || $yrMixed) {
+        // For annual: if avg method, average across all 12 months that have data
+        $allMonths = [1,2,3,4,5,6,7,8,9,10,11,12];
+        $allSum = 0; $allMonthCount = 0; $allMixed = false;
+        foreach ($allMonths as $m) {
+            $val = $monthly_map[$d['id']][$m]['actual_value'] ?? null;
+            if ($val === null || $val === '') continue;
+            $raw = stripThousands($val);
+            if (is_numeric($raw)) { $allSum += (float)$raw; $allMonthCount++; }
+            else $allMixed = true;
+        }
+        $yrDisplay = ($method === 'avg' && !$allMixed && $allMonthCount > 0) ? $allSum / $allMonthCount : $allSum;
+        $def_yr_totals[$d['id']] = ['sum' => $yrDisplay, 'fmt' => number_format($yrDisplay, 0, ',', '.'), 'count' => $allMonthCount, 'mixed' => $yrMixed];
+    } else {
+        $def_yr_totals[$d['id']] = null;
+    }
 }
 
 // Helper: progress data from actual sum + target num

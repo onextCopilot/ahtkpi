@@ -37,7 +37,7 @@ function parseTarget($val)
  * Calculate 3-month actual total for a quarter.
  * Returns ['sum'=>float,'fmt'=>string,'count'=>int,'mixed'=>bool] or null
  */
-function quarterTotal($monthly_map, $def_id, $qmonths)
+function quarterTotal($monthly_map, $def_id, $qmonths, $calc_method = 'sum')
 {
     $sum = 0;
     $count = 0;
@@ -57,7 +57,8 @@ function quarterTotal($monthly_map, $def_id, $qmonths)
     }
     if ($count === 0)
         return null;
-    return ['sum' => $sum, 'fmt' => number_format($sum, 0, ',', '.'), 'count' => $count, 'mixed' => $mixed];
+    $display = ($calc_method === 'avg' && !$mixed && $count > 0) ? $sum / $count : $sum;
+    return ['sum' => $display, 'fmt' => number_format($display, 0, ',', '.'), 'count' => $count, 'mixed' => $mixed];
 }
 
 /** Format numeric target for display: "12000000" → "12.000.000", text unchanged */
@@ -126,6 +127,8 @@ function fmtDisplayTarget($val)
                     <td style="white-space:normal;font-weight:500">
                         <?= htmlspecialchars($d['kpi_name']) ?>
                         <?php if ($d['is_condition']): ?><span class="badge badge-cond">ĐK</span><?php endif; ?>
+                            <?php if (($d['calc_method'] ?? 'sum') === 'avg'): ?>
+                                    <span style="font-size:10px;background:#FEF3C7;color:#92400E;padding:1px 5px;border-radius:4px;border:1px solid #FDE68A">÷ TB</span><?php endif; ?>
                     </td>
                     <td style="font-size:12px;color:#6B7280;white-space:nowrap">
                         <?= htmlspecialchars($d['target_base'] ?? '—') ?>     <?php if (!empty($d['unit'])): ?><span
@@ -137,7 +140,8 @@ function fmtDisplayTarget($val)
                         $qrow = $quarterly_map[$d['id']][$qi] ?? null;
                         $bgCol = $q_colors[$qi]['bg'];
                         $headCol = $q_colors[$qi]['head'];
-                        $total = quarterTotal($monthly_map, $d['id'], $q_months[$qi]);
+                        $calc_method = $d['calc_method'] ?? 'sum';
+                        $total = quarterTotal($monthly_map, $d['id'], $q_months[$qi], $calc_method);
 
                         // Progress calculation
                         $targetNum = parseTarget($qrow['target_value'] ?? '');

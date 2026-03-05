@@ -75,20 +75,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $owner_id = !empty($_POST['kpi_owner_id']) ? intval($_POST['kpi_owner_id']) : null;
             $is_cond = isset($_POST['is_condition']) ? 1 : 0;
             $notes = trim($_POST['notes'] ?? '');
+            $calc_method = in_array($_POST['calc_method'] ?? '', ['sum', 'avg']) ? $_POST['calc_method'] : 'sum';
 
             if (empty($name)) {
                 $msg_err = "Tên KPI không được để trống.";
             } else {
                 if ($action === 'add_def') {
-                    $stmt = $conn->prepare("INSERT INTO kpi_definitions (year,department_id,kpi_group,kpi_name,target_base,unit,weight,kpi_owner_id,is_condition,notes,created_by) VALUES (?,?,?,?,?,?,?,?,?,?,?)");
-                    // i=year, i=dept, s=group, s=name, s=target, s=unit, d=weight, i=owner, i=is_cond, s=notes, i=created_by
-                    $stmt->bind_param("iissssdisis", $yr, $dept_id, $group, $name, $target, $unit, $weight, $owner_id, $is_cond, $notes, $_SESSION['user_id']);
+                    $stmt = $conn->prepare("INSERT INTO kpi_definitions (year,department_id,kpi_group,kpi_name,target_base,unit,weight,kpi_owner_id,is_condition,notes,created_by,calc_method) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)");
+                    $stmt->bind_param("iissssdisiss", $yr, $dept_id, $group, $name, $target, $unit, $weight, $owner_id, $is_cond, $notes, $_SESSION['user_id'], $calc_method);
                     $stmt->execute() ? $msg_ok = "Đã lưu KPI!" : $msg_err = $conn->error;
                 } else {
                     $id = intval($_POST['id']);
-                    $stmt = $conn->prepare("UPDATE kpi_definitions SET year=?,department_id=?,kpi_group=?,kpi_name=?,target_base=?,unit=?,weight=?,kpi_owner_id=?,is_condition=?,notes=? WHERE id=?");
-                    // i=year, i=dept, s=group, s=name, s=target, s=unit, d=weight, i=owner, i=is_cond, s=notes, i=id
-                    $stmt->bind_param("iissssdiisi", $yr, $dept_id, $group, $name, $target, $unit, $weight, $owner_id, $is_cond, $notes, $id);
+                    $stmt = $conn->prepare("UPDATE kpi_definitions SET year=?,department_id=?,kpi_group=?,kpi_name=?,target_base=?,unit=?,weight=?,kpi_owner_id=?,is_condition=?,notes=?,calc_method=? WHERE id=?");
+                    $stmt->bind_param("iissssdiissi", $yr, $dept_id, $group, $name, $target, $unit, $weight, $owner_id, $is_cond, $notes, $calc_method, $id);
                     $stmt->execute() ? $msg_ok = "Đã lưu KPI!" : $msg_err = $conn->error;
                 }
             }
@@ -182,6 +181,11 @@ if ($col_check && $col_check->num_rows == 0) {
     $conn->query("ALTER TABLE kpi_definitions 
             ADD COLUMN sort_order INT DEFAULT 0 AFTER kpi_name,
             ADD COLUMN group_order INT DEFAULT 0 AFTER kpi_group");
+}
+// Auto-create calc_method if missing
+$calc_col_check = $conn->query("SHOW COLUMNS FROM kpi_definitions LIKE 'calc_method'");
+if ($calc_col_check && $calc_col_check->num_rows == 0) {
+    $conn->query("ALTER TABLE kpi_definitions ADD COLUMN calc_method VARCHAR(10) NOT NULL DEFAULT 'sum' AFTER notes");
 }
 
 $r = $conn->query("SELECT k.*, d.name dept_name, u.full_name owner_name, u.avatar owner_avatar, d.owner_id as dept_owner_id, d.manager_id as dept_manager_id
@@ -1038,12 +1042,21 @@ $status_map = ['draft' => ['#F1F5F9', '#64748B'], 'active' => ['#DBEAFE', '#1D4E
                     <label>Ghi chú / Top-line</label>
                     <textarea name="notes" id="def_notes" rows="2" placeholder="Top-line, KPI điều kiện..."></textarea>
                 </div>
-                <div class="fg">
-                    <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
-                        <input type="checkbox" name="is_condition" id="def_cond"
-                            style="width:16px;height:16px;accent-color:#1D4ED8">
-                        ⚑ KPI điều kiện (phải đạt mới tính thưởng)
-                    </label>
+                <div class="fg2">
+                    <div class="fg">
+                        <label>Phương pháp tính</label>
+                        <select name="calc_method" id="def_calc_method">
+                            <option value="sum">➕ Cộng (Sum)</option>
+                            <option value="avg">➗ Chia trung bình (Average)</option>
+                        </select>
+                    </div>
+                    <div class="fg">
+                        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;margin-top:22px">
+                            <input type="checkbox" name="is_condition" id="def_cond"
+                                style="width:16px;height:16px;accent-color:#1D4ED8">
+                            ⚑ KPI điều kiện (phải đạt mới tính thưởng)
+                        </label>
+                    </div>
                 </div>
                 <div class="mf">
                     <button type="button" class="btn" onclick="closeDefModal()">Huỷ</button>
@@ -1078,6 +1091,7 @@ $status_map = ['draft' => ['#F1F5F9', '#64748B'], 'active' => ['#DBEAFE', '#1D4E
             document.getElementById('def_owner').value = d.kpi_owner_id || '';
             document.getElementById('def_notes').value = d.notes || '';
             document.getElementById('def_cond').checked = d.is_condition == 1;
+            document.getElementById('def_calc_method').value = d.calc_method || 'sum';
             document.getElementById('defModal').classList.add('show');
         }
         function closeDefModal() { document.getElementById('defModal').classList.remove('show') }
