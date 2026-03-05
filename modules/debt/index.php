@@ -329,6 +329,21 @@ function formatDate($date)
 {
     return ($date && $date != '0000-00-00') ? date('d/m/Y', strtotime($date)) : '';
 }
+
+// Fetch AM / BD Users
+$am_list = [];
+$res_am = $conn->query("SELECT full_name FROM users WHERE is_am_bd = 1 ORDER BY full_name ASC");
+if ($res_am && $res_am->num_rows > 0) {
+    while ($row_am = $res_am->fetch_assoc()) {
+        $n = trim($row_am['full_name']);
+        if (!empty($n) && !in_array($n, $am_list)) {
+            $am_list[] = $n;
+        }
+    }
+} else {
+    // Fallback if none found
+    $am_list = ['Emily', 'Ryan', 'Hyun'];
+}
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -1060,9 +1075,11 @@ function formatDate($date)
 
                         <select name="am" class="filter-select" onchange="this.form.submit()">
                             <option value="">AM: All</option>
-                            <option value="Emily" <?php echo (isset($_GET['am']) && $_GET['am'] == 'Emily') ? 'selected' : ''; ?>>Emily</option>
-                            <option value="Ryan" <?php echo (isset($_GET['am']) && $_GET['am'] == 'Ryan') ? 'selected' : ''; ?>>Ryan</option>
-                            <option value="Hyun" <?php echo (isset($_GET['am']) && $_GET['am'] == 'Hyun') ? 'selected' : ''; ?>>Hyun</option>
+                            <?php foreach ($am_list as $am_name): ?>
+                                <option value="<?php echo htmlspecialchars($am_name); ?>" <?php echo (isset($_GET['am']) && $_GET['am'] === $am_name) ? 'selected' : ''; ?>>
+                                    <?php echo htmlspecialchars($am_name); ?>
+                                </option>
+                            <?php endforeach; ?>
                         </select>
 
                         <select name="status" class="filter-select" onchange="this.form.submit()">
@@ -1755,228 +1772,228 @@ function formatDate($date)
                             </div>
                         </div>
                         <script>
-                            // Helpers
-                            const formatVND = (val) => new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(val);
+                                                                   // Helpers
+                                const formatVND = (val) => new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(val);
 
-                            // Data passed from PHP
-                            const teamNames = <?php echo json_encode($chartTeams); ?>;
-                            const dataPaid = <?php echo json_encode($chartPaid); ?>;
-                            const dataNotPaid = <?php echo json_encode($chartNotPaid); ?>;
-                            const dataCompletion = <?php echo json_encode($chartCompletion); ?>;
+                                // Data passed from PHP
+                                const teamNames = <?php echo json_encode($chartTeams); ?>;
+                                const dataPaid = <?php echo json_encode($chartPaid); ?>;
+                                const dataNotPaid = <?php echo json_encode($chartNotPaid); ?>;
+                                const dataCompletion = <?php echo json_encode($chartCompletion); ?>;
 
-                            const statusLabels = <?php echo json_encode($statusLabels); ?>;
-                            const statusCounts = <?php echo json_encode(array_values($statusCount)); ?>;
-                            const statusAmounts = <?php echo json_encode(array_values($statusPaid)); ?>;
+                                const statusLabels = <?php echo json_encode($statusLabels); ?>;
+                                const statusCounts = <?php echo json_encode(array_values($statusCount)); ?>;
+                                const statusAmounts = <?php echo json_encode(array_values($statusPaid)); ?>;
 
-                            const monthlyLabels = <?php echo json_encode(array_values($chartMonthlyLabels)); ?>;
-                            const monthlyTotals = <?php echo json_encode(array_values($chartMonthlyTotals)); ?>;
+                                const monthlyLabels = <?php echo json_encode(array_values($chartMonthlyLabels)); ?>;
+                                const monthlyTotals = <?php echo json_encode(array_values($chartMonthlyTotals)); ?>;
 
-                            // 0. Monthly Debt Area Chart
-                            new ApexCharts(document.querySelector("#chart-monthly-debt"), {
-                                series: [{ name: 'Total Debt', data: monthlyTotals }],
-                                chart: { type: 'area', height: 350, toolbar: { show: false } },
-                                dataLabels: { enabled: true, formatter: function (val) { return val > 0 ? (val / 1000000).toFixed(0) + "M" : "" }, style: { fontSize: '10px' } },
-                                stroke: { curve: 'smooth', width: 2 },
-                                colors: ['#0ea5e9'],
-                                xaxis: { categories: monthlyLabels },
-                                yaxis: { labels: { formatter: val => (val / 1000000).toFixed(0) + 'M' } },
-                                tooltip: { y: { formatter: val => formatVND(val) } },
-                                fill: { type: 'gradient', gradient: { shadeIntensity: 1, opacityFrom: 0.7, opacityTo: 0.9, stops: [0, 90, 100] } },
-                            }).render();
+                                // 0. Monthly Debt Area Chart
+                                new ApexCharts(document.querySelector("#chart-monthly-debt"), {
+                                    series: [{ name: 'Total Debt', data: monthlyTotals }],
+                                    chart: { type: 'area', height: 350, toolbar: { show: false } },
+                                    dataLabels: { enabled: true, formatter: function (val) { return val > 0 ? (val / 1000000).toFixed(0) + "M" : "" }, style: { fontSize: '10px' } },
+                                    stroke: { curve: 'smooth', width: 2 },
+                                    colors: ['#0ea5e9'],
+                                    xaxis: { categories: monthlyLabels },
+                                    yaxis: { labels: { formatter: val => (val / 1000000).toFixed(0) + 'M' } },
+                                    tooltip: { y: { formatter: val => formatVND(val) } },
+                                    fill: { type: 'gradient', gradient: { shadeIntensity: 1, opacityFrom: 0.7, opacityTo: 0.9, stops: [0, 90, 100] } },
+                                }).render();
 
-                            // 1. Global Pie
-                            new ApexCharts(document.querySelector("#chart-global-pie"), {
-                                series: [<?php echo array_sum($chartPaid); ?>, <?php echo array_sum($chartNotPaid); ?>],
-                                chart: { type: 'donut', height: 350 },
-                                labels: ['Paid', 'Not Paid'],
-                                colors: ['#52c41a', '#ff4d4f'],
-                                dataLabels: { enabled: true, formatter: function (val, opts) { return formatVND(opts.w.globals.series[opts.seriesIndex]) } },
-                                plotOptions: { pie: { donut: { labels: { show: true, total: { show: true, label: 'Total Volume', formatter: function (w) { return formatVND(w.globals.seriesTotals.reduce((a, b) => a + b, 0)) } } } } } }
-                            }).render();
+                                // 1. Global Pie
+                                new ApexCharts(document.querySelector("#chart-global-pie"), {
+                                    series: [<?php echo array_sum($chartPaid); ?>, <?php echo array_sum($chartNotPaid); ?>],
+                                    chart: { type: 'donut', height: 350 },
+                                    labels: ['Paid', 'Not Paid'],
+                                    colors: ['#52c41a', '#ff4d4f'],
+                                    dataLabels: { enabled: true, formatter: function (val, opts) { return formatVND(opts.w.globals.series[opts.seriesIndex]) } },
+                                    plotOptions: { pie: { donut: { labels: { show: true, total: { show: true, label: 'Total Volume', formatter: function (w) { return formatVND(w.globals.seriesTotals.reduce((a, b) => a + b, 0)) } } } } } }
+                                }).render();
 
-                            // 2. Completion Bar
-                            new ApexCharts(document.querySelector("#chart-completion-bar"), {
-                                series: [{ name: 'Completion Rate', data: dataCompletion }],
-                                chart: { type: 'bar', height: 350 },
-                                plotOptions: { bar: { borderRadius: 4, horizontal: true, distributed: true, dataLabels: { position: 'bottom' } } },
-                                dataLabels: { enabled: true, textAnchor: 'start', style: { colors: ['#fff'] }, formatter: function (val, opt) { return val + "%" } },
-                                xaxis: { categories: teamNames, max: 100 },
-                                colors: ['#1890ff'],
-                                tooltip: { y: { formatter: val => val + "%" } }
-                            }).render();
+                                // 2. Completion Bar
+                                new ApexCharts(document.querySelector("#chart-completion-bar"), {
+                                    series: [{ name: 'Completion Rate', data: dataCompletion }],
+                                    chart: { type: 'bar', height: 350 },
+                                    plotOptions: { bar: { borderRadius: 4, horizontal: true, distributed: true, dataLabels: { position: 'bottom' } } },
+                                    dataLabels: { enabled: true, textAnchor: 'start', style: { colors: ['#fff'] }, formatter: function (val, opt) { return val + "%" } },
+                                    xaxis: { categories: teamNames, max: 100 },
+                                    colors: ['#1890ff'],
+                                    tooltip: { y: { formatter: val => val + "%" } }
+                                }).render();
 
-                            // 3. Paid Amount Bar
-                            new ApexCharts(document.querySelector("#chart-team-paid"), {
-                                series: [{ name: 'Paid Amount', data: dataPaid }],
-                                chart: { type: 'bar', height: 350 },
-                                plotOptions: { bar: { borderRadius: 4, columnWidth: '50%', dataLabels: { position: 'top' } } },
-                                dataLabels: { enabled: true, formatter: function (val) { return (val / 1000000).toFixed(0) + "M" }, offsetY: -20, style: { fontSize: '10px', colors: ["#304758"] } },
-                                xaxis: { categories: teamNames },
-                                colors: ['#52c41a'],
-                                yaxis: { labels: { formatter: val => (val / 1000000).toFixed(0) + 'M' } },
-                                tooltip: { y: { formatter: val => formatVND(val) } }
-                            }).render();
+                                // 3. Paid Amount Bar
+                                new ApexCharts(document.querySelector("#chart-team-paid"), {
+                                    series: [{ name: 'Paid Amount', data: dataPaid }],
+                                    chart: { type: 'bar', height: 350 },
+                                    plotOptions: { bar: { borderRadius: 4, columnWidth: '50%', dataLabels: { position: 'top' } } },
+                                    dataLabels: { enabled: true, formatter: function (val) { return (val / 1000000).toFixed(0) + "M" }, offsetY: -20, style: { fontSize: '10px', colors: ["#304758"] } },
+                                    xaxis: { categories: teamNames },
+                                    colors: ['#52c41a'],
+                                    yaxis: { labels: { formatter: val => (val / 1000000).toFixed(0) + 'M' } },
+                                    tooltip: { y: { formatter: val => formatVND(val) } }
+                                }).render();
 
-                            // 4. Outstanding Bar
-                            new ApexCharts(document.querySelector("#chart-team-outstanding"), {
-                                series: [{ name: 'Pending Amount', data: dataNotPaid }],
-                                chart: { type: 'bar', height: 350 },
-                                plotOptions: { bar: { borderRadius: 4, columnWidth: '50%', dataLabels: { position: 'top' } } },
-                                dataLabels: { enabled: true, formatter: function (val) { return (val / 1000000).toFixed(0) + "M" }, offsetY: -20, style: { fontSize: '10px', colors: ["#304758"] } },
-                                xaxis: { categories: teamNames },
-                                colors: ['#ff4d4f'],
-                                yaxis: { labels: { formatter: val => (val / 1000000).toFixed(0) + 'M' } },
-                                tooltip: { y: { formatter: val => formatVND(val) } }
-                            }).render();
-                        </script>
+                                // 4. Outstanding Bar
+                                new ApexCharts(document.querySelector("#chart-team-outstanding"), {
+                                    series: [{ name: 'Pending Amount', data: dataNotPaid }],
+                                    chart: { type: 'bar', height: 350 },
+                                    plotOptions: { bar: { borderRadius: 4, columnWidth: '50%', dataLabels: { position: 'top' } } },
+                                    dataLabels: { enabled: true, formatter: function (val) { return (val / 1000000).toFixed(0) + "M" }, offsetY: -20, style: { fontSize: '10px', colors: ["#304758"] } },
+                                    xaxis: { categories: teamNames },
+                                    colors: ['#ff4d4f'],
+                                    yaxis: { labels: { formatter: val => (val / 1000000).toFixed(0) + 'M' } },
+                                    tooltip: { y: { formatter: val => formatVND(val) } }
+                                }).render();
+                            </script>
                     <?php else: ?>
-                        <table class="debt-table">
-                            <thead>
-                                <tr>
-                                    <th style="width: 30px !important; text-align: center;">#</th>
-                                    <th>CTY</th>
-                                    <th>AM</th>
-                                    <th>Sale Team</th>
-                                    <th>Tên khách hàng</th>
-                                    <th>Tên dự án</th>
-                                    <th>Ngày hóa đơn</th>
-                                    <th>Mốc thanh toán</th>
-                                    <th>Exp. Prod Date</th>
-                                    <th>Exp. Pay Date</th>
-                                    <th>Phân loại HĐ</th>
-                                    <th>Số tiền</th>
-                                    <th>P&L</th>
-                                    <th>Hóa đơn</th>
-                                    <th>HĐ VAT</th>
-                                    <th>Trạng thái TT</th>
-                                    <th>Tháng TT</th>
-                                    <th>Cập nhật tuần</th>
-                                    <th>Ghi chú AM</th>
-                                    <th>Ghi chú Delivery</th>
-                                    <th>Trạng thái SX</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                <?php $globalIdx = 1; ?>
-                                <?php foreach ($groupedDebts as $monthName => $ams): ?>
-                                    <tr class="group-header">
-                                        <td colspan="22">
-                                            Tháng <?php echo $monthName; ?>
-                                            <span class="group-total">(Total:
-                                                <?php echo formatVND($monthTotals[$monthName]); ?>)</span>
-                                        </td>
+                            <table class="debt-table">
+                                <thead>
+                                    <tr>
+                                        <th style="width: 30px !important; text-align: center;">#</th>
+                                        <th>CTY</th>
+                                        <th>AM</th>
+                                        <th>Sale Team</th>
+                                        <th>Tên khách hàng</th>
+                                        <th>Tên dự án</th>
+                                        <th>Ngày hóa đơn</th>
+                                        <th>Mốc thanh toán</th>
+                                        <th>Exp. Prod Date</th>
+                                        <th>Exp. Pay Date</th>
+                                        <th>Phân loại HĐ</th>
+                                        <th>Số tiền</th>
+                                        <th>P&L</th>
+                                        <th>Hóa đơn</th>
+                                        <th>HĐ VAT</th>
+                                        <th>Trạng thái TT</th>
+                                        <th>Tháng TT</th>
+                                        <th>Cập nhật tuần</th>
+                                        <th>Ghi chú AM</th>
+                                        <th>Ghi chú Delivery</th>
+                                        <th>Trạng thái SX</th>
                                     </tr>
-                                    <?php foreach ($ams as $amName => $monthItems): ?>
-                                        <tr class="group-header-am">
-                                            <td colspan="22">
-                                                AM: <?php echo htmlspecialchars($amName); ?>
-                                                <span class="group-total"
-                                                    style="font-size: 0.8rem; font-weight: normal; opacity: 0.8;">(Subtotal:
-                                                    <?php echo formatVND($amTotals[$monthName][$amName]); ?>)</span>
-                                            </td>
-                                        </tr>
-                                        <?php foreach ($monthItems as $d): ?>
-                                            <td style="text-align: center;"><?php echo $globalIdx++; ?></td>
-                                            <td class="cell-company"><?php echo htmlspecialchars($d['company']); ?></td>
-                                            <td>
-                                                <?php
-                                                // Format AM Badge
-                                                $am_val = $d['am'] ?? '';
-                                                $am_class = 'am-default';
-                                                if (stripos($am_val, 'Emily') !== false)
-                                                    $am_class = 'am-emily';
-                                                if (stripos($am_val, 'Hyun') !== false)
-                                                    $am_class = 'am-hyun';
-                                                if (stripos($am_val, 'Ryan') !== false)
-                                                    $am_class = 'am-ryan';
-                                                ?>
-                                                <span
-                                                    class="badge am-badge <?php echo $am_class; ?>"><?php echo htmlspecialchars($am_val); ?></span>
-                                            </td>
-                                            <td>
-                                                <?php if (!empty($d['team_name'])): ?>
-                                                    <span class="badge"
-                                                        style="background: #f1f5f9; color: #475569; border: 1px solid #e2e8f0; font-size: 11px;">
-                                                        <?php echo htmlspecialchars($d['team_name']); ?>
-                                                    </span>
-                                                <?php endif; ?>
-                                            </td>
-                                            <td class="cell-company client-tooltip-trigger"
-                                                data-client-name="<?php echo htmlspecialchars($d['client_name'] ?? ''); ?>"
-                                                style="cursor: pointer; position: relative;">
-                                                <?php echo htmlspecialchars($d['client_name'] ?? ''); ?>
-                                            </td>
-                                            <td class="project-tooltip-trigger"
-                                                data-project-name="<?php echo htmlspecialchars($d['project_name'] ?? ''); ?>"
-                                                style="position: relative; cursor: pointer;">
-                                                <?php echo htmlspecialchars($d['project_name'] ?? ''); ?>
-                                            </td>
-                                            <td><?php echo formatDate($d['invoice_date']); ?></td>
-                                            <td><?php echo htmlspecialchars($d['payment_milestone'] ?? ''); ?></td>
-                                            <td><?php echo $d['expected_prod_date']; ?></td>
-                                            <td><?php echo $d['expected_payment_date']; ?></td>
-                                            <td style="position: relative; text-align: center;">
-                                                <?php
-                                                $st = $d['invoice_status_class'] ?? '';
-                                                $bgClass = 'status-chuaxacdinh'; // Default
-                                                if ($st === 'Done')
-                                                    $bgClass = 'status-done';
-                                                elseif ($st === 'Tím')
-                                                    $bgClass = 'status-tim';
-                                                elseif ($st === 'Xanh')
-                                                    $bgClass = 'status-xanh';
-                                                elseif ($st === 'Trắng')
-                                                    $bgClass = 'status-trang';
-                                                elseif ($st === 'PP')
-                                                    $bgClass = 'status-pp';
-                                                elseif ($st === 'Draft')
-                                                    $bgClass = 'status-draft';
-                                                elseif ($st === 'Chưa xác định')
-                                                    $bgClass = 'status-chuaxacdinh';
-                                                elseif ($st === 'Đỏ')
-                                                    $bgClass = 'status-do';
-
-                                                echo "<span class='$bgClass'>" . htmlspecialchars($st) . "</span>";
-                                                ?>
-                                            </td>
-                                            <td class="cell-amount">
-                                                <?php echo formatCurrency($d['amount'] ?? 0, $d['currency'] ?? 'USD'); ?>
-                                            </td>
-                                            <td>
-                                                <span
-                                                    class="badge <?php echo (stripos($d['pl_class'] ?? '', 'Xấu') !== false ? 'pl-xau' : ((stripos($d['pl_class'] ?? '', 'TB') !== false) ? 'pl-tb' : 'pl-tot')); ?>">
-                                                    <?php echo htmlspecialchars($d['pl_class'] ?? ''); ?>
-                                                </span>
-                                            </td>
-                                            <td><?php echo htmlspecialchars($d['invoice_status'] ?? ''); ?></td>
-                                            <td><?php echo htmlspecialchars($d['vat_invoice'] ?? ''); ?></td>
-                                            <td>
-                                                <span
-                                                    class="badge <?php echo (stripos($d['payment_status'] ?? '', 'Not') !== false ? 'pay-not-paid' : 'pay-paid'); ?>">
-                                                    <?php echo htmlspecialchars($d['payment_status'] ?? ''); ?>
-                                                </span>
-                                            </td>
-                                            <td><?php echo htmlspecialchars($d['payment_month'] ?? ''); ?></td>
-                                            <td><?php echo htmlspecialchars($d['weekly_update'] ?? ''); ?></td>
-                                            <td><?php echo htmlspecialchars($d['am_notes'] ?? ''); ?></td>
-                                            <td><?php echo htmlspecialchars($d['delivery_notes'] ?? ''); ?></td>
-                                            <td style="position: relative; text-align: center;">
-                                                <?php
-                                                $ps = $d['production_status'] ?? '';
-                                                $prodClass = 'prod-dc2';
-                                                if (stripos($ps, 'Overdue') !== false || stripos($ps, 'DC5') !== false)
-                                                    $prodClass = 'prod-dc5';
-                                                elseif (stripos($ps, 'DC1') !== false)
-                                                    $prodClass = 'prod-dc1';
-                                                ?>
-                                                <?php echo htmlspecialchars($d['production_status'] ?? ''); ?>
-                                            </td>
+                                </thead>
+                                <tbody>
+                                    <?php $globalIdx = 1; ?>
+                                    <?php foreach ($groupedDebts as $monthName => $ams): ?>
+                                            <tr class="group-header">
+                                                <td colspan="22">
+                                                    Tháng <?php echo $monthName; ?>
+                                                    <span class="group-total">(Total:
+                                                        <?php echo formatVND($monthTotals[$monthName]); ?>)</span>
+                                                </td>
                                             </tr>
-                                        <?php endforeach; ?>
+                                            <?php foreach ($ams as $amName => $monthItems): ?>
+                                                    <tr class="group-header-am">
+                                                        <td colspan="22">
+                                                            AM: <?php echo htmlspecialchars($amName); ?>
+                                                            <span class="group-total"
+                                                                style="font-size: 0.8rem; font-weight: normal; opacity: 0.8;">(Subtotal:
+                                                                <?php echo formatVND($amTotals[$monthName][$amName]); ?>)</span>
+                                                        </td>
+                                                    </tr>
+                                                    <?php foreach ($monthItems as $d): ?>
+                                                            <td style="text-align: center;"><?php echo $globalIdx++; ?></td>
+                                                            <td class="cell-company"><?php echo htmlspecialchars($d['company']); ?></td>
+                                                            <td>
+                                                                <?php
+                                                                // Format AM Badge
+                                                                $am_val = $d['am'] ?? '';
+                                                                $am_class = 'am-default';
+                                                                if (stripos($am_val, 'Emily') !== false)
+                                                                    $am_class = 'am-emily';
+                                                                if (stripos($am_val, 'Hyun') !== false)
+                                                                    $am_class = 'am-hyun';
+                                                                if (stripos($am_val, 'Ryan') !== false)
+                                                                    $am_class = 'am-ryan';
+                                                                ?>
+                                                                <span
+                                                                    class="badge am-badge <?php echo $am_class; ?>"><?php echo htmlspecialchars($am_val); ?></span>
+                                                            </td>
+                                                            <td>
+                                                                <?php if (!empty($d['team_name'])): ?>
+                                                                        <span class="badge"
+                                                                            style="background: #f1f5f9; color: #475569; border: 1px solid #e2e8f0; font-size: 11px;">
+                                                                            <?php echo htmlspecialchars($d['team_name']); ?>
+                                                                        </span>
+                                                                <?php endif; ?>
+                                                            </td>
+                                                            <td class="cell-company client-tooltip-trigger"
+                                                                data-client-name="<?php echo htmlspecialchars($d['client_name'] ?? ''); ?>"
+                                                                style="cursor: pointer; position: relative;">
+                                                                <?php echo htmlspecialchars($d['client_name'] ?? ''); ?>
+                                                            </td>
+                                                            <td class="project-tooltip-trigger"
+                                                                data-project-name="<?php echo htmlspecialchars($d['project_name'] ?? ''); ?>"
+                                                                style="position: relative; cursor: pointer;">
+                                                                <?php echo htmlspecialchars($d['project_name'] ?? ''); ?>
+                                                            </td>
+                                                            <td><?php echo formatDate($d['invoice_date']); ?></td>
+                                                            <td><?php echo htmlspecialchars($d['payment_milestone'] ?? ''); ?></td>
+                                                            <td><?php echo $d['expected_prod_date']; ?></td>
+                                                            <td><?php echo $d['expected_payment_date']; ?></td>
+                                                            <td style="position: relative; text-align: center;">
+                                                                <?php
+                                                                $st = $d['invoice_status_class'] ?? '';
+                                                                $bgClass = 'status-chuaxacdinh'; // Default
+                                                                if ($st === 'Done')
+                                                                    $bgClass = 'status-done';
+                                                                elseif ($st === 'Tím')
+                                                                    $bgClass = 'status-tim';
+                                                                elseif ($st === 'Xanh')
+                                                                    $bgClass = 'status-xanh';
+                                                                elseif ($st === 'Trắng')
+                                                                    $bgClass = 'status-trang';
+                                                                elseif ($st === 'PP')
+                                                                    $bgClass = 'status-pp';
+                                                                elseif ($st === 'Draft')
+                                                                    $bgClass = 'status-draft';
+                                                                elseif ($st === 'Chưa xác định')
+                                                                    $bgClass = 'status-chuaxacdinh';
+                                                                elseif ($st === 'Đỏ')
+                                                                    $bgClass = 'status-do';
+
+                                                                echo "<span class='$bgClass'>" . htmlspecialchars($st) . "</span>";
+                                                                ?>
+                                                            </td>
+                                                            <td class="cell-amount">
+                                                                <?php echo formatCurrency($d['amount'] ?? 0, $d['currency'] ?? 'USD'); ?>
+                                                            </td>
+                                                            <td>
+                                                                <span
+                                                                    class="badge <?php echo (stripos($d['pl_class'] ?? '', 'Xấu') !== false ? 'pl-xau' : ((stripos($d['pl_class'] ?? '', 'TB') !== false) ? 'pl-tb' : 'pl-tot')); ?>">
+                                                                    <?php echo htmlspecialchars($d['pl_class'] ?? ''); ?>
+                                                                </span>
+                                                            </td>
+                                                            <td><?php echo htmlspecialchars($d['invoice_status'] ?? ''); ?></td>
+                                                            <td><?php echo htmlspecialchars($d['vat_invoice'] ?? ''); ?></td>
+                                                            <td>
+                                                                <span
+                                                                    class="badge <?php echo (stripos($d['payment_status'] ?? '', 'Not') !== false ? 'pay-not-paid' : 'pay-paid'); ?>">
+                                                                    <?php echo htmlspecialchars($d['payment_status'] ?? ''); ?>
+                                                                </span>
+                                                            </td>
+                                                            <td><?php echo htmlspecialchars($d['payment_month'] ?? ''); ?></td>
+                                                            <td><?php echo htmlspecialchars($d['weekly_update'] ?? ''); ?></td>
+                                                            <td><?php echo htmlspecialchars($d['am_notes'] ?? ''); ?></td>
+                                                            <td><?php echo htmlspecialchars($d['delivery_notes'] ?? ''); ?></td>
+                                                            <td style="position: relative; text-align: center;">
+                                                                <?php
+                                                                $ps = $d['production_status'] ?? '';
+                                                                $prodClass = 'prod-dc2';
+                                                                if (stripos($ps, 'Overdue') !== false || stripos($ps, 'DC5') !== false)
+                                                                    $prodClass = 'prod-dc5';
+                                                                elseif (stripos($ps, 'DC1') !== false)
+                                                                    $prodClass = 'prod-dc1';
+                                                                ?>
+                                                                <?php echo htmlspecialchars($d['production_status'] ?? ''); ?>
+                                                            </td>
+                                                            </tr>
+                                                    <?php endforeach; ?>
+                                            <?php endforeach; ?>
                                     <?php endforeach; ?>
-                                <?php endforeach; ?>
-                            </tbody>
-                        </table>
+                                </tbody>
+                            </table>
                     <?php endif; ?>
                 </div>
             </div>
@@ -2024,9 +2041,9 @@ function formatDate($date)
                             <select name="sale_team_id" id="sale_team_id">
                                 <option value="">- Undefined -</option>
                                 <?php foreach ($all_teams as $team): ?>
-                                    <option value="<?php echo $team['id']; ?>">
-                                        <?php echo htmlspecialchars($team['name']); ?>
-                                    </option>
+                                        <option value="<?php echo $team['id']; ?>">
+                                            <?php echo htmlspecialchars($team['name']); ?>
+                                        </option>
                                 <?php endforeach; ?>
                             </select>
                         </div>
