@@ -311,6 +311,24 @@ class OdooAPI
             throw $e;
         }
     }
+    public function getInvoiceMap()
+    {
+        if (file_exists($this->invoiceCacheFile)) {
+            $content = file_get_contents($this->invoiceCacheFile);
+            $json = str_replace('<?php exit; ?>', '', $content);
+            $decoded = json_decode($json, true);
+            if (is_array($decoded)) {
+                $map = [];
+                foreach ($decoded as $inv) {
+                    if (isset($inv['id'])) {
+                        $map[$inv['id']] = $inv;
+                    }
+                }
+                return $map;
+            }
+        }
+        return [];
+    }
 
     public function refreshInvoiceCache()
     {

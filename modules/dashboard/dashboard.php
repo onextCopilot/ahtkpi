@@ -55,9 +55,11 @@ if (!$isAdmin && !empty($user_email)) {
     // Let's keep it global for now as it's the main dashboard, but fix the calculation.
 }
 
-$res = $conn->query("SELECT d.amount, d.currency, d.payment_status, d.invoice_date, d.odoo_invoice_id, st.name as team_name 
-                    FROM debts d 
+$res = $conn->query("SELECT d.amount, d.currency, d.payment_status, d.invoice_date, d.odoo_invoice_id, st.name as team_name
+                    FROM debts d
                     LEFT JOIN sale_teams st ON d.sale_team_id = st.id");
+
+$odoo_map = $odoo->getInvoiceMap();
 
 if ($res) {
     while ($row = $res->fetch_assoc()) {
@@ -67,13 +69,24 @@ if ($res) {
         $date = !empty($row['invoice_date']) ? $row['invoice_date'] : date('Y-m-d');
         $inv_year = (int) date('Y', strtotime($date));
         $inv_month = (int) date('n', strtotime($date));
+        $oid = $row['odoo_invoice_id'];
 
-        $rate = $odoo->getRate($curr, $date);
-        $vnd_value = ($rate > 0) ? ((float) $row['amount'] / $rate) : (float) $row['amount'];
+        // Convert to VND
+        $vnd_value = 0;
+        if (!empty($oid) && isset($odoo_map[$oid])) {
+            $odoo_inv = $odoo_map[$oid];
+            $vnd_value = isset($odoo_inv['amount_total_signed']) ? abs((float) $odoo_inv['amount_total_signed']) : 0;
+        }
+
+        // Fallback to manual rate calculation if no odoo data or manual entry
+        if ($vnd_value == 0) {
+            $rate = $odoo->getRate($curr, $date);
+            $vnd_value = ($rate > 0) ? ((float) $row['amount'] / $rate) : (float) $row['amount'];
+        }
 
         // Tracking processed Odoo IDs to avoid double counting
-        if (!empty($row['odoo_invoice_id'])) {
-            $processed_odoo_ids[] = $row['odoo_invoice_id'];
+        if (!empty($oid)) {
+            $processed_odoo_ids[] = $oid;
         }
 
         $is_paid = (strcasecmp(trim($p_status), 'Paid') === 0);

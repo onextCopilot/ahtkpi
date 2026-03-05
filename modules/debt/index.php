@@ -243,15 +243,28 @@ $res = $conn->query("SELECT d.*, st.name as team_name
                     LEFT JOIN sale_teams st ON d.sale_team_id = st.id 
                     $where_sql 
                     ORDER BY d.invoice_date DESC, d.am ASC, d.id DESC");
+
+$odoo_map = $odoo->getInvoiceMap();
+
 if ($res) {
     while ($row = $res->fetch_assoc()) {
         $amount = (float) $row['amount'];
         $curr = $row['currency'] ?: 'USD';
         $date = !empty($row['invoice_date']) ? $row['invoice_date'] : date('Y-m-d');
+        $oid = $row['odoo_invoice_id'];
 
         // Convert to VND
-        $rate = $odoo->getRate($curr, $date);
-        $vnd_value = ($rate > 0) ? ($amount / $rate) : $amount;
+        $vnd_value = 0;
+        if (!empty($oid) && isset($odoo_map[$oid])) {
+            $odoo_inv = $odoo_map[$oid];
+            $vnd_value = isset($odoo_inv['amount_total_signed']) ? abs((float) $odoo_inv['amount_total_signed']) : 0;
+        }
+
+        // Fallback to manual rate calculation if no odoo data or manual entry
+        if ($vnd_value == 0) {
+            $rate = $odoo->getRate($curr, $date);
+            $vnd_value = ($rate > 0) ? ($amount / $rate) : $amount;
+        }
 
         $total_amount_vnd += $vnd_value;
         if ($curr === 'USD') {
