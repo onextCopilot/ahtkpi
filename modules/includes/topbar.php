@@ -51,19 +51,19 @@ if (isset($_SESSION['is_am_bd']) && $_SESSION['is_am_bd'] == 1) {
         SELECT d.id, d.client_name, d.project_name, d.expected_payment_date 
         FROM debts d 
         WHERE d.am = ? AND d.payment_status = 'Not paid' 
-        AND d.expected_payment_date IS NOT NULL AND d.expected_payment_date != '0000-00-00'
+        AND d.expected_payment_date IS NOT NULL AND d.expected_payment_date > '2000-01-01'
     ");
     $stmt_notif->bind_param("s", $am_name);
     $stmt_notif->execute();
     $res_notif = $stmt_notif->get_result();
     $now_notif = new DateTime();
-    $now_notif->setTime(0,0,0);
+    $now_notif->setTime(0, 0, 0);
     $raw_notifs = [];
     while ($r_notif = $res_notif->fetch_assoc()) {
         $exp_date = new DateTime($r_notif['expected_payment_date']);
-        $exp_date->setTime(0,0,0);
+        $exp_date->setTime(0, 0, 0);
         $diff = $now_notif->diff($exp_date);
-        
+
         if ($diff->invert) {
             if ($diff->days > 60) {
                 // > 60 days
@@ -75,7 +75,7 @@ if (isset($_SESSION['is_am_bd']) && $_SESSION['is_am_bd'] == 1) {
         }
     }
     $stmt_notif->close();
-    
+
     // Now filter out the ones already read
     if (count($raw_notifs) > 0) {
         $read_stmt = $conn->prepare("SELECT debt_id, warning_level FROM debt_notifications_read WHERE user_id = ?");
@@ -83,11 +83,11 @@ if (isset($_SESSION['is_am_bd']) && $_SESSION['is_am_bd'] == 1) {
         $read_stmt->execute();
         $read_res = $read_stmt->get_result();
         $read_set = [];
-        while($r = $read_res->fetch_assoc()){
+        while ($r = $read_res->fetch_assoc()) {
             $read_set[$r['debt_id'] . '_' . $r['warning_level']] = true;
         }
         $read_stmt->close();
-        
+
         foreach ($raw_notifs as $n) {
             $key = $n['debt']['id'] . '_' . $n['level'];
             if (!isset($read_set[$key])) {
@@ -123,44 +123,58 @@ $notif_count = count($am_notifications);
         <div class="notification-container" style="position: relative;">
             <a href="#" class="notification-bell" onclick="toggleNotifications(event)"
                 style="position: relative; color: #64748b; margin-right: 8px; text-decoration: none; display: flex; align-items: center; justify-content: center; width: 36px; height: 36px; border-radius: 50%; transition: background-color 0.2s;"
-                onmouseover="this.style.backgroundColor='#f1f5f9'" onmouseout="this.style.backgroundColor='transparent'">
+                onmouseover="this.style.backgroundColor='#f1f5f9'"
+                onmouseout="this.style.backgroundColor='transparent'">
                 <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none"
                     stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                     <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path>
                     <path d="M13.73 21a2 2 0 0 1-3.46 0"></path>
                 </svg>
                 <?php if ($notif_count > 0): ?>
-                <span id="notif-badge" style="position: absolute; top: 4px; right: 4px; width: 14px; height: 14px; background-color: #ef4444; color: white; border-radius: 50%; border: 2px solid white; font-size: 8px; font-weight: bold; display: flex; align-items: center; justify-content: center;"><?php echo $notif_count > 9 ? '9+' : $notif_count; ?></span>
+                    <span id="notif-badge"
+                        style="position: absolute; top: 4px; right: 4px; width: 14px; height: 14px; background-color: #ef4444; color: white; border-radius: 50%; border: 2px solid white; font-size: 8px; font-weight: bold; display: flex; align-items: center; justify-content: center;"><?php echo $notif_count > 9 ? '9+' : $notif_count; ?></span>
                 <?php endif; ?>
             </a>
 
             <!-- Dropdown Menu -->
-            <div id="notification-dropdown" style="display: none; position: absolute; top: 45px; right: 0; width: 320px; background: white; border: 1px solid #e2e8f0; border-radius: 8px; box-shadow: 0 10px 15px -3px rgba(0,0,0,0.1); z-index: 1000; overflow: hidden;">
-                <div style="padding: 12px 16px; border-bottom: 1px solid #f1f5f9; display: flex; justify-content: space-between; align-items: center; background: #f8fafc;">
+            <div id="notification-dropdown"
+                style="display: none; position: absolute; top: 45px; right: 0; width: 320px; background: white; border: 1px solid #e2e8f0; border-radius: 8px; box-shadow: 0 10px 15px -3px rgba(0,0,0,0.1); z-index: 1000; overflow: hidden;">
+                <div
+                    style="padding: 12px 16px; border-bottom: 1px solid #f1f5f9; display: flex; justify-content: space-between; align-items: center; background: #f8fafc;">
                     <span style="font-weight: 600; font-size: 0.95rem; color: #1e293b;">Thông báo</span>
                     <?php if ($notif_count > 0): ?>
-                    <a href="#" onclick="markAllAsRead(event)" style="font-size: 0.8rem; color: #3b82f6; text-decoration: none;">Đánh dấu đã đọc tất cả</a>
+                        <a href="#" onclick="markAllAsRead(event)"
+                            style="font-size: 0.8rem; color: #3b82f6; text-decoration: none;">Đánh dấu đã đọc tất cả</a>
                     <?php endif; ?>
                 </div>
                 <div style="max-height: 350px; overflow-y: auto;">
                     <?php if ($notif_count > 0): ?>
-                        <?php foreach ($am_notifications as $notif): 
+                        <?php foreach ($am_notifications as $notif):
                             $d = $notif['debt'];
                             $lvl = $notif['level'];
                             $is_critical = ($lvl == 60);
                             $bg_col = $is_critical ? '#fef2f2' : '#fffbeb';
                             $text_col = $is_critical ? '#dc2626' : '#d97706';
                             $title = $is_critical ? 'Quá hạn > 60 ngày' : 'Cảnh báo quá hạn > 30 ngày';
-                        ?>
-                        <div class="notif-item" id="notif-item-<?php echo $d['id'].'-'.$lvl; ?>" style="padding: 12px 16px; border-bottom: 1px solid #f1f5f9; background: <?php echo $bg_col; ?>; transition: background 0.2s; position: relative;" onmouseover="this.style.filter='brightness(0.98)'" onmouseout="this.style.filter='none'">
-                            <div style="font-size: 0.85rem; font-weight: 700; color: <?php echo $text_col; ?>; margin-bottom: 4px;"><?php echo $title; ?></div>
-                            <div style="font-size: 0.8rem; color: #475569; margin-bottom: 8px;">
-                                <strong><?php echo htmlspecialchars($d['client_name'] ?? ''); ?></strong> - <?php echo htmlspecialchars($d['project_name'] ?? ''); ?>
-                                <br><span style="color: #94a3b8; font-size: 0.75rem;">Hạn thanh toán: <?php echo date('d/m/Y', strtotime($d['expected_payment_date'])); ?></span>
+                            ?>
+                            <div class="notif-item" id="notif-item-<?php echo $d['id'] . '-' . $lvl; ?>"
+                                style="padding: 12px 16px; border-bottom: 1px solid #f1f5f9; background: <?php echo $bg_col; ?>; transition: background 0.2s; position: relative;"
+                                onmouseover="this.style.filter='brightness(0.98)'" onmouseout="this.style.filter='none'">
+                                <div
+                                    style="font-size: 0.85rem; font-weight: 700; color: <?php echo $text_col; ?>; margin-bottom: 4px;">
+                                    <?php echo $title; ?></div>
+                                <div style="font-size: 0.8rem; color: #475569; margin-bottom: 8px;">
+                                    <strong><?php echo htmlspecialchars($d['client_name'] ?? ''); ?></strong> -
+                                    <?php echo htmlspecialchars($d['project_name'] ?? ''); ?>
+                                    <br><span style="color: #94a3b8; font-size: 0.75rem;">Hạn thanh toán:
+                                        <?php echo date('d/m/Y', strtotime($d['expected_payment_date'])); ?></span>
+                                </div>
+                                <button
+                                    onclick="markNotificationRead(<?php echo $d['id']; ?>, <?php echo $lvl; ?>, 'notif-item-<?php echo $d['id'] . '-' . $lvl; ?>')"
+                                    style="background: none; border: 1px solid <?php echo $text_col; ?>; color: <?php echo $text_col; ?>; padding: 4px 8px; border-radius: 4px; font-size: 0.7rem; cursor: pointer; transition: all 0.2s; float: right;">Đánh
+                                    dấu đã đọc</button>
+                                <div style="clear: both;"></div>
                             </div>
-                            <button onclick="markNotificationRead(<?php echo $d['id']; ?>, <?php echo $lvl; ?>, 'notif-item-<?php echo $d['id'].'-'.$lvl; ?>')" style="background: none; border: 1px solid <?php echo $text_col; ?>; color: <?php echo $text_col; ?>; padding: 4px 8px; border-radius: 4px; font-size: 0.7rem; cursor: pointer; transition: all 0.2s; float: right;">Đánh dấu đã đọc</button>
-                            <div style="clear: both;"></div>
-                        </div>
                         <?php endforeach; ?>
                     <?php else: ?>
                         <div style="padding: 24px; text-align: center; color: #94a3b8; font-size: 0.9rem;">
@@ -183,87 +197,87 @@ $notif_count = count($am_notifications);
             <?php endif; ?>
         </a>
     </div>
-<script>
-function toggleNotifications(e) {
-    e.preventDefault();
-    const dropdown = document.getElementById('notification-dropdown');
-    dropdown.style.display = dropdown.style.display === 'none' ? 'block' : 'none';
-}
-
-// Close when clicking outside
-document.addEventListener('click', function(e) {
-    const container = document.querySelector('.notification-container');
-    const dropdown = document.getElementById('notification-dropdown');
-    if (container && dropdown && !container.contains(e.target)) {
-        dropdown.style.display = 'none';
-    }
-});
-
-function markNotificationRead(debtId, level, elemId) {
-    fetch('/api/mark_notification_read', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ debt_id: debtId, warning_level: level })
-    })
-    .then(res => res.json())
-    .then(data => {
-        if(data.success) {
-            const elem = document.getElementById(elemId);
-            if(elem) {
-                elem.style.height = elem.offsetHeight + 'px';
-                elem.style.transition = 'all 0.3s';
-                elem.style.opacity = '0';
-                setTimeout(() => { elem.style.display = 'none'; }, 300);
-            }
-            // decrease badge
-            decreaseBadge();
+    <script>
+        function toggleNotifications(e) {
+            e.preventDefault();
+            const dropdown = document.getElementById('notification-dropdown');
+            dropdown.style.display = dropdown.style.display === 'none' ? 'block' : 'none';
         }
-    });
-}
 
-function markAllAsRead(e) {
-    e.preventDefault();
-    const notifs = [
-        <?php 
-        if ($notif_count > 0) {
-            $notif_arr = [];
-            foreach ($am_notifications as $n) {
-                $notif_arr[] = "{debt_id: " . $n['debt']['id'] . ", warning_level: " . $n['level'] . "}";
+        // Close when clicking outside
+        document.addEventListener('click', function (e) {
+            const container = document.querySelector('.notification-container');
+            const dropdown = document.getElementById('notification-dropdown');
+            if (container && dropdown && !container.contains(e.target)) {
+                dropdown.style.display = 'none';
             }
-            echo implode(", ", $notif_arr);
+        });
+
+        function markNotificationRead(debtId, level, elemId) {
+            fetch('/api/mark_notification_read', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ debt_id: debtId, warning_level: level })
+            })
+                .then(res => res.json())
+                .then(data => {
+                    if (data.success) {
+                        const elem = document.getElementById(elemId);
+                        if (elem) {
+                            elem.style.height = elem.offsetHeight + 'px';
+                            elem.style.transition = 'all 0.3s';
+                            elem.style.opacity = '0';
+                            setTimeout(() => { elem.style.display = 'none'; }, 300);
+                        }
+                        // decrease badge
+                        decreaseBadge();
+                    }
+                });
         }
-        ?>
-    ];
-    if(notifs.length === 0) return;
-    
-    fetch('/api/mark_notification_read', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'mark_all', notifications: notifs })
-    })
-    .then(res => res.json())
-    .then(data => {
-        if(data.success) {
-            // hide all items
-            document.querySelectorAll('.notif-item').forEach(el => el.style.display = 'none');
+
+        function markAllAsRead(e) {
+            e.preventDefault();
+            const notifs = [
+                <?php
+                if ($notif_count > 0) {
+                    $notif_arr = [];
+                    foreach ($am_notifications as $n) {
+                        $notif_arr[] = "{debt_id: " . $n['debt']['id'] . ", warning_level: " . $n['level'] . "}";
+                    }
+                    echo implode(", ", $notif_arr);
+                }
+                ?>
+            ];
+            if (notifs.length === 0) return;
+
+            fetch('/api/mark_notification_read', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action: 'mark_all', notifications: notifs })
+            })
+                .then(res => res.json())
+                .then(data => {
+                    if (data.success) {
+                        // hide all items
+                        document.querySelectorAll('.notif-item').forEach(el => el.style.display = 'none');
+                        const badge = document.getElementById('notif-badge');
+                        if (badge) badge.style.display = 'none';
+                    }
+                });
+        }
+
+        function decreaseBadge() {
             const badge = document.getElementById('notif-badge');
-            if(badge) badge.style.display = 'none';
+            if (badge) {
+                let text = badge.innerText;
+                if (text === '9+') return; // simplify if 9+
+                let count = parseInt(text);
+                if (!isNaN(count) && count > 1) {
+                    badge.innerText = count - 1;
+                } else {
+                    badge.style.display = 'none';
+                }
+            }
         }
-    });
-}
-
-function decreaseBadge() {
-    const badge = document.getElementById('notif-badge');
-    if(badge) {
-        let text = badge.innerText;
-        if(text === '9+') return; // simplify if 9+
-        let count = parseInt(text);
-        if(!isNaN(count) && count > 1) {
-            badge.innerText = count - 1;
-        } else {
-            badge.style.display = 'none';
-        }
-    }
-}
-</script>
+    </script>
 </header>
