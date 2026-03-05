@@ -1189,7 +1189,8 @@ if ($res_am && $res_am->num_rows > 0) {
                                 <?php foreach ($current_data as $item): ?>
                                     <tr style="user-select: none;">
                                         <td style="text-align: center; color: #94a3b8; font-weight: 500;">
-                                            <?php echo $globalIdx++; ?></td>
+                                            <?php echo $globalIdx++; ?>
+                                        </td>
                                         <td class="cell-company"><?php echo htmlspecialchars($item['company'] ?? ''); ?></td>
                                         <td>
                                             <?php
@@ -1210,7 +1211,8 @@ if ($res_am && $res_am->num_rows > 0) {
                                         <td><?php echo htmlspecialchars($item['payment_milestone'] ?? ''); ?></td>
                                         <td><?php echo formatDate($item['expected_prod_date']); ?></td>
                                         <td style="font-weight: bold; color: #dc2626;">
-                                            <?php echo formatDate($item['expected_payment_date']); ?></td>
+                                            <?php echo formatDate($item['expected_payment_date']); ?>
+                                        </td>
                                         <td>
                                             <?php
                                             $sc = $item['invoice_status_class'];
@@ -1253,7 +1255,8 @@ if ($res_am && $res_am->num_rows > 0) {
                                             <?php echo htmlspecialchars($item['invoice_status'] ?? ''); ?>
                                         </td>
                                         <td style="color: #64748b; font-size: 0.85rem;">
-                                            <?php echo htmlspecialchars($item['vat_invoice'] ?? ''); ?></td>
+                                            <?php echo htmlspecialchars($item['vat_invoice'] ?? ''); ?>
+                                        </td>
                                         <td>
                                             <?php
                                             $ps = $item['payment_status'];
@@ -1273,7 +1276,7 @@ if ($res_am && $res_am->num_rows > 0) {
                                         </td>
                                         <td>
                                             <?php
-                                            $prs = $item['production_status'];
+                                            $prs = $item['production_status'] ?? '';
                                             $prsc = 'prod-dc1'; // default
                                             if (strpos($prs, 'DC5') !== false)
                                                 $prsc = 'prod-dc5';
