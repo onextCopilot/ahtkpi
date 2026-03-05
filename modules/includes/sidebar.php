@@ -36,7 +36,7 @@ function isMenuItemActive($path, $current_uri)
 
         <!-- Debts Management Dropdown -->
         <?php if (!empty($_SESSION['is_am_bd']) || $_SESSION['role'] === 'admin'): ?>
-            <div class="nav-item nav-item-parent <?php echo (strpos($current_uri, '/debt') !== false || strpos($current_uri, '/my-debt') !== false) ? 'open' : ''; ?>"
+            <div class="nav-item nav-item-parent <?php echo (strpos($current_uri, '/debt') !== false || strpos($current_uri, '/my-debt') !== false || strpos($current_uri, '/debt-warning') !== false) ? 'open' : ''; ?>"
                 onclick="toggleSubmenu(this)">
                 <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
                     stroke-linecap="round" stroke-linejoin="round">
@@ -52,13 +52,17 @@ function isMenuItemActive($path, $current_uri)
                 </svg>
             </div>
             <div
-                class="submenu <?php echo (strpos($current_uri, '/debt') !== false || strpos($current_uri, '/my-debt') !== false) ? 'open' : ''; ?>">
+                class="submenu <?php echo (strpos($current_uri, '/debt') !== false || strpos($current_uri, '/my-debt') !== false || strpos($current_uri, '/debt-warning') !== false) ? 'open' : ''; ?>">
                 <a href="/debt" class="submenu-item <?php echo ($current_uri === '/debt') ? 'active' : ''; ?>">
                     <span>All Debts</span>
                 </a>
                 <a href="/my-debt"
                     class="submenu-item <?php echo ($current_uri === '/my-debt' || strpos($current_uri, '/my-debt') !== false) ? 'active' : ''; ?>">
                     <span>My Debts</span>
+                </a>
+                <a href="/debt-warning"
+                    class="submenu-item <?php echo ($current_uri === '/debt-warning' || strpos($current_uri, '/debt-warning') !== false) ? 'active' : ''; ?>">
+                    <span>Debts Warning</span>
                 </a>
             </div>
         <?php endif; ?>

@@ -47,6 +47,7 @@ RewriteRule ^settings/sale-levels/?$ modules/settings/sale-levels/index.php [L]
 # Application Modules
 RewriteRule ^debt/?$ modules/debt/index.php [L]
 RewriteRule ^my-debt/?$ modules/my_debt/index.php [L]
+RewriteRule ^debt-warning/?$ modules/debt_warning/index.php [L]
 RewriteRule ^customers/?$ modules/customers/index.php [L]
 RewriteRule ^invoices/?$ modules/invoices/index.php [L]
 RewriteRule ^kpi/?$ modules/kpi/index.php [L]
