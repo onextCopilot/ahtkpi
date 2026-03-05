@@ -341,18 +341,18 @@ class OdooAPI
                 }
             }
 
-            // Domain to get recent invoices (last 15 days)
-            $dateLimit = gmdate('Y-m-d H:i:s', strtotime('-15 days')); // Odoo returns/expects dates in UTC
+            // Domain to get recent invoices (last 180 days to cover past quarters)
+            $dateLimit = gmdate('Y-m-d H:i:s', strtotime('-180 days')); // Odoo returns/expects dates in UTC
 
             // Get customer invoices
             $domain = [
                 ['move_type', '=', 'out_invoice'],
                 // Include cancelled invoices in recent fetch so their state updates to 'cancel' in the cache
-                ['write_date', '>=', $dateLimit] // Only fetch last 15 days of updates to improve speed
+                ['write_date', '>=', $dateLimit] // Increased fetch window to 180 days for better coverage
             ];
 
-            // Fetch unlimited (or high limit) recent invoices
-            $recentInvoices = $this->searchRead('account.move', $domain, $fields, 0, 0);
+            // Fetch high limit recent invoices
+            $recentInvoices = $this->searchRead('account.move', $domain, $fields, 10000, 0);
 
             if (!is_array($recentInvoices)) {
                 $recentInvoices = [];
