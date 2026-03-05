@@ -286,6 +286,16 @@ class OdooAPI
             // Apply filters in memory
             $filteredInvoices = $this->filterInvoicesInMemory($allInvoices, $filters);
 
+            // Sort invoices: Recent First (Date DESC, then ID DESC)
+            usort($filteredInvoices, function ($a, $b) {
+                $dateA = $a['invoice_date'] ?: $a['date'] ?: '0000-00-00';
+                $dateB = $b['invoice_date'] ?: $b['date'] ?: '0000-00-00';
+                if ($dateA != $dateB) {
+                    return strcmp($dateB, $dateA);
+                }
+                return (int) $b['id'] - (int) $a['id'];
+            });
+
             // Calculate total matching
             $totalCount = count($filteredInvoices);
 
@@ -341,18 +351,18 @@ class OdooAPI
                 }
             }
 
-            // Domain to get recent invoices (last 180 days to cover past quarters)
-            $dateLimit = gmdate('Y-m-d H:i:s', strtotime('-180 days')); // Odoo returns/expects dates in UTC
+            // Domain to get recent invoices (last 365 days to cover very old draft invoices)
+            $dateLimit = gmdate('Y-m-d H:i:s', strtotime('-365 days')); // Odoo returns/expects dates in UTC
 
             // Get customer invoices
             $domain = [
                 ['move_type', '=', 'out_invoice'],
-                // Include cancelled invoices in recent fetch so their state updates to 'cancel' in the cache
-                ['write_date', '>=', $dateLimit] // Increased fetch window to 180 days for better coverage
+                // Include all states (draft, posted, cancel)
+                ['write_date', '>=', $dateLimit]
             ];
 
             // Fetch high limit recent invoices
-            $recentInvoices = $this->searchRead('account.move', $domain, $fields, 10000, 0);
+            $recentInvoices = $this->searchRead('account.move', $domain, $fields, 20000, 0);
 
             if (!is_array($recentInvoices)) {
                 $recentInvoices = [];
