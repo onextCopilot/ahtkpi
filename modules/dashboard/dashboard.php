@@ -71,15 +71,21 @@ if ($res) {
         $inv_month = (int) date('n', strtotime($date));
         $oid = $row['odoo_invoice_id'];
 
-        // Convert to VND
+        // Convert to VND using Odoo ratio if available
         $vnd_value = 0;
         if (!empty($oid) && isset($odoo_map[$oid])) {
             $odoo_inv = $odoo_map[$oid];
-            $vnd_value = isset($odoo_inv['amount_total_signed']) ? abs((float) $odoo_inv['amount_total_signed']) : 0;
+            $odoo_total = (float) $odoo_inv['amount_total'];
+            $odoo_signed = abs((float) $odoo_inv['amount_total_signed']);
+
+            if ($odoo_total > 0) {
+                // Apply proportional ratio
+                $vnd_value = ((float) $row['amount']) * ($odoo_signed / $odoo_total);
+            }
         }
 
-        // Fallback to manual rate calculation if no odoo data or manual entry
-        if ($vnd_value == 0) {
+        // Fallback to manual rate calculation
+        if ($vnd_value <= 0) {
             $rate = $odoo->getRate($curr, $date);
             $vnd_value = ($rate > 0) ? ((float) $row['amount'] / $rate) : (float) $row['amount'];
         }

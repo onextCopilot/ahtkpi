@@ -253,15 +253,21 @@ if ($res) {
         $date = !empty($row['invoice_date']) ? $row['invoice_date'] : date('Y-m-d');
         $oid = $row['odoo_invoice_id'];
 
-        // Convert to VND
+        // Convert to VND using Odoo exchange rate ratio if available
         $vnd_value = 0;
         if (!empty($oid) && isset($odoo_map[$oid])) {
             $odoo_inv = $odoo_map[$oid];
-            $vnd_value = isset($odoo_inv['amount_total_signed']) ? abs((float) $odoo_inv['amount_total_signed']) : 0;
+            $odoo_total = (float) $odoo_inv['amount_total'];
+            $odoo_signed = abs((float) $odoo_inv['amount_total_signed']);
+
+            if ($odoo_total > 0) {
+                // Apply the exact conversion ratio from Odoo to the debt amount
+                $vnd_value = $amount * ($odoo_signed / $odoo_total);
+            }
         }
 
-        // Fallback to manual rate calculation if no odoo data or manual entry
-        if ($vnd_value == 0) {
+        // Fallback to manual rate calculation if no odoo data or ratio is 0
+        if ($vnd_value <= 0) {
             $rate = $odoo->getRate($curr, $date);
             $vnd_value = ($rate > 0) ? ($amount / $rate) : $amount;
         }
