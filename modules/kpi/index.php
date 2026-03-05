@@ -176,6 +176,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 $defs = [];
 $filter_dept = isset($_GET['dept']) ? intval($_GET['dept']) : (!empty($departments) ? $departments[0]['id'] : 0);
 $where = "WHERE k.year = $year" . ($filter_dept ? " AND k.department_id = $filter_dept" : "");
+// ── Auto-create sorting columns if missing ──
+$col_check = $conn->query("SHOW COLUMNS FROM kpi_definitions LIKE 'sort_order'");
+if ($col_check && $col_check->num_rows == 0) {
+    $conn->query("ALTER TABLE kpi_definitions 
+            ADD COLUMN sort_order INT DEFAULT 0 AFTER kpi_name,
+            ADD COLUMN group_order INT DEFAULT 0 AFTER kpi_group");
+}
+
 $r = $conn->query("SELECT k.*, d.name dept_name, u.full_name owner_name, u.avatar owner_avatar, d.owner_id as dept_owner_id, d.manager_id as dept_manager_id
     FROM kpi_definitions k
     LEFT JOIN departments d ON k.department_id=d.id
