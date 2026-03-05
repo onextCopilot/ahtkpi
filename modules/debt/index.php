@@ -206,7 +206,7 @@ if (!empty($_GET['month'])) {
 
 if (!empty($_GET['week'])) {
     $week = intval($_GET['week']);
-    $where_clauses[] = "CEIL(DAY(d.invoice_date) / 7) = $week";
+    $where_clauses[] = "(d.weekly_update LIKE '%W$week%' OR d.weekly_update LIKE '%w$week%' OR d.weekly_update = '$week')";
 }
 
 $selected_team = $_GET['team'] ?? 'dashboard'; // Default to dashboard as requested
