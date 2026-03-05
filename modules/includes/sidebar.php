@@ -64,6 +64,10 @@ function isMenuItemActive($path, $current_uri)
                     class="submenu-item <?php echo ($current_uri === '/debt-warning' || strpos($current_uri, '/debt-warning') !== false) ? 'active' : ''; ?>">
                     <span>Debts Warning</span>
                 </a>
+                <a href="/sale-report"
+                    class="submenu-item <?php echo ($current_uri === '/sale-report' || strpos($current_uri, '/sale-report') !== false) ? 'active' : ''; ?>">
+                    <span>Sale Reports</span>
+                </a>
             </div>
         <?php endif; ?>
 
