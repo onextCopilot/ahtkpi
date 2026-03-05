@@ -43,7 +43,7 @@ try {
     }
 
     // Filter by current Odoo user (salesperson)
-    if ($my_only && $_SESSION['role'] !== 'admin' && $current_user_email) {
+    if ($my_only && $current_user_email) {
         $odoo_users = $odoo->searchRead('res.users', [['login', '=', $current_user_email]], ['id'], 1);
         if (!empty($odoo_users[0]['id'])) {
             $domain[] = ['user_id', '=', $odoo_users[0]['id']];
