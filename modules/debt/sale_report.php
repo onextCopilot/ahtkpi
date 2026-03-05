@@ -134,8 +134,6 @@ $page_title = "Sale Reports";
     <title><?php echo $page_title; ?> - Management System</title>
     <link rel="stylesheet" href="/assets/css/dashboard.css">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-    <!-- Bootstrap CSS for basic classes if needed -->
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <style>
         body {
             font-family: 'Inter', sans-serif;
@@ -146,32 +144,69 @@ $page_title = "Sale Reports";
             background-color: #f8fafc;
         }
 
-        .table-container {
-            padding: 20px;
+        /* Google Sheets Style Table */
+        .table-card {
             background: white;
-            border-radius: 12px;
-            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
+            border: 1px solid #c0c0c0;
+            border-radius: 0;
+            box-shadow: none;
+            overflow: auto;
+            max-height: calc(100vh - 120px);
             margin: 20px;
+        }
+
+        .table-card table {
+            width: 100%;
+            border-collapse: collapse;
+            font-family: Arial, sans-serif;
+            font-size: 13px;
+            color: #000;
+        }
+
+        .table-card th {
+            background: #f8f9fa;
+            color: #5f6368;
+            font-weight: bold;
+            text-align: left;
+            padding: 4px 8px;
+            border: 1px solid #e0e0e0;
+            white-space: nowrap;
+            height: 30px;
+        }
+
+        .table-card td {
+            padding: 4px 8px;
+            border: 1px solid #e0e0e0;
+            color: #202124;
+            white-space: nowrap;
+            height: 25px;
+            vertical-align: middle;
+        }
+
+        .table-card tr:hover td {
+            background-color: #f1f3f4;
         }
 
         .editable-field {
             border: 1px solid transparent;
-            border-radius: 4px;
-            padding: 4px 8px;
+            background: transparent;
             width: 100%;
+            padding: 2px 4px;
             transition: 0.2s;
             font-size: 13px;
+            font-family: Arial, sans-serif;
+            outline: none;
+            box-sizing: border-box;
         }
 
         .editable-field:hover {
             border-color: #cbd5e1;
-            background: #f8fafc;
         }
 
         .editable-field:focus {
-            border-color: #3b82f6;
-            outline: none;
             background: white;
+            box-shadow: inset 0 0 0 2px #1a73e8;
+            border-color: transparent;
         }
 
         .text-end {
@@ -221,150 +256,146 @@ $page_title = "Sale Reports";
                     <div class="alert alert-danger mx-4 mt-3"><?php echo htmlspecialchars($error_message); ?></div>
                 <?php endif; ?>
 
-                <div class="table-container">
-                    <div class="table-responsive">
-                        <table class="table table-hover align-middle mb-0" style="min-width: 1600px; font-size: 13px;">
-                            <thead class="bg-light">
-                                <tr class="text-secondary">
-                                    <th style="width: 40px;">STT</th>
-                                    <th>Khách hàng</th>
-                                    <th>Dự án</th>
-                                    <th>Mã dự án</th>
-                                    <th>Ngày ký HĐ</th>
-                                    <th>Loại HĐ</th>
-                                    <th>Presales</th>
-                                    <th>Loại KH</th>
-                                    <th class="text-end">Giá trị (Untaxed)</th>
-                                    <th>%Profit PAKD</th>
-                                    <th class="text-end">Net Profit</th>
-                                    <th>% Com (Lead)</th>
-                                    <th>% Bonus</th>
-                                    <th>% Com 1</th>
-                                    <th>% Com 2</th>
-                                    <th>Note</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                <?php
-                                $stt = 1;
-                                $total_amount = 0;
-                                foreach ($invoices as $inv):
-                                    $inv_id = $inv['id'];
-                                    $detail = $local_details[$inv_id] ?? [];
-                                    $amount = abs($inv['amount_total_signed'] ?? 0);
-                                    $total_amount += $amount;
+                <div class="table-card">
+                    <table style="min-width: 1600px;">
+                        <thead>
+                            <tr>
+                                <th style="width: 40px; text-align: center;">STT</th>
+                                <th>Khách hàng</th>
+                                <th>Dự án</th>
+                                <th>Mã dự án</th>
+                                <th>Ngày ký HĐ</th>
+                                <th>Loại HĐ</th>
+                                <th>Presales</th>
+                                <th>Loại KH</th>
+                                <th class="text-end">Giá trị (Untaxed)</th>
+                                <th>%Profit PAKD</th>
+                                <th class="text-end">Net Profit</th>
+                                <th>% Com (Lead)</th>
+                                <th>% Bonus</th>
+                                <th>% Com 1</th>
+                                <th>% Com 2</th>
+                                <th>Note</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <?php
+                            $stt = 1;
+                            $total_amount = 0;
+                            foreach ($invoices as $inv):
+                                $inv_id = $inv['id'];
+                                $detail = $local_details[$inv_id] ?? [];
+                                $amount = abs($inv['amount_total_signed'] ?? 0);
+                                $total_amount += $amount;
 
-                                    $client_type = $detail['client_type'] ?? '';
-                                    $com1 = ($client_type === 'Old client') ? '0.5%' : (($client_type === 'New client') ? '1%' : '');
-                                    ?>
-                                    <tr data-id="<?php echo $inv_id; ?>">
-                                        <td><?php echo $stt++; ?></td>
-                                        <td class="text-truncate" style="max-width: 150px;"
-                                            title="<?php echo htmlspecialchars($inv['partner_id'][1] ?? ''); ?>">
-                                            <?php echo htmlspecialchars($inv['partner_id'][1] ?? '-'); ?>
-                                        </td>
-                                        <td class="text-truncate" style="max-width: 150px;"
-                                            title="<?php echo htmlspecialchars($inv['invoice_origin'] ?: ($inv['ref'] ?: '-')); ?>">
-                                            <?php echo htmlspecialchars($inv['invoice_origin'] ?: ($inv['ref'] ?: '-')); ?>
-                                        </td>
-                                        <td><span
-                                                class="badge bg-secondary-subtle text-secondary border"><?php echo htmlspecialchars($inv['x_studio_project_code'] ?? '-'); ?></span>
-                                        </td>
-
-                                        <td>
-                                            <input type="date" class="editable-field" data-field="contract_date"
-                                                value="<?php echo $detail['contract_date'] ?? ''; ?>">
-                                        </td>
-                                        <td>
-                                            <select class="editable-field" data-field="contract_type">
-                                                <option value="">--</option>
-                                                <?php foreach (['Service', 'Trading', 'Dedicated', 'License'] as $opt): ?>
-                                                    <option value="<?php echo $opt; ?>" <?php echo ($detail['contract_type'] ?? '') === $opt ? 'selected' : ''; ?>>
-                                                        <?php echo $opt; ?>
-                                                    </option>
-                                                <?php endforeach; ?>
-                                            </select>
-                                        </td>
-                                        <td>
-                                            <select class="editable-field" data-field="presales">
-                                                <option value="">--</option>
-                                                <?php foreach (['No presales', '0%', '0.25%', '0.5%'] as $opt): ?>
-                                                    <option value="<?php echo $opt; ?>" <?php echo ($detail['presales'] ?? '') === $opt ? 'selected' : ''; ?>>
-                                                        <?php echo $opt; ?>
-                                                    </option>
-                                                <?php endforeach; ?>
-                                            </select>
-                                        </td>
-                                        <td>
-                                            <select class="editable-field" data-field="client_type">
-                                                <option value="">--</option>
-                                                <?php foreach (['New client', 'Old client'] as $opt): ?>
-                                                    <option value="<?php echo $opt; ?>" <?php echo ($detail['client_type'] ?? '') === $opt ? 'selected' : ''; ?>>
-                                                        <?php echo $opt; ?>
-                                                    </option>
-                                                <?php endforeach; ?>
-                                            </select>
-                                        </td>
-
-                                        <td class="text-end fw-bold">
-                                            <?php echo number_format($amount, 2); ?>
-                                        </td>
-
-                                        <td>
-                                            <input type="text" class="editable-field" data-field="profit_pakd"
-                                                value="<?php echo htmlspecialchars($detail['profit_pakd'] ?? ''); ?>"
-                                                placeholder="...">
-                                        </td>
-                                        <td>
-                                            <input type="number" step="0.01" class="editable-field text-end"
-                                                data-field="net_profit" value="<?php echo $detail['net_profit'] ?? ''; ?>">
-                                        </td>
-                                        <td>
-                                            <select class="editable-field" data-field="com_lead_source">
-                                                <option value="0" <?php echo ($detail['com_lead_source'] ?? 0) == 0 ? 'selected' : ''; ?>>No</option>
-                                                <option value="1" <?php echo ($detail['com_lead_source'] ?? 0) == 1 ? 'selected' : ''; ?>>Yes</option>
-                                            </select>
-                                        </td>
-                                        <td>
-                                            <select class="editable-field" data-field="bonus_license_trading">
-                                                <option value="0" <?php echo ($detail['bonus_license_trading'] ?? 0) == 0 ? 'selected' : ''; ?>>No</option>
-                                                <option value="1" <?php echo ($detail['bonus_license_trading'] ?? 0) == 1 ? 'selected' : ''; ?>>Yes</option>
-                                            </select>
-                                        </td>
-                                        <td class="com1-cell text-center"><?php echo $com1; ?></td>
-                                        <td>
-                                            <select class="editable-field" data-field="com_2">
-                                                <option value="">--</option>
-                                                <?php foreach (['0.5%', '1%', '1.5%', '2%', '2.5%', '3%'] as $opt): ?>
-                                                    <option value="<?php echo $opt; ?>" <?php echo ($detail['com_2'] ?? '') === $opt ? 'selected' : ''; ?>>
-                                                        <?php echo $opt; ?>
-                                                    </option>
-                                                <?php endforeach; ?>
-                                            </select>
-                                        </td>
-                                        <td>
-                                            <textarea class="editable-field" data-field="note" rows="1"
-                                                style="height: 32px;"><?php echo htmlspecialchars($detail['note'] ?? ''); ?></textarea>
-                                        </td>
-                                    </tr>
-                                <?php endforeach; ?>
-                            </tbody>
-                            <tfoot class="bg-light fw-bold">
-                                <tr>
-                                    <td colspan="8" class="text-end">TOTAL VALUE:</td>
-                                    <td class="text-end text-primary"><?php echo number_format($total_amount, 2); ?>
+                                $client_type = $detail['client_type'] ?? '';
+                                $com1 = ($client_type === 'Old client') ? '0.5%' : (($client_type === 'New client') ? '1%' : '');
+                                ?>
+                                <tr data-id="<?php echo $inv_id; ?>">
+                                    <td style="text-align: center;"><?php echo $stt++; ?></td>
+                                    <td class="text-truncate" style="max-width: 150px;"
+                                        title="<?php echo htmlspecialchars($inv['partner_id'][1] ?? ''); ?>">
+                                        <?php echo htmlspecialchars($inv['partner_id'][1] ?? '-'); ?>
                                     </td>
-                                    <td colspan="7"></td>
+                                    <td class="text-truncate" style="max-width: 150px;"
+                                        title="<?php echo htmlspecialchars($inv['invoice_origin'] ?: ($inv['ref'] ?: '-')); ?>">
+                                        <?php echo htmlspecialchars($inv['invoice_origin'] ?: ($inv['ref'] ?: '-')); ?>
+                                    </td>
+                                    <td style="color: #5f6368;">
+                                        <?php echo htmlspecialchars($inv['x_studio_project_code'] ?? '-'); ?></td>
+
+                                    <td>
+                                        <input type="date" class="editable-field" data-field="contract_date"
+                                            value="<?php echo $detail['contract_date'] ?? ''; ?>">
+                                    </td>
+                                    <td>
+                                        <select class="editable-field" data-field="contract_type">
+                                            <option value="">--</option>
+                                            <?php foreach (['Service', 'Trading', 'Dedicated', 'License'] as $opt): ?>
+                                                <option value="<?php echo $opt; ?>" <?php echo ($detail['contract_type'] ?? '') === $opt ? 'selected' : ''; ?>>
+                                                    <?php echo $opt; ?>
+                                                </option>
+                                            <?php endforeach; ?>
+                                        </select>
+                                    </td>
+                                    <td>
+                                        <select class="editable-field" data-field="presales">
+                                            <option value="">--</option>
+                                            <?php foreach (['No presales', '0%', '0.25%', '0.5%'] as $opt): ?>
+                                                <option value="<?php echo $opt; ?>" <?php echo ($detail['presales'] ?? '') === $opt ? 'selected' : ''; ?>>
+                                                    <?php echo $opt; ?>
+                                                </option>
+                                            <?php endforeach; ?>
+                                        </select>
+                                    </td>
+                                    <td>
+                                        <select class="editable-field" data-field="client_type">
+                                            <option value="">--</option>
+                                            <?php foreach (['New client', 'Old client'] as $opt): ?>
+                                                <option value="<?php echo $opt; ?>" <?php echo ($detail['client_type'] ?? '') === $opt ? 'selected' : ''; ?>>
+                                                    <?php echo $opt; ?>
+                                                </option>
+                                            <?php endforeach; ?>
+                                        </select>
+                                    </td>
+
+                                    <td class="text-end fw-bold">
+                                        <?php echo number_format($amount, 2); ?>
+                                    </td>
+
+                                    <td>
+                                        <input type="text" class="editable-field" data-field="profit_pakd"
+                                            value="<?php echo htmlspecialchars($detail['profit_pakd'] ?? ''); ?>"
+                                            placeholder="...">
+                                    </td>
+                                    <td>
+                                        <input type="number" step="0.01" class="editable-field text-end"
+                                            data-field="net_profit" value="<?php echo $detail['net_profit'] ?? ''; ?>">
+                                    </td>
+                                    <td>
+                                        <select class="editable-field" data-field="com_lead_source">
+                                            <option value="0" <?php echo ($detail['com_lead_source'] ?? 0) == 0 ? 'selected' : ''; ?>>No</option>
+                                            <option value="1" <?php echo ($detail['com_lead_source'] ?? 0) == 1 ? 'selected' : ''; ?>>Yes</option>
+                                        </select>
+                                    </td>
+                                    <td>
+                                        <select class="editable-field" data-field="bonus_license_trading">
+                                            <option value="0" <?php echo ($detail['bonus_license_trading'] ?? 0) == 0 ? 'selected' : ''; ?>>No</option>
+                                            <option value="1" <?php echo ($detail['bonus_license_trading'] ?? 0) == 1 ? 'selected' : ''; ?>>Yes</option>
+                                        </select>
+                                    </td>
+                                    <td class="com1-cell text-center"><?php echo $com1; ?></td>
+                                    <td>
+                                        <select class="editable-field" data-field="com_2">
+                                            <option value="">--</option>
+                                            <?php foreach (['0.5%', '1%', '1.5%', '2%', '2.5%', '3%'] as $opt): ?>
+                                                <option value="<?php echo $opt; ?>" <?php echo ($detail['com_2'] ?? '') === $opt ? 'selected' : ''; ?>>
+                                                    <?php echo $opt; ?>
+                                                </option>
+                                            <?php endforeach; ?>
+                                        </select>
+                                    </td>
+                                    <td>
+                                        <textarea class="editable-field" data-field="note" rows="1"
+                                            style="height: 32px;"><?php echo htmlspecialchars($detail['note'] ?? ''); ?></textarea>
+                                    </td>
                                 </tr>
-                            </tfoot>
-                        </table>
-                    </div>
+                            <?php endforeach; ?>
+                        </tbody>
+                        <tfoot>
+                            <tr>
+                                <td colspan="8" class="text-end fw-bold">TOTAL VALUE:</td>
+                                <td class="text-end fw-bold" style="color: #1a73e8;">
+                                    <?php echo number_format($total_amount, 2); ?></td>
+                                <td colspan="7"></td>
+                            </tr>
+                        </tfoot>
+                    </table>
                 </div>
             </div>
         </main>
     </div>
 
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script>
         document.querySelectorAll('.editable-field').forEach(el => {
             el.addEventListener('change', function () {
