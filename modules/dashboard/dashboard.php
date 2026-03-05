@@ -339,7 +339,7 @@ $paged_customers = array_slice($new_customers, $coffset, $climit);
                         </div>
                         <div class="stat-content">
                             <h3>Total Paid (VND)</h3>
-                            <p class="stat-number" style="font-size: 1.2rem; color: #16a34a;">
+                            <p style="font-size: 1.1rem; font-weight: 700; color: #16a34a; margin: 0;">
                                 <?php echo number_format($total_paid_vnd, 0, ',', '.'); ?> ₫
                             </p>
                         </div>
@@ -355,7 +355,7 @@ $paged_customers = array_slice($new_customers, $coffset, $climit);
                         </div>
                         <div class="stat-content">
                             <h3>Pending (VND)</h3>
-                            <p class="stat-number" style="font-size: 1.2rem; color: #dc2626;">
+                            <p style="font-size: 1.1rem; font-weight: 700; color: #dc2626; margin: 0;">
                                 <?php echo number_format($total_unpaid_vnd, 0, ',', '.'); ?> ₫
                             </p>
                         </div>
