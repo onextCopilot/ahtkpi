@@ -491,7 +491,6 @@ function fmtUSD($n)
                         <thead>
                             <tr>
                                 <th class="col-num">#</th>
-                                <th style="min-width:160px">Vị trí</th>
                                 <th style="min-width:180px">Tên Level</th>
                                 <th style="min-width:130px" class="num-cell">Khung lương (tháng)</th>
                                 <th style="min-width:140px" class="num-cell">Total Salary (năm)</th>
@@ -519,7 +518,7 @@ function fmtUSD($n)
                             ?>
                             <!-- Group header -->
                             <tr>
-                                <td colspan="11" style="background:<?= $pc['bg'] ?>;padding:5px 12px;">
+                                <td colspan="10" style="background:<?= $pc['bg'] ?>;padding:5px 12px;">
                                     <span class="pos-badge" style="background:<?= $pc['badge'] ?>"><?= htmlspecialchars($pos) ?></span>
                                 </td>
                             </tr>
