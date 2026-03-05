@@ -528,7 +528,6 @@ $is_admin = ($_SESSION['role'] === 'admin');
                 const amount = typeof o.amount_total === 'number'
                     ? new Intl.NumberFormat('vi-VN').format(o.amount_total)
                     : '—';
-                const projCode = esc(o.x_studio_project_code || '—');
                 const ref = esc(o.client_order_ref || '—');
 
                 return `<tr>
@@ -538,7 +537,6 @@ $is_admin = ($_SESSION['role'] === 'admin');
                 <td>${dateStr}</td>
                 <td title="${esc(salesperson)}">${esc(salesperson)}</td>
                 <td title="${esc(team)}">${esc(team)}</td>
-                <td>${projCode}</td>
                 <td style="text-align:right;font-weight:600">${amount}</td>
                 <td>${esc(currency)}</td>
                 <td><span class="so-status ${st.cls}">${st.label}</span></td>

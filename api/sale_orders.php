@@ -63,8 +63,7 @@ try {
         'validity_date',
         'commitment_date',
         'team_id',
-        'note',
-        'x_studio_project_code'
+        'note'
     ];
 
     // Fetch with limit — Odoo handles ordering server-side
@@ -80,8 +79,7 @@ try {
             $name = strtolower($o['name'] ?? '');
             $partner = strtolower(is_array($o['partner_id']) ? ($o['partner_id'][1] ?? '') : '');
             $ref = strtolower($o['client_order_ref'] ?? '');
-            $proj = strtolower($o['x_studio_project_code'] ?? '');
-            return str_contains($name, $sl) || str_contains($partner, $sl) || str_contains($ref, $sl) || str_contains($proj, $sl);
+            return str_contains($name, $sl) || str_contains($partner, $sl) || str_contains($ref, $sl);
         }));
     }
 
