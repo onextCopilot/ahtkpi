@@ -223,7 +223,8 @@ body {
     flex-direction: column;
     background: var(--bg-secondary);
     height: 100vh;
-    overflow: hidden;
+    overflow-y: auto;
+    overflow-x: hidden;
 }
 
 .top-bar {
