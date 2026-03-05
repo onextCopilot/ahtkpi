@@ -320,7 +320,7 @@ $paged_customers = array_slice($new_customers, $coffset, $climit);
                             </svg>
                         </div>
                         <div class="stat-content">
-                            <h3>Total Debts</h3>
+                            <h3>All Debts</h3>
                             <p class="stat-number"><?php echo number_format($total_debts_vnd, 0, ',', '.'); ?> ₫</p>
                         </div>
                     </div>
