@@ -52,9 +52,14 @@ try {
         $filters['owner_email'] = $row['email'];
     }
 
-    $result = $odoo->getInvoices($limit, $offset, $filters);
-    $invoices = $result['invoices'];
-    $total = $result['total'];
+    // Get ALL matching invoices for calculations (totals per group/month)
+    $fullResult = $odoo->getInvoices(10000, 0, $filters);
+    $allInvoices = $fullResult['invoices'] ?? [];
+    $total = $fullResult['total'] ?? 0;
+
+    // Get only the paginated slice for actual display
+    $invoices = array_slice($allInvoices, $offset, $limit);
+
     $totalPages = ceil($total / $limit);
 
 } catch (Exception $e) {
@@ -451,67 +456,71 @@ function formatDate($date)
                                     // Ignore
                                 }
 
-                                // Note: $groupBy is already defined above
-                                $groupedInvoices = [];
+                                // Pre-calculate GLOBALLY matching group totals (across all pages)
+                                $allGroupInfo = [];
+                                foreach ($allInvoices as $inv) {
+                                    $date = $inv['date'] ?: $inv['invoice_date'];
+                                    $timestamp = strtotime($date);
 
+                                    if ($groupBy === 'month') {
+                                        $key = date('F Y', $timestamp);
+                                        $sortKey = date('Y-m', $timestamp);
+                                    } elseif ($groupBy === 'quarter') {
+                                        $quarter = ceil(date('n', $timestamp) / 3);
+                                        $key = "Q{$quarter} " . date('Y', $timestamp);
+                                        $sortKey = date('Y', $timestamp) . $quarter;
+                                    } elseif ($groupBy === 'year') {
+                                        $key = date('Y', $timestamp);
+                                        $sortKey = $key;
+                                    } else {
+                                        $key = 'All';
+                                        $sortKey = 0;
+                                    }
+
+                                    // Get VND for total
+                                    $amountVnd = isset($inv['amount_total_signed']) ? (float) $inv['amount_total_signed'] : 0;
+                                    if ($amountVnd == 0 && $inv['amount_total'] > 0) {
+                                        $currencyCode = is_array($inv['currency_id']) ? $inv['currency_id'][1] : 'VND';
+                                        $invoiceDate = $inv['date'] ?: $inv['invoice_date'];
+                                        $rateSource = $odoo->getRate($currencyCode, $invoiceDate) ?: 1.0;
+                                        $rateVnd = $odoo->getRate('VND', $invoiceDate) ?: 1.0;
+                                        $amountVnd = $inv['amount_total'] * ($rateVnd / $rateSource);
+                                    }
+
+                                    if (!isset($allGroupInfo[$sortKey])) {
+                                        $allGroupInfo[$sortKey] = ['label' => $key, 'total_vnd' => 0, 'count' => 0];
+                                    }
+                                    $allGroupInfo[$sortKey]['total_vnd'] += $amountVnd;
+                                    $allGroupInfo[$sortKey]['count']++;
+                                }
+
+                                // Now prepare labels and totals for current page rendering
+                                $groupedInvoices = [];
                                 if ($groupBy) {
-                                    // ... grouping logic ...
                                     foreach ($invoices as $inv) {
                                         $date = $inv['date'] ?: $inv['invoice_date'];
                                         $timestamp = strtotime($date);
-
-                                        if ($groupBy === 'month') {
-                                            $key = date('F Y', $timestamp); // e.g., "January 2024"
+                                        if ($groupBy === 'month')
                                             $sortKey = date('Y-m', $timestamp);
-                                        } elseif ($groupBy === 'quarter') {
-                                            $quarter = ceil(date('n', $timestamp) / 3);
-                                            $key = "Q{$quarter} " . date('Y', $timestamp); // e.g., "Q1 2024"
-                                            $sortKey = date('Y', $timestamp) . $quarter;
-                                        } elseif ($groupBy === 'year') {
-                                            $key = date('Y', $timestamp); // e.g., "2024"
-                                            $sortKey = $key;
-                                        } else {
-                                            $key = 'All';
+                                        elseif ($groupBy === 'quarter')
+                                            $sortKey = date('Y', $timestamp) . ceil(date('n', $timestamp) / 3);
+                                        elseif ($groupBy === 'year')
+                                            $sortKey = date('Y', $timestamp);
+                                        else
                                             $sortKey = 0;
-                                        }
 
-                                        $groupedInvoices[$sortKey]['label'] = $key;
+                                        $groupedInvoices[$sortKey]['label'] = $allGroupInfo[$sortKey]['label'];
                                         $groupedInvoices[$sortKey]['items'][] = $inv;
-
-                                        // Use amount_total_signed for 100% accuracy from Odoo
-                                        $amountVnd = isset($inv['amount_total_signed']) ? (float) $inv['amount_total_signed'] : 0;
-
-                                        // Fallback to manual rate calculation if amount_total_signed is missing or 0 (unlikely in Odoo 18)
-                                        if ($amountVnd == 0 && $inv['amount_total'] > 0) {
-                                            $currencyCode = is_array($inv['currency_id']) ? $inv['currency_id'][1] : 'VND';
-                                            $invoiceDate = $inv['date'] ?: $inv['invoice_date'];
-                                            $rateSource = $odoo->getRate($currencyCode, $invoiceDate) ?: 1.0;
-                                            $rateVnd = $odoo->getRate('VND', $invoiceDate) ?: 1.0;
-                                            $amountVnd = $inv['amount_total'] * ($rateVnd / $rateSource);
-                                        }
-                                        if (!isset($groupedInvoices[$sortKey]['total_vnd'])) {
-                                            $groupedInvoices[$sortKey]['total_vnd'] = 0;
-                                        }
-                                        $groupedInvoices[$sortKey]['total_vnd'] += $amountVnd;
+                                        // Set GLOBAL totals from the pre-calculation
+                                        $groupedInvoices[$sortKey]['total_vnd'] = $allGroupInfo[$sortKey]['total_vnd'];
+                                        $groupedInvoices[$sortKey]['global_count'] = $allGroupInfo[$sortKey]['count'];
                                     }
-                                    // Sort groups descending (newest first)
                                     krsort($groupedInvoices);
                                 } else {
-                                    // No grouping, treat as single group
                                     $groupedInvoices['all']['items'] = $invoices;
-                                    // Calculate totals for the single group
-                                    $groupedInvoices['all']['total_vnd'] = 0;
-                                    foreach ($invoices as $inv) {
-                                        $amountVnd = isset($inv['amount_total_signed']) ? (float) $inv['amount_total_signed'] : 0;
-                                        if ($amountVnd == 0 && $inv['amount_total'] > 0) {
-                                            $currencyCode = is_array($inv['currency_id']) ? $inv['currency_id'][1] : 'VND';
-                                            $invoiceDate = $inv['date'] ?: $inv['invoice_date'];
-                                            $rateSource = $odoo->getRate($currencyCode, $invoiceDate) ?: 1.0;
-                                            $rateVnd = $odoo->getRate('VND', $invoiceDate) ?: 1.0;
-                                            $amountVnd = $inv['amount_total'] * ($rateVnd / $rateSource);
-                                        }
-                                        $groupedInvoices['all']['total_vnd'] += $amountVnd;
-                                    }
+                                    $groupedInvoices['all']['label'] = 'Summary';
+                                    $groupedInvoices['all']['total_vnd'] = $allGroupInfo[0]['total_vnd'] ?? 0;
+                                    $groupedInvoices['all']['global_count'] = $total;
                                 }
                                 ?>
 
@@ -522,7 +531,7 @@ function formatDate($date)
                                                 <?php echo $group['label']; ?>
                                                 <span
                                                     style="font-weight: normal; font-size: 0.9em; color: #5f6368; margin-left: 0.5rem;">
-                                                    (<?php echo count($group['items']); ?> rows)
+                                                    (Showing <?php echo count($group['items']); ?> of <?php echo $group['global_count']; ?>)
                                                 </span>
                                                 <span style="float: right; margin-right: 2rem; color: #333;">
                                                     Total: <strong>
