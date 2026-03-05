@@ -64,6 +64,7 @@ $routes = [
     '/invoices' => 'modules/invoices/index.php',
     '/kpi' => 'modules/kpi/index.php',
     '/api/kpi_tab_order' => 'api/kpi_tab_order.php',
+    '/api/kpi_sort' => 'api/kpi_sort.php',
     '/api/kpi_monthly_save' => 'api/kpi_monthly_save.php',
     '/api/kpi_quarterly_save' => 'api/kpi_quarterly_save.php',
     '/api/mark_notification_read' => 'api/mark_notification_read.php',

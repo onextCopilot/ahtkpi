@@ -180,7 +180,7 @@ $r = $conn->query("SELECT k.*, d.name dept_name, u.full_name owner_name, u.avata
     FROM kpi_definitions k
     LEFT JOIN departments d ON k.department_id=d.id
     LEFT JOIN users u ON k.kpi_owner_id=u.id
-    $where ORDER BY k.kpi_group, k.id");
+    $where ORDER BY k.group_order, k.kpi_group, k.sort_order, k.id");
 if ($r)
     while ($row = $r->fetch_assoc())
         $defs[] = $row;

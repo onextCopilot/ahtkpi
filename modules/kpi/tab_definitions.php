@@ -145,14 +145,29 @@ $COLS = 14; // STT+Nhóm+Tên+TargetNăm+CảNăm+Tỷtrọng+Q1+Q2+Q3+Q4+Owner+
                 <?php endforeach; ?>
             </tr>
         </thead>
-        <tbody>
+        <?php if (empty($defs)): ?>
+            <tbody>
+                <tr>
+                    <td colspan="<?= $COLS ?>" style="text-align:center;padding:40px;color:#9CA3AF">
+                        Chưa có KPI nào cho năm <?= $year ?>. Nhấn <b>+ Thêm KPI</b> để bắt đầu.
+                    </td>
+                </tr>
+            </tbody>
+        <?php else: ?>
             <?php $cur_group = null;
             $stt = 1;
             foreach ($defs as $d):
                 if ($d['kpi_group'] !== $cur_group):
+                    if ($cur_group !== null) echo '</tbody>'; // close previous group's tbody
                     $cur_group = $d['kpi_group']; ?>
-                    <tr class="group-row">
-                        <td colspan="<?= $COLS ?>"><?= htmlspecialchars($cur_group ?: '(Chưa phân nhóm)') ?></td>
+                    <tbody class="kpi-group-tbody" data-group="<?= htmlspecialchars($cur_group ?: '') ?>">
+                    <tr class="group-row" style="background:#F9FAFB">
+                        <td colspan="<?= $COLS ?>" style="font-weight:700">
+                            <?php if ($_SESSION['role'] === 'admin'): ?>
+                                <span class="group-drag-handle" style="cursor:move;margin-right:8px;color:#9CA3AF" title="Kéo thả nhóm">☰</span>
+                            <?php endif; ?>
+                            <?= htmlspecialchars($cur_group ?: '(Chưa phân nhóm)') ?>
+                        </td>
                     </tr>
                 <?php endif;
 
@@ -162,9 +177,14 @@ $COLS = 14; // STT+Nhóm+Tên+TargetNăm+CảNăm+Tỷtrọng+Q1+Q2+Q3+Q4+Owner+
                 $baseNum = (is_numeric($baseRaw) && (float) $baseRaw > 0) ? (float) $baseRaw : null;
                 $yrProg = ($yrTot && !$yrTot['mixed'] && $baseNum) ? calcProgress($yrTot['sum'], $baseNum) : null;
                 ?>
-                <tr>
-                    <td class="col-no"><?= $stt++ ?></td>
-                    <td style="font-size:11px;color:#6B7280"><?= htmlspecialchars($d['kpi_group'] ?? '') ?></td>
+                <tr class="kpi-item-row" data-id="<?= $d['id'] ?>">
+                    <td class="col-no">
+                        <?php if ($_SESSION['role'] === 'admin'): ?>
+                            <span class="item-drag-handle" style="cursor:move;margin-right:4px;color:#9CA3AF" title="Kéo thả">☰</span>
+                        <?php endif; ?>
+                        <?= $stt++ ?>
+                    </td>
+                    <td class="item-group-col" style="font-size:11px;color:#6B7280"><?= htmlspecialchars($d['kpi_group'] ?? '') ?></td>
                     <td style="font-weight:500;white-space:normal">
                         <?= htmlspecialchars($d['kpi_name']) ?>
                         <?php if ($d['is_condition']): ?><span class="badge badge-cond">KPI ĐK</span><?php endif; ?>
@@ -310,14 +330,9 @@ $COLS = 14; // STT+Nhóm+Tên+TargetNăm+CảNăm+Tỷtrọng+Q1+Q2+Q3+Q4+Owner+
                     </td>
                 </tr>
             <?php endforeach; ?>
-            <?php if (empty($defs)): ?>
-                <tr>
-                    <td colspan="<?= $COLS ?>" style="text-align:center;padding:40px;color:#9CA3AF">
-                        Chưa có KPI nào cho năm <?= $year ?>. Nhấn <b>+ Thêm KPI</b> để bắt đầu.
-                    </td>
-                </tr>
-            <?php endif; ?>
-        </tbody>
+
+            <?php if (!empty($defs)): ?></tbody><?php endif; ?>
+        <?php endif; ?>
         <tfoot>
             <tr>
                 <td class="col-no"></td>
@@ -385,3 +400,78 @@ function exportCSV(tblId) {
     a.click();
 }
 </script>
+
+<?php if ($_SESSION['role'] === 'admin'): ?>
+<!-- SortableJS -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Sortable/1.15.0/Sortable.min.js"></script>
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const table = document.getElementById('defTable');
+    if (!table) return;
+
+    // 1. Sortable groups
+    new Sortable(table, {
+        draggable: 'tbody.kpi-group-tbody',
+        handle: '.group-drag-handle',
+        animation: 150,
+        onEnd: function(evt) {
+            saveSortOrder();
+        }
+    });
+
+    // 2. Sortable items within groups
+    document.querySelectorAll('tbody.kpi-group-tbody').forEach(tbody => {
+        new Sortable(tbody, {
+            draggable: 'tr.kpi-item-row',
+            handle: '.item-drag-handle',
+            group: 'shared', // allows moving between groups
+            animation: 150,
+            onEnd: function(evt) {
+                // If it moved between groups, let's update the visual group name inside the row:
+                const row = evt.item;
+                const newTbody = row.closest('tbody');
+                const newGroup = newTbody.dataset.group;
+                const groupCol = row.querySelector('.item-group-col');
+                if(groupCol) groupCol.textContent = newGroup;
+                
+                // Re-sort and save to backend
+                saveSortOrder();
+            }
+        });
+    });
+
+    function saveSortOrder() {
+        let data = [];
+        let groupOrder = 1;
+        document.querySelectorAll('tbody.kpi-group-tbody').forEach(tbody => {
+            const groupName = tbody.dataset.group;
+            let sortOrder = 1;
+            tbody.querySelectorAll('tr.kpi-item-row').forEach(tr => {
+                data.push({
+                    id: tr.dataset.id,
+                    group: groupName,
+                    group_order: groupOrder,
+                    sort_order: sortOrder++
+                });
+            });
+            groupOrder++;
+        });
+
+        fetch('/api/kpi_sort.php', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({sort_data: data})
+        }).then(r => r.json()).then(res => {
+            if (res.success) {
+                // optional toast
+            } else {
+                console.error('Save failed:', res);
+                alert('Lỗi lưu thứ tự KPI: ' + (res.error || 'Server error'));
+            }
+        }).catch(err => {
+            console.error(err);
+        });
+    }
+});
+</script>
+<?php endif; ?>
