@@ -65,7 +65,8 @@ $note_migrations = [
     "Sales Operation"             => $note_so,
 ];
 foreach ($note_migrations as $pos => $note) {
-    $upd = $conn->prepare("UPDATE sale_levels SET notes=? WHERE position_type=? AND (notes IS NULL OR notes='' OR notes LIKE '%&#10;%')");
+    // Force-update notes for ALL levels of this position (runs once on each deploy)
+    $upd = $conn->prepare("UPDATE sale_levels SET notes=? WHERE position_type=?");
     if ($upd) { $upd->bind_param("ss", $note, $pos); $upd->execute(); }
 }
 
