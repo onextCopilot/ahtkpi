@@ -162,6 +162,11 @@ if (!empty($_GET['month'])) {
     $where_clauses[] = "MONTH(d.invoice_date) = $month";
 }
 
+if (!empty($_GET['week'])) {
+    $week = intval($_GET['week']);
+    $where_clauses[] = "WEEK(d.invoice_date, 1) = $week";
+}
+
 $where_sql = "";
 if (count($where_clauses) > 0) {
     $where_sql = "WHERE " . implode(" AND ", $where_clauses);
@@ -1119,6 +1124,16 @@ if ($team_res && $team_res->num_rows > 0) {
                                 $sel = (isset($_GET['month']) && $_GET['month'] == $m) ? 'selected' : '';
                                 $mName = date('F', mktime(0, 0, 0, $m, 1));
                                 echo "<option value='$m' $sel>$mName</option>";
+                            }
+                            ?>
+                        </select>
+
+                        <select name="week" class="filter-select" onchange="this.form.submit()">
+                            <option value="">Week: All</option>
+                            <?php
+                            for ($w = 1; $w <= 53; $w++) {
+                                $sel = (isset($_GET['week']) && $_GET['week'] == $w) ? 'selected' : '';
+                                echo "<option value='$w' $sel>W$w</option>";
                             }
                             ?>
                         </select>
