@@ -257,7 +257,7 @@ $res = $conn->query("SELECT d.*, st.name as team_name
                     ORDER BY d.expected_payment_date ASC, d.id DESC");
 if ($res) {
     $now = new DateTime();
-    $now->setTime(0,0,0);
+    $now->setTime(0, 0, 0);
     while ($row = $res->fetch_assoc()) {
         $amount = (float) $row['amount'];
         $curr = $row['currency'] ?: 'USD';
@@ -278,7 +278,7 @@ if ($res) {
             $total_warning_empty += $vnd_value;
         } else {
             $exp_date = new DateTime($exp_date_str);
-            $exp_date->setTime(0,0,0);
+            $exp_date->setTime(0, 0, 0);
             $diff = $now->diff($exp_date);
 
             // if invert == 1, $exp_date is earlier than $now (quá hạn)
@@ -1048,7 +1048,7 @@ if ($res_am && $res_am->num_rows > 0) {
             <?php
             $page_title = 'Debts Warning';
 
-$active_tab = isset($_GET['tab']) ? $_GET['tab'] : '60_days';
+            $active_tab = isset($_GET['tab']) ? $_GET['tab'] : '60_days';
 
             include __DIR__ . '/../includes/topbar.php';
             ?>
@@ -1134,148 +1134,170 @@ $active_tab = isset($_GET['tab']) ? $_GET['tab'] : '60_days';
                     </div>
                 </div>
 
-                
-                        <div class="table-responsive" style="overflow: visible; padding-bottom: 10px; border: none; background: transparent; box-shadow: none;">
-                <div class="team-tabs" style="margin-bottom: 20px; display: flex; gap: 10px; flex-wrap: wrap;">
-<?php
-$tabs = [
-    '60_days' => ['title' => 'Nợ xấu > 60 ngày', 'data' => $warningLevel60, 'total' => $total_warning_60],
-    '30_days' => ['title' => 'Quá hạn 30 ngày', 'data' => $warningLevel30, 'total' => $total_warning_30],
-    'empty' => ['title' => 'Chưa có ngày thanh toán', 'data' => $warningEmpty, 'total' => $total_warning_empty],
-];
-?>
-    <?php foreach ($tabs as $key => $tab): ?>
-        <a href="?<?php echo http_build_query(array_merge($_GET, ['tab' => $key])); ?>" 
-           class="team-tab <?php echo ($active_tab === $key) ? 'active' : ''; ?>">
-           <?php echo $tab['title']; ?> (<?php echo count($tab['data']); ?>)
-        </a>
-    <?php endforeach; ?>
-</div>
-</div>
-<div class="table-responsive">
-<table class="debt-table">
-    <thead>
-        <tr>
-            <th style="width: 30px !important; text-align: center;">#</th>
-            <th>CTY</th>
-            <th>AM</th>
-            <th>Sale Team</th>
-            <th>Tên khách hàng</th>
-            <th>Tên dự án</th>
-            <th>Ngày hóa đơn</th>
-            <th>Mốc thanh toán</th>
-            <th>Exp. Prod Date</th>
-            <th>Exp. Pay Date</th>
-            <th>Phân loại HĐ</th>
-            <th>Số tiền</th>
-            <th>P&L</th>
-            <th>Hóa đơn</th>
-            <th>HĐ VAT</th>
-            <th>Trạng thái TT</th>
-            <th>Tháng TT</th>
-            <th>Cập nhật tuần</th>
-            <th>Ghi chú AM</th>
-            <th>Ghi chú Delivery</th>
-            <th>Trạng thái SX</th>
-        </tr>
-    </thead>
-    <tbody>
-<?php
-$current_data = $tabs[$active_tab]['data'];
-$globalIdx = 1;
-?>
-    <?php if (count($current_data) > 0): ?>
-        <?php foreach ($current_data as $item): ?>
-            <tr style="user-select: none;">
-                <td style="text-align: center; color: #94a3b8; font-weight: 500;"><?php echo $globalIdx++; ?></td>
-                <td class="cell-company"><?php echo htmlspecialchars($item['company'] ?? ''); ?></td>
-                <td>
-                    <?php
-                    $am = $item['am'] ?? '';
-                    $cls = 'am-emily';
-                    if ($am === 'Ryan') $cls = 'am-ryan';
-                    else if ($am === 'Hyun') $cls = 'am-hyun';
-                    ?>
-                    <span class="badge am-badge <?php echo $cls; ?>"><?php echo htmlspecialchars($am ?? ''); ?></span>
-                </td>
-                <td><?php echo htmlspecialchars($item['team_name'] ?? ''); ?></td>
-                <td><?php echo htmlspecialchars($item['client_name'] ?? ''); ?></td>
-                <td><?php echo htmlspecialchars($item['project_name'] ?? ''); ?></td>
-                <td><?php echo formatDate($item['invoice_date']); ?></td>
-                <td><?php echo htmlspecialchars($item['payment_milestone'] ?? ''); ?></td>
-                <td><?php echo formatDate($item['expected_prod_date']); ?></td>
-                <td style="font-weight: bold; color: #dc2626;"><?php echo formatDate($item['expected_payment_date']); ?></td>
-                <td>
-                    <?php
-                    $sc = $item['invoice_status_class'];
-                    $scc = 'status-chuaxacdinh';
-                    if ($sc == 'Done') $scc = 'status-done';
-                    elseif ($sc == 'Tím') $scc = 'status-tim';
-                    elseif ($sc == 'Xanh' || $sc == 'Tốt') $scc = 'status-xanh';
-                    elseif ($sc == 'Trắng') $scc = 'status-trang';
-                    elseif ($sc == 'Đỏ') $scc = 'status-do';
-                    ?>
-                    <span class="<?php echo $scc; ?>"><?php echo htmlspecialchars($sc ?: ''); ?></span>
-                </td>
-                <td class="cell-amount">
-                    <?php echo formatVND($item['amount']); ?>
-                    <?php if ($item['currency_original'] === 'USD' && $item['amount_original'] > 0): ?>
-                        <div style="font-size: 10px; color: #64748b; font-weight: normal; margin-top: 2px;">
-                            ($<?php echo number_format($item['amount_original'], 2); ?>)
-                        </div>
-                    <?php endif; ?>
-                </td>
-                <td>
-                    <?php
-                    $pl = $item['pl_class'];
-                    $plc = 'pl-tb'; // Default
-                    if ($pl === 'Tốt') $plc = 'pl-tot';
-                    elseif ($pl === 'Xấu') $plc = 'pl-xau';
-                    ?>
-                    <span class="badge <?php echo $plc; ?>"><?php echo htmlspecialchars($pl ?: 'TB'); ?></span>
-                </td>
-                <td style="color: #64748b; font-size: 0.85rem; max-width: 150px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="<?php echo htmlspecialchars($item['invoice_status'] ?? ''); ?>">
-                    <?php echo htmlspecialchars($item['invoice_status'] ?? ''); ?>
-                </td>
-                <td style="color: #64748b; font-size: 0.85rem;"><?php echo htmlspecialchars($item['vat_invoice'] ?? ''); ?></td>
-                <td>
-                    <?php 
-                    $ps = $item['payment_status'];
-                    $psc = 'pay-not-paid';
-                    ?>
-                    <span class="<?php echo $psc; ?>"><?php echo htmlspecialchars($ps ?? ''); ?></span>
-                </td>
-                <td><?php echo htmlspecialchars($item['payment_month'] ?? ''); ?></td>
-                <td><?php echo htmlspecialchars($item['weekly_update'] ?? ''); ?></td>
-                <td style="max-width: 200px; white-space: normal; font-size: 0.8rem; color: #475569; line-height: 1.4;">
-                    <?php echo nl2br(htmlspecialchars($item['am_notes'] ?? '')); ?>
-                </td>
-                <td style="max-width: 200px; white-space: normal; font-size: 0.8rem; color: #475569; line-height: 1.4;">
-                    <?php echo nl2br(htmlspecialchars($item['delivery_notes'] ?? '')); ?>
-                </td>
-                <td>
-                    <?php
-                    $prs = $item['production_status'];
-                    $prsc = 'prod-dc1'; // default
-                    if (strpos($prs, 'DC5') !== false) $prsc = 'prod-dc5';
-                    elseif (strpos($prs, 'Thêm') !== false) $prsc = 'prod-them';
-                    ?>
-                    <span class="badge <?php echo $prsc; ?> text-xs"><?php echo htmlspecialchars($prs ?? ''); ?></span>
-                </td>
-            </tr>
-        <?php endforeach; ?>
-    <?php else: ?>
-        <tr>
-            <td colspan="21" style="text-align: center; padding: 20px; color: #64748b;">
-                Không có dữ liệu
-            </td>
-        </tr>
-    <?php endif; ?>
-    </tbody>
-</table>
+
+                <div class="table-wrapper"
+                    style="overflow: visible; padding-bottom: 10px; border: none; background: transparent; box-shadow: none;">
+                    <div class="team-tabs" style="margin-bottom: 20px; display: flex; gap: 10px; flex-wrap: wrap;">
+                        <?php
+                        $tabs = [
+                            '60_days' => ['title' => 'Nợ xấu > 60 ngày', 'data' => $warningLevel60, 'total' => $total_warning_60],
+                            '30_days' => ['title' => 'Quá hạn 30 ngày', 'data' => $warningLevel30, 'total' => $total_warning_30],
+                            'empty' => ['title' => 'Chưa có ngày thanh toán', 'data' => $warningEmpty, 'total' => $total_warning_empty],
+                        ];
+                        ?>
+                        <?php foreach ($tabs as $key => $tab): ?>
+                            <a href="?<?php echo http_build_query(array_merge($_GET, ['tab' => $key])); ?>"
+                                class="team-tab <?php echo ($active_tab === $key) ? 'active' : ''; ?>">
+                                <?php echo $tab['title']; ?> (<?php echo count($tab['data']); ?>)
+                            </a>
+                        <?php endforeach; ?>
+                    </div>
+                </div>
+                <div class="table-wrapper">
+                    <table class="debt-table">
+                        <thead>
+                            <tr>
+                                <th style="width: 30px !important; text-align: center;">#</th>
+                                <th>CTY</th>
+                                <th>AM</th>
+                                <th>Sale Team</th>
+                                <th>Tên khách hàng</th>
+                                <th>Tên dự án</th>
+                                <th>Ngày hóa đơn</th>
+                                <th>Mốc thanh toán</th>
+                                <th>Exp. Prod Date</th>
+                                <th>Exp. Pay Date</th>
+                                <th>Phân loại HĐ</th>
+                                <th>Số tiền</th>
+                                <th>P&L</th>
+                                <th>Hóa đơn</th>
+                                <th>HĐ VAT</th>
+                                <th>Trạng thái TT</th>
+                                <th>Tháng TT</th>
+                                <th>Cập nhật tuần</th>
+                                <th>Ghi chú AM</th>
+                                <th>Ghi chú Delivery</th>
+                                <th>Trạng thái SX</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <?php
+                            $current_data = $tabs[$active_tab]['data'];
+                            $globalIdx = 1;
+                            ?>
+                            <?php if (count($current_data) > 0): ?>
+                                <?php foreach ($current_data as $item): ?>
+                                    <tr style="user-select: none;">
+                                        <td style="text-align: center; color: #94a3b8; font-weight: 500;">
+                                            <?php echo $globalIdx++; ?></td>
+                                        <td class="cell-company"><?php echo htmlspecialchars($item['company'] ?? ''); ?></td>
+                                        <td>
+                                            <?php
+                                            $am = $item['am'] ?? '';
+                                            $cls = 'am-emily';
+                                            if ($am === 'Ryan')
+                                                $cls = 'am-ryan';
+                                            else if ($am === 'Hyun')
+                                                $cls = 'am-hyun';
+                                            ?>
+                                            <span
+                                                class="badge am-badge <?php echo $cls; ?>"><?php echo htmlspecialchars($am ?? ''); ?></span>
+                                        </td>
+                                        <td><?php echo htmlspecialchars($item['team_name'] ?? ''); ?></td>
+                                        <td><?php echo htmlspecialchars($item['client_name'] ?? ''); ?></td>
+                                        <td><?php echo htmlspecialchars($item['project_name'] ?? ''); ?></td>
+                                        <td><?php echo formatDate($item['invoice_date']); ?></td>
+                                        <td><?php echo htmlspecialchars($item['payment_milestone'] ?? ''); ?></td>
+                                        <td><?php echo formatDate($item['expected_prod_date']); ?></td>
+                                        <td style="font-weight: bold; color: #dc2626;">
+                                            <?php echo formatDate($item['expected_payment_date']); ?></td>
+                                        <td>
+                                            <?php
+                                            $sc = $item['invoice_status_class'];
+                                            $scc = 'status-chuaxacdinh';
+                                            if ($sc == 'Done')
+                                                $scc = 'status-done';
+                                            elseif ($sc == 'Tím')
+                                                $scc = 'status-tim';
+                                            elseif ($sc == 'Xanh' || $sc == 'Tốt')
+                                                $scc = 'status-xanh';
+                                            elseif ($sc == 'Trắng')
+                                                $scc = 'status-trang';
+                                            elseif ($sc == 'Đỏ')
+                                                $scc = 'status-do';
+                                            ?>
+                                            <span class="<?php echo $scc; ?>"><?php echo htmlspecialchars($sc ?: ''); ?></span>
+                                        </td>
+                                        <td class="cell-amount">
+                                            <?php echo formatVND($item['amount']); ?>
+                                            <?php if ($item['currency_original'] === 'USD' && $item['amount_original'] > 0): ?>
+                                                <div style="font-size: 10px; color: #64748b; font-weight: normal; margin-top: 2px;">
+                                                    ($<?php echo number_format($item['amount_original'], 2); ?>)
+                                                </div>
+                                            <?php endif; ?>
+                                        </td>
+                                        <td>
+                                            <?php
+                                            $pl = $item['pl_class'];
+                                            $plc = 'pl-tb'; // Default
+                                            if ($pl === 'Tốt')
+                                                $plc = 'pl-tot';
+                                            elseif ($pl === 'Xấu')
+                                                $plc = 'pl-xau';
+                                            ?>
+                                            <span
+                                                class="badge <?php echo $plc; ?>"><?php echo htmlspecialchars($pl ?: 'TB'); ?></span>
+                                        </td>
+                                        <td style="color: #64748b; font-size: 0.85rem; max-width: 150px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;"
+                                            title="<?php echo htmlspecialchars($item['invoice_status'] ?? ''); ?>">
+                                            <?php echo htmlspecialchars($item['invoice_status'] ?? ''); ?>
+                                        </td>
+                                        <td style="color: #64748b; font-size: 0.85rem;">
+                                            <?php echo htmlspecialchars($item['vat_invoice'] ?? ''); ?></td>
+                                        <td>
+                                            <?php
+                                            $ps = $item['payment_status'];
+                                            $psc = 'pay-not-paid';
+                                            ?>
+                                            <span class="<?php echo $psc; ?>"><?php echo htmlspecialchars($ps ?? ''); ?></span>
+                                        </td>
+                                        <td><?php echo htmlspecialchars($item['payment_month'] ?? ''); ?></td>
+                                        <td><?php echo htmlspecialchars($item['weekly_update'] ?? ''); ?></td>
+                                        <td
+                                            style="max-width: 200px; white-space: normal; font-size: 0.8rem; color: #475569; line-height: 1.4;">
+                                            <?php echo nl2br(htmlspecialchars($item['am_notes'] ?? '')); ?>
+                                        </td>
+                                        <td
+                                            style="max-width: 200px; white-space: normal; font-size: 0.8rem; color: #475569; line-height: 1.4;">
+                                            <?php echo nl2br(htmlspecialchars($item['delivery_notes'] ?? '')); ?>
+                                        </td>
+                                        <td>
+                                            <?php
+                                            $prs = $item['production_status'];
+                                            $prsc = 'prod-dc1'; // default
+                                            if (strpos($prs, 'DC5') !== false)
+                                                $prsc = 'prod-dc5';
+                                            elseif (strpos($prs, 'Thêm') !== false)
+                                                $prsc = 'prod-them';
+                                            ?>
+                                            <span
+                                                class="badge <?php echo $prsc; ?> text-xs"><?php echo htmlspecialchars($prs ?? ''); ?></span>
+                                        </td>
+                                    </tr>
+                                <?php endforeach; ?>
+                            <?php else: ?>
+                                <tr>
+                                    <td colspan="21" style="text-align: center; padding: 20px; color: #64748b;">
+                                        Không có dữ liệu
+                                    </td>
+                                </tr>
+                            <?php endif; ?>
+                        </tbody>
+                    </table>
                 </div>
             </div>
         </main>
     </div>
 </body>
+
 </html>
