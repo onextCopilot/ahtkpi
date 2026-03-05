@@ -163,6 +163,15 @@ if (!empty($_GET['am'])) {
     $am_filter = $conn->real_escape_string($_GET['am']);
     $where_clauses[] = "d.am = '$am_filter'";
 }
+if (!empty($_GET['invoice_status_class'])) {
+    $inv_class_filter = $conn->real_escape_string($_GET['invoice_status_class']);
+    if ($inv_class_filter === 'Xanh') {
+        $where_clauses[] = "(d.invoice_status_class = 'Xanh' OR d.invoice_status_class = 'Tốt')";
+    } else {
+        $where_clauses[] = "d.invoice_status_class = '$inv_class_filter'";
+    }
+}
+
 if (!empty($_GET['status'])) {
     $status_filter = $conn->real_escape_string($_GET['status']);
     $where_clauses[] = "d.payment_status = '$status_filter'";
@@ -1062,6 +1071,19 @@ function formatDate($date)
                             <option value="Paid" <?php echo (isset($_GET['status']) && $_GET['status'] == 'Paid') ? 'selected' : ''; ?>>Paid</option>
                         </select>
 
+                        <select name="invoice_status_class" class="filter-select" onchange="this.form.submit()">
+                            <option value="">Phân loại HĐ: All</option>
+                            <option value="Trắng" <?php echo (isset($_GET['invoice_status_class']) && $_GET['invoice_status_class'] == 'Trắng') ? 'selected' : ''; ?>>Trắng</option>
+                            <option value="Xanh" <?php echo (isset($_GET['invoice_status_class']) && $_GET['invoice_status_class'] == 'Xanh') ? 'selected' : ''; ?>>Xanh (Tốt)</option>
+                            <option value="Tím" <?php echo (isset($_GET['invoice_status_class']) && $_GET['invoice_status_class'] == 'Tím') ? 'selected' : ''; ?>>Tím</option>
+                            <option value="Đỏ" <?php echo (isset($_GET['invoice_status_class']) && $_GET['invoice_status_class'] == 'Đỏ') ? 'selected' : ''; ?>>Đỏ</option>
+                            <option value="PP" <?php echo (isset($_GET['invoice_status_class']) && $_GET['invoice_status_class'] == 'PP') ? 'selected' : ''; ?>>PP</option>
+                            <option value="Draft" <?php echo (isset($_GET['invoice_status_class']) && $_GET['invoice_status_class'] == 'Draft') ? 'selected' : ''; ?>>Draft</option>
+                            <option value="Done" <?php echo (isset($_GET['invoice_status_class']) && $_GET['invoice_status_class'] == 'Done') ? 'selected' : ''; ?>>Done</option>
+                            <option value="Chưa xác định" <?php echo (isset($_GET['invoice_status_class']) && $_GET['invoice_status_class'] == 'Chưa xác định') ? 'selected' : ''; ?>>Chưa xác định
+                            </option>
+                        </select>
+
                         <select name="year" class="filter-select" onchange="this.form.submit()">
                             <option value="">Year: All</option>
                             <?php
@@ -1684,9 +1706,11 @@ function formatDate($date)
                         }
 
                         $chartMonthlyLabels = array_map(function ($item) {
-                            return $item['label']; }, $monthlyData);
+                            return $item['label'];
+                        }, $monthlyData);
                         $chartMonthlyTotals = array_map(function ($item) {
-                            return $item['total']; }, $monthlyData);
+                            return $item['total'];
+                        }, $monthlyData);
                         ?>
                         <div
                             style="padding: 20px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">
