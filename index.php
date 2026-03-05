@@ -70,7 +70,7 @@ $routes = [
     '/api/mark_notification_read' => 'api/mark_notification_read.php',
     '/sale-orders' => 'modules/sale_orders/index.php',
     '/api/sale_orders' => 'api/sale_orders.php',
-    '/sale-report' => 'modules/debt/sale_report.php',
+    '/sale-reports' => 'modules/sale_reports/index.php',
 ];
 
 // Check if route exists in our mapping
