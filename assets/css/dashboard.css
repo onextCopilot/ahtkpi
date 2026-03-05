@@ -58,7 +58,8 @@ body {
 
 .dashboard-container {
     display: flex;
-    min-height: 100vh;
+    height: 100vh;
+    overflow: hidden;
 }
 
 /* ========================================
@@ -221,6 +222,8 @@ body {
     display: flex;
     flex-direction: column;
     background: var(--bg-secondary);
+    height: 100vh;
+    overflow: hidden;
 }
 
 .top-bar {

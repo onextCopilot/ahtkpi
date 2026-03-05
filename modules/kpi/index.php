@@ -235,9 +235,11 @@ $status_map = ['draft' => ['#F1F5F9', '#64748B'], 'active' => ['#DBEAFE', '#1D4E
             padding: .6rem 1rem;
             /* 64px topbar + 40px sheet-footer */
             height: calc(100vh - 64px - 40px);
+            max-height: calc(100vh - 64px - 40px);
             display: flex;
             flex-direction: column;
-            gap: .5rem
+            gap: .5rem;
+            overflow: hidden;
         }
 
         /* Tab bar */
