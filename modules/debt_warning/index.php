@@ -1179,7 +1179,7 @@ $globalIdx = 1;
         <?php foreach ($cat_info['data'] as $item): ?>
             <tr style="user-select: none;">
                 <td style="text-align: center; color: #94a3b8; font-weight: 500;"><?php echo $globalIdx++; ?></td>
-                <td class="cell-company"><?php echo htmlspecialchars($item['company']); ?></td>
+                <td class="cell-company"><?php echo htmlspecialchars($item['company'] ?? ''); ?></td>
                 <td>
                     <?php
                     $am = $item['am'] ?? '';
@@ -1187,13 +1187,13 @@ $globalIdx = 1;
                     if ($am === 'Ryan') $cls = 'am-ryan';
                     else if ($am === 'Hyun') $cls = 'am-hyun';
                     ?>
-                    <span class="badge am-badge <?php echo $cls; ?>"><?php echo htmlspecialchars($am); ?></span>
+                    <span class="badge am-badge <?php echo $cls; ?>"><?php echo htmlspecialchars($am ?? ''); ?></span>
                 </td>
                 <td><?php echo htmlspecialchars($item['team_name'] ?? ''); ?></td>
-                <td><?php echo htmlspecialchars($item['client_name']); ?></td>
-                <td><?php echo htmlspecialchars($item['project_name']); ?></td>
+                <td><?php echo htmlspecialchars($item['client_name'] ?? ''); ?></td>
+                <td><?php echo htmlspecialchars($item['project_name'] ?? ''); ?></td>
                 <td><?php echo formatDate($item['invoice_date']); ?></td>
-                <td><?php echo htmlspecialchars($item['payment_milestone']); ?></td>
+                <td><?php echo htmlspecialchars($item['payment_milestone'] ?? ''); ?></td>
                 <td><?php echo formatDate($item['expected_prod_date']); ?></td>
                 <td style="font-weight: bold; color: #dc2626;"><?php echo formatDate($item['expected_payment_date']); ?></td>
                 <td>
@@ -1225,24 +1225,24 @@ $globalIdx = 1;
                     ?>
                     <span class="badge <?php echo $plc; ?>"><?php echo htmlspecialchars($pl ?: 'TB'); ?></span>
                 </td>
-                <td style="color: #64748b; font-size: 0.85rem; max-width: 150px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="<?php echo htmlspecialchars($item['invoice_status']); ?>">
-                    <?php echo htmlspecialchars($item['invoice_status']); ?>
+                <td style="color: #64748b; font-size: 0.85rem; max-width: 150px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="<?php echo htmlspecialchars($item['invoice_status'] ?? ''); ?>">
+                    <?php echo htmlspecialchars($item['invoice_status'] ?? ''); ?>
                 </td>
-                <td style="color: #64748b; font-size: 0.85rem;"><?php echo htmlspecialchars($item['vat_invoice']); ?></td>
+                <td style="color: #64748b; font-size: 0.85rem;"><?php echo htmlspecialchars($item['vat_invoice'] ?? ''); ?></td>
                 <td>
                     <?php 
                     $ps = $item['payment_status'];
                     $psc = 'pay-not-paid';
                     ?>
-                    <span class="<?php echo $psc; ?>"><?php echo htmlspecialchars($ps); ?></span>
+                    <span class="<?php echo $psc; ?>"><?php echo htmlspecialchars($ps ?? ''); ?></span>
                 </td>
-                <td><?php echo htmlspecialchars($item['payment_month']); ?></td>
-                <td><?php echo htmlspecialchars($item['weekly_update']); ?></td>
+                <td><?php echo htmlspecialchars($item['payment_month'] ?? ''); ?></td>
+                <td><?php echo htmlspecialchars($item['weekly_update'] ?? ''); ?></td>
                 <td style="max-width: 200px; white-space: normal; font-size: 0.8rem; color: #475569; line-height: 1.4;">
-                    <?php echo nl2br(htmlspecialchars($item['am_notes'])); ?>
+                    <?php echo nl2br(htmlspecialchars($item['am_notes'] ?? '')); ?>
                 </td>
                 <td style="max-width: 200px; white-space: normal; font-size: 0.8rem; color: #475569; line-height: 1.4;">
-                    <?php echo nl2br(htmlspecialchars($item['delivery_notes'])); ?>
+                    <?php echo nl2br(htmlspecialchars($item['delivery_notes'] ?? '')); ?>
                 </td>
                 <td>
                     <?php
@@ -1251,7 +1251,7 @@ $globalIdx = 1;
                     if (strpos($prs, 'DC5') !== false) $prsc = 'prod-dc5';
                     elseif (strpos($prs, 'Thêm') !== false) $prsc = 'prod-them';
                     ?>
-                    <span class="badge <?php echo $prsc; ?> text-xs"><?php echo htmlspecialchars($prs); ?></span>
+                    <span class="badge <?php echo $prsc; ?> text-xs"><?php echo htmlspecialchars($prs ?? ''); ?></span>
                 </td>
             </tr>
         <?php endforeach; ?>
