@@ -59,6 +59,7 @@ $routes = [
     '/settings/sale-levels' => 'modules/settings/sale-levels/index.php',
     '/debt' => 'modules/debt/index.php',
     '/my-debt' => 'modules/my_debt/index.php',
+    '/debt-warning' => 'modules/debt_warning/index.php',
     '/customers' => 'modules/customers/index.php',
     '/invoices' => 'modules/invoices/index.php',
     '/kpi' => 'modules/kpi/index.php',
