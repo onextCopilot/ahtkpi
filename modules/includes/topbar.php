@@ -262,10 +262,21 @@ $notif_count = count($am_notifications);
                                         }
                                         ?></span>
                                 </div>
-                                <button
-                                    onclick="markNotificationRead(<?php echo $d['id']; ?>, <?php echo $lvl; ?>, 'notif-item-<?php echo $d['id'] . '-' . $lvl; ?>')"
-                                    style="background: none; border: 1px solid <?php echo $text_col; ?>; color: <?php echo $text_col; ?>; padding: 4px 8px; border-radius: 4px; font-size: 0.7rem; cursor: pointer; transition: all 0.2s; float: right;">Đánh
-                                    dấu đã đọc</button>
+                                <div style="display: flex; gap: 8px; float: right; align-items: center;">
+                                    <?php
+                                    $month_val = date('m', strtotime($d['invoice_date'] ?? 'now'));
+                                    $year_val = date('Y', strtotime($d['invoice_date'] ?? 'now'));
+                                    $update_link = "/modules/my_debts?month=$month_val&year=$year_val";
+                                    ?>
+                                    <a href="<?php echo $update_link; ?>"
+                                        style="font-size: 0.7rem; color: #3b82f6; text-decoration: none; border: 1px solid #3b82f6; padding: 4px 8px; border-radius: 4px; transition: all 0.2s;"
+                                        onmouseover="this.style.backgroundColor='#eff6ff'"
+                                        onmouseout="this.style.backgroundColor='transparent'">Cập nhật</a>
+                                    <button
+                                        onclick="markNotificationRead(<?php echo $d['id']; ?>, <?php echo $lvl; ?>, 'notif-item-<?php echo $d['id'] . '-' . $lvl; ?>')"
+                                        style="background: none; border: 1px solid <?php echo $text_col; ?>; color: <?php echo $text_col; ?>; padding: 4px 8px; border-radius: 4px; font-size: 0.7rem; cursor: pointer; transition: all 0.2s;">Đánh
+                                        dấu đã đọc</button>
+                                </div>
                                 <div style="clear: both;"></div>
                             </div>
                         <?php endforeach; ?>
