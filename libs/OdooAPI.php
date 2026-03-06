@@ -521,8 +521,6 @@ class OdooAPI
 
     public function getRate($currencyName, $date)
     {
-        if ($currencyName === 'VND')
-            return 1.0;
 
         // Load cache
         static $ratesCache = null;
