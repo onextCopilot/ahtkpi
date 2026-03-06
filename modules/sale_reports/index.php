@@ -1752,7 +1752,7 @@ function formatMoney($amount, $currency_code)
                                 $total_com_usd = $final_comm1_usd + $final_comm2_usd;
                                 ?>
                                 <div
-                                    style="margin-top: 2rem; background: #fff; border: 1px solid #e2e8f0; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.05); padding: 1.5rem; max-width: 600px; margin-left: auto;">
+                                    style="margin-top: 2rem; background: #fff; border: 1px solid #e2e8f0; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.05); padding: 1.5rem; max-width: 600px;">
                                     <h3
                                         style="margin-top:0; margin-bottom: 1rem; color: #1e293b; font-size: 16px; border-bottom: 2px solid #f1f5f9; padding-bottom: 0.5rem; display: flex; align-items: center; gap: 0.5rem;">
                                         <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24"
