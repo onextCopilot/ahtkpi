@@ -361,7 +361,9 @@ while ($conf_row = $conf_res->fetch_assoc()) {
 }
 if (!empty($confirmations)) $confirmation = $confirmations[0]; // latest
 // locked = latest event is 'confirmed' (not 'reset')
-$is_locked = (!empty($confirmation) && ($confirmation['type'] ?? 'confirmed') === 'confirmed');
+$latest_type  = !empty($confirmation) ? ($confirmation['type'] ?? 'confirmed') : null;
+$is_locked    = ($latest_type === 'confirmed');   // locked only when latest event is 'confirmed'
+$is_confirmed = ($latest_type === 'confirmed');   // for display logic
 
 // Fetch edit log for this quarter (newest first)
 $edit_log = [];
@@ -1285,28 +1287,22 @@ function formatMoney($amount, $currency_code)
                         <!-- ── Confirm section ── -->
                         <div class="kpi-confirm-section">
                             <div style="flex:1;">
-                                <?php if ($confirmation): ?>
-                                    <!-- Locked banner -->
+                                <?php if ($is_confirmed): ?>
+                                    <!-- STATE: Confirmed / Locked -->
                                     <div class="locked-banner">
                                         <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
                                         Bảng đang bị khoá — chỉ xem. Nhấn <strong style="margin:0 3px;">Reset to Draft</strong> để cho phép chỉnh sửa.
                                     </div>
                                     <div style="display:flex; align-items:center; gap:1rem; flex-wrap:wrap;">
                                         <div class="confirmed-badge">
-                                            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24"
-                                                fill="none" stroke="currentColor" stroke-width="2.5">
+                                            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
                                                 <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
                                                 <polyline points="22 4 12 14.01 9 11.01" />
                                             </svg>
-                                            Đã xác nhận KPI
+                                            Đã xác nhận KPI — <?= date('H:i d/m/Y', strtotime($confirmation['confirmed_at'])) ?>
                                         </div>
-                                        <button class="confirm-btn" onclick="confirmKpi()"
-                                            style="background: #64748b; box-shadow: none; font-size: 12px; padding: 7px 16px;">
-                                            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24"
-                                                fill="none" stroke="currentColor" stroke-width="2">
-                                                <polyline points="23 4 23 11 16 11" />
-                                                <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 11" />
-                                            </svg>
+                                        <button class="confirm-btn" onclick="confirmKpi()" style="background:#64748b;box-shadow:none;font-size:12px;padding:7px 16px;">
+                                            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 11 16 11"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 11"/></svg>
                                             Xác nhận lại
                                         </button>
                                         <button class="draft-btn" onclick="resetToDraft()">
@@ -1315,35 +1311,24 @@ function formatMoney($amount, $currency_code)
                                         </button>
                                     </div>
 
-                                    <!-- History timeline -->
-                                    <div style="margin-top: 1rem;">
-                                        <div
-                                            style="font-size: 11px; font-weight:700; color:#64748b; text-transform:uppercase; letter-spacing:.5px; margin-bottom:.5rem;">
-                                            Lịch sử xác nhận (<?= count($confirmations) ?> lần)
-                                        </div>
-                                        <div
-                                            style="max-height: 140px; overflow-y: auto; display:flex; flex-direction:column; gap:4px;">
-                                            <?php foreach ($confirmations as $idx => $c): ?>
-                                                <div
-                                                    style="display:flex; align-items:center; gap:8px; font-size: 12px; color: <?= $idx === 0 ? '#065f46' : '#64748b' ?>;">
-                                                    <span
-                                                        style="width:18px; height:18px; border-radius:50%; background: <?= $idx === 0 ? '#d1fae5' : '#f1f5f9' ?>; border: 1.5px solid <?= $idx === 0 ? '#6ee7b7' : '#e2e8f0' ?>; display:inline-flex; align-items:center; justify-content:center; flex-shrink:0; font-size:9px; font-weight:700; color:<?= $idx === 0 ? '#065f46' : '#94a3b8' ?>">
-                                                        <?= $idx === 0 ? '&#10003;' : ($idx + 1) ?>
-                                                    </span>
-                                                    <span>
-                                                        <strong><?= htmlspecialchars($c['confirmed_by_name']) ?></strong>
-                                                        &mdash; <?= date('H:i:s • d/m/Y', strtotime($c['confirmed_at'])) ?>
-                                                        <?= $idx === 0 ? '<span style="background:#d1fae5;color:#065f46;padding:1px 7px;border-radius:10px;font-size:10px;margin-left:4px;">mới nhất</span>' : '' ?>
-                                                    </span>
-                                                </div>
-                                            <?php endforeach; ?>
-                                        </div>
+                                <?php elseif ($latest_type === 'reset'): ?>
+                                    <!-- STATE: Draft (after reset) -->
+                                    <div class="locked-banner" style="background:#f0fdf4;border-color:#bbf7d0;color:#166534;">
+                                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 9.9-1"/></svg>
+                                        Đang ở trạng thái <strong style="margin:0 3px;">Draft</strong> — bảng đã được mở khoá. Xác nhận lại khi hoàn tất.
                                     </div>
+                                    <button class="confirm-btn" onclick="confirmKpi()" id="confirmKpiBtn">
+                                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                                            <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
+                                            <polyline points="22 4 12 14.01 9 11.01" />
+                                        </svg>
+                                        Xác nhận KPI Quý
+                                    </button>
 
                                 <?php else: ?>
+                                    <!-- STATE: No history yet -->
                                     <button class="confirm-btn" onclick="confirmKpi()" id="confirmKpiBtn">
-                                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24"
-                                            fill="none" stroke="currentColor" stroke-width="2.5">
+                                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
                                             <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
                                             <polyline points="22 4 12 14.01 9 11.01" />
                                         </svg>
