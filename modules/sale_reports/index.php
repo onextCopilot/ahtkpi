@@ -429,17 +429,37 @@ function formatMoney($amount, $currency_code)
         }
 
         .exclude-btn {
-            background: none;
-            border: none;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 28px;
+            height: 28px;
+            border-radius: 50%;
+            border: 2px solid #cbd5e1;
+            background: #f8fafc;
             cursor: pointer;
-            font-size: 18px;
-            padding: 2px 4px;
-            border-radius: 4px;
-            transition: transform 0.15s;
+            transition: all 0.2s ease;
+            color: #94a3b8;
+            padding: 0;
         }
 
         .exclude-btn:hover {
-            transform: scale(1.2);
+            border-color: #f59e0b;
+            background: #fef3c7;
+            color: #d97706;
+            transform: scale(1.1);
+        }
+
+        .exclude-btn.excluded {
+            border-color: #f59e0b;
+            background: #fef3c7;
+            color: #d97706;
+        }
+
+        .exclude-btn svg {
+            width: 14px;
+            height: 14px;
+            pointer-events: none;
         }
     </style>
 </head>
@@ -482,6 +502,7 @@ function formatMoney($amount, $currency_code)
                     <thead>
                         <tr>
                             <th style="width: 40px; text-align: center;">STT</th>
+                            <th style="width: 50px; text-align: center;">Loại trừ</th>
                             <th style="width: 150px;">Tên khách hàng</th>
                             <th style="width: 150px;">Tên Dự án</th>
                             <th style="width: 120px;">Mã dự án</th>
@@ -498,7 +519,6 @@ function formatMoney($amount, $currency_code)
                             <th style="width: 80px;">% Com 1</th>
                             <th style="width: 100px;">% Com 2</th>
                             <th style="min-width: 200px;">Note</th>
-                            <th style="width: 70px; text-align: center;">Loại trừ</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -528,6 +548,18 @@ function formatMoney($amount, $currency_code)
                                         data-invoice-id="<?= $odoo_id ?>">
                                         <td style="text-align: center;">
                                             <?= $stt++ ?>
+                                        </td>
+                                        <!-- Loại trừ (cột 2) -->
+                                        <td style="text-align: center;">
+                                            <button class="exclude-btn <?= $is_excluded ? 'excluded' : '' ?>"
+                                                onclick="toggleExclude(this, <?= $odoo_id ?>)"
+                                                title="<?= $is_excluded ? 'Bỏ loại trừ invoice này' : 'Loại trừ invoice này khỏi tổng' ?>">
+                                                <?php if ($is_excluded): ?>
+                                                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 14.5v-9l6 4.5-6 4.5z"/></svg>
+                                                <?php else: ?>
+                                                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm5 11H7v-2h10v2z"/></svg>
+                                                <?php endif; ?>
+                                            </button>
                                         </td>
                                         <td>
                                             <?= htmlspecialchars(is_array($inv['partner_id']) ? $inv['partner_id'][1] : '') ?>
@@ -604,15 +636,6 @@ function formatMoney($amount, $currency_code)
                                         <!-- Note -->
                                         <td class="editable-cell" onclick="makeEditable(this, <?= $odoo_id ?>, 'note', 'text')">
                                             <?= htmlspecialchars($l['note'] ?? '') ?>
-                                        </td>
-
-                                        <!-- Loại trừ -->
-                                        <td style="text-align: center;">
-                                            <button class="exclude-btn <?= $is_excluded ? 'excluded' : '' ?>"
-                                                onclick="toggleExclude(this, <?= $odoo_id ?>)"
-                                                title="<?= $is_excluded ? 'Bỏ loại trừ invoice này' : 'Loại trừ invoice này khỏi tổng' ?>">
-                                                <?= $is_excluded ? '✅' : '🚫' ?>
-                                            </button>
                                         </td>
 
                                     </tr>
@@ -766,6 +789,9 @@ function formatMoney($amount, $currency_code)
             formData.append('action', 'toggle_exclude');
             formData.append('odoo_invoice_id', invoiceId);
 
+            const svgExcluded = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" style="width:14px;height:14px;pointer-events:none"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 14.5v-9l6 4.5-6 4.5z"/></svg>';
+            const svgNormal  = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" style="width:14px;height:14px;pointer-events:none"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm5 11H7v-2h10v2z"/></svg>';
+
             fetch('', { method: 'POST', body: formData })
                 .then(res => res.json())
                 .then(data => {
@@ -774,9 +800,8 @@ function formatMoney($amount, $currency_code)
                         const isExcluded = data.is_excluded === 1;
                         row.classList.toggle('row-excluded', isExcluded);
                         btn.classList.toggle('excluded', isExcluded);
-                        btn.textContent = isExcluded ? '\u2705' : '\uD83D\uDEAB';
-                        btn.title = isExcluded ? 'B\u1ecf lo\u1ea1i tr\u1eeb invoice n\u00e0y' : 'Lo\u1ea1i tr\u1eeb invoice n\u00e0y kh\u1ecfi t\u1ed5ng';
-                        // Reload the page after short delay to recalculate totals
+                        btn.innerHTML = isExcluded ? svgExcluded : svgNormal;
+                        btn.title = isExcluded ? 'Bỏ loại trừ invoice này' : 'Loại trừ invoice này khỏi tổng';
                         showToast(isExcluded ? 'Đã loại trừ khỏi tổng!' : 'Đã bao gồm lại vào tổng!');
                         setTimeout(() => location.reload(), 800);
                     }
