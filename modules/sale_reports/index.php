@@ -48,15 +48,16 @@ if ($table_check->num_rows == 0) {
     }
 }
 
-// Ensure confirmations table exists
+// Ensure confirmations table exists (no UNIQUE constraint — keep all history)
 $conn->query("CREATE TABLE IF NOT EXISTS sale_report_confirmations (
     id INT AUTO_INCREMENT PRIMARY KEY,
     user_id INT NOT NULL,
     quarter VARCHAR(20) NOT NULL,
     confirmed_at DATETIME NOT NULL,
-    confirmed_by_name VARCHAR(255),
-    UNIQUE KEY uq_user_quarter (user_id, quarter)
+    confirmed_by_name VARCHAR(255)
 )");
+// Drop UNIQUE KEY if it still exists from earlier migration
+$conn->query("ALTER TABLE sale_report_confirmations DROP INDEX IF EXISTS uq_user_quarter");
 
 // Handle AJAX confirm_kpi
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'confirm_kpi') {
@@ -91,8 +92,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
         echo json_encode(['success' => false, 'missing' => array_values(array_unique($missing))]);
     } else {
         $now = date('Y-m-d H:i:s');
-        $stmt_c = $conn->prepare("INSERT INTO sale_report_confirmations (user_id, quarter, confirmed_at, confirmed_by_name) VALUES (?,?,?,?) ON DUPLICATE KEY UPDATE confirmed_at=?, confirmed_by_name=?");
-        $stmt_c->bind_param("isssss", $uid, $quarter_key, $now, $uname, $now, $uname);
+        $stmt_c = $conn->prepare("INSERT INTO sale_report_confirmations (user_id, quarter, confirmed_at, confirmed_by_name) VALUES (?,?,?,?)");
+        $stmt_c->bind_param("isss", $uid, $quarter_key, $now, $uname);
         $stmt_c->execute();
         echo json_encode(['success' => true, 'confirmed_at' => $now, 'confirmed_by' => $uname]);
     }
@@ -296,14 +297,17 @@ if ($is_am_bd) {
     }
 }
 
-// Fetch existing confirmation for this quarter
-$confirmation = null;
-$stmt_conf = $conn->prepare("SELECT * FROM sale_report_confirmations WHERE user_id=? AND quarter=? LIMIT 1");
+// Fetch ALL confirmations for this quarter (history), newest first
+$confirmations = [];
+$confirmation = null; // latest one
+$stmt_conf = $conn->prepare("SELECT * FROM sale_report_confirmations WHERE user_id=? AND quarter=? ORDER BY confirmed_at DESC");
 $stmt_conf->bind_param("is", $u_id, $active_tab);
 $stmt_conf->execute();
-$conf_row = $stmt_conf->get_result()->fetch_assoc();
-if ($conf_row)
-    $confirmation = $conf_row;
+$conf_res = $stmt_conf->get_result();
+while ($conf_row = $conf_res->fetch_assoc()) {
+    $confirmations[] = $conf_row;
+}
+if (!empty($confirmations)) $confirmation = $confirmations[0]; // latest
 
 // Helper
 function formatMoney($amount, $currency_code)
@@ -1164,21 +1168,17 @@ function formatMoney($amount, $currency_code)
 
                         <!-- ── Confirm section ── -->
                         <div class="kpi-confirm-section">
-                            <div>
+                            <div style="flex:1;">
                                 <?php if ($confirmation): ?>
-                                    <div class="confirmed-badge">
-                                        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24"
-                                            fill="none" stroke="currentColor" stroke-width="2.5">
-                                            <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
-                                            <polyline points="22 4 12 14.01 9 11.01" />
-                                        </svg>
-                                        Đã xác nhận KPI
-                                    </div>
-                                    <div style="font-size: 11px; color: #64748b; margin-top: 0.4rem;">
-                                        Bởi <strong><?= htmlspecialchars($confirmation['confirmed_by_name']) ?></strong>
-                                        lúc <?= date('H:i d/m/Y', strtotime($confirmation['confirmed_at'])) ?>
-                                    </div>
-                                    <div style="margin-top: 0.6rem;">
+                                    <div style="display:flex; align-items:center; gap:1rem; flex-wrap:wrap;">
+                                        <div class="confirmed-badge">
+                                            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24"
+                                                fill="none" stroke="currentColor" stroke-width="2.5">
+                                                <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
+                                                <polyline points="22 4 12 14.01 9 11.01" />
+                                            </svg>
+                                            Đã xác nhận KPI
+                                        </div>
                                         <button class="confirm-btn" onclick="confirmKpi()"
                                             style="background: #64748b; box-shadow: none; font-size: 12px; padding: 7px 16px;">
                                             <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24"
@@ -1189,6 +1189,28 @@ function formatMoney($amount, $currency_code)
                                             Xác nhận lại
                                         </button>
                                     </div>
+
+                                    <!-- History timeline -->
+                                    <div style="margin-top: 1rem;">
+                                        <div style="font-size: 11px; font-weight:700; color:#64748b; text-transform:uppercase; letter-spacing:.5px; margin-bottom:.5rem;">
+                                            Lịch sử xác nhận (<?= count($confirmations) ?> lần)
+                                        </div>
+                                        <div style="max-height: 140px; overflow-y: auto; display:flex; flex-direction:column; gap:4px;">
+                                            <?php foreach ($confirmations as $idx => $c): ?>
+                                            <div style="display:flex; align-items:center; gap:8px; font-size: 12px; color: <?= $idx === 0 ? '#065f46' : '#64748b' ?>;">
+                                                <span style="width:18px; height:18px; border-radius:50%; background: <?= $idx === 0 ? '#d1fae5' : '#f1f5f9' ?>; border: 1.5px solid <?= $idx === 0 ? '#6ee7b7' : '#e2e8f0' ?>; display:inline-flex; align-items:center; justify-content:center; flex-shrink:0; font-size:9px; font-weight:700; color:<?= $idx === 0 ? '#065f46' : '#94a3b8' ?>">
+                                                    <?= $idx === 0 ? '&#10003;' : ($idx + 1) ?>
+                                                </span>
+                                                <span>
+                                                    <strong><?= htmlspecialchars($c['confirmed_by_name']) ?></strong>
+                                                    &mdash; <?= date('H:i:s • d/m/Y', strtotime($c['confirmed_at'])) ?>
+                                                    <?= $idx === 0 ? '<span style="background:#d1fae5;color:#065f46;padding:1px 7px;border-radius:10px;font-size:10px;margin-left:4px;">mới nhất</span>' : '' ?>
+                                                </span>
+                                            </div>
+                                            <?php endforeach; ?>
+                                        </div>
+                                    </div>
+
                                 <?php else: ?>
                                     <button class="confirm-btn" onclick="confirmKpi()" id="confirmKpiBtn">
                                         <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24"
