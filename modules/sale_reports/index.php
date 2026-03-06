@@ -1530,6 +1530,8 @@ function formatMoney($amount, $currency_code)
                     // Merge confirmations + edit_log into one timeline sorted by time DESC
                     $audit_events = [];
                     foreach ($confirmations as $c) {
+                        if (($c['type'] ?? 'confirmed') === 'commission_confirmed')
+                            continue;
                         $audit_events[] = [
                             'time' => $c['confirmed_at'],
                             'type' => $c['type'] ?? 'confirmed',
@@ -1573,12 +1575,6 @@ function formatMoney($amount, $currency_code)
                                         $dot_color = '#92400e';
                                         $dot_icon = '↩';
                                         $label = '<span style="background:#fef3c7;color:#92400e;padding:1px 8px;border-radius:10px;font-weight:600;font-size:11px;">🔓 Reset to Draft</span>';
-                                    } elseif ($t === 'commission_confirmed') {
-                                        $dot_bg = '#dcfce7';
-                                        $dot_border = '#86efac';
-                                        $dot_color = '#166534';
-                                        $dot_icon = '💰';
-                                        $label = '<span style="background:#dcfce7;color:#166534;padding:1px 8px;border-radius:10px;font-weight:600;font-size:11px;">✅ Đã xác nhận Commission</span>';
                                     } elseif ($t === 'edit') {
                                         $dot_bg = '#eff6ff';
                                         $dot_border = '#bfdbfe';
