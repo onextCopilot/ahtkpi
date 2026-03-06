@@ -246,7 +246,14 @@ $notif_count = count($am_notifications);
                                     <strong><?php echo htmlspecialchars($d['client_name'] ?? ''); ?></strong> -
                                     <?php echo htmlspecialchars($d['project_name'] ?? ''); ?>
                                     <br><span style="color: #94a3b8; font-size: 0.75rem;">Hạn thanh toán:
-                                        <?php echo date('d/m/Y', strtotime($d['expected_payment_date'])); ?></span>
+                                        <?php
+                                        $p_date = $d['expected_payment_date'] ?? '';
+                                        if ($p_date && $p_date !== '0000-00-00' && $p_date !== '1970-01-01') {
+                                            echo date('d/m/Y', strtotime($p_date));
+                                        } else {
+                                            echo '<span style="color: #ef4444;">Chưa có ngày TT</span>';
+                                        }
+                                        ?></span>
                                 </div>
                                 <button
                                     onclick="markNotificationRead(<?php echo $d['id']; ?>, <?php echo $lvl; ?>, 'notif-item-<?php echo $d['id'] . '-' . $lvl; ?>')"
