@@ -46,6 +46,11 @@ if ($table_check->num_rows == 0) {
     if ($col_check->num_rows == 0) {
         $conn->query("ALTER TABLE sale_reports ADD COLUMN is_excluded TINYINT(1) DEFAULT 0");
     }
+    // Migration: add license_trading if not exists
+    $col_check_lt = $conn->query("SHOW COLUMNS FROM sale_reports LIKE 'license_trading'");
+    if ($col_check_lt->num_rows == 0) {
+        $conn->query("ALTER TABLE sale_reports ADD COLUMN license_trading VARCHAR(20) DEFAULT ''");
+    }
 }
 
 // Ensure confirmations table exists (append-only, all history kept)
@@ -187,12 +192,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
     $uname = $_SESSION['full_name'] ?? 'Unknown';
 
     // Fetch current values for audit and auto-calc
-    $res_current = $conn->query("SELECT `$field` as old_val, client_type, com_lead_source FROM sale_reports WHERE odoo_invoice_id = $odoo_id LIMIT 1");
+    $res_current = $conn->query("SELECT `$field` as old_val, client_type, com_lead_source, bonus_license_trading FROM sale_reports WHERE odoo_invoice_id = $odoo_id LIMIT 1");
     $db_row = $res_current ? $res_current->fetch_assoc() : null;
     $old_val = $db_row['old_val'] ?? '';
 
     $current_client_type = ($field === 'client_type') ? $val : ($db_row['client_type'] ?? '');
     $current_lead_source = ($field === 'com_lead_source') ? $val : ($db_row['com_lead_source'] ?? 'No');
+    $current_bonus_license_trading = ($field === 'bonus_license_trading') ? $val : ($db_row['bonus_license_trading'] ?? 'No');
 
     // Auto rules for com_1 (Base + Lead Source Bonus)
     if ($field === 'client_type' || $field === 'com_lead_source') {
@@ -219,8 +225,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
         $stmt_log->execute();
 
         echo json_encode(['success' => true, 'com_1' => $com1_val]);
+    } elseif ($field === 'bonus_license_trading') {
+        $lic_val = ($val === 'Yes') ? '10%' : '';
+        $stmt = $conn->prepare("INSERT INTO sale_reports (odoo_invoice_id, bonus_license_trading, license_trading) VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE bonus_license_trading=?, license_trading=?");
+        $stmt->bind_param("issss", $odoo_id, $val, $lic_val, $val, $lic_val);
+        $stmt->execute();
+
+        // Log edit
+        $now = date('Y-m-d H:i:s');
+        $stmt_log = $conn->prepare("INSERT INTO sale_report_edit_log (odoo_invoice_id, quarter, user_id, user_name, field_name, old_value, new_value, edited_at) VALUES (?,?,?,?,?,?,?,?)");
+        $stmt_log->bind_param("isssssss", $odoo_id, $quarter_key, $uid, $uname, $field, $old_val, $val, $now);
+        $stmt_log->execute();
+
+        echo json_encode(['success' => true, 'license_trading' => $lic_val]);
     } else {
-        $allowed = ['contract_type', 'presales', 'client_type', 'profit_pakd', 'net_profit', 'com_lead_source', 'bonus_license_trading', 'com_1', 'com_2', 'note'];
+        $allowed = ['contract_type', 'presales', 'client_type', 'profit_pakd', 'net_profit', 'com_lead_source', 'bonus_license_trading', 'license_trading', 'com_1', 'com_2', 'note'];
         if (in_array($field, $allowed)) {
             $stmt = $conn->prepare("INSERT INTO sale_reports (odoo_invoice_id, `$field`) VALUES (?, ?) ON DUPLICATE KEY UPDATE `$field`=?");
             $stmt->bind_param("iss", $odoo_id, $val, $val);
@@ -1150,6 +1169,7 @@ function formatMoney($amount, $currency_code)
                                 <th style="width: 160px;">% Bonus License/trading</th>
                                 <th style="width: 80px;">% Com 1</th>
                                 <th style="width: 100px;">% Com 2</th>
+                                <th style="width: 120px;">License/trading</th>
                                 <th style="min-width: 200px;">Note</th>
                             </tr>
                         </thead>
@@ -1210,7 +1230,8 @@ function formatMoney($amount, $currency_code)
                                                                 d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 14.5v-9l6 4.5-6 4.5z" />
                                                         </svg>
                                                     <?php else: ?>
-                                                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
+                                                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14"
+                                                            viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                                                             <path
                                                                 d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm5 11H7v-2h10v2z" />
                                                         </svg>
@@ -1259,8 +1280,14 @@ function formatMoney($amount, $currency_code)
                                             </td>
 
                                             <!-- Net profit -->
-                                            <td class="editable-cell <?= $is_locked ? 'cell-locked' : '' ?>" <?= !$is_locked ? "onclick=\"makeEditable(this, $odoo_id, 'net_profit', 'text')\"" : 'title="Đang bị khoá"' ?>>
-                                                <?= htmlspecialchars($l['net_profit'] ?? '') ?>
+                                            <?php
+                                            $is_bonus_yes = ($l['bonus_license_trading'] ?? 'No') === 'Yes';
+                                            $net_profit_val = trim($l['net_profit'] ?? '');
+                                            $net_profit_style = ($is_bonus_yes && $net_profit_val === '') ? 'background: #fee2e2; border: 1.5px solid #ef4444;' : '';
+                                            ?>
+                                            <td class="editable-cell <?= $is_locked ? 'cell-locked' : '' ?>"
+                                                id="net_profit_<?= $odoo_id ?>" style="<?= $net_profit_style ?>" <?= !$is_locked ? "onclick=\"makeEditable(this, $odoo_id, 'net_profit', 'text')\"" : 'title="Đang bị khoá"' ?>>
+                                                <?= htmlspecialchars($net_profit_val) ?>
                                             </td>
 
                                             <!-- % Com (Lead source) -->
@@ -1284,6 +1311,12 @@ function formatMoney($amount, $currency_code)
                                             <!-- % Com 2 -->
                                             <td class="editable-cell <?= $is_locked ? 'cell-locked' : '' ?>" <?= !$is_locked ? "onclick=\"makeEditable(this, $odoo_id, 'com_2', 'select', ['0.5%', '1%', '1.5%', '2%', '2.5%', '3%'])\"" : 'title="Đang bị khoá"' ?>>
                                                 <?= htmlspecialchars($l['com_2'] ?? '') ?>
+                                            </td>
+
+                                            <!-- License/trading -->
+                                            <td id="lic_trd_<?= $odoo_id ?>"
+                                                style="font-weight: 600; color: #1e40af; background: #f0f7ff; text-align: center;">
+                                                <?= htmlspecialchars($l['license_trading'] ?? '') ?>
                                             </td>
 
                                             <!-- Note -->
@@ -1482,61 +1515,61 @@ function formatMoney($amount, $currency_code)
                                                 Xác nhận lại KPI
                                             </button>
                                         <?php else: ?>
-                                                        <div class="confirmed-badge"
-                                                            style="background:#dcfce7; color:#166534; border-color:#86efac;">
-                                                            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24"
-                                                                fill="none" stroke="currentColor" stroke-width="2.5">
-                                                                <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" />
-                                                            </svg>
-                                                            ĐÃ CHỐT COMMISSION —
-                                                            <?= date('H:i d/m/Y', strtotime($latest_comm_event['confirmed_at'])) ?>
-                                                        </div>
-                                                <?php endif; ?>
-                                                <button class="draft-btn" onclick="resetToDraft()">
-                                                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24"
-                                                        fill="none" stroke="currentColor" stroke-width="2">
-                                                        <path d="M18.36 6.64A9 9 0 1 1 5.64 5.64" />
-                                                        <polyline points="15 2 21 2 21 8" />
-                                                        <line x1="21" y1="2" x2="14" y2="9" />
-                                                    </svg>
-                                                    Reset to Draft
-                                                </button>
-                                            </div>
-
-                                    <?php elseif ($latest_type === 'reset'): ?>
-                                            <!-- STATE: Draft (after reset) -->
-                                            <div class="locked-banner" style="background:#f0fdf4;border-color:#bbf7d0;color:#166534;">
-                                                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24"
-                                                    fill="none" stroke="currentColor" stroke-width="2">
-                                                    <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
-                                                    <path d="M7 11V7a5 5 0 0 1 9.9-1" />
-                                                </svg>
-                                                Đang ở trạng thái <strong style="margin:0 3px;">Draft</strong> — bảng đã được mở khoá.
-                                                Xác nhận lại khi hoàn tất.
-                                            </div>
-                                            <button class="confirm-btn" onclick="confirmKpi()" id="confirmKpiBtn">
-                                                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24"
+                                            <div class="confirmed-badge"
+                                                style="background:#dcfce7; color:#166534; border-color:#86efac;">
+                                                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24"
                                                     fill="none" stroke="currentColor" stroke-width="2.5">
-                                                    <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
-                                                    <polyline points="22 4 12 14.01 9 11.01" />
+                                                    <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" />
                                                 </svg>
-                                                Xác nhận KPI Quý
-                                            </button>
+                                                ĐÃ CHỐT COMMISSION —
+                                                <?= date('H:i d/m/Y', strtotime($latest_comm_event['confirmed_at'])) ?>
+                                            </div>
+                                        <?php endif; ?>
+                                        <button class="draft-btn" onclick="resetToDraft()">
+                                            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24"
+                                                fill="none" stroke="currentColor" stroke-width="2">
+                                                <path d="M18.36 6.64A9 9 0 1 1 5.64 5.64" />
+                                                <polyline points="15 2 21 2 21 8" />
+                                                <line x1="21" y1="2" x2="14" y2="9" />
+                                            </svg>
+                                            Reset to Draft
+                                        </button>
+                                    </div>
 
-                                    <?php else: ?>
-                                            <!-- STATE: No history yet -->
-                                            <button class="confirm-btn" onclick="confirmKpi()" id="confirmKpiBtn">
-                                                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24"
-                                                    fill="none" stroke="currentColor" stroke-width="2.5">
-                                                    <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
-                                                    <polyline points="22 4 12 14.01 9 11.01" />
-                                                </svg>
-                                                Xác nhận KPI Quý
-                                            </button>
-                                    <?php endif; ?>
-                                </div>
-                                <div id="confirmErrorBox" style="display:none; flex:1; min-width:250px;"></div>
+                                <?php elseif ($latest_type === 'reset'): ?>
+                                    <!-- STATE: Draft (after reset) -->
+                                    <div class="locked-banner" style="background:#f0fdf4;border-color:#bbf7d0;color:#166534;">
+                                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24"
+                                            fill="none" stroke="currentColor" stroke-width="2">
+                                            <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+                                            <path d="M7 11V7a5 5 0 0 1 9.9-1" />
+                                        </svg>
+                                        Đang ở trạng thái <strong style="margin:0 3px;">Draft</strong> — bảng đã được mở khoá.
+                                        Xác nhận lại khi hoàn tất.
+                                    </div>
+                                    <button class="confirm-btn" onclick="confirmKpi()" id="confirmKpiBtn">
+                                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24"
+                                            fill="none" stroke="currentColor" stroke-width="2.5">
+                                            <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
+                                            <polyline points="22 4 12 14.01 9 11.01" />
+                                        </svg>
+                                        Xác nhận KPI Quý
+                                    </button>
+
+                                <?php else: ?>
+                                    <!-- STATE: No history yet -->
+                                    <button class="confirm-btn" onclick="confirmKpi()" id="confirmKpiBtn">
+                                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24"
+                                            fill="none" stroke="currentColor" stroke-width="2.5">
+                                            <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
+                                            <polyline points="22 4 12 14.01 9 11.01" />
+                                        </svg>
+                                        Xác nhận KPI Quý
+                                    </button>
+                                <?php endif; ?>
                             </div>
+                            <div id="confirmErrorBox" style="display:none; flex:1; min-width:250px;"></div>
+                        </div>
 
                     <?php endif; ?>
 
@@ -1565,75 +1598,75 @@ function formatMoney($amount, $currency_code)
                     usort($audit_events, fn($a, $b) => strcmp($b['time'], $a['time']));
                     ?>
                     <?php if (!empty($audit_events)): ?>
-                            <div style="border-top: 1px dashed #e2e8f0; margin-top: 1.5rem; padding-top: 1.25rem;">
-                                <div
-                                    style="font-size: 11px; font-weight:700; color:#64748b; text-transform:uppercase; letter-spacing:.5px; margin-bottom:.75rem; display:flex; align-items:center; gap:6px;">
-                                    <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24"
-                                        fill="none" stroke="currentColor" stroke-width="2">
-                                        <circle cx="12" cy="12" r="10" />
-                                        <polyline points="12 6 12 12 16 14" />
-                                    </svg>
-                                    Lịch sử hoạt động (<?= count($audit_events) ?> sự kiện)
-                                </div>
-                                <div style="max-height: 220px; overflow-y: auto; display:flex; flex-direction:column; gap:5px;">
-                                    <?php foreach ($audit_events as $ev):
-                                        $t = $ev['type'];
-                                        if ($t === 'confirmed') {
-                                            $dot_bg = '#d1fae5';
-                                            $dot_border = '#6ee7b7';
-                                            $dot_color = '#065f46';
-                                            $dot_icon = '✓';
-                                            $label = '<span style="background:#d1fae5;color:#065f46;padding:1px 8px;border-radius:10px;font-weight:600;font-size:11px;">✅ Đã xác nhận KPI</span>';
-                                        } elseif ($t === 'reset') {
-                                            $dot_bg = '#fef3c7';
-                                            $dot_border = '#fde68a';
-                                            $dot_color = '#92400e';
-                                            $dot_icon = '↩';
-                                            $label = '<span style="background:#fef3c7;color:#92400e;padding:1px 8px;border-radius:10px;font-weight:600;font-size:11px;">🔓 Reset to Draft</span>';
-                                        } elseif ($t === 'edit') {
-                                            $dot_bg = '#eff6ff';
-                                            $dot_border = '#bfdbfe';
-                                            $dot_color = '#1d4ed8';
-                                            $dot_icon = '✎';
-                                            $d = $ev['data'];
-                                            $field_labels = [
-                                                'contract_type' => 'Loại HĐ',
-                                                'presales' => 'Presales',
-                                                'client_type' => 'Loại KH',
-                                                'profit_pakd' => '%Profit PAKD',
-                                                'net_profit' => 'Net profit',
-                                                'com_lead_source' => '% Com Lead',
-                                                'bonus_license_trading' => '% Bonus',
-                                                'com_1' => '% Com 1',
-                                                'com_2' => '% Com 2',
-                                                'note' => 'Note'
-                                            ];
-                                            $fn = $field_labels[$d['field_name']] ?? $d['field_name'];
-                                            $old = htmlspecialchars($d['old_value'] ?? '');
-                                            $new = htmlspecialchars($d['new_value'] ?? '');
-                                            $inv = $d['odoo_invoice_id'] ?? 'N/A';
-                                            $label = "<span style='font-size:11px;'>Sửa <strong>$fn</strong> (Invoice #$inv): "
-                                                . ($old !== '' ? "<span style='color:#94a3b8;text-decoration:line-through;'>$old</span> → " : '')
-                                                . "<strong style='color:#1d4ed8;'>$new</strong></span>";
-                                        } else {
-                                            $dot_bg = '#f1f5f9';
-                                            $dot_border = '#e2e8f0';
-                                            $dot_color = '#475569';
-                                            $dot_icon = '•';
-                                            $label = '<span style="font-size:11px;">Hoạt động: ' . htmlspecialchars($t) . '</span>';
-                                        }
-                                        ?>
-                                            <div style="display:flex; align-items:baseline; gap:8px; font-size:12px; color:#475569;">
-                                                <span
-                                                    style="width:20px;height:20px;border-radius:50%;background:<?= $dot_bg ?>;border:1.5px solid <?= $dot_border ?>;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;font-size:10px;color:<?= $dot_color ?>;font-weight:700;"><?= $dot_icon ?></span>
-                                                <span style="flex:1;"><?= $label ?></span>
-                                                <span
-                                                    style="white-space:nowrap;color:#94a3b8;font-size:11px;"><?= date('H:i:s • d/m/Y', strtotime($ev['time'])) ?>
-                                                    — <?= htmlspecialchars($ev['by']) ?></span>
-                                            </div>
-                                    <?php endforeach; ?>
-                                </div>
+                        <div style="border-top: 1px dashed #e2e8f0; margin-top: 1.5rem; padding-top: 1.25rem;">
+                            <div
+                                style="font-size: 11px; font-weight:700; color:#64748b; text-transform:uppercase; letter-spacing:.5px; margin-bottom:.75rem; display:flex; align-items:center; gap:6px;">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24"
+                                    fill="none" stroke="currentColor" stroke-width="2">
+                                    <circle cx="12" cy="12" r="10" />
+                                    <polyline points="12 6 12 12 16 14" />
+                                </svg>
+                                Lịch sử hoạt động (<?= count($audit_events) ?> sự kiện)
                             </div>
+                            <div style="max-height: 220px; overflow-y: auto; display:flex; flex-direction:column; gap:5px;">
+                                <?php foreach ($audit_events as $ev):
+                                    $t = $ev['type'];
+                                    if ($t === 'confirmed') {
+                                        $dot_bg = '#d1fae5';
+                                        $dot_border = '#6ee7b7';
+                                        $dot_color = '#065f46';
+                                        $dot_icon = '✓';
+                                        $label = '<span style="background:#d1fae5;color:#065f46;padding:1px 8px;border-radius:10px;font-weight:600;font-size:11px;">✅ Đã xác nhận KPI</span>';
+                                    } elseif ($t === 'reset') {
+                                        $dot_bg = '#fef3c7';
+                                        $dot_border = '#fde68a';
+                                        $dot_color = '#92400e';
+                                        $dot_icon = '↩';
+                                        $label = '<span style="background:#fef3c7;color:#92400e;padding:1px 8px;border-radius:10px;font-weight:600;font-size:11px;">🔓 Reset to Draft</span>';
+                                    } elseif ($t === 'edit') {
+                                        $dot_bg = '#eff6ff';
+                                        $dot_border = '#bfdbfe';
+                                        $dot_color = '#1d4ed8';
+                                        $dot_icon = '✎';
+                                        $d = $ev['data'];
+                                        $field_labels = [
+                                            'contract_type' => 'Loại HĐ',
+                                            'presales' => 'Presales',
+                                            'client_type' => 'Loại KH',
+                                            'profit_pakd' => '%Profit PAKD',
+                                            'net_profit' => 'Net profit',
+                                            'com_lead_source' => '% Com Lead',
+                                            'bonus_license_trading' => '% Bonus',
+                                            'com_1' => '% Com 1',
+                                            'com_2' => '% Com 2',
+                                            'note' => 'Note'
+                                        ];
+                                        $fn = $field_labels[$d['field_name']] ?? $d['field_name'];
+                                        $old = htmlspecialchars($d['old_value'] ?? '');
+                                        $new = htmlspecialchars($d['new_value'] ?? '');
+                                        $inv = $d['odoo_invoice_id'] ?? 'N/A';
+                                        $label = "<span style='font-size:11px;'>Sửa <strong>$fn</strong> (Invoice #$inv): "
+                                            . ($old !== '' ? "<span style='color:#94a3b8;text-decoration:line-through;'>$old</span> → " : '')
+                                            . "<strong style='color:#1d4ed8;'>$new</strong></span>";
+                                    } else {
+                                        $dot_bg = '#f1f5f9';
+                                        $dot_border = '#e2e8f0';
+                                        $dot_color = '#475569';
+                                        $dot_icon = '•';
+                                        $label = '<span style="font-size:11px;">Hoạt động: ' . htmlspecialchars($t) . '</span>';
+                                    }
+                                    ?>
+                                    <div style="display:flex; align-items:baseline; gap:8px; font-size:12px; color:#475569;">
+                                        <span
+                                            style="width:20px;height:20px;border-radius:50%;background:<?= $dot_bg ?>;border:1.5px solid <?= $dot_border ?>;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;font-size:10px;color:<?= $dot_color ?>;font-weight:700;"><?= $dot_icon ?></span>
+                                        <span style="flex:1;"><?= $label ?></span>
+                                        <span
+                                            style="white-space:nowrap;color:#94a3b8;font-size:11px;"><?= date('H:i:s • d/m/Y', strtotime($ev['time'])) ?>
+                                            — <?= htmlspecialchars($ev['by']) ?></span>
+                                    </div>
+                                <?php endforeach; ?>
+                            </div>
+                        </div>
                     <?php endif; ?>
 
                 </div>
@@ -1642,395 +1675,399 @@ function formatMoney($amount, $currency_code)
                      BÁO CÁO THANH TOÁN — Paid Invoices
                 ═══════════════════════════════════════════ -->
                 <?php if ($is_confirmed): ?>
-                        <?php
-                        $paid_invoices_grouped = [];
-                        $paid_total_vnd = 0;
-                        $all_paid_candidates = array_merge($filtered_invoices, $past_paid_invoices);
-                        foreach ($all_paid_candidates as $inv) {
-                            $p_state = $inv['payment_state'] ?? '';
-                            // Include partially paid and fully paid invoices
-                            if (!in_array($p_state, ['paid', 'in_payment', 'partial']))
-                                continue;
-                            if ((int) ($inv['is_excluded'] ?? 0) === 1)
-                                continue;
+                    <?php
+                    $paid_invoices_grouped = [];
+                    $paid_total_vnd = 0;
+                    $all_paid_candidates = array_merge($filtered_invoices, $past_paid_invoices);
+                    foreach ($all_paid_candidates as $inv) {
+                        $p_state = $inv['payment_state'] ?? '';
+                        // Include partially paid and fully paid invoices
+                        if (!in_array($p_state, ['paid', 'in_payment', 'partial']))
+                            continue;
+                        if ((int) ($inv['is_excluded'] ?? 0) === 1)
+                            continue;
 
-                            // Parse payment widget early
-                            $pay_widget = $inv['invoice_payments_widget'] ?? null;
-                            $giaingan_origin = 0;
-                            $ngay_tien_ve_arr = [];
-                            if ($pay_widget && $pay_widget !== 'false') {
-                                $pw = is_array($pay_widget) ? $pay_widget : json_decode($pay_widget, true);
-                                if (is_array($pw)) {
-                                    foreach ($pw['content'] ?? [] as $p) {
-                                        if (!empty($p['is_exchange']))
-                                            continue; // Không cộng chênh lệch tỷ giá (khác currency)
-                                        $giaingan_origin += (float) ($p['amount'] ?? 0);
-                                        if (!empty($p['date']))
-                                            $ngay_tien_ve_arr[] = $p['date'];
-                                    }
+                        // Parse payment widget early
+                        $pay_widget = $inv['invoice_payments_widget'] ?? null;
+                        $giaingan_origin = 0;
+                        $ngay_tien_ve_arr = [];
+                        if ($pay_widget && $pay_widget !== 'false') {
+                            $pw = is_array($pay_widget) ? $pay_widget : json_decode($pay_widget, true);
+                            if (is_array($pw)) {
+                                foreach ($pw['content'] ?? [] as $p) {
+                                    if (!empty($p['is_exchange']))
+                                        continue; // Không cộng chênh lệch tỷ giá (khác currency)
+                                    $giaingan_origin += (float) ($p['amount'] ?? 0);
+                                    if (!empty($p['date']))
+                                        $ngay_tien_ve_arr[] = $p['date'];
                                 }
                             }
-                            if ($giaingan_origin <= 0)
-                                continue; // Skip if nothing was actually disbursed yet
-                    
-                            // Convert disbursed amount to VND for totals
-                            $amt_total = (float) ($inv['amount_total'] ?? 0);
-                            $calc_vnd = (float) ($inv['calc_amount_vnd'] ?? 0);
-                            $ratio = $amt_total > 0 ? ($calc_vnd / $amt_total) : 1;
-                            $giaingan_vnd_converted = $giaingan_origin * $ratio;
-
-                            // Save parsed values for HTML rendering
-                            $inv['parsed_giaingan_origin'] = $giaingan_origin;
-                            $inv['parsed_giaingan_vnd'] = $giaingan_vnd_converted;
-                            $inv['parsed_ngay_tien_ve'] = !empty($ngay_tien_ve_arr) ? date('d/m/Y', strtotime(max($ngay_tien_ve_arr))) : '';
-
-                            $inv_date_str = $inv['invoice_date'] ?: $inv['date'];
-                            if (!empty($inv['is_past_quarter'])) {
-                                $month_key = 'ZZZ_PAST';
-                            } else {
-                                $month_key = $inv_date_str ? date('Y-m', strtotime($inv_date_str)) : 'Unknown';
-                            }
-                            $paid_invoices_grouped[$month_key][] = $inv;
-
-                            // Add actual disbursed money to total, NOT the full invoice value
-                            $paid_total_vnd += $giaingan_vnd_converted;
                         }
-                        ksort($paid_invoices_grouped);
-                        $odoo_url = $odoo->getUrl();
-                        ?>
-                        <div class="kpi-report" style="margin-top: 2rem;">
-                            <div class="kpi-report-header">
-                                <div class="kpi-report-title">
-                                    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24"
-                                        fill="none" stroke="#10b981" stroke-width="2.5">
-                                        <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
-                                    </svg>
-                                    Báo cáo Thanh toán (Đã thu)
-                                </div>
-                                <span class="kpi-quarter-label">📅 <?= htmlspecialchars($quarter_label) ?> &nbsp;·&nbsp;
-                                    <strong><?= array_sum(array_map('count', $paid_invoices_grouped)) ?></strong> hóa đơn
-                                    &nbsp;·&nbsp;
-                                    Tổng: <strong><?= number_format($paid_total_vnd / 1e9, 3) ?>B VND</strong>
-                                </span>
+                        if ($giaingan_origin <= 0)
+                            continue; // Skip if nothing was actually disbursed yet
+                
+                        // Convert disbursed amount to VND for totals
+                        $amt_total = (float) ($inv['amount_total'] ?? 0);
+                        $calc_vnd = (float) ($inv['calc_amount_vnd'] ?? 0);
+                        $ratio = $amt_total > 0 ? ($calc_vnd / $amt_total) : 1;
+                        $giaingan_vnd_converted = $giaingan_origin * $ratio;
+
+                        // Save parsed values for HTML rendering
+                        $inv['parsed_giaingan_origin'] = $giaingan_origin;
+                        $inv['parsed_giaingan_vnd'] = $giaingan_vnd_converted;
+                        $inv['parsed_ngay_tien_ve'] = !empty($ngay_tien_ve_arr) ? date('d/m/Y', strtotime(max($ngay_tien_ve_arr))) : '';
+
+                        $inv_date_str = $inv['invoice_date'] ?: $inv['date'];
+                        if (!empty($inv['is_past_quarter'])) {
+                            $month_key = 'ZZZ_PAST';
+                        } else {
+                            $month_key = $inv_date_str ? date('Y-m', strtotime($inv_date_str)) : 'Unknown';
+                        }
+                        $paid_invoices_grouped[$month_key][] = $inv;
+
+                        // Add actual disbursed money to total, NOT the full invoice value
+                        $paid_total_vnd += $giaingan_vnd_converted;
+                    }
+                    ksort($paid_invoices_grouped);
+                    $odoo_url = $odoo->getUrl();
+                    ?>
+                    <div class="kpi-report" style="margin-top: 2rem;">
+                        <div class="kpi-report-header">
+                            <div class="kpi-report-title">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24"
+                                    fill="none" stroke="#10b981" stroke-width="2.5">
+                                    <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+                                </svg>
+                                Báo cáo Thanh toán (Đã thu)
                             </div>
+                            <span class="kpi-quarter-label">📅 <?= htmlspecialchars($quarter_label) ?> &nbsp;·&nbsp;
+                                <strong><?= array_sum(array_map('count', $paid_invoices_grouped)) ?></strong> hóa đơn
+                                &nbsp;·&nbsp;
+                                Tổng: <strong><?= number_format($paid_total_vnd / 1e9, 3) ?>B VND</strong>
+                            </span>
+                        </div>
 
-                            <?php if (empty($paid_invoices_grouped)): ?>
-                                    <div class="kpi-no-level">✅ Chưa có hóa đơn nào được thanh toán (paid) trong quý này.</div>
-                            <?php else: ?>
-                                    <div style="overflow-x: auto;">
-                                        <table class="report-table" style="margin-top: 1rem;">
-                                            <thead>
-                                                <tr>
-                                                    <th style="width:40px;text-align:center;">STT</th>
-                                                    <th style="width:100px;">Invoice #</th>
-                                                    <th style="width:50px;text-align:center;">Loại trừ</th>
-                                                    <th style="width:150px;">Tên khách hàng</th>
-                                                    <th style="width:150px;">Tên Dự án</th>
-                                                    <th style="width:110px;">Mã dự án</th>
-                                                    <th style="width:95px;">Ngày ký HĐ</th>
-                                                    <th style="width:110px;">Loại HĐ</th>
-                                                    <th style="width:90px;">Presales</th>
-                                                    <th style="width:110px;">Loại KH</th>
-                                                    <th style="width:145px;text-align:right;">Giá trị HĐ/HD</th>
-                                                    <th style="width:120px;">%Profit PAKD</th>
-                                                    <th style="width:110px;">Net profit</th>
-                                                    <th style="width:140px;text-align:right;">Giá trị xuất VAT</th>
-                                                    <th style="width:140px;text-align:right;">Giá trị giải ngân</th>
-                                                    <th style="width:140px;text-align:right;">Giá trị giải ngân (USD)</th>
-                                                    <th style="width:80px;text-align:center;">Link Odoo</th>
-                                                    <th style="width:105px;">Ngày xuất VAT</th>
-                                                    <th style="width:115px;">Ngày tiền về</th>
-                                                    <th style="width:130px;">% Com Lead</th>
-                                                    <th style="width:150px;">% Bonus Lic/Trd</th>
-                                                    <th style="width:75px;">% Com 1</th>
-                                                    <th style="width:90px;">% Com 2</th>
-                                                    <th style="width:130px;text-align:right;">Commission (USD)</th>
-                                                    <th style="width:130px;text-align:right;">Com giữ lại (USD)</th>
-                                                    <th style="min-width:180px;">Note</th>
+                        <?php if (empty($paid_invoices_grouped)): ?>
+                            <div class="kpi-no-level">✅ Chưa có hóa đơn nào được thanh toán (paid) trong quý này.</div>
+                        <?php else: ?>
+                            <div style="overflow-x: auto;">
+                                <table class="report-table" style="margin-top: 1rem;">
+                                    <thead>
+                                        <tr>
+                                            <th style="width:40px;text-align:center;">STT</th>
+                                            <th style="width:100px;">Invoice #</th>
+                                            <th style="width:50px;text-align:center;">Loại trừ</th>
+                                            <th style="width:150px;">Tên khách hàng</th>
+                                            <th style="width:150px;">Tên Dự án</th>
+                                            <th style="width:110px;">Mã dự án</th>
+                                            <th style="width:95px;">Ngày ký HĐ</th>
+                                            <th style="width:110px;">Loại HĐ</th>
+                                            <th style="width:90px;">Presales</th>
+                                            <th style="width:110px;">Loại KH</th>
+                                            <th style="width:145px;text-align:right;">Giá trị HĐ/HD</th>
+                                            <th style="width:120px;">%Profit PAKD</th>
+                                            <th style="width:110px;">Net profit</th>
+                                            <th style="width:140px;text-align:right;">Giá trị xuất VAT</th>
+                                            <th style="width:140px;text-align:right;">Giá trị giải ngân</th>
+                                            <th style="width:140px;text-align:right;">Giá trị giải ngân (USD)</th>
+                                            <th style="width:80px;text-align:center;">Link Odoo</th>
+                                            <th style="width:105px;">Ngày xuất VAT</th>
+                                            <th style="width:115px;">Ngày tiền về</th>
+                                            <th style="width:130px;">% Com Lead</th>
+                                            <th style="width:150px;">% Bonus Lic/Trd</th>
+                                            <th style="width:75px;">% Com 1</th>
+                                            <th style="width: 90px;">% Com 2</th>
+                                            <th style="width: 100px;">License/trading</th>
+                                            <th style="width: 130px; text-align:right;">Commission (USD)</th>
+                                            <th style="width:130px;text-align:right;">Com giữ lại (USD)</th>
+                                            <th style="min-width:180px;">Note</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <?php $pstt = 1;
+                                        $quarter_total_giaingan_usd = 0;
+                                        $quarter_total_comm1_usd = 0;
+                                        $quarter_total_comm2_usd = 0;
+                                        foreach ($paid_invoices_grouped as $month_key => $month_invs):
+                                            if ($month_key === 'ZZZ_PAST') {
+                                                $display_group = 'HÓA ĐƠN QUÝ TRƯỚC ĐƯỢC TT';
+                                            } else {
+                                                $display_group = 'THÁNG ' . ($month_key !== 'Unknown' ? date('m / Y', strtotime($month_key . '-01')) : 'Unknown');
+                                            }
+                                            $month_sub = 0;
+                                            $month_giaingan_usd = 0;
+                                            $month_comm1_usd = 0;
+                                            $month_comm2_usd = 0;
+                                            ?>
+                                            <tr class="month-group-header">
+                                                <td colspan="26"><?= $display_group ?></td>
+                                            </tr>
+                                            <?php foreach ($month_invs as $inv):
+                                                $oid = $inv['id'];
+                                                $l = $local_data[$oid] ?? [];
+                                                $inv_date_str = $inv['invoice_date'] ?: $inv['date'];
+                                                $month_str = $inv_date_str ? date('d/m/Y', strtotime($inv_date_str)) : '';
+
+                                                // Add actual disbursed amount to month total
+                                                $giaingan_origin = $inv['parsed_giaingan_origin'] ?? 0;
+                                                $giaingan_vnd_converted = $inv['parsed_giaingan_vnd'] ?? 0;
+                                                $ngay_tien_ve = $inv['parsed_ngay_tien_ve'] ?? '';
+                                                $month_sub += $giaingan_vnd_converted;
+
+                                                $com1_p = (float) str_replace(['%', ','], '', $l['com_1'] ?? '0');
+                                                $com2_p = (float) str_replace(['%', ','], '', $l['com_2'] ?? '0');
+
+                                                $currency_code = is_array($inv['currency_id']) ? $inv['currency_id'][1] : 'VND';
+
+                                                $rateSource = $odoo->getRate($currency_code, $inv_date_str) ?: 1.0;
+                                                $rateUsd = $odoo->getRate('USD', $inv_date_str) ?: 1.0;
+                                                $ratioUsd = $rateSource > 0 ? ($rateUsd / $rateSource) : 1;
+
+                                                // Convert disbursed amount to USD FIRST before multiplying by commission
+                                                $giaingan_usd = $giaingan_origin * $ratioUsd;
+
+                                                $comm1_val_usd = $giaingan_usd * ($com1_p / 100);
+                                                $comm2_val_usd = $giaingan_usd * ($com2_p / 100);
+
+                                                $month_giaingan_usd += $giaingan_usd;
+                                                $month_comm1_usd += $comm1_val_usd;
+                                                $month_comm2_usd += $comm2_val_usd;
+
+                                                $quarter_total_giaingan_usd += $giaingan_usd;
+                                                $quarter_total_comm1_usd += $comm1_val_usd;
+                                                $quarter_total_comm2_usd += $comm2_val_usd;
+
+                                                $vat_amount = (float) ($inv['amount_total'] ?? 0);
+                                                $odoo_link = $odoo_url . '/web#id=' . $oid . '&model=account.move&view_type=form';
+                                                ?>
+                                                <tr class="invoice-row" data-invoice-id="<?= $oid ?>">
+                                                    <td style="text-align:center;"><?= $pstt++ ?></td>
+                                                    <td
+                                                        style="font-family:monospace;font-size:12px;color:#64748b;text-align:center;font-weight:600;">
+                                                        #<?= $oid ?></td>
+                                                    <td style="text-align: center;">
+                                                        <button class="exclude-btn" onclick="toggleExclude(this, <?= $oid ?>)"
+                                                            title="Loại trừ (Remove) invoice này khỏi báo cáo">
+                                                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"
+                                                                fill="currentColor">
+                                                                <path
+                                                                    d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm5 11H7v-2h10v2z" />
+                                                            </svg>
+                                                        </button>
+                                                    </td>
+                                                    <td><?= htmlspecialchars(is_array($inv['partner_id']) ? $inv['partner_id'][1] : '') ?>
+                                                    </td>
+                                                    <td><?= htmlspecialchars($inv['ref'] ?: $inv['name']) ?></td>
+                                                    <td><?= htmlspecialchars($inv['x_studio_project_code'] ?? '') ?></td>
+                                                    <td><?= $month_str ?></td>
+                                                    <td><?= htmlspecialchars($l['contract_type'] ?? '') ?></td>
+                                                    <td><?= htmlspecialchars($l['presales'] ?? '') ?></td>
+                                                    <td><?= htmlspecialchars($l['client_type'] ?? '') ?></td>
+                                                    <td style="text-align:right;font-family:monospace;">
+                                                        <?= formatMoney($vat_amount, $currency_code) ?>
+                                                    </td>
+                                                    <td><?= htmlspecialchars($l['profit_pakd'] ?? '') ?></td>
+                                                    <td><?= htmlspecialchars($l['net_profit'] ?? '') ?></td>
+                                                    <td style="text-align:right;font-family:monospace;color:#0f766e;font-weight:600;">
+                                                        <?= formatMoney($vat_amount, $currency_code) ?>
+                                                    </td>
+                                                    <td style="text-align:right;font-family:monospace;color:#1d4ed8;font-weight:600;">
+                                                        <?= $giaingan_origin > 0 ? formatMoney($giaingan_origin, $currency_code) : '<span style="color:#94a3b8">—</span>' ?>
+                                                    </td>
+                                                    <td style="text-align:right;font-family:monospace;color:#059669;font-weight:600;">
+                                                        <?= $giaingan_usd > 0 ? formatMoney($giaingan_usd, 'USD') : '<span style="color:#94a3b8">—</span>' ?>
+                                                    </td>
+                                                    <td style="text-align:center;">
+                                                        <a href="<?= htmlspecialchars($odoo_link) ?>" target="_blank"
+                                                            title="Mở trong Odoo"
+                                                            style="display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;border-radius:6px;background:#eff6ff;border:1.5px solid #bfdbfe;color:#2563eb;text-decoration:none;transition:all .2s;"
+                                                            onmouseover="this.style.background='#2563eb';this.style.color='#fff'"
+                                                            onmouseout="this.style.background='#eff6ff';this.style.color='#2563eb'">
+                                                            <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13"
+                                                                viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                                                stroke-width="2.5">
+                                                                <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
+                                                                <polyline points="15 3 21 3 21 9" />
+                                                                <line x1="10" y1="14" x2="21" y2="3" />
+                                                            </svg>
+                                                        </a>
+                                                    </td>
+                                                    <td><?= $month_str ?></td>
+                                                    <td style="color:#0f766e;font-weight:500;">
+                                                        <?= $ngay_tien_ve ?: '<span style="color:#94a3b8">—</span>' ?>
+                                                    </td>
+                                                    <td><?= htmlspecialchars($l['com_lead_source'] ?? '') ?></td>
+                                                    <td><?= htmlspecialchars($l['bonus_license_trading'] ?? '') ?></td>
+                                                    <td style="color:#c5221f;font-weight:600;">
+                                                        <?= htmlspecialchars($l['com_1'] ?? '') ?>
+                                                    </td>
+                                                    <td><?= htmlspecialchars($l['com_2'] ?? '') ?></td>
+                                                    <td style="background:#f0f7ff; font-weight:600; color:#1e40af; text-align:center;">
+                                                        <?= htmlspecialchars($l['license_trading'] ?? '') ?>
+                                                    </td>
+                                                    <td style="text-align:right;font-family:monospace;color:#b91c1c;font-weight:600;">
+                                                        <?= $comm1_val_usd > 0 ? formatMoney($comm1_val_usd, 'USD') : '<span style="color:#d1d5db">—</span>' ?>
+                                                    </td>
+                                                    <td style="text-align:right;font-family:monospace;color:#b91c1c;font-weight:600;">
+                                                        <?= $comm2_val_usd > 0 ? formatMoney($comm2_val_usd, 'USD') : '<span style="color:#d1d5db">—</span>' ?>
+                                                    </td>
+                                                    <td><?= htmlspecialchars($l['note'] ?? '') ?></td>
                                                 </tr>
-                                            </thead>
-                                            <tbody>
-                                                <?php $pstt = 1;
-                                                $quarter_total_giaingan_usd = 0;
-                                                $quarter_total_comm1_usd = 0;
-                                                $quarter_total_comm2_usd = 0;
-                                                foreach ($paid_invoices_grouped as $month_key => $month_invs):
-                                                    if ($month_key === 'ZZZ_PAST') {
-                                                        $display_group = 'HÓA ĐƠN QUÝ TRƯỚC ĐƯỢC TT';
-                                                    } else {
-                                                        $display_group = 'THÁNG ' . ($month_key !== 'Unknown' ? date('m / Y', strtotime($month_key . '-01')) : 'Unknown');
-                                                    }
-                                                    $month_sub = 0;
-                                                    $month_giaingan_usd = 0;
-                                                    $month_comm1_usd = 0;
-                                                    $month_comm2_usd = 0;
-                                                    ?>
-                                                        <tr class="month-group-header">
-                                                            <td colspan="26"><?= $display_group ?></td>
-                                                        </tr>
-                                                        <?php foreach ($month_invs as $inv):
-                                                            $oid = $inv['id'];
-                                                            $l = $local_data[$oid] ?? [];
-                                                            $inv_date_str = $inv['invoice_date'] ?: $inv['date'];
-                                                            $month_str = $inv_date_str ? date('d/m/Y', strtotime($inv_date_str)) : '';
+                                            <?php endforeach; ?>
+                                            <tr class="month-total-row">
+                                                <td colspan="14" style="text-align:right;">Tổng <?= $display_group ?>:</td>
+                                                <td style="text-align:right;font-weight:700;color:#1d4ed8;">
+                                                    <?= formatMoney($month_sub, 'VND') ?>
+                                                </td>
+                                                <td style="text-align:right;font-weight:700;color:#059669;">
+                                                    <?= formatMoney($month_giaingan_usd, 'USD') ?>
+                                                </td>
+                                                <td colspan="7"></td>
+                                                <td style="text-align:right;font-weight:700;color:#b91c1c;">
+                                                    <?= formatMoney($month_comm1_usd, 'USD') ?>
+                                                </td>
+                                                <td style="text-align:right;font-weight:700;color:#b91c1c;">
+                                                    <?= formatMoney($month_comm2_usd, 'USD') ?>
+                                                </td>
+                                                <td></td>
+                                            </tr>
+                                        <?php endforeach; ?>
+                                        <tr style="background:#f1f5f9;font-weight:bold;">
+                                            <td colspan="15" style="text-align:right;font-size:14px;padding: 1rem 0.75rem;">TỔNG
+                                                CỘNG QUÝ:</td>
+                                            <td style="text-align:right;color:#059669;font-size:14px;padding: 1rem 0.75rem;">
+                                                <?= formatMoney($quarter_total_giaingan_usd, 'USD') ?>
+                                            </td>
+                                            <td colspan="7"></td>
+                                            <td style="text-align:right;color:#b91c1c;font-size:14px;padding: 1rem 0.75rem;">
+                                                <?= formatMoney($quarter_total_comm1_usd, 'USD') ?>
+                                            </td>
+                                            <td style="text-align:right;color:#b91c1c;font-size:14px;padding: 1rem 0.75rem;">
+                                                <?= formatMoney($quarter_total_comm2_usd, 'USD') ?>
+                                            </td>
+                                            <td></td>
+                                        </tr>
+                                    </tbody>
+                                </table>
 
-                                                            // Add actual disbursed amount to month total
-                                                            $giaingan_origin = $inv['parsed_giaingan_origin'] ?? 0;
-                                                            $giaingan_vnd_converted = $inv['parsed_giaingan_vnd'] ?? 0;
-                                                            $ngay_tien_ve = $inv['parsed_ngay_tien_ve'] ?? '';
-                                                            $month_sub += $giaingan_vnd_converted;
+                                <?php
+                                // Tính Commission theo rule quy định KPI
+                                $kpi_pct = isset($pct_quarter) ? $pct_quarter : 0;
 
-                                                            $com1_p = (float) str_replace(['%', ','], '', $l['com_1'] ?? '0');
-                                                            $com2_p = (float) str_replace(['%', ','], '', $l['com_2'] ?? '0');
+                                if ($kpi_pct < 70) {
+                                    $payout_ratio = 0;
+                                    $payout_label = "Dưới 70% KPI -> Nhận 0%";
+                                } elseif ($kpi_pct < 100) {
+                                    $payout_ratio = 0.7;
+                                    $payout_label = "Từ 70% đến dưới 100% KPI -> Nhận 70%";
+                                } else {
+                                    $payout_ratio = 1.0;
+                                    $payout_label = "Đạt >= 100% KPI -> Nhận 100%";
+                                }
 
-                                                            $currency_code = is_array($inv['currency_id']) ? $inv['currency_id'][1] : 'VND';
+                                $final_comm1_usd = $quarter_total_comm1_usd * $payout_ratio;
+                                $final_comm2_usd = $quarter_total_comm2_usd * $payout_ratio;
+                                $total_com_usd = $final_comm1_usd + $final_comm2_usd;
+                                ?>
+                                <div
+                                    style="margin-top: 2rem; background: #fff; border: 1px solid #e2e8f0; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.05); padding: 1.5rem; max-width: 600px;">
+                                    <h3
+                                        style="margin-top:0; margin-bottom: 1rem; color: #1e293b; font-size: 16px; border-bottom: 2px solid #f1f5f9; padding-bottom: 0.5rem; display: flex; align-items: center; gap: 0.5rem;">
+                                        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24"
+                                            fill="none" stroke="#eab308" stroke-width="2.5">
+                                            <circle cx="12" cy="8" r="7"></circle>
+                                            <polyline points="8.21 13.89 7 23 12 20 17 23 15.79 13.88"></polyline>
+                                        </svg>
+                                        TỔNG KẾT COMMISSION ĐƯỢC NHẬN
+                                    </h3>
 
-                                                            $rateSource = $odoo->getRate($currency_code, $inv_date_str) ?: 1.0;
-                                                            $rateUsd = $odoo->getRate('USD', $inv_date_str) ?: 1.0;
-                                                            $ratioUsd = $rateSource > 0 ? ($rateUsd / $rateSource) : 1;
+                                    <div
+                                        style="display: flex; justify-content: space-between; margin-bottom: 0.75rem; color: #475569; font-size: 14px;">
+                                        <span>Tỉ lệ hoàn thành KPI (Quý):</span>
+                                        <span
+                                            style="font-weight: 600; color: #0f172a;"><?= number_format($kpi_pct, 1) ?>%</span>
+                                    </div>
+                                    <div
+                                        style="display: flex; justify-content: space-between; margin-bottom: 0.75rem; color: #475569; font-size: 14px;">
+                                        <span>Hệ số Payout áp dụng:</span>
+                                        <span
+                                            style="font-weight: 600; color: <?= $payout_ratio == 0 ? '#ef4444' : ($payout_ratio == 1 ? '#10b981' : '#f59e0b') ?>;">
+                                            <?= $payout_label ?>
+                                        </span>
+                                    </div>
 
-                                                            // Convert disbursed amount to USD FIRST before multiplying by commission
-                                                            $giaingan_usd = $giaingan_origin * $ratioUsd;
+                                    <div style="height: 1px; background: #e2e8f0; margin: 1rem 0;"></div>
 
-                                                            $comm1_val_usd = $giaingan_usd * ($com1_p / 100);
-                                                            $comm2_val_usd = $giaingan_usd * ($com2_p / 100);
+                                    <div
+                                        style="display: flex; justify-content: space-between; margin-bottom: 0.5rem; color: #475569; font-size: 14px;">
+                                        <span>Tổng Commission (Com 1) x <?= $payout_ratio * 100 ?>%:</span>
+                                        <span
+                                            style="font-weight: 600; font-family: monospace; color: #b91c1c; font-size: 15px;">
+                                            <?= formatMoney($final_comm1_usd, 'USD') ?>
+                                        </span>
+                                    </div>
+                                    <div
+                                        style="display: flex; justify-content: space-between; margin-bottom: 1rem; color: #475569; font-size: 14px;">
+                                        <span>Tổng Com giữ lại (Com 2) x <?= $payout_ratio * 100 ?>%:</span>
+                                        <span
+                                            style="font-weight: 600; font-family: monospace; color: #b91c1c; font-size: 15px;">
+                                            <?= formatMoney($final_comm2_usd, 'USD') ?>
+                                        </span>
+                                    </div>
 
-                                                            $month_giaingan_usd += $giaingan_usd;
-                                                            $month_comm1_usd += $comm1_val_usd;
-                                                            $month_comm2_usd += $comm2_val_usd;
+                                    <div
+                                        style="display: flex; justify-content: space-between; align-items: center; background: #fbbf24; color: #78350f; padding: 1rem; border-radius: 6px; font-weight: bold; font-size: 16px;">
+                                        <span>THỰC NHẬN KỲ NÀY:</span>
+                                        <span style="font-family: monospace; font-size: 20px;">
+                                            <?= formatMoney($total_com_usd, 'USD') ?>
+                                        </span>
+                                    </div>
+                                    <div
+                                        style="text-align:right; font-size: 12px; color: #94a3b8; margin-top: 0.5rem; font-style: italic; margin-bottom: 1.5rem;">
+                                        * Phụ thuộc vào chính sách chi trả của công ty theo từng thời kỳ.
+                                    </div>
 
-                                                            $quarter_total_giaingan_usd += $giaingan_usd;
-                                                            $quarter_total_comm1_usd += $comm1_val_usd;
-                                                            $quarter_total_comm2_usd += $comm2_val_usd;
+                                    <div style="border-top: 1px dashed #ced4da; padding-top: 1.5rem;">
+                                        <button type="button" onclick="confirmCommission('<?= $active_tab ?>')"
+                                            style="width: 100%; padding: 12px; background: <?= $comm_is_confirmed ? '#10b981' : '#2563eb' ?>; color: #fff; border: none; border-radius: 6px; font-weight: 600; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px; transition: all 0.2s;"
+                                            onmouseover="this.style.background='<?= $comm_is_confirmed ? '#059669' : '#1d4ed8' ?>'"
+                                            onmouseout="this.style.background='<?= $comm_is_confirmed ? '#10b981' : '#2563eb' ?>'">
+                                            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24"
+                                                fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"
+                                                stroke-linejoin="round">
+                                                <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
+                                                <polyline points="22 4 12 14.01 9 11.01"></polyline>
+                                            </svg>
+                                            <?= $comm_is_confirmed ? 'ĐÃ XÁC NHẬN COMMISSION' : 'XÁC NHẬN COMMISSION' ?>
+                                        </button>
 
-                                                            $vat_amount = (float) ($inv['amount_total'] ?? 0);
-                                                            $odoo_link = $odoo_url . '/web#id=' . $oid . '&model=account.move&view_type=form';
-                                                            ?>
-                                                                <tr class="invoice-row" data-invoice-id="<?= $oid ?>">
-                                                                    <td style="text-align:center;"><?= $pstt++ ?></td>
-                                                                    <td
-                                                                        style="font-family:monospace;font-size:12px;color:#64748b;text-align:center;font-weight:600;">
-                                                                        #<?= $oid ?></td>
-                                                                    <td style="text-align: center;">
-                                                                        <button class="exclude-btn" onclick="toggleExclude(this, <?= $oid ?>)"
-                                                                            title="Loại trừ (Remove) invoice này khỏi báo cáo">
-                                                                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"
-                                                                                fill="currentColor">
-                                                                                <path
-                                                                                    d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm5 11H7v-2h10v2z" />
-                                                                            </svg>
-                                                                        </button>
-                                                                    </td>
-                                                                    <td><?= htmlspecialchars(is_array($inv['partner_id']) ? $inv['partner_id'][1] : '') ?>
-                                                                    </td>
-                                                                    <td><?= htmlspecialchars($inv['ref'] ?: $inv['name']) ?></td>
-                                                                    <td><?= htmlspecialchars($inv['x_studio_project_code'] ?? '') ?></td>
-                                                                    <td><?= $month_str ?></td>
-                                                                    <td><?= htmlspecialchars($l['contract_type'] ?? '') ?></td>
-                                                                    <td><?= htmlspecialchars($l['presales'] ?? '') ?></td>
-                                                                    <td><?= htmlspecialchars($l['client_type'] ?? '') ?></td>
-                                                                    <td style="text-align:right;font-family:monospace;">
-                                                                        <?= formatMoney($vat_amount, $currency_code) ?>
-                                                                    </td>
-                                                                    <td><?= htmlspecialchars($l['profit_pakd'] ?? '') ?></td>
-                                                                    <td><?= htmlspecialchars($l['net_profit'] ?? '') ?></td>
-                                                                    <td style="text-align:right;font-family:monospace;color:#0f766e;font-weight:600;">
-                                                                        <?= formatMoney($vat_amount, $currency_code) ?>
-                                                                    </td>
-                                                                    <td style="text-align:right;font-family:monospace;color:#1d4ed8;font-weight:600;">
-                                                                        <?= $giaingan_origin > 0 ? formatMoney($giaingan_origin, $currency_code) : '<span style="color:#94a3b8">—</span>' ?>
-                                                                    </td>
-                                                                    <td style="text-align:right;font-family:monospace;color:#059669;font-weight:600;">
-                                                                        <?= $giaingan_usd > 0 ? formatMoney($giaingan_usd, 'USD') : '<span style="color:#94a3b8">—</span>' ?>
-                                                                    </td>
-                                                                    <td style="text-align:center;">
-                                                                        <a href="<?= htmlspecialchars($odoo_link) ?>" target="_blank"
-                                                                            title="Mở trong Odoo"
-                                                                            style="display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;border-radius:6px;background:#eff6ff;border:1.5px solid #bfdbfe;color:#2563eb;text-decoration:none;transition:all .2s;"
-                                                                            onmouseover="this.style.background='#2563eb';this.style.color='#fff'"
-                                                                            onmouseout="this.style.background='#eff6ff';this.style.color='#2563eb'">
-                                                                            <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13"
-                                                                                viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                                                                                stroke-width="2.5">
-                                                                                <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
-                                                                                <polyline points="15 3 21 3 21 9" />
-                                                                                <line x1="10" y1="14" x2="21" y2="3" />
-                                                                            </svg>
-                                                                        </a>
-                                                                    </td>
-                                                                    <td><?= $month_str ?></td>
-                                                                    <td style="color:#0f766e;font-weight:500;">
-                                                                        <?= $ngay_tien_ve ?: '<span style="color:#94a3b8">—</span>' ?>
-                                                                    </td>
-                                                                    <td><?= htmlspecialchars($l['com_lead_source'] ?? '') ?></td>
-                                                                    <td><?= htmlspecialchars($l['bonus_license_trading'] ?? '') ?></td>
-                                                                    <td style="color:#c5221f;font-weight:600;">
-                                                                        <?= htmlspecialchars($l['com_1'] ?? '') ?>
-                                                                    </td>
-                                                                    <td><?= htmlspecialchars($l['com_2'] ?? '') ?></td>
-                                                                    <td style="text-align:right;font-family:monospace;color:#b91c1c;font-weight:600;">
-                                                                        <?= $comm1_val_usd > 0 ? formatMoney($comm1_val_usd, 'USD') : '<span style="color:#d1d5db">—</span>' ?>
-                                                                    </td>
-                                                                    <td style="text-align:right;font-family:monospace;color:#b91c1c;font-weight:600;">
-                                                                        <?= $comm2_val_usd > 0 ? formatMoney($comm2_val_usd, 'USD') : '<span style="color:#d1d5db">—</span>' ?>
-                                                                    </td>
-                                                                    <td><?= htmlspecialchars($l['note'] ?? '') ?></td>
-                                                                </tr>
-                                                        <?php endforeach; ?>
-                                                        <tr class="month-total-row">
-                                                            <td colspan="14" style="text-align:right;">Tổng <?= $display_group ?>:</td>
-                                                            <td style="text-align:right;font-weight:700;color:#1d4ed8;">
-                                                                <?= formatMoney($month_sub, 'VND') ?>
-                                                            </td>
-                                                            <td style="text-align:right;font-weight:700;color:#059669;">
-                                                                <?= formatMoney($month_giaingan_usd, 'USD') ?>
-                                                            </td>
-                                                            <td colspan="7"></td>
-                                                            <td style="text-align:right;font-weight:700;color:#b91c1c;">
-                                                                <?= formatMoney($month_comm1_usd, 'USD') ?>
-                                                            </td>
-                                                            <td style="text-align:right;font-weight:700;color:#b91c1c;">
-                                                                <?= formatMoney($month_comm2_usd, 'USD') ?>
-                                                            </td>
-                                                            <td></td>
-                                                        </tr>
-                                                <?php endforeach; ?>
-                                                <tr style="background:#f1f5f9;font-weight:bold;">
-                                                    <td colspan="15" style="text-align:right;font-size:14px;padding: 1rem 0.75rem;">TỔNG
-                                                        CỘNG QUÝ:</td>
-                                                    <td style="text-align:right;color:#059669;font-size:14px;padding: 1rem 0.75rem;">
-                                                        <?= formatMoney($quarter_total_giaingan_usd, 'USD') ?>
-                                                    </td>
-                                                    <td colspan="7"></td>
-                                                    <td style="text-align:right;color:#b91c1c;font-size:14px;padding: 1rem 0.75rem;">
-                                                        <?= formatMoney($quarter_total_comm1_usd, 'USD') ?>
-                                                    </td>
-                                                    <td style="text-align:right;color:#b91c1c;font-size:14px;padding: 1rem 0.75rem;">
-                                                        <?= formatMoney($quarter_total_comm2_usd, 'USD') ?>
-                                                    </td>
-                                                    <td></td>
-                                                </tr>
-                                            </tbody>
-                                        </table>
-
-                                        <?php
-                                        // Tính Commission theo rule quy định KPI
-                                        $kpi_pct = isset($pct_quarter) ? $pct_quarter : 0;
-
-                                        if ($kpi_pct < 70) {
-                                            $payout_ratio = 0;
-                                            $payout_label = "Dưới 70% KPI -> Nhận 0%";
-                                        } elseif ($kpi_pct < 100) {
-                                            $payout_ratio = 0.7;
-                                            $payout_label = "Từ 70% đến dưới 100% KPI -> Nhận 70%";
-                                        } else {
-                                            $payout_ratio = 1.0;
-                                            $payout_label = "Đạt >= 100% KPI -> Nhận 100%";
-                                        }
-
-                                        $final_comm1_usd = $quarter_total_comm1_usd * $payout_ratio;
-                                        $final_comm2_usd = $quarter_total_comm2_usd * $payout_ratio;
-                                        $total_com_usd = $final_comm1_usd + $final_comm2_usd;
-                                        ?>
-                                        <div
-                                            style="margin-top: 2rem; background: #fff; border: 1px solid #e2e8f0; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.05); padding: 1.5rem; max-width: 600px;">
-                                            <h3
-                                                style="margin-top:0; margin-bottom: 1rem; color: #1e293b; font-size: 16px; border-bottom: 2px solid #f1f5f9; padding-bottom: 0.5rem; display: flex; align-items: center; gap: 0.5rem;">
-                                                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24"
-                                                    fill="none" stroke="#eab308" stroke-width="2.5">
-                                                    <circle cx="12" cy="8" r="7"></circle>
-                                                    <polyline points="8.21 13.89 7 23 12 20 17 23 15.79 13.88"></polyline>
-                                                </svg>
-                                                TỔNG KẾT COMMISSION ĐƯỢC NHẬN
-                                            </h3>
-
-                                            <div
-                                                style="display: flex; justify-content: space-between; margin-bottom: 0.75rem; color: #475569; font-size: 14px;">
-                                                <span>Tỉ lệ hoàn thành KPI (Quý):</span>
-                                                <span
-                                                    style="font-weight: 600; color: #0f172a;"><?= number_format($kpi_pct, 1) ?>%</span>
-                                            </div>
-                                            <div
-                                                style="display: flex; justify-content: space-between; margin-bottom: 0.75rem; color: #475569; font-size: 14px;">
-                                                <span>Hệ số Payout áp dụng:</span>
-                                                <span
-                                                    style="font-weight: 600; color: <?= $payout_ratio == 0 ? '#ef4444' : ($payout_ratio == 1 ? '#10b981' : '#f59e0b') ?>;">
-                                                    <?= $payout_label ?>
-                                                </span>
-                                            </div>
-
-                                            <div style="height: 1px; background: #e2e8f0; margin: 1rem 0;"></div>
-
-                                            <div
-                                                style="display: flex; justify-content: space-between; margin-bottom: 0.5rem; color: #475569; font-size: 14px;">
-                                                <span>Tổng Commission (Com 1) x <?= $payout_ratio * 100 ?>%:</span>
-                                                <span
-                                                    style="font-weight: 600; font-family: monospace; color: #b91c1c; font-size: 15px;">
-                                                    <?= formatMoney($final_comm1_usd, 'USD') ?>
-                                                </span>
-                                            </div>
-                                            <div
-                                                style="display: flex; justify-content: space-between; margin-bottom: 1rem; color: #475569; font-size: 14px;">
-                                                <span>Tổng Com giữ lại (Com 2) x <?= $payout_ratio * 100 ?>%:</span>
-                                                <span
-                                                    style="font-weight: 600; font-family: monospace; color: #b91c1c; font-size: 15px;">
-                                                    <?= formatMoney($final_comm2_usd, 'USD') ?>
-                                                </span>
-                                            </div>
-
-                                            <div
-                                                style="display: flex; justify-content: space-between; align-items: center; background: #fbbf24; color: #78350f; padding: 1rem; border-radius: 6px; font-weight: bold; font-size: 16px;">
-                                                <span>THỰC NHẬN KỲ NÀY:</span>
-                                                <span style="font-family: monospace; font-size: 20px;">
-                                                    <?= formatMoney($total_com_usd, 'USD') ?>
-                                                </span>
-                                            </div>
-                                            <div
-                                                style="text-align:right; font-size: 12px; color: #94a3b8; margin-top: 0.5rem; font-style: italic; margin-bottom: 1.5rem;">
-                                                * Phụ thuộc vào chính sách chi trả của công ty theo từng thời kỳ.
-                                            </div>
-
-                                            <div style="border-top: 1px dashed #ced4da; padding-top: 1.5rem;">
-                                                <button type="button" onclick="confirmCommission('<?= $active_tab ?>')"
-                                                    style="width: 100%; padding: 12px; background: <?= $comm_is_confirmed ? '#10b981' : '#2563eb' ?>; color: #fff; border: none; border-radius: 6px; font-weight: 600; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px; transition: all 0.2s;"
-                                                    onmouseover="this.style.background='<?= $comm_is_confirmed ? '#059669' : '#1d4ed8' ?>'"
-                                                    onmouseout="this.style.background='<?= $comm_is_confirmed ? '#10b981' : '#2563eb' ?>'">
-                                                    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24"
-                                                        fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"
-                                                        stroke-linejoin="round">
-                                                        <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
-                                                        <polyline points="22 4 12 14.01 9 11.01"></polyline>
-                                                    </svg>
-                                                    <?= $comm_is_confirmed ? 'ĐÃ XÁC NHẬN COMMISSION' : 'XÁC NHẬN COMMISSION' ?>
-                                                </button>
-
-                                                <div id="comm_history" style="margin-top: 1rem;">
-                                                    <?php if (!empty($comm_confirmations)): ?>
-                                                            <div
-                                                                style="font-size: 12px; font-weight: 600; color: #64748b; margin-bottom: 0.5rem; text-transform: uppercase; letter-spacing: 0.025em;">
-                                                                Lịch sử xác nhận:
-                                                            </div>
-                                                            <div
-                                                                style="max-height: 150px; overflow-y: auto; border: 1px solid #f1f5f9; border-radius: 6px; background: #f8fafc;">
-                                                                <?php foreach ($comm_confirmations as $cc): ?>
-                                                                        <div
-                                                                            style="padding: 8px 12px; border-bottom: 1px solid #f1f5f9; font-size: 12px; color: #475569; display: flex; justify-content: space-between; align-items: center;">
-                                                                            <span>
-                                                                                <span style="color: #0f172a; font-weight: 500;">✓</span>
-                                                                                <?= date('H:i d/m/Y', strtotime($cc['confirmed_at'])) ?>
-                                                                            </span>
-                                                                            <span style="color: #94a3b8; font-size: 11px;">Bởi:
-                                                                                <?= htmlspecialchars($cc['confirmed_by_name']) ?></span>
-                                                                        </div>
-                                                                <?php endforeach; ?>
-                                                            </div>
-                                                    <?php endif; ?>
+                                        <div id="comm_history" style="margin-top: 1rem;">
+                                            <?php if (!empty($comm_confirmations)): ?>
+                                                <div
+                                                    style="font-size: 12px; font-weight: 600; color: #64748b; margin-bottom: 0.5rem; text-transform: uppercase; letter-spacing: 0.025em;">
+                                                    Lịch sử xác nhận:
                                                 </div>
-                                            </div>
+                                                <div
+                                                    style="max-height: 150px; overflow-y: auto; border: 1px solid #f1f5f9; border-radius: 6px; background: #f8fafc;">
+                                                    <?php foreach ($comm_confirmations as $cc): ?>
+                                                        <div
+                                                            style="padding: 8px 12px; border-bottom: 1px solid #f1f5f9; font-size: 12px; color: #475569; display: flex; justify-content: space-between; align-items: center;">
+                                                            <span>
+                                                                <span style="color: #0f172a; font-weight: 500;">✓</span>
+                                                                <?= date('H:i d/m/Y', strtotime($cc['confirmed_at'])) ?>
+                                                            </span>
+                                                            <span style="color: #94a3b8; font-size: 11px;">Bởi:
+                                                                <?= htmlspecialchars($cc['confirmed_by_name']) ?></span>
+                                                        </div>
+                                                    <?php endforeach; ?>
+                                                </div>
+                                            <?php endif; ?>
                                         </div>
                                     </div>
-                            <?php endif; ?>
-                        </div>
+                                </div>
+                            </div>
+                        <?php endif; ?>
+                    </div>
                 <?php endif; // end of if ($is_confirmed) for paid block ?>
 
             </div><!-- /.report-wrapper -->
@@ -2133,11 +2170,42 @@ function formatMoney($amount, $currency_code)
                             cell.innerHTML = newVal;
                             showToast("Đã lưu!");
 
-                            // Trigger auto update for com_1 if client_type or com_lead_source was edited
+                            // Trigger auto update for com_1 or license_trading
                             if (fieldName === 'client_type' || fieldName === 'com_lead_source') {
                                 const com1Cell = document.getElementById('com_1_' + invoiceId);
                                 if (com1Cell && data.com_1 !== undefined) {
                                     com1Cell.innerText = data.com_1;
+                                }
+                            }
+                            if (fieldName === 'bonus_license_trading') {
+                                const licCell = document.getElementById('lic_trd_' + invoiceId);
+                                if (licCell && data.license_trading !== undefined) {
+                                    licCell.innerText = data.license_trading;
+                                }
+                                // Update Net Profit style
+                                const netProfitCell = document.getElementById('net_profit_' + invoiceId);
+                                if (netProfitCell) {
+                                    const npVal = netProfitCell.innerText.trim();
+                                    if (newVal === 'Yes' && npVal === '') {
+                                        netProfitCell.style.background = '#fee2e2';
+                                        netProfitCell.style.border = '1.5px solid #ef4444';
+                                    } else {
+                                        netProfitCell.style.background = '';
+                                        netProfitCell.style.border = '';
+                                    }
+                                }
+                            }
+                            if (fieldName === 'net_profit') {
+                                const row = cell.closest('tr');
+                                const bonusCell = row.querySelector('[data-required-field="bonus_license_trading"]');
+                                if (bonusCell && bonusCell.innerText.trim() === 'Yes') {
+                                    if (newVal.trim() === '') {
+                                        cell.style.background = '#fee2e2';
+                                        cell.style.border = '1.5px solid #ef4444';
+                                    } else {
+                                        cell.style.background = '';
+                                        cell.style.border = '';
+                                    }
                                 }
                             }
                         } else {
@@ -2324,9 +2392,9 @@ function formatMoney($amount, $currency_code)
                         }
                     })
                     .catch(err => console.error(err));
-     
 
-     }
+
+            }
 
             // Make scrolling table scroll sync if needed
         </script>
