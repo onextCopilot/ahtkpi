@@ -1604,17 +1604,17 @@ function formatMoney($amount, $currency_code)
                                                 $com1_p = (float)str_replace(['%', ','], '', $l['com_1'] ?? '0');
                                                 $com2_p = (float)str_replace(['%', ','], '', $l['com_2'] ?? '0');
                                                 
-                                                $comm1_val = $giaingan_origin * ($com1_p / 100);
-                                                $comm2_val = $giaingan_origin * ($com2_p / 100);
-                                                
                                                 $currency_code = is_array($inv['currency_id']) ? $inv['currency_id'][1] : 'VND';
                                                 
                                                 $rateSource = $odoo->getRate($currency_code, $inv_date_str) ?: 1.0;
                                                 $rateUsd = $odoo->getRate('USD', $inv_date_str) ?: 1.0;
                                                 $ratioUsd = $rateSource > 0 ? ($rateUsd / $rateSource) : 1;
                                                 
-                                                $comm1_val_usd = $comm1_val * $ratioUsd;
-                                                $comm2_val_usd = $comm2_val * $ratioUsd;
+                                                // Convert disbursed amount to USD FIRST before multiplying by commission
+                                                $giaingan_usd = $giaingan_origin * $ratioUsd;
+                                                
+                                                $comm1_val_usd = $giaingan_usd * ($com1_p / 100);
+                                                $comm2_val_usd = $giaingan_usd * ($com2_p / 100);
                                                 
                                                 $month_comm1_usd += $comm1_val_usd;
                                                 $month_comm2_usd += $comm2_val_usd;
