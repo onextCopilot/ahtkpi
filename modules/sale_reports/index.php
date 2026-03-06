@@ -764,21 +764,23 @@ function formatMoney($amount, $currency_code)
         }
 
         td.cell-missing {
-            background: #fff1f2 !important;
-            outline: 2px solid #f43f5e !important;
-            outline-offset: -2px;
-            animation: pulse-missing 1.5s ease-in-out 3;
+            background: #fff8f8 !important;
+            border: 1.5px dashed #f87171 !important;
+            position: relative;
+            animation: fade-missing 2s ease-in-out 2;
         }
 
-        @keyframes pulse-missing {
+        @keyframes fade-missing {
 
             0%,
             100% {
-                outline-color: #f43f5e;
+                border-color: #f87171;
+                background: #fff8f8;
             }
 
             50% {
-                outline-color: #fca5a5;
+                border-color: #fca5a5;
+                background: #fff;
             }
         }
 
