@@ -1091,6 +1091,31 @@ if ($res_am && $res_am->num_rows > 0) {
             opacity: 0.5;
             cursor: wait;
         }
+
+        .btn-bulk-warn {
+            background: #2563eb;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            transition: all 0.2s;
+            font-size: 0.875rem;
+            box-shadow: 0 4px 6px -1px rgba(37, 99, 235, 0.2);
+        }
+
+        .btn-bulk-warn:hover {
+            background: #1d4ed8;
+            transform: translateY(-1px);
+        }
+
+        .btn-bulk-warn:active {
+            transform: translateY(0);
+        }
     </style>
 </head>
 
@@ -1190,8 +1215,19 @@ if ($res_am && $res_am->num_rows > 0) {
                     ];
                     $current_tab_total = isset($tabs[$active_tab]) ? $tabs[$active_tab]['total'] : $total_amount_vnd;
                     ?>
-                    <div class="total-badge">
-                        Total: <?php echo formatVND($current_tab_total); ?>
+                    <div style="display: flex; align-items: center; gap: 10px; margin-left: auto;">
+                        <button type="button" class="btn-bulk-warn" onclick="sendBulkWarning()">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24"
+                                fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                                stroke-linejoin="round">
+                                <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path>
+                                <path d="M13.73 21a2 2 0 0 1-3.46 0"></path>
+                            </svg>
+                            Gửi thông báo đã chọn
+                        </button>
+                        <div class="total-badge" style="margin: 0;">
+                            Total: <?php echo formatVND($current_tab_total); ?>
+                        </div>
                     </div>
                 </div>
 
@@ -1211,6 +1247,7 @@ if ($res_am && $res_am->num_rows > 0) {
                     <table class="debt-table">
                         <thead>
                             <tr>
+                                <th style="width: 30px; text-align: center;"><input type="checkbox" id="selectAll"></th>
                                 <th style="width: 30px !important; text-align: center;">#</th>
                                 <th style="width: 50px; text-align: center;">Warning</th>
                                 <th>CTY</th>
@@ -1243,11 +1280,24 @@ if ($res_am && $res_am->num_rows > 0) {
                             <?php if (count($current_data) > 0): ?>
                                 <?php foreach ($current_data as $item): ?>
                                     <tr style="user-select: none;">
+                                        <td style="text-align: center;">
+                                            <input type="checkbox" class="debt-checkbox" value="<?= $item['id'] ?>">
+                                        </td>
                                         <td style="text-align: center; color: #94a3b8; font-weight: 500;">
                                             <?php echo $globalIdx++; ?>
                                         </td>
                                         <td style="text-align: center;">
-                                            <button class="btn-warn" onclick="sendDebtWarning(<?= $item['id'] ?>, event)"
+                                            <?php
+                                            $bell_color = '#eab308'; // Default
+                                            if ($active_tab === '60_days')
+                                                $bell_color = '#ef4444';
+                                            else if ($active_tab === '30_days')
+                                                $bell_color = '#f59e0b';
+                                            else if ($active_tab === 'empty')
+                                                $bell_color = '#3b82f6';
+                                            ?>
+                                            <button class="btn-warn" style="color: <?= $bell_color ?>;"
+                                                onclick="sendDebtWarning(<?= $item['id'] ?>, event)"
                                                 title="Gửi cảnh báo cho AM">
                                                 <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16"
                                                     viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
@@ -1356,7 +1406,7 @@ if ($res_am && $res_am->num_rows > 0) {
                                 <?php endforeach; ?>
                             <?php else: ?>
                                 <tr>
-                                    <td colspan="22" style="text-align: center; padding: 20px; color: #64748b;">
+                                    <td colspan="23" style="text-align: center; padding: 20px; color: #64748b;">
                                         Không có dữ liệu
                                     </td>
                                 </tr>
@@ -1369,38 +1419,83 @@ if ($res_am && $res_am->num_rows > 0) {
     </div>
 
     <script>
-        function sendDebtWarning(debtId, event) {
-            const btn = event.currentTarget;
-            if (btn.classList.contains('loading')) return;
+        const activeTab = '<?= $active_tab ?>';
 
-            btn.classList.add('loading');
+        document.getElementById('selectAll').addEventListener('change', function () {
+            const checked = this.checked;
+            document.querySelectorAll('.debt-checkbox').forEach(cb => {
+                cb.checked = checked;
+            });
+        });
+
+        function sendDebtWarning(debtId, event) {
+            const btn = event ? event.currentTarget : null;
+            if (btn && btn.classList.contains('loading')) return;
+
+            if (btn) btn.classList.add('loading');
+            return fetch('/api/send_debt_warning.php', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    debt_id: debtId,
+                    warning_type: activeTab
+                })
+            })
+                .then(res => res.json())
+                .then(data => {
+                    if (btn) {
+                        btn.classList.remove('loading');
+                        if (data.success) {
+                            btn.classList.add('sent');
+                            btn.style.color = '#10b981';
+                        }
+                    }
+                    return data;
+                });
+        }
+
+        function sendBulkWarning() {
+            const selected = Array.from(document.querySelectorAll('.debt-checkbox:checked')).map(cb => cb.value);
+            if (selected.length === 0) {
+                alert('Vui lòng chọn ít nhất một khoản nợ để gửi thông báo.');
+                return;
+            }
+
+            if (!confirm(`Bạn có chắc muốn gửi thông báo cho ${selected.length} khoản nợ đã chọn?`)) {
+                return;
+            }
+
+            const btn = document.querySelector('.btn-bulk-warn');
+            const originalHtml = btn.innerHTML;
+            btn.disabled = true;
+            btn.innerHTML = '<span class="loading-spinner"></span> Đang gửi...';
+
             fetch('/api/send_debt_warning.php', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json'
                 },
                 body: JSON.stringify({
-                    debt_id: debtId
+                    debt_ids: selected,
+                    warning_type: activeTab
                 })
             })
                 .then(res => res.json())
                 .then(data => {
-                    btn.classList.remove('loading');
+                    btn.disabled = false;
+                    btn.innerHTML = originalHtml;
                     if (data.success) {
-                        btn.classList.add('sent');
-                        btn.innerHTML = `
-                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                            <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path>
-                            <path d="M13.73 21a2 2 0 0 1-3.46 0"></path>
-                        </svg>
-                    `;
-                        alert('Đã gửi cảnh báo thành công cho AM!');
+                        alert(`Đã gửi thành công ${data.count} thông báo!`);
+                        location.reload();
                     } else {
-                        alert('Lỗi: ' + (data.error || 'Không thể gửi cảnh báo'));
+                        alert('Lỗi: ' + (data.errors ? data.errors.join('\n') : 'Không thể gửi thông báo'));
                     }
                 })
                 .catch(err => {
-                    btn.classList.remove('loading');
+                    btn.disabled = false;
+                    btn.innerHTML = originalHtml;
                     console.error(err);
                     alert('Lỗi kết nối server');
                 });

@@ -123,7 +123,7 @@ if (isset($_SESSION['is_am_bd']) && $_SESSION['is_am_bd'] == 1) {
 
     // Fetch manual warnings
     $stmt_manual = $conn->prepare("
-        SELECT mw.id as warning_id, mw.created_at as warned_at, d.id, d.client_name, d.project_name, d.expected_payment_date, u.full_name as sender_name
+        SELECT mw.id as warning_id, mw.created_at as warned_at, mw.warning_type, d.id, d.client_name, d.project_name, d.expected_payment_date, u.full_name as sender_name
         FROM debt_manual_warnings mw
         JOIN debts d ON mw.debt_id = d.id
         JOIN users u ON mw.sender_id = u.id
@@ -138,7 +138,8 @@ if (isset($_SESSION['is_am_bd']) && $_SESSION['is_am_bd'] == 1) {
                 'debt' => $rm,
                 'level' => 99, // Custom level for manual warnings
                 'sender' => $rm['sender_name'],
-                'at' => $rm['warned_at']
+                'at' => $rm['warned_at'],
+                'warning_type' => $rm['warning_type']
             ];
         }
         $stmt_manual->close();
@@ -201,9 +202,31 @@ $notif_count = count($am_notifications);
                             $d = $notif['debt'];
                             $lvl = $notif['level'];
                             $is_critical = ($lvl == 60);
-                            $bg_col = $is_critical ? '#fef2f2' : ($lvl == 99 ? '#fff7ed' : '#fffbeb');
-                            $text_col = $is_critical ? '#dc2626' : ($lvl == 99 ? '#ea580c' : '#d97706');
-                            $title = $is_critical ? 'Quá hạn > 60 ngày' : ($lvl == 99 ? '🔔 CẢNH BÁO TỪ ' . strtoupper($notif['sender']) : 'Cảnh báo quá hạn > 30 ngày');
+                            $bg_col = $is_critical ? '#fef2f2' : '#fffbeb';
+                            $text_col = $is_critical ? '#dc2626' : '#d97706';
+                            $title = $is_critical ? 'Quá hạn > 60 ngày' : 'Cảnh báo quá hạn > 30 ngày';
+
+                            if ($lvl == 99) {
+                                $wt = $notif['warning_type'] ?? 'manual';
+                                $wt_label = 'CẢNH BÁO';
+                                if ($wt == '60_days') {
+                                    $wt_label = 'QUÁ HẠN > 60 NGÀY';
+                                    $bg_col = '#fef2f2';
+                                    $text_col = '#dc2626';
+                                } elseif ($wt == '30_days') {
+                                    $wt_label = 'QUÁ HẠN > 30 NGÀY';
+                                    $bg_col = '#fffbeb';
+                                    $text_col = '#d97706';
+                                } elseif ($wt == 'empty') {
+                                    $wt_label = 'CHƯA CÓ NGÀY TT';
+                                    $bg_col = '#f0f9ff';
+                                    $text_col = '#0284c7';
+                                } else {
+                                    $bg_col = '#fff7ed';
+                                    $text_col = '#ea580c';
+                                }
+                                $title = '🔔 ' . $wt_label . ' TỪ ' . strtoupper($notif['sender']);
+                            }
                             ?>
                             <div class="notif-item" id="notif-item-<?php echo $d['id'] . '-' . $lvl; ?>"
                                 style="padding: 12px 16px; border-bottom: 1px solid #f1f5f9; background: <?php echo $bg_col; ?>; transition: background 0.2s; position: relative;"
