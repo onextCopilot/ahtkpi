@@ -414,8 +414,7 @@ function formatMoney($amount, $currency_code)
             /* Fill screen */
             display: flex;
             flex-direction: column;
-            overflow-x: auto;
-            /* Allow horizontal scroll on wrapper now */
+            overflow-x: hidden;
             overflow-y: auto;
             position: relative;
         }
@@ -988,180 +987,182 @@ function formatMoney($amount, $currency_code)
                     </div>
                 </div>
 
-                <table class="report-table">
-                    <thead>
-                        <tr>
-                            <th style="width: 40px; text-align: center;">STT</th>
-                            <th style="width: 130px;">Invoice #</th>
-                            <th style="width: 100px; text-align: center;">Trạng thái TT</th>
-                            <th style="width: 50px; text-align: center;">Loại trừ</th>
-                            <th style="width: 150px;">Tên khách hàng</th>
-                            <th style="width: 150px;">Tên Dự án</th>
-                            <th style="width: 120px;">Mã dự án</th>
-                            <th style="width: 100px;">Ngày ký Hợp đồng</th>
-                            <th style="width: 120px;">Loại Hợp đồng</th>
-                            <th style="width: 100px;">Presales</th>
-                            <th style="width: 120px;">Loại khách hàng</th>
-                            <th style="width: 150px; text-align:right;">Giá trị HĐ / Hóa đơn</th>
-                            <th style="width: 140px;">%Profit trong PAKD</th>
-                            <th style="width: 120px;">Net profit</th>
-                            <!-- Target + %KPI skipped -->
-                            <th style="width: 140px;">% Com (Lead source)</th>
-                            <th style="width: 160px;">% Bonus License/trading</th>
-                            <th style="width: 80px;">% Com 1</th>
-                            <th style="width: 100px;">% Com 2</th>
-                            <th style="min-width: 200px;">Note</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <?php if (empty($grouped_invoices)): ?>
+                <div style="overflow-x: auto; width: 100%;">
+                    <table class="report-table">
+                        <thead>
                             <tr>
-                                <td colspan="18" style="text-align:center; padding: 2rem;">No invoices found.</td>
+                                <th style="width: 40px; text-align: center;">STT</th>
+                                <th style="width: 130px;">Invoice #</th>
+                                <th style="width: 100px; text-align: center;">Trạng thái TT</th>
+                                <th style="width: 50px; text-align: center;">Loại trừ</th>
+                                <th style="width: 150px;">Tên khách hàng</th>
+                                <th style="width: 150px;">Tên Dự án</th>
+                                <th style="width: 120px;">Mã dự án</th>
+                                <th style="width: 100px;">Ngày ký Hợp đồng</th>
+                                <th style="width: 120px;">Loại Hợp đồng</th>
+                                <th style="width: 100px;">Presales</th>
+                                <th style="width: 120px;">Loại khách hàng</th>
+                                <th style="width: 150px; text-align:right;">Giá trị HĐ / Hóa đơn</th>
+                                <th style="width: 140px;">%Profit trong PAKD</th>
+                                <th style="width: 120px;">Net profit</th>
+                                <!-- Target + %KPI skipped -->
+                                <th style="width: 140px;">% Com (Lead source)</th>
+                                <th style="width: 160px;">% Bonus License/trading</th>
+                                <th style="width: 80px;">% Com 1</th>
+                                <th style="width: 100px;">% Com 2</th>
+                                <th style="min-width: 200px;">Note</th>
                             </tr>
-                        <?php else: ?>
-                            <?php $stt = 1;
-                            foreach ($grouped_invoices as $month_key => $month_invoices):
-                                $display_month = $month_key !== 'Unknown' ? date('m / Y', strtotime($month_key . '-01')) : 'Unknown';
-                                $month_subtotal = 0;
-                                ?>
-                                <tr class="month-group-header">
-                                    <td colspan="18">THÁNG <?= $display_month ?></td>
+                        </thead>
+                        <tbody>
+                            <?php if (empty($grouped_invoices)): ?>
+                                <tr>
+                                    <td colspan="18" style="text-align:center; padding: 2rem;">No invoices found.</td>
                                 </tr>
-                                <?php foreach ($month_invoices as $inv):
-                                    $odoo_id = $inv['id'];
-                                    $l = $local_data[$odoo_id] ?? [];
-                                    $inv_date_str = $inv['invoice_date'] ?: $inv['date'];
-                                    $month_str = $inv_date_str ? date('d/m/Y', strtotime($inv_date_str)) : '';
-                                    $is_excluded = (int) ($inv['is_excluded'] ?? 0);
-                                    if (!$is_excluded)
-                                        $month_subtotal += $inv['calc_amount_vnd'];
+                            <?php else: ?>
+                                <?php $stt = 1;
+                                foreach ($grouped_invoices as $month_key => $month_invoices):
+                                    $display_month = $month_key !== 'Unknown' ? date('m / Y', strtotime($month_key . '-01')) : 'Unknown';
+                                    $month_subtotal = 0;
                                     ?>
-                                    <tr class="invoice-row <?= $is_excluded ? 'row-excluded' : '' ?>"
-                                        data-invoice-id="<?= $odoo_id ?>" data-is-excluded="<?= $is_excluded ?>">
-                                        <td style="text-align: center;">
-                                            <?= $stt++ ?>
-                                        </td>
-                                        <!-- Invoice # (Odoo DB ID) -->
-                                        <td
-                                            style="font-family: 'Inconsolata', monospace; font-size: 12px; color: #64748b; white-space: nowrap; font-weight: 600; text-align: center;">
-                                            #<?= $odoo_id ?>
-                                        </td>
-                                        <!-- Trạng thái TT -->
-                                        <td style="text-align: center;">
-                                            <?php
-                                            $p_state = $inv['payment_state'] ?? '';
-                                            if ($p_state === 'paid') {
-                                                echo '<span style="background:#d1fae5; color:#065f46; padding: 2px 6px; border-radius: 4px; font-size: 10px; font-weight: 600; text-transform: uppercase;">Paid</span>';
-                                            } elseif ($p_state === 'in_payment') {
-                                                echo '<span style="background:#dbeafe; color:#1e40af; padding: 2px 6px; border-radius: 4px; font-size: 10px; font-weight: 600; text-transform: uppercase;">In Payment</span>';
-                                            } else {
-                                                echo '<span style="background:#f1f5f9; color:#64748b; padding: 2px 6px; border-radius: 4px; font-size: 10px; font-weight: 600; text-transform: uppercase;">' . ($p_state ?: 'Unpaid') . '</span>';
-                                            }
-                                            ?>
-                                        </td>
-                                        <!-- Loại trừ (cột 2) -->
-                                        <td style="text-align: center;">
-                                            <button class="exclude-btn <?= $is_excluded ? 'excluded' : '' ?>"
-                                                onclick="toggleExclude(this, <?= $odoo_id ?>)"
-                                                title="<?= $is_excluded ? 'Bỏ loại trừ invoice này' : 'Loại trừ invoice này khỏi tổng' ?>">
-                                                <?php if ($is_excluded): ?>
-                                                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
-                                                        <path
-                                                            d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 14.5v-9l6 4.5-6 4.5z" />
-                                                    </svg>
-                                                <?php else: ?>
-                                                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
-                                                        <path
-                                                            d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm5 11H7v-2h10v2z" />
-                                                    </svg>
-                                                <?php endif; ?>
-                                            </button>
-                                        </td>
-                                        <td>
-                                            <?= htmlspecialchars(is_array($inv['partner_id']) ? $inv['partner_id'][1] : '') ?>
-                                        </td>
-                                        <td>
-                                            <?= htmlspecialchars($inv['ref'] ?: $inv['name']) ?>
-                                        </td>
-                                        <td data-required-field="project_code">
-                                            <?= htmlspecialchars($inv['x_studio_project_code'] ?? '') ?>
-                                        </td>
-                                        <td>
-                                            <?= $month_str ?>
-                                        </td>
+                                    <tr class="month-group-header">
+                                        <td colspan="18">THÁNG <?= $display_month ?></td>
+                                    </tr>
+                                    <?php foreach ($month_invoices as $inv):
+                                        $odoo_id = $inv['id'];
+                                        $l = $local_data[$odoo_id] ?? [];
+                                        $inv_date_str = $inv['invoice_date'] ?: $inv['date'];
+                                        $month_str = $inv_date_str ? date('d/m/Y', strtotime($inv_date_str)) : '';
+                                        $is_excluded = (int) ($inv['is_excluded'] ?? 0);
+                                        if (!$is_excluded)
+                                            $month_subtotal += $inv['calc_amount_vnd'];
+                                        ?>
+                                        <tr class="invoice-row <?= $is_excluded ? 'row-excluded' : '' ?>"
+                                            data-invoice-id="<?= $odoo_id ?>" data-is-excluded="<?= $is_excluded ?>">
+                                            <td style="text-align: center;">
+                                                <?= $stt++ ?>
+                                            </td>
+                                            <!-- Invoice # (Odoo DB ID) -->
+                                            <td
+                                                style="font-family: 'Inconsolata', monospace; font-size: 12px; color: #64748b; white-space: nowrap; font-weight: 600; text-align: center;">
+                                                #<?= $odoo_id ?>
+                                            </td>
+                                            <!-- Trạng thái TT -->
+                                            <td style="text-align: center;">
+                                                <?php
+                                                $p_state = $inv['payment_state'] ?? '';
+                                                if ($p_state === 'paid') {
+                                                    echo '<span style="background:#d1fae5; color:#065f46; padding: 2px 6px; border-radius: 4px; font-size: 10px; font-weight: 600; text-transform: uppercase;">Paid</span>';
+                                                } elseif ($p_state === 'in_payment') {
+                                                    echo '<span style="background:#dbeafe; color:#1e40af; padding: 2px 6px; border-radius: 4px; font-size: 10px; font-weight: 600; text-transform: uppercase;">In Payment</span>';
+                                                } else {
+                                                    echo '<span style="background:#f1f5f9; color:#64748b; padding: 2px 6px; border-radius: 4px; font-size: 10px; font-weight: 600; text-transform: uppercase;">' . ($p_state ?: 'Unpaid') . '</span>';
+                                                }
+                                                ?>
+                                            </td>
+                                            <!-- Loại trừ (cột 2) -->
+                                            <td style="text-align: center;">
+                                                <button class="exclude-btn <?= $is_excluded ? 'excluded' : '' ?>"
+                                                    onclick="toggleExclude(this, <?= $odoo_id ?>)"
+                                                    title="<?= $is_excluded ? 'Bỏ loại trừ invoice này' : 'Loại trừ invoice này khỏi tổng' ?>">
+                                                    <?php if ($is_excluded): ?>
+                                                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
+                                                            <path
+                                                                d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 14.5v-9l6 4.5-6 4.5z" />
+                                                        </svg>
+                                                    <?php else: ?>
+                                                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
+                                                            <path
+                                                                d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm5 11H7v-2h10v2z" />
+                                                        </svg>
+                                                    <?php endif; ?>
+                                                </button>
+                                            </td>
+                                            <td>
+                                                <?= htmlspecialchars(is_array($inv['partner_id']) ? $inv['partner_id'][1] : '') ?>
+                                            </td>
+                                            <td>
+                                                <?= htmlspecialchars($inv['ref'] ?: $inv['name']) ?>
+                                            </td>
+                                            <td data-required-field="project_code">
+                                                <?= htmlspecialchars($inv['x_studio_project_code'] ?? '') ?>
+                                            </td>
+                                            <td>
+                                                <?= $month_str ?>
+                                            </td>
 
-                                        <!-- Loại Hợp đồng -->
-                                        <td class="editable-cell <?= $is_locked ? 'cell-locked' : '' ?>"
-                                            data-required-field="contract_type" <?= !$is_locked ? "onclick=\"makeEditable(this, $odoo_id, 'contract_type', 'select', ['Service', 'Trading', 'Dedicated', 'License'])\"" : 'title="Đang bị khoá — Reset to Draft để sửa"' ?>>
-                                            <?= htmlspecialchars($l['contract_type'] ?? '') ?>
-                                        </td>
+                                            <!-- Loại Hợp đồng -->
+                                            <td class="editable-cell <?= $is_locked ? 'cell-locked' : '' ?>"
+                                                data-required-field="contract_type" <?= !$is_locked ? "onclick=\"makeEditable(this, $odoo_id, 'contract_type', 'select', ['Service', 'Trading', 'Dedicated', 'License'])\"" : 'title="Đang bị khoá — Reset to Draft để sửa"' ?>>
+                                                <?= htmlspecialchars($l['contract_type'] ?? '') ?>
+                                            </td>
 
-                                        <!-- Presales -->
-                                        <td class="editable-cell <?= $is_locked ? 'cell-locked' : '' ?>"
-                                            data-required-field="presales" <?= !$is_locked ? "onclick=\"makeEditable(this, $odoo_id, 'presales', 'select', ['No presales', '0%', '0.25%', '0.5%'])\"" : 'title="Đang bị khoá — Reset to Draft để sửa"' ?>>
-                                            <?= htmlspecialchars($l['presales'] ?? '') ?>
-                                        </td>
+                                            <!-- Presales -->
+                                            <td class="editable-cell <?= $is_locked ? 'cell-locked' : '' ?>"
+                                                data-required-field="presales" <?= !$is_locked ? "onclick=\"makeEditable(this, $odoo_id, 'presales', 'select', ['No presales', '0%', '0.25%', '0.5%'])\"" : 'title="Đang bị khoá — Reset to Draft để sửa"' ?>>
+                                                <?= htmlspecialchars($l['presales'] ?? '') ?>
+                                            </td>
 
-                                        <!-- Loại khách hàng -->
-                                        <td class="editable-cell <?= $is_locked ? 'cell-locked' : '' ?>"
-                                            data-required-field="client_type" <?= !$is_locked ? "onclick=\"makeEditable(this, $odoo_id, 'client_type', 'select', ['New client', 'Old client'])\"" : 'title="Đang bị khoá — Reset to Draft để sửa"' ?>>
-                                            <?= htmlspecialchars($l['client_type'] ?? '') ?>
-                                        </td>
+                                            <!-- Loại khách hàng -->
+                                            <td class="editable-cell <?= $is_locked ? 'cell-locked' : '' ?>"
+                                                data-required-field="client_type" <?= !$is_locked ? "onclick=\"makeEditable(this, $odoo_id, 'client_type', 'select', ['New client', 'Old client'])\"" : 'title="Đang bị khoá — Reset to Draft để sửa"' ?>>
+                                                <?= htmlspecialchars($l['client_type'] ?? '') ?>
+                                            </td>
 
-                                        <!-- Giá trị -->
-                                        <td style="text-align:right; font-family: Inconsolata, monospace;">
-                                            <?= formatMoney($inv['amount_total'], is_array($inv['currency_id']) ? $inv['currency_id'][1] : 'VND') ?>
-                                        </td>
+                                            <!-- Giá trị -->
+                                            <td style="text-align:right; font-family: Inconsolata, monospace;">
+                                                <?= formatMoney($inv['amount_total'], is_array($inv['currency_id']) ? $inv['currency_id'][1] : 'VND') ?>
+                                            </td>
 
-                                        <!-- %Profit trong PAKD -->
-                                        <td class="editable-cell <?= $is_locked ? 'cell-locked' : '' ?>" <?= !$is_locked ? "onclick=\"makeEditable(this, $odoo_id, 'profit_pakd', 'text')\"" : 'title="Đang bị khoá"' ?>>
-                                            <?= htmlspecialchars($l['profit_pakd'] ?? '') ?>
-                                        </td>
+                                            <!-- %Profit trong PAKD -->
+                                            <td class="editable-cell <?= $is_locked ? 'cell-locked' : '' ?>" <?= !$is_locked ? "onclick=\"makeEditable(this, $odoo_id, 'profit_pakd', 'text')\"" : 'title="Đang bị khoá"' ?>>
+                                                <?= htmlspecialchars($l['profit_pakd'] ?? '') ?>
+                                            </td>
 
-                                        <!-- Net profit -->
-                                        <td class="editable-cell <?= $is_locked ? 'cell-locked' : '' ?>" <?= !$is_locked ? "onclick=\"makeEditable(this, $odoo_id, 'net_profit', 'text')\"" : 'title="Đang bị khoá"' ?>>
-                                            <?= htmlspecialchars($l['net_profit'] ?? '') ?>
-                                        </td>
+                                            <!-- Net profit -->
+                                            <td class="editable-cell <?= $is_locked ? 'cell-locked' : '' ?>" <?= !$is_locked ? "onclick=\"makeEditable(this, $odoo_id, 'net_profit', 'text')\"" : 'title="Đang bị khoá"' ?>>
+                                                <?= htmlspecialchars($l['net_profit'] ?? '') ?>
+                                            </td>
 
-                                        <!-- % Com (Lead source) -->
-                                        <td class="editable-cell <?= $is_locked ? 'cell-locked' : '' ?>"
-                                            data-required-field="com_lead_source" <?= !$is_locked ? "onclick=\"makeEditable(this, $odoo_id, 'com_lead_source', 'select', ['Yes', 'No'])\"" : 'title="Đang bị khoá — Reset to Draft để sửa"' ?>>
-                                            <?= htmlspecialchars($l['com_lead_source'] ?? 'No') ?>
-                                        </td>
+                                            <!-- % Com (Lead source) -->
+                                            <td class="editable-cell <?= $is_locked ? 'cell-locked' : '' ?>"
+                                                data-required-field="com_lead_source" <?= !$is_locked ? "onclick=\"makeEditable(this, $odoo_id, 'com_lead_source', 'select', ['Yes', 'No'])\"" : 'title="Đang bị khoá — Reset to Draft để sửa"' ?>>
+                                                <?= htmlspecialchars($l['com_lead_source'] ?? 'No') ?>
+                                            </td>
 
-                                        <!-- % Bonus License/trading -->
-                                        <td class="editable-cell <?= $is_locked ? 'cell-locked' : '' ?>"
-                                            data-required-field="bonus_license_trading" <?= !$is_locked ? "onclick=\"makeEditable(this, $odoo_id, 'bonus_license_trading', 'select', ['Yes', 'No'])\"" : 'title="Đang bị khoá — Reset to Draft để sửa"' ?>>
-                                            <?= htmlspecialchars($l['bonus_license_trading'] ?? 'No') ?>
-                                        </td>
+                                            <!-- % Bonus License/trading -->
+                                            <td class="editable-cell <?= $is_locked ? 'cell-locked' : '' ?>"
+                                                data-required-field="bonus_license_trading" <?= !$is_locked ? "onclick=\"makeEditable(this, $odoo_id, 'bonus_license_trading', 'select', ['Yes', 'No'])\"" : 'title="Đang bị khoá — Reset to Draft để sửa"' ?>>
+                                                <?= htmlspecialchars($l['bonus_license_trading'] ?? 'No') ?>
+                                            </td>
 
-                                        <!-- % Com 1 -->
-                                        <td id="com_1_<?= $odoo_id ?>"
-                                            style="color: #c5221f; font-weight:600; background: #fdfaf6;">
-                                            <?= htmlspecialchars($l['com_1'] ?? '') ?>
-                                        </td>
+                                            <!-- % Com 1 -->
+                                            <td id="com_1_<?= $odoo_id ?>"
+                                                style="color: #c5221f; font-weight:600; background: #fdfaf6;">
+                                                <?= htmlspecialchars($l['com_1'] ?? '') ?>
+                                            </td>
 
-                                        <!-- % Com 2 -->
-                                        <td class="editable-cell <?= $is_locked ? 'cell-locked' : '' ?>" <?= !$is_locked ? "onclick=\"makeEditable(this, $odoo_id, 'com_2', 'select', ['0.5%', '1%', '1.5%', '2%', '2.5%', '3%'])\"" : 'title="Đang bị khoá"' ?>>
-                                            <?= htmlspecialchars($l['com_2'] ?? '') ?>
-                                        </td>
+                                            <!-- % Com 2 -->
+                                            <td class="editable-cell <?= $is_locked ? 'cell-locked' : '' ?>" <?= !$is_locked ? "onclick=\"makeEditable(this, $odoo_id, 'com_2', 'select', ['0.5%', '1%', '1.5%', '2%', '2.5%', '3%'])\"" : 'title="Đang bị khoá"' ?>>
+                                                <?= htmlspecialchars($l['com_2'] ?? '') ?>
+                                            </td>
 
-                                        <!-- Note -->
-                                        <td class="editable-cell <?= $is_locked ? 'cell-locked' : '' ?>" <?= !$is_locked ? "onclick=\"makeEditable(this, $odoo_id, 'note', 'text')\"" : 'title="Đang bị khoá"' ?>>
-                                            <?= htmlspecialchars($l['note'] ?? '') ?>
-                                        </td>
+                                            <!-- Note -->
+                                            <td class="editable-cell <?= $is_locked ? 'cell-locked' : '' ?>" <?= !$is_locked ? "onclick=\"makeEditable(this, $odoo_id, 'note', 'text')\"" : 'title="Đang bị khoá"' ?>>
+                                                <?= htmlspecialchars($l['note'] ?? '') ?>
+                                            </td>
 
+                                        </tr>
+                                    <?php endforeach; ?>
+                                    <tr class="month-total-row">
+                                        <td colspan="10" style="text-align: right;">Cộng tháng <?= $display_month ?>:</td>
+                                        <td style="text-align: right;"><?= formatMoney($month_subtotal, 'VND') ?></td>
+                                        <td colspan="7"></td>
                                     </tr>
                                 <?php endforeach; ?>
-                                <tr class="month-total-row">
-                                    <td colspan="10" style="text-align: right;">Cộng tháng <?= $display_month ?>:</td>
-                                    <td style="text-align: right;"><?= formatMoney($month_subtotal, 'VND') ?></td>
-                                    <td colspan="7"></td>
-                                </tr>
-                            <?php endforeach; ?>
-                        <?php endif; ?>
-                    </tbody>
-                </table>
+                            <?php endif; ?>
+                        </tbody>
+                    </table>
+                </div>
 
                 <!-- ── KPI Performance Report ── -->
                 <?php
@@ -2067,7 +2068,7 @@ function formatMoney($amount, $currency_code)
                             setTimeout(() => location.reload(), 800);
                         }
                     })
-               .catch(err => console.error(err));
+             .catch(err => console.error(err));
             }
 
             // Make scrolling table scroll sync if needed
