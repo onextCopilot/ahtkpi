@@ -48,6 +48,57 @@ if ($table_check->num_rows == 0) {
     }
 }
 
+// Ensure confirmations table exists
+$conn->query("CREATE TABLE IF NOT EXISTS sale_report_confirmations (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    user_id INT NOT NULL,
+    quarter VARCHAR(20) NOT NULL,
+    confirmed_at DATETIME NOT NULL,
+    confirmed_by_name VARCHAR(255),
+    UNIQUE KEY uq_user_quarter (user_id, quarter)
+)");
+
+// Handle AJAX confirm_kpi
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'confirm_kpi') {
+    header('Content-Type: application/json');
+    $quarter_key = preg_replace('/[^A-Za-z0-9_]/', '', $_POST['quarter'] ?? '');
+    $uid = (int) $_SESSION['user_id'];
+    $uname = $_SESSION['full_name'] ?? 'Unknown';
+    // Server-side check on local fields for non-excluded invoices
+    $ids_str = $_POST['invoice_ids'] ?? '';
+    $ids = array_filter(array_map('intval', explode(',', $ids_str)));
+    $res_inv = $conn->query("SELECT odoo_invoice_id, contract_type, presales, client_type, com_lead_source, bonus_license_trading FROM sale_reports WHERE is_excluded = 0 OR is_excluded IS NULL");
+    $local_map = [];
+    if ($res_inv) {
+        while ($r = $res_inv->fetch_assoc())
+            $local_map[(int) $r['odoo_invoice_id']] = $r;
+    }
+    $missing = [];
+    foreach ($ids as $oid) {
+        $r = $local_map[$oid] ?? null;
+        if (!$r || trim($r['contract_type'] ?? '') === '')
+            $missing[] = "Invoice #$oid: Loại Hợp đồng";
+        if (!$r || trim($r['presales'] ?? '') === '')
+            $missing[] = "Invoice #$oid: Presales";
+        if (!$r || trim($r['client_type'] ?? '') === '')
+            $missing[] = "Invoice #$oid: Loại khách hàng";
+        if (!$r || trim($r['com_lead_source'] ?? '') === '')
+            $missing[] = "Invoice #$oid: % Com (Lead source)";
+        if (!$r || trim($r['bonus_license_trading'] ?? '') === '')
+            $missing[] = "Invoice #$oid: % Bonus License/trading";
+    }
+    if (!empty($missing)) {
+        echo json_encode(['success' => false, 'missing' => array_values(array_unique($missing))]);
+    } else {
+        $now = date('Y-m-d H:i:s');
+        $stmt_c = $conn->prepare("INSERT INTO sale_report_confirmations (user_id, quarter, confirmed_at, confirmed_by_name) VALUES (?,?,?,?) ON DUPLICATE KEY UPDATE confirmed_at=?, confirmed_by_name=?");
+        $stmt_c->bind_param("isssss", $uid, $quarter_key, $now, $uname, $now, $uname);
+        $stmt_c->execute();
+        echo json_encode(['success' => true, 'confirmed_at' => $now, 'confirmed_by' => $uname]);
+    }
+    exit();
+}
+
 // Handle AJAX toggle exclude
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'toggle_exclude') {
     header('Content-Type: application/json');
@@ -200,14 +251,16 @@ unset($inv);
 // Compute Year-To-Date revenue (from Jan 1 of the viewed year through end of active quarter)
 // This is used for the KPI Yearly comparison in the report below
 $ytd_start_date = isset($y) ? "$y-01-01" : date('Y') . '-01-01';
-$ytd_end_date   = $end_date; // same as end of active quarter
+$ytd_end_date = $end_date; // same as end of active quarter
 $ytd_vnd = 0;
 foreach ($invoices as $inv_ytd) {
     $inv_date_str_ytd = $inv_ytd['invoice_date'] ?: $inv_ytd['date'];
-    if (!$inv_date_str_ytd || $inv_date_str_ytd < $ytd_start_date || $inv_date_str_ytd > $ytd_end_date) continue;
-    $is_excluded_ytd = (int)($local_data[$inv_ytd['id']]['is_excluded'] ?? 0);
-    if ($is_excluded_ytd) continue;
-    $ytd_vnd += isset($inv_ytd['amount_total_signed']) ? (float)$inv_ytd['amount_total_signed'] : 0;
+    if (!$inv_date_str_ytd || $inv_date_str_ytd < $ytd_start_date || $inv_date_str_ytd > $ytd_end_date)
+        continue;
+    $is_excluded_ytd = (int) ($local_data[$inv_ytd['id']]['is_excluded'] ?? 0);
+    if ($is_excluded_ytd)
+        continue;
+    $ytd_vnd += isset($inv_ytd['amount_total_signed']) ? (float) $inv_ytd['amount_total_signed'] : 0;
     // Fallback conversion for non-VND invoices
     if ($ytd_vnd == 0 && $inv_ytd['amount_total'] > 0) {
         // Already converted invoices are stored, but for safety keep simple approach here
@@ -242,6 +295,15 @@ if ($is_am_bd) {
         $kpi_data = $kpi_row;
     }
 }
+
+// Fetch existing confirmation for this quarter
+$confirmation = null;
+$stmt_conf = $conn->prepare("SELECT * FROM sale_report_confirmations WHERE user_id=? AND quarter=? LIMIT 1");
+$stmt_conf->bind_param("is", $u_id, $active_tab);
+$stmt_conf->execute();
+$conf_row = $stmt_conf->get_result()->fetch_assoc();
+if ($conf_row)
+    $confirmation = $conf_row;
 
 // Helper
 function formatMoney($amount, $currency_code)
@@ -464,7 +526,7 @@ function formatMoney($amount, $currency_code)
             border: 1px solid #e2e8f0;
             border-radius: 16px;
             padding: 1.5rem 2rem;
-            box-shadow: 0 4px 24px rgba(0,0,0,0.06);
+            box-shadow: 0 4px 24px rgba(0, 0, 0, 0.06);
             flex-shrink: 0;
         }
 
@@ -524,15 +586,28 @@ function formatMoney($amount, $currency_code)
         .kpi-metric-card::before {
             content: '';
             position: absolute;
-            top: 0; left: 0; right: 0;
+            top: 0;
+            left: 0;
+            right: 0;
             height: 3px;
             border-radius: 12px 12px 0 0;
         }
 
-        .kpi-metric-card.blue::before  { background: #3b82f6; }
-        .kpi-metric-card.green::before { background: #10b981; }
-        .kpi-metric-card.amber::before { background: #f59e0b; }
-        .kpi-metric-card.rose::before  { background: #f43f5e; }
+        .kpi-metric-card.blue::before {
+            background: #3b82f6;
+        }
+
+        .kpi-metric-card.green::before {
+            background: #10b981;
+        }
+
+        .kpi-metric-card.amber::before {
+            background: #f59e0b;
+        }
+
+        .kpi-metric-card.rose::before {
+            background: #f43f5e;
+        }
 
         .kpi-metric-label {
             font-size: 11px;
@@ -593,16 +668,118 @@ function formatMoney($amount, $currency_code)
             font-weight: 600;
         }
 
-        .status-achieved  { background: #d1fae5; color: #065f46; }
-        .status-on-track  { background: #dbeafe; color: #1d4ed8; }
-        .status-at-risk   { background: #fef3c7; color: #92400e; }
-        .status-behind    { background: #fee2e2; color: #991b1b; }
+        .status-achieved {
+            background: #d1fae5;
+            color: #065f46;
+        }
+
+        .status-on-track {
+            background: #dbeafe;
+            color: #1d4ed8;
+        }
+
+        .status-at-risk {
+            background: #fef3c7;
+            color: #92400e;
+        }
+
+        .status-behind {
+            background: #fee2e2;
+            color: #991b1b;
+        }
 
         .kpi-no-level {
             text-align: center;
             padding: 2rem;
             color: #94a3b8;
             font-size: 14px;
+        }
+
+        /* ── Confirm section ── */
+        .kpi-confirm-section {
+            border-top: 1px solid #e2e8f0;
+            margin-top: 1.5rem;
+            padding-top: 1.25rem;
+            display: flex;
+            align-items: flex-start;
+            justify-content: space-between;
+            flex-wrap: wrap;
+            gap: 1rem;
+        }
+
+        .confirm-btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 10px 24px;
+            background: linear-gradient(135deg, #2563eb, #1d4ed8);
+            color: #fff;
+            border: none;
+            border-radius: 10px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            box-shadow: 0 2px 8px rgba(37, 99, 235, 0.3);
+        }
+
+        .confirm-btn:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 4px 14px rgba(37, 99, 235, 0.4);
+        }
+
+        .confirm-btn:disabled {
+            background: #94a3b8;
+            cursor: not-allowed;
+            transform: none;
+            box-shadow: none;
+        }
+
+        .confirmed-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 10px 20px;
+            background: #d1fae5;
+            color: #065f46;
+            border-radius: 10px;
+            font-size: 14px;
+            font-weight: 600;
+            border: 2px solid #6ee7b7;
+        }
+
+        .confirm-error-list {
+            background: #fef2f2;
+            border: 1px solid #fecaca;
+            border-radius: 8px;
+            padding: 0.75rem 1rem;
+            font-size: 12px;
+            color: #991b1b;
+            max-height: 160px;
+            overflow-y: auto;
+        }
+
+        .confirm-error-list li {
+            margin: 2px 0;
+        }
+
+        td.cell-missing {
+            background: #fff1f2 !important;
+            outline: 2px solid #f43f5e !important;
+            outline-offset: -2px;
+            animation: pulse-missing 1.5s ease-in-out 3;
+        }
+
+        @keyframes pulse-missing {
+
+            0%,
+            100% {
+                outline-color: #f43f5e;
+            }
+
+            50% {
+                outline-color: #fca5a5;
+            }
         }
 
         tr.row-excluded td {
@@ -731,7 +908,7 @@ function formatMoney($amount, $currency_code)
                                         $month_subtotal += $inv['calc_amount_vnd'];
                                     ?>
                                     <tr class="invoice-row <?= $is_excluded ? 'row-excluded' : '' ?>"
-                                        data-invoice-id="<?= $odoo_id ?>">
+                                        data-invoice-id="<?= $odoo_id ?>" data-is-excluded="<?= $is_excluded ?>">
                                         <td style="text-align: center;">
                                             <?= $stt++ ?>
                                         </td>
@@ -741,9 +918,15 @@ function formatMoney($amount, $currency_code)
                                                 onclick="toggleExclude(this, <?= $odoo_id ?>)"
                                                 title="<?= $is_excluded ? 'Bỏ loại trừ invoice này' : 'Loại trừ invoice này khỏi tổng' ?>">
                                                 <?php if ($is_excluded): ?>
-                                                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 14.5v-9l6 4.5-6 4.5z"/></svg>
+                                                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
+                                                        <path
+                                                            d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 14.5v-9l6 4.5-6 4.5z" />
+                                                    </svg>
                                                 <?php else: ?>
-                                                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm5 11H7v-2h10v2z"/></svg>
+                                                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
+                                                        <path
+                                                            d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm5 11H7v-2h10v2z" />
+                                                    </svg>
                                                 <?php endif; ?>
                                             </button>
                                         </td>
@@ -753,7 +936,7 @@ function formatMoney($amount, $currency_code)
                                         <td>
                                             <?= htmlspecialchars($inv['ref'] ?: $inv['name']) ?>
                                         </td>
-                                        <td>
+                                        <td data-required-field="project_code">
                                             <?= htmlspecialchars($inv['x_studio_project_code'] ?? '') ?>
                                         </td>
                                         <td>
@@ -761,19 +944,19 @@ function formatMoney($amount, $currency_code)
                                         </td>
 
                                         <!-- Loại Hợp đồng -->
-                                        <td class="editable-cell"
+                                        <td class="editable-cell" data-required-field="contract_type"
                                             onclick="makeEditable(this, <?= $odoo_id ?>, 'contract_type', 'select', ['Service', 'Trading', 'Dedicated', 'License'])">
                                             <?= htmlspecialchars($l['contract_type'] ?? '') ?>
                                         </td>
 
                                         <!-- Presales -->
-                                        <td class="editable-cell"
+                                        <td class="editable-cell" data-required-field="presales"
                                             onclick="makeEditable(this, <?= $odoo_id ?>, 'presales', 'select', ['No presales', '0%', '0.25%', '0.5%'])">
                                             <?= htmlspecialchars($l['presales'] ?? '') ?>
                                         </td>
 
                                         <!-- Loại khách hàng -->
-                                        <td class="editable-cell"
+                                        <td class="editable-cell" data-required-field="client_type"
                                             onclick="makeEditable(this, <?= $odoo_id ?>, 'client_type', 'select', ['New client', 'Old client'])">
                                             <?= htmlspecialchars($l['client_type'] ?? '') ?>
                                         </td>
@@ -796,13 +979,13 @@ function formatMoney($amount, $currency_code)
                                         </td>
 
                                         <!-- % Com (Lead source) -->
-                                        <td class="editable-cell"
+                                        <td class="editable-cell" data-required-field="com_lead_source"
                                             onclick="makeEditable(this, <?= $odoo_id ?>, 'com_lead_source', 'select', ['Yes', 'No'])">
                                             <?= htmlspecialchars($l['com_lead_source'] ?? 'No') ?>
                                         </td>
 
                                         <!-- % Bonus License/trading -->
-                                        <td class="editable-cell"
+                                        <td class="editable-cell" data-required-field="bonus_license_trading"
                                             onclick="makeEditable(this, <?= $odoo_id ?>, 'bonus_license_trading', 'select', ['Yes', 'No'])">
                                             <?= htmlspecialchars($l['bonus_license_trading'] ?? 'No') ?>
                                         </td>
@@ -843,10 +1026,14 @@ function formatMoney($amount, $currency_code)
                 <div class="kpi-report">
                     <div class="kpi-report-header">
                         <div class="kpi-report-title">
-                            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#2563eb" stroke-width="2.5"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+                            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24"
+                                fill="none" stroke="#2563eb" stroke-width="2.5">
+                                <polyline points="22 12 18 12 15 21 9 3 6 12 2 12" />
+                            </svg>
                             KPI Performance Report
                             <?php if ($kpi_data): ?>
-                                <span class="kpi-level-badge" style="background: <?= htmlspecialchars($kpi_data['color_badge']) ?>">
+                                <span class="kpi-level-badge"
+                                    style="background: <?= htmlspecialchars($kpi_data['color_badge']) ?>">
                                     <?= htmlspecialchars($kpi_data['level_name']) ?>
                                 </span>
                             <?php endif; ?>
@@ -855,17 +1042,18 @@ function formatMoney($amount, $currency_code)
                     </div>
 
                     <?php if (!$is_am_bd): ?>
-                        <div class="kpi-no-level">⚠️ Tài khoản này không phải AM/BD — không có Sale Level để so sánh KPI.</div>
+                        <div class="kpi-no-level">⚠️ Tài khoản này không phải AM/BD — không có Sale Level để so sánh KPI.
+                        </div>
                     <?php elseif (!$kpi_data): ?>
                         <div class="kpi-no-level">ℹ️ Chưa được gán Sale Level. Liên hệ Admin để cập nhật.</div>
                     <?php else:
-                        $kpi_quarter_vnd  = (float) $kpi_data['kpi_quarter_vnd'];
-                        $kpi_yearly_vnd   = (float) $kpi_data['kpi_yearly_vnd'];
-                        $actual_vnd       = $total_vnd; // current quarter only (excl. excluded)
-
+                        $kpi_quarter_vnd = (float) $kpi_data['kpi_quarter_vnd'];
+                        $kpi_yearly_vnd = (float) $kpi_data['kpi_yearly_vnd'];
+                        $actual_vnd = $total_vnd; // current quarter only (excl. excluded)
+                    
                         $pct_quarter = $kpi_quarter_vnd > 0 ? min(($actual_vnd / $kpi_quarter_vnd) * 100, 999) : 0;
                         // Use YTD (all quarters of the year up to current) for yearly comparison
-                        $pct_yearly  = $kpi_yearly_vnd  > 0 ? min(($ytd_vnd  / $kpi_yearly_vnd)  * 100, 999) : 0;
+                        $pct_yearly = $kpi_yearly_vnd > 0 ? min(($ytd_vnd / $kpi_yearly_vnd) * 100, 999) : 0;
 
                         // Remaining months in quarter to estimate pace
                         $months_in_q = 3;
@@ -873,92 +1061,146 @@ function formatMoney($amount, $currency_code)
                         // Determine status
                         if ($pct_quarter >= 100) {
                             $status_class = 'status-achieved';
-                            $status_icon  = '🏆';
-                            $status_text  = 'Đạt KPI quý!';
+                            $status_icon = '🏆';
+                            $status_text = 'Đạt KPI quý!';
                         } elseif ($pct_quarter >= 75) {
                             $status_class = 'status-on-track';
-                            $status_icon  = '✅';
-                            $status_text  = 'Đang đúng lộ trình';
+                            $status_icon = '✅';
+                            $status_text = 'Đang đúng lộ trình';
                         } elseif ($pct_quarter >= 50) {
                             $status_class = 'status-at-risk';
-                            $status_icon  = '⚠️';
-                            $status_text  = 'Có nguy cơ không đạt';
+                            $status_icon = '⚠️';
+                            $status_text = 'Có nguy cơ không đạt';
                         } else {
                             $status_class = 'status-behind';
-                            $status_icon  = '🔴';
-                            $status_text  = 'Chưa đạt — cần cải thiện';
+                            $status_icon = '🔴';
+                            $status_text = 'Chưa đạt — cần cải thiện';
                         }
 
                         $bar_color_q = $pct_quarter >= 100 ? '#10b981' : ($pct_quarter >= 75 ? '#3b82f6' : ($pct_quarter >= 50 ? '#f59e0b' : '#f43f5e'));
-                        $bar_color_y = $pct_yearly  >= 100 ? '#10b981' : ($pct_yearly  >= 75 ? '#3b82f6' : ($pct_yearly  >= 50 ? '#f59e0b' : '#f43f5e'));
+                        $bar_color_y = $pct_yearly >= 100 ? '#10b981' : ($pct_yearly >= 75 ? '#3b82f6' : ($pct_yearly >= 50 ? '#f59e0b' : '#f43f5e'));
 
                         $remaining_vnd = max(0, $kpi_quarter_vnd - $actual_vnd);
-                    ?>
-                    <div class="kpi-metrics-grid">
+                        ?>
+                        <div class="kpi-metrics-grid">
 
-                        <!-- Thực tế quý -->
-                        <div class="kpi-metric-card blue">
-                            <div class="kpi-metric-label">Doanh thu thực tế (Quý)</div>
-                            <div class="kpi-metric-value"><?= number_format($actual_vnd / 1e9, 2) ?>B</div>
-                            <div class="kpi-metric-sub"><?= number_format($actual_vnd, 0, ',', '.') ?> VND</div>
-                            <div class="kpi-progress-section">
-                                <div class="kpi-progress-header">
-                                    <span>vs KPI Quý</span>
-                                    <span style="color: <?= $bar_color_q ?>"><?= number_format($pct_quarter, 1) ?>%</span>
-                                </div>
-                                <div class="kpi-progress-bar">
-                                    <div class="kpi-progress-fill" style="width: <?= min($pct_quarter, 100) ?>%; background: <?= $bar_color_q ?>"></div>
+                            <!-- Thực tế quý -->
+                            <div class="kpi-metric-card blue">
+                                <div class="kpi-metric-label">Doanh thu thực tế (Quý)</div>
+                                <div class="kpi-metric-value"><?= number_format($actual_vnd / 1e9, 2) ?>B</div>
+                                <div class="kpi-metric-sub"><?= number_format($actual_vnd, 0, ',', '.') ?> VND</div>
+                                <div class="kpi-progress-section">
+                                    <div class="kpi-progress-header">
+                                        <span>vs KPI Quý</span>
+                                        <span
+                                            style="color: <?= $bar_color_q ?>"><?= number_format($pct_quarter, 1) ?>%</span>
+                                    </div>
+                                    <div class="kpi-progress-bar">
+                                        <div class="kpi-progress-fill"
+                                            style="width: <?= min($pct_quarter, 100) ?>%; background: <?= $bar_color_q ?>">
+                                        </div>
+                                    </div>
                                 </div>
                             </div>
+
+                            <!-- KPI Quý target -->
+                            <div class="kpi-metric-card green">
+                                <div class="kpi-metric-label">KPI Quý (target)</div>
+                                <div class="kpi-metric-value"><?= number_format($kpi_quarter_vnd / 1e9, 2) ?>B</div>
+                                <div class="kpi-metric-sub"><?= number_format($kpi_quarter_vnd, 0, ',', '.') ?> VND</div>
+                                <div class="kpi-progress-section">
+                                    <div class="kpi-progress-header">
+                                        <span>Còn thiếu</span>
+                                        <span
+                                            style="color: #f43f5e"><?= $remaining_vnd > 0 ? number_format($remaining_vnd / 1e9, 2) . 'B VND' : 'Đã đạt 🎉' ?></span>
+                                    </div>
+                                    <div class="kpi-progress-bar">
+                                        <div class="kpi-progress-fill"
+                                            style="width: <?= min($pct_quarter, 100) ?>%; background: <?= $bar_color_q ?>">
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- KPI Năm -->
+                            <div class="kpi-metric-card amber">
+                                <div class="kpi-metric-label">KPI Năm (target)</div>
+                                <div class="kpi-metric-value"><?= number_format($kpi_yearly_vnd / 1e9, 2) ?>B</div>
+                                <div class="kpi-metric-sub"><?= number_format($kpi_yearly_vnd, 0, ',', '.') ?> VND</div>
+                                <div class="kpi-progress-section">
+                                    <div class="kpi-progress-header">
+                                        <span>Lũy kế <?= isset($q) ? "Q1–Q$q" : '' ?> / Năm</span>
+                                        <span
+                                            style="color: <?= $bar_color_y ?>"><?= number_format($pct_yearly, 1) ?>%</span>
+                                    </div>
+                                    <div class="kpi-progress-bar">
+                                        <div class="kpi-progress-fill"
+                                            style="width: <?= min($pct_yearly, 100) ?>%; background: <?= $bar_color_y ?>">
+                                        </div>
+                                    </div>
+                                    <div style="margin-top: 0.3rem; font-size: 11px; color: #94a3b8;">
+                                        Thực tế YTD: <?= number_format($ytd_vnd / 1e9, 2) ?>B VND
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Status card -->
+                            <div class="kpi-metric-card rose"
+                                style="display:flex;flex-direction:column;justify-content:space-between;">
+                                <div class="kpi-metric-label">Trạng thái</div>
+                                <div style="margin: 0.5rem 0;">
+                                    <span class="status-badge <?= $status_class ?>"><?= $status_icon ?>
+                                        <?= $status_text ?></span>
+                                </div>
+                                <div class="kpi-metric-sub">
+                                    <?= htmlspecialchars($kpi_data['position_type']) ?> &bull;
+                                    <?= htmlspecialchars($kpi_data['level_name']) ?>
+                                </div>
+                            </div>
+
                         </div>
 
-                        <!-- KPI Quý target -->
-                        <div class="kpi-metric-card green">
-                            <div class="kpi-metric-label">KPI Quý (target)</div>
-                            <div class="kpi-metric-value"><?= number_format($kpi_quarter_vnd / 1e9, 2) ?>B</div>
-                            <div class="kpi-metric-sub"><?= number_format($kpi_quarter_vnd, 0, ',', '.') ?> VND</div>
-                            <div class="kpi-progress-section">
-                                <div class="kpi-progress-header">
-                                    <span>Còn thiếu</span>
-                                    <span style="color: #f43f5e"><?= $remaining_vnd > 0 ? number_format($remaining_vnd / 1e9, 2) . 'B VND' : 'Đã đạt 🎉' ?></span>
-                                </div>
-                                <div class="kpi-progress-bar">
-                                    <div class="kpi-progress-fill" style="width: <?= min($pct_quarter, 100) ?>%; background: <?= $bar_color_q ?>"></div>
-                                </div>
+                        <!-- ── Confirm section ── -->
+                        <div class="kpi-confirm-section">
+                            <div>
+                                <?php if ($confirmation): ?>
+                                    <div class="confirmed-badge">
+                                        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24"
+                                            fill="none" stroke="currentColor" stroke-width="2.5">
+                                            <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
+                                            <polyline points="22 4 12 14.01 9 11.01" />
+                                        </svg>
+                                        Đã xác nhận KPI
+                                    </div>
+                                    <div style="font-size: 11px; color: #64748b; margin-top: 0.4rem;">
+                                        Bởi <strong><?= htmlspecialchars($confirmation['confirmed_by_name']) ?></strong>
+                                        lúc <?= date('H:i d/m/Y', strtotime($confirmation['confirmed_at'])) ?>
+                                    </div>
+                                    <div style="margin-top: 0.6rem;">
+                                        <button class="confirm-btn" onclick="confirmKpi()"
+                                            style="background: #64748b; box-shadow: none; font-size: 12px; padding: 7px 16px;">
+                                            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24"
+                                                fill="none" stroke="currentColor" stroke-width="2">
+                                                <polyline points="23 4 23 11 16 11" />
+                                                <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 11" />
+                                            </svg>
+                                            Xác nhận lại
+                                        </button>
+                                    </div>
+                                <?php else: ?>
+                                    <button class="confirm-btn" onclick="confirmKpi()" id="confirmKpiBtn">
+                                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24"
+                                            fill="none" stroke="currentColor" stroke-width="2.5">
+                                            <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
+                                            <polyline points="22 4 12 14.01 9 11.01" />
+                                        </svg>
+                                        Xác nhận KPI Quý
+                                    </button>
+                                <?php endif; ?>
                             </div>
+                            <div id="confirmErrorBox" style="display:none; flex:1; min-width:250px;"></div>
                         </div>
 
-                        <!-- KPI Năm -->
-                        <div class="kpi-metric-card amber">
-                            <div class="kpi-metric-label">KPI Năm (target)</div>
-                            <div class="kpi-metric-value"><?= number_format($kpi_yearly_vnd / 1e9, 2) ?>B</div>
-                            <div class="kpi-metric-sub"><?= number_format($kpi_yearly_vnd, 0, ',', '.') ?> VND</div>
-                            <div class="kpi-progress-section">
-                                <div class="kpi-progress-header">
-                                    <span>Lũy kế <?= isset($q) ? "Q1–Q$q" : '' ?> / Năm</span>
-                                    <span style="color: <?= $bar_color_y ?>"><?= number_format($pct_yearly, 1) ?>%</span>
-                                </div>
-                                <div class="kpi-progress-bar">
-                                    <div class="kpi-progress-fill" style="width: <?= min($pct_yearly, 100) ?>%; background: <?= $bar_color_y ?>"></div>
-                                </div>
-                                <div style="margin-top: 0.3rem; font-size: 11px; color: #94a3b8;">
-                                    Thực tế YTD: <?= number_format($ytd_vnd / 1e9, 2) ?>B VND
-                                </div>
-                            </div>
-                        </div>
-
-                        <!-- Status card -->
-                        <div class="kpi-metric-card rose" style="display:flex;flex-direction:column;justify-content:space-between;">
-                            <div class="kpi-metric-label">Trạng thái</div>
-                            <div style="margin: 0.5rem 0;">
-                                <span class="status-badge <?= $status_class ?>"><?= $status_icon ?> <?= $status_text ?></span>
-                            </div>
-                            <div class="kpi-metric-sub">
-                                <?= htmlspecialchars($kpi_data['position_type']) ?> &bull; <?= htmlspecialchars($kpi_data['level_name']) ?>
-                            </div>
-                        </div>
-
-                    </div>
                     <?php endif; ?>
                 </div>
 
@@ -1097,13 +1339,94 @@ function formatMoney($amount, $currency_code)
             }
         });
 
+        // ── KPI Confirmation ──
+        function confirmKpi() {
+            // 1. Collect all non-excluded invoice rows in the table
+            const rows = document.querySelectorAll('tr.invoice-row:not([data-is-excluded="1"])');
+            const requiredFields = ['project_code', 'contract_type', 'presales', 'client_type', 'com_lead_source', 'bonus_license_trading'];
+            const fieldLabels = {
+                project_code: 'Mã dự án',
+                contract_type: 'Loại Hợp đồng',
+                presales: 'Presales',
+                client_type: 'Loại khách hàng',
+                com_lead_source: '% Com (Lead source)',
+                bonus_license_trading: '% Bonus License/trading'
+            };
+
+            // Clear previous highlights
+            document.querySelectorAll('td.cell-missing').forEach(td => td.classList.remove('cell-missing'));
+
+            const invoiceIds = [];
+            const errors = [];
+
+            rows.forEach(row => {
+                const invId = row.dataset.invoiceId;
+                invoiceIds.push(invId);
+                requiredFields.forEach(field => {
+                    const td = row.querySelector(`td[data-required-field="${field}"]`);
+                    if (td) {
+                        const text = td.innerText.trim().replace(/^-- Chọn --$/, '');
+                        if (!text) {
+                            td.classList.add('cell-missing');
+                            errors.push(`Invoice #${invId}: ${fieldLabels[field]}`);
+                        }
+                    }
+                });
+            });
+
+            const errorBox = document.getElementById('confirmErrorBox');
+
+            if (errors.length > 0) {
+                errorBox.style.display = 'block';
+                errorBox.innerHTML = `<div class="confirm-error-list">
+                    <strong style="display:block;margin-bottom:4px">⚠️ ${errors.length} ô chưa điền — vui lòng bổ sung trước khi xác nhận:</strong>
+                    <ul style="margin:0;padding-left:16px">${errors.map(e => `<li>${e}</li>`).join('')}</ul>
+                </div>`;
+                // Scroll to first missing
+                const firstMissing = document.querySelector('td.cell-missing');
+                if (firstMissing) firstMissing.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                return;
+            }
+
+            // 2. All good — send to server
+            errorBox.style.display = 'none';
+            const btn = document.getElementById('confirmKpiBtn') || document.querySelector('.confirm-btn');
+            if (btn) { btn.disabled = true; btn.textContent = 'Đang xác nhận...'; }
+
+            const formData = new FormData();
+            formData.append('action', 'confirm_kpi');
+            formData.append('quarter', '<?= $active_tab ?>');
+            formData.append('invoice_ids', invoiceIds.join(','));
+
+            fetch('', { method: 'POST', body: formData })
+                .then(res => res.json())
+                .then(data => {
+                    if (data.success) {
+                        showToast('✅ Đã xác nhận KPI!');
+                        setTimeout(() => location.reload(), 900);
+                    } else {
+                        if (btn) { btn.disabled = false; btn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg> Xác nhận KPI Quý'; }
+                        const missing = data.missing || [];
+                        errorBox.style.display = 'block';
+                        errorBox.innerHTML = `<div class="confirm-error-list">
+                            <strong style="display:block;margin-bottom:4px">❌ Server tìm thấy dữ liệu thiếu:</strong>
+                            <ul style="margin:0;padding-left:16px">${missing.map(e => `<li>${e}</li>`).join('')}</ul>
+                        </div>`;
+                    }
+                })
+                .catch(() => {
+                    if (btn) { btn.disabled = false; }
+                    alert('Lỗi kết nối, vui lòng thử lại.');
+                });
+        }
+
         function toggleExclude(btn, invoiceId) {
             const formData = new FormData();
             formData.append('action', 'toggle_exclude');
             formData.append('odoo_invoice_id', invoiceId);
 
             const svgExcluded = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" style="width:14px;height:14px;pointer-events:none"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 14.5v-9l6 4.5-6 4.5z"/></svg>';
-            const svgNormal  = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" style="width:14px;height:14px;pointer-events:none"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm5 11H7v-2h10v2z"/></svg>';
+            const svgNormal = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" style="width:14px;height:14px;pointer-events:none"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm5 11H7v-2h10v2z"/></svg>';
 
             fetch('', { method: 'POST', body: formData })
                 .then(res => res.json())
