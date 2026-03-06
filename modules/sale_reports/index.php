@@ -464,10 +464,32 @@ if ($res_cc) {
         $comm_confirmations[] = $r;
 }
 
-// locked = latest event is 'confirmed' (not 'reset')
+// Find the latest KPI status (either 'confirmed' or 'reset')
+$latest_kpi_event = null;
+foreach ($confirmations as $c) {
+    if ($c['type'] === 'confirmed' || $c['type'] === 'reset') {
+        $latest_kpi_event = $c;
+        break;
+    }
+}
+
+// Find the latest Commission status
+$latest_comm_event = null;
+foreach ($confirmations as $c) {
+    if ($c['type'] === 'commission_confirmed') {
+        $latest_comm_event = $c;
+        break;
+    }
+}
+
+// Global state: locked if latest confirmation event is not a reset
 $latest_type = !empty($confirmation) ? ($confirmation['type'] ?? 'confirmed') : null;
-$is_locked = ($latest_type === 'confirmed');   // locked only when latest event is 'confirmed'
-$is_confirmed = ($latest_type === 'confirmed');   // for display logic
+$is_locked = ($latest_type === 'confirmed' || $latest_type === 'commission_confirmed');
+$is_confirmed = ($latest_type === 'confirmed' || $latest_type === 'commission_confirmed');
+
+// Specific state flags
+$kpi_is_confirmed = ($latest_kpi_event && $latest_kpi_event['type'] === 'confirmed');
+$comm_is_confirmed = ($latest_type === 'commission_confirmed');
 
 // Fetch edit log for this quarter (newest first)
 $edit_log = [];
@@ -1429,26 +1451,41 @@ function formatMoney($amount, $currency_code)
                                                 <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
                                                 <polyline points="22 4 12 14.01 9 11.01" />
                                             </svg>
-                                            Đã xác nhận KPI — <?= date('H:i d/m/Y', strtotime($confirmation['confirmed_at'])) ?>
+                                            <?php
+                                            $kpi_date = ($latest_kpi_event) ? date('H:i d/m/Y', strtotime($latest_kpi_event['confirmed_at'])) : 'Unknown';
+                                            ?>
+                                            Đã xác nhận KPI — <?= $kpi_date ?>
                                         </div>
-                                        <button class="confirm-btn" onclick="confirmKpi()"
-                                            style="background:#64748b;box-shadow:none;font-size:12px;padding:7px 16px;">
-                                            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24"
-                                                fill="none" stroke="currentColor" stroke-width="2">
-                                                <polyline points="23 4 23 11 16 11" />
-                                                <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 11" />
-                                            </svg>
-                                            Xác nhận lại
-                                        </button>
-                                        <button class="draft-btn" onclick="resetToDraft()">
-                                            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24"
-                                                fill="none" stroke="currentColor" stroke-width="2">
-                                                <path d="M18.36 6.64A9 9 0 1 1 5.64 5.64" />
-                                                <polyline points="15 2 21 2 21 8" />
-                                                <line x1="21" y1="2" x2="14" y2="9" />
-                                            </svg>
-                                            Reset to Draft
-                                        </button>
+                                        <?php if (!$comm_is_confirmed): ?>
+                                            <button class="confirm-btn" onclick="confirmKpi()"
+                                                style="background:#64748b;box-shadow:none;font-size:12px;padding:7px 16px;">
+                                                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24"
+                                                    fill="none" stroke="currentColor" stroke-width="2">
+                                                    <polyline points="23 4 23 11 16 11" />
+                                                    <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 11" />
+                                                </svg>
+                                                Xác nhận lại KPI
+                                            </button>
+                                            <button class="draft-btn" onclick="resetToDraft()">
+                                                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24"
+                                                    fill="none" stroke="currentColor" stroke-width="2">
+                                                    <path d="M18.36 6.64A9 9 0 1 1 5.64 5.64" />
+                                                    <polyline points="15 2 21 2 21 8" />
+                                                    <line x1="21" y1="2" x2="14" y2="9" />
+                                                </svg>
+                                                Reset to Draft
+                                            </button>
+                                        <?php else: ?>
+                                            <div class="confirmed-badge"
+                                                style="background:#dcfce7; color:#166534; border-color:#86efac;">
+                                                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24"
+                                                    fill="none" stroke="currentColor" stroke-width="2.5">
+                                                    <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" />
+                                                </svg>
+                                                ĐÃ CHỐT COMMISSION —
+                                                <?= date('H:i d/m/Y', strtotime($latest_comm_event['confirmed_at'])) ?>
+                                            </div>
+                                        <?php endif; ?>
                                     </div>
 
                                 <?php elseif ($latest_type === 'reset'): ?>
