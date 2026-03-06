@@ -341,6 +341,7 @@ class OdooAPI
                 'partner_id',
                 'amount_total',
                 'amount_total_signed', // Amount in company currency
+                'amount_tax',          // VAT amount
                 'amount_residual', // amount due
                 'currency_id',
                 'state', // posted, draft, cancel
@@ -349,6 +350,7 @@ class OdooAPI
                 'invoice_user_id', // Salesperson
                 'invoice_origin', // Source Document
                 'ref',
+                'invoice_date_due',    // Due date
                 'write_date', // Last update date (proxy for payment date if state is paid)
                 'x_studio_project_code',
                 'invoice_payments_widget' // JSON blob with payment info
@@ -435,6 +437,11 @@ class OdooAPI
         }
 
         return null;
+    }
+
+    public function getUrl(): string
+    {
+        return $this->url;
     }
 
     private $currencyCacheFile = __DIR__ . '/../cache/currencies.cache.php';

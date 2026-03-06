@@ -1414,6 +1414,156 @@ function formatMoney($amount, $currency_code)
                 </div>
 
             </div>
+
+            <!-- ══════════════════════════════════════════
+                 BÁO CÁO THANH TOÁN — Paid Invoices
+            ═══════════════════════════════════════════ -->
+            <?php
+            // Build paid-only list for this quarter (already date-filtered, now filter payment_state)
+            $paid_invoices_grouped = [];
+            $paid_total_vnd = 0;
+            foreach ($filtered_invoices as $inv) {
+                if (($inv['payment_state'] ?? '') !== 'paid') continue;
+                if ((int)($inv['is_excluded'] ?? 0) === 1) continue;
+                $inv_date_str = $inv['invoice_date'] ?: $inv['date'];
+                $month_key    = $inv_date_str ? date('Y-m', strtotime($inv_date_str)) : 'Unknown';
+                $paid_invoices_grouped[$month_key][] = $inv;
+                $paid_total_vnd += $inv['calc_amount_vnd'];
+            }
+            ksort($paid_invoices_grouped);
+            $odoo_url = $odoo->getUrl();
+            ?>
+            <div class="kpi-report" style="margin-top: 2rem;">
+                <div class="kpi-report-header">
+                    <div class="kpi-report-title">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#10b981" stroke-width="2.5"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+                        Báo cáo Thanh toán (Đã thu)
+                    </div>
+                    <span class="kpi-quarter-label">📅 <?= htmlspecialchars($quarter_label) ?> &nbsp;·&nbsp;
+                        <strong><?= array_sum(array_map('count', $paid_invoices_grouped)) ?></strong> hóa đơn &nbsp;·&nbsp;
+                        Tổng: <strong><?= number_format($paid_total_vnd / 1e9, 3) ?>B VND</strong>
+                    </span>
+                </div>
+
+                <?php if (empty($paid_invoices_grouped)): ?>
+                    <div class="kpi-no-level">✅ Chưa có hóa đơn nào được thanh toán (paid) trong quý này.</div>
+                <?php else: ?>
+                <div style="overflow-x: auto;">
+                <table class="report-table" style="margin-top: 1rem;">
+                    <thead>
+                        <tr>
+                            <th style="width:40px;text-align:center;">STT</th>
+                            <th style="width:100px;">Invoice #</th>
+                            <th style="width:150px;">Tên khách hàng</th>
+                            <th style="width:150px;">Tên Dự án</th>
+                            <th style="width:110px;">Mã dự án</th>
+                            <th style="width:95px;">Ngày ký HĐ</th>
+                            <th style="width:110px;">Loại HĐ</th>
+                            <th style="width:90px;">Presales</th>
+                            <th style="width:110px;">Loại KH</th>
+                            <th style="width:145px;text-align:right;">Giá trị HĐ/HD</th>
+                            <th style="width:120px;">%Profit PAKD</th>
+                            <th style="width:110px;">Net profit</th>
+                            <th style="width:140px;text-align:right;">Giá trị xuất VAT</th>
+                            <th style="width:140px;text-align:right;">Giá trị giải ngân</th>
+                            <th style="width:80px;text-align:center;">Link Odoo</th>
+                            <th style="width:105px;">Ngày xuất VAT</th>
+                            <th style="width:115px;">Ngày tiền về</th>
+                            <th style="width:130px;">% Com Lead</th>
+                            <th style="width:150px;">% Bonus Lic/Trd</th>
+                            <th style="width:75px;">% Com 1</th>
+                            <th style="width:90px;">% Com 2</th>
+                            <th style="min-width:180px;">Note</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                    <?php $pstt = 1;
+                    foreach ($paid_invoices_grouped as $month_key => $month_invs):
+                        $display_month = $month_key !== 'Unknown' ? date('m / Y', strtotime($month_key.'-01')) : 'Unknown';
+                        $month_sub = 0;
+                    ?>
+                        <tr class="month-group-header"><td colspan="22">THÁNG <?= $display_month ?></td></tr>
+                        <?php foreach ($month_invs as $inv):
+                            $oid = $inv['id'];
+                            $l   = $local_data[$oid] ?? [];
+                            $inv_date_str = $inv['invoice_date'] ?: $inv['date'];
+                            $month_str    = $inv_date_str ? date('d/m/Y', strtotime($inv_date_str)) : '';
+                            $month_sub   += $inv['calc_amount_vnd'];
+
+                            // Parse invoice_payments_widget for giải ngân & ngày tiền về
+                            $pay_widget   = $inv['invoice_payments_widget'] ?? null;
+                            $giaingan_vnd = 0;
+                            $ngay_tien_ve_arr = [];
+                            if ($pay_widget && $pay_widget !== 'false' && is_string($pay_widget)) {
+                                $pw = json_decode($pay_widget, true);
+                                foreach ($pw['content'] ?? [] as $p) {
+                                    $giaingan_vnd    += (float)($p['amount'] ?? 0);
+                                    if (!empty($p['date'])) $ngay_tien_ve_arr[] = $p['date'];
+                                }
+                            }
+                            $ngay_tien_ve = !empty($ngay_tien_ve_arr) ? date('d/m/Y', strtotime(max($ngay_tien_ve_arr))) : '';
+
+                            // Giá trị xuất VAT = amount_total (total including VAT, in invoice currency)
+                            $currency_code = is_array($inv['currency_id']) ? $inv['currency_id'][1] : 'VND';
+                            $vat_amount    = (float)($inv['amount_total'] ?? 0);
+
+                            // Odoo deeplink
+                            $odoo_link = $odoo_url . '/web#id=' . $oid . '&model=account.move&view_type=form';
+                        ?>
+                        <tr class="invoice-row" data-invoice-id="<?= $oid ?>">
+                            <td style="text-align:center;"><?= $pstt++ ?></td>
+                            <td style="font-family:monospace;font-size:12px;color:#64748b;text-align:center;font-weight:600;">#<?= $oid ?></td>
+                            <td><?= htmlspecialchars(is_array($inv['partner_id']) ? $inv['partner_id'][1] : '') ?></td>
+                            <td><?= htmlspecialchars($inv['ref'] ?: $inv['name']) ?></td>
+                            <td><?= htmlspecialchars($inv['x_studio_project_code'] ?? '') ?></td>
+                            <td><?= $month_str ?></td>
+                            <td><?= htmlspecialchars($l['contract_type'] ?? '') ?></td>
+                            <td><?= htmlspecialchars($l['presales'] ?? '') ?></td>
+                            <td><?= htmlspecialchars($l['client_type'] ?? '') ?></td>
+                            <td style="text-align:right;font-family:monospace;"><?= formatMoney($vat_amount, $currency_code) ?></td>
+                            <td><?= htmlspecialchars($l['profit_pakd'] ?? '') ?></td>
+                            <td><?= htmlspecialchars($l['net_profit'] ?? '') ?></td>
+                            <!-- Giá trị xuất VAT -->
+                            <td style="text-align:right;font-family:monospace;color:#0f766e;font-weight:600;">
+                                <?= formatMoney($vat_amount, $currency_code) ?>
+                            </td>
+                            <!-- Giá trị giải ngân -->
+                            <td style="text-align:right;font-family:monospace;color:#1d4ed8;font-weight:600;">
+                                <?= $giaingan_vnd > 0 ? formatMoney($giaingan_vnd, $currency_code) : '<span style="color:#94a3b8">—</span>' ?>
+                            </td>
+                            <!-- Link Odoo -->
+                            <td style="text-align:center;">
+                                <a href="<?= htmlspecialchars($odoo_link) ?>" target="_blank"
+                                   title="Mở trong Odoo"
+                                   style="display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;border-radius:6px;background:#eff6ff;border:1.5px solid #bfdbfe;color:#2563eb;text-decoration:none;transition:all .2s;"
+                                   onmouseover="this.style.background='#2563eb';this.style.color='#fff'"
+                                   onmouseout="this.style.background='#eff6ff';this.style.color='#2563eb'">
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+                                </a>
+                            </td>
+                            <!-- Ngày xuất VAT -->
+                            <td style="color:#475569;"><?= $month_str ?></td>
+                            <!-- Ngày tiền về -->
+                            <td style="color:#0f766e;font-weight:500;"><?= $ngay_tien_ve ?: '<span style="color:#94a3b8">—</span>' ?></td>
+                            <td><?= htmlspecialchars($l['com_lead_source'] ?? '') ?></td>
+                            <td><?= htmlspecialchars($l['bonus_license_trading'] ?? '') ?></td>
+                            <td style="color:#c5221f;font-weight:600;"><?= htmlspecialchars($l['com_1'] ?? '') ?></td>
+                            <td><?= htmlspecialchars($l['com_2'] ?? '') ?></td>
+                            <td><?= htmlspecialchars($l['note'] ?? '') ?></td>
+                        </tr>
+                        <?php endforeach; ?>
+                        <tr class="month-total-row">
+                            <td colspan="8" style="text-align:right;">Cộng tháng <?= $display_month ?>:</td>
+                            <td style="text-align:right;"><?= formatMoney($month_sub, 'VND') ?></td>
+                            <td colspan="13"></td>
+                        </tr>
+                    <?php endforeach; ?>
+                    </tbody>
+                </table>
+                </div>
+                <?php endif; ?>
+            </div>
+
         </main>
     </div>
 
