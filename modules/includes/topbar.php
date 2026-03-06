@@ -149,9 +149,16 @@ if (isset($_SESSION['is_am_bd']) && $_SESSION['is_am_bd'] == 1) {
                 'warning_type' => $rm['warning_type']
             ];
         }
-        $stmt_manual->close();
     }
 }
+
+// Sort notifications: newest first
+usort($am_notifications, function ($a, $b) {
+    $dateA = $a['level'] == 99 ? $a['at'] : ($a['debt']['expected_payment_date'] ?? '2000-01-01');
+    $dateB = $b['level'] == 99 ? $b['at'] : ($b['debt']['expected_payment_date'] ?? '2000-01-01');
+    return strcmp($dateB, $dateA);
+});
+
 $notif_count = count($am_notifications);
 ?>
 <header class="top-bar">
