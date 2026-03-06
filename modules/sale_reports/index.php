@@ -993,6 +993,7 @@ function formatMoney($amount, $currency_code)
                         <tr>
                             <th style="width: 40px; text-align: center;">STT</th>
                             <th style="width: 130px;">Invoice #</th>
+                            <th style="width: 100px; text-align: center;">Trạng thái TT</th>
                             <th style="width: 50px; text-align: center;">Loại trừ</th>
                             <th style="width: 150px;">Tên khách hàng</th>
                             <th style="width: 150px;">Tên Dự án</th>
@@ -1015,7 +1016,7 @@ function formatMoney($amount, $currency_code)
                     <tbody>
                         <?php if (empty($grouped_invoices)): ?>
                             <tr>
-                                <td colspan="17" style="text-align:center; padding: 2rem;">No invoices found.</td>
+                                <td colspan="18" style="text-align:center; padding: 2rem;">No invoices found.</td>
                             </tr>
                         <?php else: ?>
                             <?php $stt = 1;
@@ -1024,7 +1025,7 @@ function formatMoney($amount, $currency_code)
                                 $month_subtotal = 0;
                                 ?>
                                 <tr class="month-group-header">
-                                    <td colspan="17">THÁNG <?= $display_month ?></td>
+                                    <td colspan="18">THÁNG <?= $display_month ?></td>
                                 </tr>
                                 <?php foreach ($month_invoices as $inv):
                                     $odoo_id = $inv['id'];
@@ -1044,6 +1045,19 @@ function formatMoney($amount, $currency_code)
                                         <td
                                             style="font-family: 'Inconsolata', monospace; font-size: 12px; color: #64748b; white-space: nowrap; font-weight: 600; text-align: center;">
                                             #<?= $odoo_id ?>
+                                        </td>
+                                        <!-- Trạng thái TT -->
+                                        <td style="text-align: center;">
+                                            <?php
+                                            $p_state = $inv['payment_state'] ?? '';
+                                            if ($p_state === 'paid') {
+                                                echo '<span style="background:#d1fae5; color:#065f46; padding: 2px 6px; border-radius: 4px; font-size: 10px; font-weight: 600; text-transform: uppercase;">Paid</span>';
+                                            } elseif ($p_state === 'in_payment') {
+                                                echo '<span style="background:#dbeafe; color:#1e40af; padding: 2px 6px; border-radius: 4px; font-size: 10px; font-weight: 600; text-transform: uppercase;">In Payment</span>';
+                                            } else {
+                                                echo '<span style="background:#f1f5f9; color:#64748b; padding: 2px 6px; border-radius: 4px; font-size: 10px; font-weight: 600; text-transform: uppercase;">' . ($p_state ?: 'Unpaid') . '</span>';
+                                            }
+                                            ?>
                                         </td>
                                         <!-- Loại trừ (cột 2) -->
                                         <td style="text-align: center;">
@@ -1140,7 +1154,7 @@ function formatMoney($amount, $currency_code)
                                     </tr>
                                 <?php endforeach; ?>
                                 <tr class="month-total-row">
-                                    <td colspan="9" style="text-align: right;">Cộng tháng <?= $display_month ?>:</td>
+                                    <td colspan="10" style="text-align: right;">Cộng tháng <?= $display_month ?>:</td>
                                     <td style="text-align: right;"><?= formatMoney($month_subtotal, 'VND') ?></td>
                                     <td colspan="7"></td>
                                 </tr>
@@ -1464,6 +1478,7 @@ function formatMoney($amount, $currency_code)
                 <!-- ══════════════════════════════════════════
                      BÁO CÁO THANH TOÁN — Paid Invoices
                 ═══════════════════════════════════════════ -->
+                <?php if ($is_confirmed): ?>
                 <?php
                 $paid_invoices_grouped = [];
                 $paid_total_vnd = 0;
@@ -1617,6 +1632,7 @@ function formatMoney($amount, $currency_code)
                         </div>
                     <?php endif; ?>
                 </div>
+                <?php endif; // end of if ($is_confirmed) for paid block ?>
 
             </div><!-- /.report-wrapper -->
 
