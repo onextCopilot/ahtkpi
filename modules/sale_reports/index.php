@@ -34,11 +34,37 @@ if ($table_check->num_rows == 0) {
         com_1 VARCHAR(20),
         com_2 VARCHAR(20),
         note TEXT,
+        is_excluded TINYINT(1) DEFAULT 0,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
     )";
     if (!$conn->query($sql)) {
         die("Error creating table: " . $conn->error);
     }
+} else {
+    // Migration: add is_excluded if not exists
+    $col_check = $conn->query("SHOW COLUMNS FROM sale_reports LIKE 'is_excluded'");
+    if ($col_check->num_rows == 0) {
+        $conn->query("ALTER TABLE sale_reports ADD COLUMN is_excluded TINYINT(1) DEFAULT 0");
+    }
+}
+
+// Handle AJAX toggle exclude
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'toggle_exclude') {
+    header('Content-Type: application/json');
+    $odoo_id = intval($_POST['odoo_invoice_id']);
+    // Get current state
+    $stmt = $conn->prepare("SELECT is_excluded FROM sale_reports WHERE odoo_invoice_id = ?");
+    $stmt->bind_param("i", $odoo_id);
+    $stmt->execute();
+    $res = $stmt->get_result();
+    $row = $res->fetch_assoc();
+    $current = $row ? (int) $row['is_excluded'] : 0;
+    $new_val = $current ? 0 : 1;
+    $stmt2 = $conn->prepare("INSERT INTO sale_reports (odoo_invoice_id, is_excluded) VALUES (?, ?) ON DUPLICATE KEY UPDATE is_excluded=?");
+    $stmt2->bind_param("iii", $odoo_id, $new_val, $new_val);
+    $stmt2->execute();
+    echo json_encode(['success' => true, 'is_excluded' => $new_val]);
+    exit();
 }
 
 // Handle AJAX update
@@ -159,7 +185,13 @@ foreach ($invoices as &$inv) {
     }
 
     $inv['calc_amount_vnd'] = $amountVnd;
-    $total_vnd += $amountVnd;
+
+    // Only add to total if not excluded
+    $is_excluded = (int) ($local_data[$inv['id']]['is_excluded'] ?? 0);
+    $inv['is_excluded'] = $is_excluded;
+    if (!$is_excluded) {
+        $total_vnd += $amountVnd;
+    }
 
     $filtered_invoices[] = $inv;
 }
@@ -386,6 +418,29 @@ function formatMoney($amount, $currency_code)
             color: #475569 !important;
             border-top: 1px solid #e2e8f0 !important;
         }
+
+        tr.row-excluded td {
+            background: #fffde7 !important;
+            opacity: 0.8;
+        }
+
+        tr.row-excluded:hover td {
+            background: #fff9c4 !important;
+        }
+
+        .exclude-btn {
+            background: none;
+            border: none;
+            cursor: pointer;
+            font-size: 18px;
+            padding: 2px 4px;
+            border-radius: 4px;
+            transition: transform 0.15s;
+        }
+
+        .exclude-btn:hover {
+            transform: scale(1.2);
+        }
     </style>
 </head>
 
@@ -443,6 +498,7 @@ function formatMoney($amount, $currency_code)
                             <th style="width: 80px;">% Com 1</th>
                             <th style="width: 100px;">% Com 2</th>
                             <th style="min-width: 200px;">Note</th>
+                            <th style="width: 70px; text-align: center;">Loại trừ</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -464,9 +520,12 @@ function formatMoney($amount, $currency_code)
                                     $l = $local_data[$odoo_id] ?? [];
                                     $inv_date_str = $inv['invoice_date'] ?: $inv['date'];
                                     $month_str = $inv_date_str ? date('d/m/Y', strtotime($inv_date_str)) : '';
-                                    $month_subtotal += $inv['calc_amount_vnd'];
+                                    $is_excluded = (int) ($inv['is_excluded'] ?? 0);
+                                    if (!$is_excluded)
+                                        $month_subtotal += $inv['calc_amount_vnd'];
                                     ?>
-                                    <tr>
+                                    <tr class="invoice-row <?= $is_excluded ? 'row-excluded' : '' ?>"
+                                        data-invoice-id="<?= $odoo_id ?>">
                                         <td style="text-align: center;">
                                             <?= $stt++ ?>
                                         </td>
@@ -545,6 +604,15 @@ function formatMoney($amount, $currency_code)
                                         <!-- Note -->
                                         <td class="editable-cell" onclick="makeEditable(this, <?= $odoo_id ?>, 'note', 'text')">
                                             <?= htmlspecialchars($l['note'] ?? '') ?>
+                                        </td>
+
+                                        <!-- Loại trừ -->
+                                        <td style="text-align: center;">
+                                            <button class="exclude-btn <?= $is_excluded ? 'excluded' : '' ?>"
+                                                onclick="toggleExclude(this, <?= $odoo_id ?>)"
+                                                title="<?= $is_excluded ? 'Bỏ loại trừ invoice này' : 'Loại trừ invoice này khỏi tổng' ?>">
+                                                <?= $is_excluded ? '✅' : '🚫' ?>
+                                            </button>
                                         </td>
 
                                     </tr>
@@ -692,6 +760,29 @@ function formatMoney($amount, $currency_code)
                 saveCurrentEdit();
             }
         });
+
+        function toggleExclude(btn, invoiceId) {
+            const formData = new FormData();
+            formData.append('action', 'toggle_exclude');
+            formData.append('odoo_invoice_id', invoiceId);
+
+            fetch('', { method: 'POST', body: formData })
+                .then(res => res.json())
+                .then(data => {
+                    if (data.success) {
+                        const row = btn.closest('tr');
+                        const isExcluded = data.is_excluded === 1;
+                        row.classList.toggle('row-excluded', isExcluded);
+                        btn.classList.toggle('excluded', isExcluded);
+                        btn.textContent = isExcluded ? '\u2705' : '\uD83D\uDEAB';
+                        btn.title = isExcluded ? 'B\u1ecf lo\u1ea1i tr\u1eeb invoice n\u00e0y' : 'Lo\u1ea1i tr\u1eeb invoice n\u00e0y kh\u1ecfi t\u1ed5ng';
+                        // Reload the page after short delay to recalculate totals
+                        showToast(isExcluded ? 'Đã loại trừ khỏi tổng!' : 'Đã bao gồm lại vào tổng!');
+                        setTimeout(() => location.reload(), 800);
+                    }
+                })
+                .catch(err => console.error(err));
+        }
 
         // Make scrolling table scroll sync if needed
     </script>
