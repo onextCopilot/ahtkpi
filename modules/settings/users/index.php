@@ -1,6 +1,24 @@
 <?php
 require_once __DIR__ . '/../../../config/config.php';
 
+// AJAX: Get history
+if (isset($_GET['ajax_action']) && $_GET['ajax_action'] === 'get_level_history') {
+    $uid = intval($_GET['user_id']);
+    $res = $conn->query("
+        SELECT h.*, sl.level_name, sl.position_type 
+        FROM user_sale_level_history h
+        LEFT JOIN sale_levels sl ON h.sale_level_id = sl.id
+        WHERE h.user_id = $uid
+        ORDER BY apply_year DESC, apply_quarter DESC
+    ");
+    $list = [];
+    while ($r = $res->fetch_assoc())
+        $list[] = $r;
+    header('Content-Type: application/json');
+    echo json_encode($list);
+    exit;
+}
+
 // Check session
 if (!isset($_SESSION['user_id'])) {
     header("Location: /login");
@@ -239,6 +257,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     }
                 }
             }
+        }
+        // DELETE HISTORY
+        elseif ($_POST['action'] === 'delete_history') {
+            $h_id = intval($_POST['history_id']);
+            $conn->query("DELETE FROM user_sale_level_history WHERE id = $h_id");
+            $success_message = "Xóa lịch sử level thành công!";
         }
         // SET PASSWORD
         elseif ($_POST['action'] === 'set_password') {
@@ -1092,7 +1116,13 @@ if ($sl_tbl && $sl_tbl->num_rows > 0) {
                                 </div>
                             </div>
                             <small style="color:#70757a; margin-top:6px; display:block;">Chọn level KPI phù hợp với vị
-                                trí.</small>
+                                <div id="modal_level_history"
+                                    style="margin-top: 20px; border-top: 1px dashed #dadce0; padding-top: 15px; display: none;">
+                                    <label
+                                        style="margin-bottom: 10px; color: #5f6368; font-weight: 600; font-size: 12px; display: block;">📜
+                                        LỊCH SỬ LEVEL</label>
+                                    <div id="history_list_container"></div>
+                                </div>
                         </div>
                     </div>
                 </div>
@@ -1179,6 +1209,8 @@ if ($sl_tbl && $sl_tbl->num_rows > 0) {
             canViewInvoice.checked = false;
             canViewAllDebts.checked = false;
             document.getElementById('is_am_bd').checked = false;
+            // Hide history
+            document.getElementById('modal_level_history').style.display = 'none';
             toggleTeamSelect();
 
             modal.classList.add('show');
@@ -1223,9 +1255,57 @@ if ($sl_tbl && $sl_tbl->num_rows > 0) {
                     document.getElementById('level_effective_div').style.display = 'none';
                 }
             }
+            // Load history
+            loadLevelHistory(user.id);
             toggleTeamSelect();
 
             modal.classList.add('show');
+        }
+
+        async function loadLevelHistory(uid) {
+            const container = document.getElementById('history_list_container');
+            const historyDiv = document.getElementById('modal_level_history');
+            container.innerHTML = '<p style="font-size:11px; color:#666;">Đang tải...</p>';
+
+            try {
+                const response = await fetch(`?ajax_action=get_level_history&user_id=${uid}`);
+                const data = await response.json();
+
+                if (data.length > 0) {
+                    historyDiv.style.display = 'block';
+                    let html = '<table style="width:100%; border-collapse: collapse; font-size: 11px; border: 1px solid #eee;">';
+                    data.forEach(h => {
+                        html += `
+                        <tr style="border-bottom: 1px solid #f9f9f9;">
+                            <td style="padding: 6px;">Q${h.apply_quarter}/${h.apply_year}</td>
+                            <td style="padding: 6px; font-weight: 600; color: #1a73e8;">${h.level_name}</td>
+                            <td style="padding: 6px; text-align: right;">
+                                <button type="button" onclick="deleteHistory(${h.id}, ${uid})" style="background:none; border:none; color:#d93025; cursor:pointer; padding:0;">Xóa</button>
+                            </td>
+                        </tr>`;
+                    });
+                    html += '</table>';
+                    container.innerHTML = html;
+                } else {
+                    historyDiv.style.display = 'none';
+                }
+            } catch (e) {
+                container.innerHTML = '<p style="color:red; font-size:11px;">Lỗi tải dữ liệu</p>';
+            }
+        }
+
+        function deleteHistory(hid, uid) {
+            if (!confirm('Xóa lịch sử level này?')) return;
+
+            const form = document.createElement('form');
+            form.method = 'POST';
+            form.innerHTML = `
+                <input type="hidden" name="action" value="delete_history">
+                <input type="hidden" name="history_id" value="${hid}">
+                <input type="hidden" name="id" value="${uid}">
+            `;
+            document.body.appendChild(form);
+            form.submit();
         }
 
         function closeModal() { modal.classList.remove('show'); }

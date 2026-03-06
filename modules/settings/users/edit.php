@@ -214,8 +214,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             } else {
                 $error_message = "Failed to reset password.";
             }
-        } catch (Exception $e) {
-            $error_message = "Error: " . $e->getMessage();
+        }
+    }
+
+    // DELETE HISTORY ITEM
+    if (isset($_POST['delete_history'])) {
+        $history_id = intval($_POST['history_id']);
+        $stmt_del = $conn->prepare("DELETE FROM user_sale_level_history WHERE id = ? AND user_id = ?");
+        $stmt_del->bind_param("ii", $history_id, $edit_id);
+        if ($stmt_del->execute()) {
+            $success_message = "Xóa lịch sử level thành công!";
         }
     }
 }
@@ -272,6 +280,22 @@ if ($sl_table_check && $sl_table_check->num_rows > 0) {
             $sale_levels_flat[] = $r;
         }
     }
+}
+
+// Fetch Sale Level History for this user
+$level_history = [];
+$sh_res = $conn->prepare("
+    SELECT h.*, sl.level_name, sl.position_type 
+    FROM user_sale_level_history h
+    LEFT JOIN sale_levels sl ON h.sale_level_id = sl.id
+    WHERE h.user_id = ?
+    ORDER BY h.apply_year DESC, h.apply_quarter DESC
+");
+$sh_res->bind_param("i", $edit_id);
+$sh_res->execute();
+$sh_res_result = $sh_res->get_result();
+while ($r = $sh_res_result->fetch_assoc()) {
+    $level_history[] = $r;
 }
 ?>
 <!DOCTYPE html>
@@ -800,7 +824,8 @@ if ($sl_table_check && $sl_table_check->num_rows > 0) {
                                                     $cur_q = ceil(date('n') / 3);
                                                     for ($q = 1; $q <= 4; $q++): ?>
                                                         <option value="<?= $q ?>" <?= ($cur_q == $q) ? 'selected' : '' ?>>Quý
-                                                            <?= $q ?></option>
+                                                            <?= $q ?>
+                                                        </option>
                                                     <?php endfor; ?>
                                                 </select>
                                             </div>
@@ -814,7 +839,8 @@ if ($sl_table_check && $sl_table_check->num_rows > 0) {
                                                     $cur_y = date('Y');
                                                     for ($y = $cur_y - 1; $y <= $cur_y + 2; $y++): ?>
                                                         <option value="<?= $y ?>" <?= ($cur_y == $y) ? 'selected' : '' ?>>
-                                                            <?= $y ?></option>
+                                                            <?= $y ?>
+                                                        </option>
                                                     <?php endfor; ?>
                                                 </select>
                                             </div>
@@ -832,6 +858,64 @@ if ($sl_table_check && $sl_table_check->num_rows > 0) {
                                                 level KPI phù hợp với vị trí của thành viên này.</small>
                                         <?php endif; ?>
                                     </div>
+
+                                    <?php if (!empty($level_history)): ?>
+                                        <div class="user-level-history" style="margin-top: 2rem;">
+                                            <label
+                                                style="font-weight: 600; color: var(--text-secondary); margin-bottom: 0.75rem; display:block;">
+                                                📜 LỊCH SỬ THAY ĐỔI LEVEL (KPI)
+                                            </label>
+                                            <table
+                                                style="width:100%; border-collapse: collapse; font-size: 13px; border: 1px solid #E5E7EB; border-radius: 8px; overflow: hidden;">
+                                                <thead>
+                                                    <tr style="background: #F9FAFB; border-bottom: 1px solid #E5E7EB;">
+                                                        <th style="padding: 10px; text-align: left;">Thời điểm</th>
+                                                        <th style="padding: 10px; text-align: left;">Level đã set</th>
+                                                        <th style="padding: 10px; text-align: center;">Thao tác</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody>
+                                                    <?php foreach ($level_history as $h): ?>
+                                                        <tr style="border-bottom: 1px solid #F3F4F6;">
+                                                            <td style="padding: 10px;">Quý
+                                                                <?= $h['apply_quarter'] ?> /
+                                                                <?= $h['apply_year'] ?>
+                                                            </td>
+                                                            <td style="padding: 10px;">
+                                                                <span style="font-weight: 600; color: #1D4ED8;">
+                                                                    <?= htmlspecialchars($h['level_name']) ?>
+                                                                </span>
+                                                                <div style="font-size: 11px; color: #6B7280; font-weight: 400;">
+                                                                    <?= htmlspecialchars($h['position_type']) ?>
+                                                                </div>
+                                                            </td>
+                                                            <td style="padding: 10px; text-align: center;">
+                                                                <form method="POST"
+                                                                    onsubmit="return confirm('Bạn có chắc muốn xóa lịch sử level này?')"
+                                                                    style="display: inline;">
+                                                                    <input type="hidden" name="delete_history" value="1">
+                                                                    <input type="hidden" name="history_id"
+                                                                        value="<?= $h['id'] ?>">
+                                                                    <button type="submit"
+                                                                        style="background: none; border: none; color: #EF4444; cursor: pointer; padding: 4px;"
+                                                                        title="Xóa lịch sử">
+                                                                        <svg width="16" height="16" viewBox="0 0 24 24"
+                                                                            fill="none" stroke="currentColor" stroke-width="2"
+                                                                            stroke-linecap="round" stroke-linejoin="round">
+                                                                            <polyline points="3 6 5 6 21 6"></polyline>
+                                                                            <path
+                                                                                d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2">
+                                                                            </path>
+                                                                        </svg>
+                                                                    </button>
+                                                                </form>
+                                                            </td>
+                                                        </tr>
+                                                    <?php endforeach; ?>
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    <?php endif; ?>
                                 </div>
                             </div>
 
