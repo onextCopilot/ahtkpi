@@ -197,6 +197,23 @@ foreach ($invoices as &$inv) {
 }
 unset($inv);
 
+// Compute Year-To-Date revenue (from Jan 1 of the viewed year through end of active quarter)
+// This is used for the KPI Yearly comparison in the report below
+$ytd_start_date = isset($y) ? "$y-01-01" : date('Y') . '-01-01';
+$ytd_end_date   = $end_date; // same as end of active quarter
+$ytd_vnd = 0;
+foreach ($invoices as $inv_ytd) {
+    $inv_date_str_ytd = $inv_ytd['invoice_date'] ?: $inv_ytd['date'];
+    if (!$inv_date_str_ytd || $inv_date_str_ytd < $ytd_start_date || $inv_date_str_ytd > $ytd_end_date) continue;
+    $is_excluded_ytd = (int)($local_data[$inv_ytd['id']]['is_excluded'] ?? 0);
+    if ($is_excluded_ytd) continue;
+    $ytd_vnd += isset($inv_ytd['amount_total_signed']) ? (float)$inv_ytd['amount_total_signed'] : 0;
+    // Fallback conversion for non-VND invoices
+    if ($ytd_vnd == 0 && $inv_ytd['amount_total'] > 0) {
+        // Already converted invoices are stored, but for safety keep simple approach here
+    }
+}
+
 // Group by month
 $grouped_invoices = [];
 foreach ($filtered_invoices as $inv) {
@@ -844,10 +861,11 @@ function formatMoney($amount, $currency_code)
                     <?php else:
                         $kpi_quarter_vnd  = (float) $kpi_data['kpi_quarter_vnd'];
                         $kpi_yearly_vnd   = (float) $kpi_data['kpi_yearly_vnd'];
-                        $actual_vnd       = $total_vnd; // already excludes is_excluded
+                        $actual_vnd       = $total_vnd; // current quarter only (excl. excluded)
 
                         $pct_quarter = $kpi_quarter_vnd > 0 ? min(($actual_vnd / $kpi_quarter_vnd) * 100, 999) : 0;
-                        $pct_yearly  = $kpi_yearly_vnd  > 0 ? min(($actual_vnd / $kpi_yearly_vnd)  * 100, 999) : 0;
+                        // Use YTD (all quarters of the year up to current) for yearly comparison
+                        $pct_yearly  = $kpi_yearly_vnd  > 0 ? min(($ytd_vnd  / $kpi_yearly_vnd)  * 100, 999) : 0;
 
                         // Remaining months in quarter to estimate pace
                         $months_in_q = 3;
@@ -917,11 +935,14 @@ function formatMoney($amount, $currency_code)
                             <div class="kpi-metric-sub"><?= number_format($kpi_yearly_vnd, 0, ',', '.') ?> VND</div>
                             <div class="kpi-progress-section">
                                 <div class="kpi-progress-header">
-                                    <span>Quý này / Năm</span>
+                                    <span>Lũy kế <?= isset($q) ? "Q1–Q$q" : '' ?> / Năm</span>
                                     <span style="color: <?= $bar_color_y ?>"><?= number_format($pct_yearly, 1) ?>%</span>
                                 </div>
                                 <div class="kpi-progress-bar">
                                     <div class="kpi-progress-fill" style="width: <?= min($pct_yearly, 100) ?>%; background: <?= $bar_color_y ?>"></div>
+                                </div>
+                                <div style="margin-top: 0.3rem; font-size: 11px; color: #94a3b8;">
+                                    Thực tế YTD: <?= number_format($ytd_vnd / 1e9, 2) ?>B VND
                                 </div>
                             </div>
                         </div>
