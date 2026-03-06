@@ -1981,16 +1981,16 @@ function formatMoney($amount, $currency_code)
 
                                     <div style="border-top: 1px dashed #ced4da; padding-top: 1.5rem;">
                                         <button type="button" onclick="confirmCommission('<?= $active_tab ?>')"
-                                            style="width: 100%; padding: 12px; background: #2563eb; color: #fff; border: none; border-radius: 6px; font-weight: 600; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px; transition: all 0.2s;"
-                                            onmouseover="this.style.background='#1d4ed8'"
-                                            onmouseout="this.style.background='#2563eb'">
+                                            style="width: 100%; padding: 12px; background: <?= $comm_is_confirmed ? '#10b981' : '#2563eb' ?>; color: #fff; border: none; border-radius: 6px; font-weight: 600; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px; transition: all 0.2s;"
+                                            onmouseover="this.style.background='<?= $comm_is_confirmed ? '#059669' : '#1d4ed8' ?>'"
+                                            onmouseout="this.style.background='<?= $comm_is_confirmed ? '#10b981' : '#2563eb' ?>'">
                                             <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24"
                                                 fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"
                                                 stroke-linejoin="round">
                                                 <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
                                                 <polyline points="22 4 12 14.01 9 11.01"></polyline>
                                             </svg>
-                                            XÁC NHẬN COMMISSION
+                                            <?= $comm_is_confirmed ? 'ĐÃ XÁC NHẬN COMMISSION' : 'XÁC NHẬN COMMISSION' ?>
                                         </button>
 
                                         <div id="comm_history" style="margin-top: 1rem;">
