@@ -1498,7 +1498,8 @@ function formatMoney($amount, $currency_code)
                             $pw = is_array($pay_widget) ? $pay_widget : json_decode($pay_widget, true);
                             if (is_array($pw)) {
                                 foreach ($pw['content'] ?? [] as $p) {
-                                    if (!empty($p['is_exchange'])) continue; // Không cộng chênh lệch tỷ giá (khác currency)
+                                    if (!empty($p['is_exchange']))
+                                        continue; // Không cộng chênh lệch tỷ giá (khác currency)
                                     $giaingan_origin += (float) ($p['amount'] ?? 0);
                                     if (!empty($p['date']))
                                         $ngay_tien_ve_arr[] = $p['date'];
@@ -1566,6 +1567,7 @@ function formatMoney($amount, $currency_code)
                                             <th style="width:110px;">Net profit</th>
                                             <th style="width:140px;text-align:right;">Giá trị xuất VAT</th>
                                             <th style="width:140px;text-align:right;">Giá trị giải ngân</th>
+                                            <th style="width:140px;text-align:right;">Giá trị giải ngân (USD)</th>
                                             <th style="width:80px;text-align:center;">Link Odoo</th>
                                             <th style="width:105px;">Ngày xuất VAT</th>
                                             <th style="width:115px;">Ngày tiền về</th>
@@ -1580,14 +1582,18 @@ function formatMoney($amount, $currency_code)
                                     </thead>
                                     <tbody>
                                         <?php $pstt = 1;
+                                        $quarter_total_giaingan_usd = 0;
+                                        $quarter_total_comm1_usd = 0;
+                                        $quarter_total_comm2_usd = 0;
                                         foreach ($paid_invoices_grouped as $month_key => $month_invs):
                                             $display_month = $month_key !== 'Unknown' ? date('m / Y', strtotime($month_key . '-01')) : 'Unknown';
                                             $month_sub = 0;
+                                            $month_giaingan_usd = 0;
                                             $month_comm1_usd = 0;
                                             $month_comm2_usd = 0;
                                             ?>
                                             <tr class="month-group-header">
-                                                <td colspan="24">THÁNG <?= $display_month ?></td>
+                                                <td colspan="25">THÁNG <?= $display_month ?></td>
                                             </tr>
                                             <?php foreach ($month_invs as $inv):
                                                 $oid = $inv['id'];
@@ -1601,23 +1607,28 @@ function formatMoney($amount, $currency_code)
                                                 $ngay_tien_ve = $inv['parsed_ngay_tien_ve'] ?? '';
                                                 $month_sub += $giaingan_vnd_converted;
 
-                                                $com1_p = (float)str_replace(['%', ','], '', $l['com_1'] ?? '0');
-                                                $com2_p = (float)str_replace(['%', ','], '', $l['com_2'] ?? '0');
-                                                
+                                                $com1_p = (float) str_replace(['%', ','], '', $l['com_1'] ?? '0');
+                                                $com2_p = (float) str_replace(['%', ','], '', $l['com_2'] ?? '0');
+
                                                 $currency_code = is_array($inv['currency_id']) ? $inv['currency_id'][1] : 'VND';
-                                                
+
                                                 $rateSource = $odoo->getRate($currency_code, $inv_date_str) ?: 1.0;
                                                 $rateUsd = $odoo->getRate('USD', $inv_date_str) ?: 1.0;
                                                 $ratioUsd = $rateSource > 0 ? ($rateUsd / $rateSource) : 1;
-                                                
+
                                                 // Convert disbursed amount to USD FIRST before multiplying by commission
                                                 $giaingan_usd = $giaingan_origin * $ratioUsd;
-                                                
+
                                                 $comm1_val_usd = $giaingan_usd * ($com1_p / 100);
                                                 $comm2_val_usd = $giaingan_usd * ($com2_p / 100);
-                                                
+
+                                                $month_giaingan_usd += $giaingan_usd;
                                                 $month_comm1_usd += $comm1_val_usd;
                                                 $month_comm2_usd += $comm2_val_usd;
+
+                                                $quarter_total_giaingan_usd += $giaingan_usd;
+                                                $quarter_total_comm1_usd += $comm1_val_usd;
+                                                $quarter_total_comm2_usd += $comm2_val_usd;
 
                                                 $vat_amount = (float) ($inv['amount_total'] ?? 0);
                                                 $odoo_link = $odoo_url . '/web#id=' . $oid . '&model=account.move&view_type=form';
@@ -1645,6 +1656,9 @@ function formatMoney($amount, $currency_code)
                                                     </td>
                                                     <td style="text-align:right;font-family:monospace;color:#1d4ed8;font-weight:600;">
                                                         <?= $giaingan_origin > 0 ? formatMoney($giaingan_origin, $currency_code) : '<span style="color:#94a3b8">—</span>' ?>
+                                                    </td>
+                                                    <td style="text-align:right;font-family:monospace;color:#059669;font-weight:600;">
+                                                        <?= $giaingan_usd > 0 ? formatMoney($giaingan_usd, 'USD') : '<span style="color:#94a3b8">—</span>' ?>
                                                     </td>
                                                     <td style="text-align:center;">
                                                         <a href="<?= htmlspecialchars($odoo_link) ?>" target="_blank"
@@ -1682,13 +1696,30 @@ function formatMoney($amount, $currency_code)
                                             <?php endforeach; ?>
                                             <tr class="month-total-row">
                                                 <td colspan="13" style="text-align:right;">Cộng tháng <?= $display_month ?>:</td>
-                                                <td style="text-align:right;font-weight:700;color:#1d4ed8;"><?= formatMoney($month_sub, 'VND') ?></td>
+                                                <td style="text-align:right;font-weight:700;color:#1d4ed8;">
+                                                    <?= formatMoney($month_sub, 'VND') ?></td>
+                                                <td style="text-align:right;font-weight:700;color:#059669;">
+                                                    <?= formatMoney($month_giaingan_usd, 'USD') ?></td>
                                                 <td colspan="7"></td>
-                                                <td style="text-align:right;font-weight:700;color:#b91c1c;"><?= formatMoney($month_comm1_usd, 'USD') ?></td>
-                                                <td style="text-align:right;font-weight:700;color:#b91c1c;"><?= formatMoney($month_comm2_usd, 'USD') ?></td>
+                                                <td style="text-align:right;font-weight:700;color:#b91c1c;">
+                                                    <?= formatMoney($month_comm1_usd, 'USD') ?></td>
+                                                <td style="text-align:right;font-weight:700;color:#b91c1c;">
+                                                    <?= formatMoney($month_comm2_usd, 'USD') ?></td>
                                                 <td></td>
                                             </tr>
                                         <?php endforeach; ?>
+                                        <tr style="background:#f1f5f9;font-weight:bold;">
+                                            <td colspan="14" style="text-align:right;font-size:14px;padding: 1rem 0.75rem;">TỔNG
+                                                CỘNG QUÝ:</td>
+                                            <td style="text-align:right;color:#059669;font-size:14px;padding: 1rem 0.75rem;">
+                                                <?= formatMoney($quarter_total_giaingan_usd, 'USD') ?></td>
+                                            <td colspan="7"></td>
+                                            <td style="text-align:right;color:#b91c1c;font-size:14px;padding: 1rem 0.75rem;">
+                                                <?= formatMoney($quarter_total_comm1_usd, 'USD') ?></td>
+                                            <td style="text-align:right;color:#b91c1c;font-size:14px;padding: 1rem 0.75rem;">
+                                                <?= formatMoney($quarter_total_comm2_usd, 'USD') ?></td>
+                                            <td></td>
+                                        </tr>
                                     </tbody>
                                 </table>
                             </div>
