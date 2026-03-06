@@ -60,6 +60,19 @@ addColumnIfNotExists($conn, 'users', 'can_view_all_debts', "TINYINT(1) DEFAULT 0
 addColumnIfNotExists($conn, 'users', 'is_am_bd', "TINYINT(1) DEFAULT 0");
 addColumnIfNotExists($conn, 'users', 'avatar', "VARCHAR(255) DEFAULT NULL"); // Ensure avatar exists
 
+// --- USER SALE LEVEL HISTORY TABLE ---
+$conn->query("
+    CREATE TABLE IF NOT EXISTS user_sale_level_history (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        user_id INT NOT NULL,
+        sale_level_id INT NOT NULL,
+        apply_quarter INT NOT NULL,
+        apply_year INT NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE KEY uidx_history (user_id, apply_year, apply_quarter)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+");
+
 // --- USER SALE TEAMS TABLE ---
 $conn->query("CREATE TABLE IF NOT EXISTS user_sale_teams (
     user_id INT NOT NULL,
@@ -100,6 +113,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $team_ids = isset($_POST['team_ids']) ? $_POST['team_ids'] : [];
             $role_val = $_POST['role'] ?? 'user';
             $sale_level_id = ($is_am_bd && !empty($_POST['sale_level_id'])) ? intval($_POST['sale_level_id']) : null;
+            $apply_quarter = !empty($_POST['apply_quarter']) ? intval($_POST['apply_quarter']) : null;
+            $apply_year = !empty($_POST['apply_year']) ? intval($_POST['apply_year']) : null;
             $username = trim($_POST['username']);
             // Auto-generate username from email if empty
             if (empty($username) && !empty($email)) {
@@ -143,6 +158,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         }
                     }
 
+                    // Insert History
+                    if ($sale_level_id && $apply_quarter && $apply_year) {
+                        $hq = "INSERT INTO user_sale_level_history (user_id, sale_level_id, apply_quarter, apply_year) VALUES (?, ?, ?, ?) ON DUPLICATE KEY UPDATE sale_level_id = ?";
+                        $hst = $conn->prepare($hq);
+                        $hst->bind_param("iiiii", $new_id, $sale_level_id, $apply_quarter, $apply_year, $sale_level_id);
+                        $hst->execute();
+                    }
+
                     $success_message = "Member added successfully!";
                 } catch (Exception $e) {
                     if ($conn->errno == 1062) { // Duplicate entry
@@ -172,6 +195,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $team_ids = isset($_POST['team_ids']) ? $_POST['team_ids'] : [];
             $role_val = $_POST['role'] ?? 'user';
             $sale_level_id = ($is_am_bd && !empty($_POST['sale_level_id'])) ? intval($_POST['sale_level_id']) : null;
+            $apply_quarter = !empty($_POST['apply_quarter']) ? intval($_POST['apply_quarter']) : null;
+            $apply_year = !empty($_POST['apply_year']) ? intval($_POST['apply_year']) : null;
 
             $username = trim($_POST['username']);
             if (empty($username) && !empty($email)) {
@@ -195,6 +220,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             $ts->bind_param("ii", $id, $tid);
                             $ts->execute();
                         }
+                    }
+
+                    // Insert/Update History
+                    if ($sale_level_id && $apply_quarter && $apply_year) {
+                        $hq = "INSERT INTO user_sale_level_history (user_id, sale_level_id, apply_quarter, apply_year) VALUES (?, ?, ?, ?) ON DUPLICATE KEY UPDATE sale_level_id = ?";
+                        $hst = $conn->prepare($hq);
+                        $hst->bind_param("iiiii", $id, $sale_level_id, $apply_quarter, $apply_year, $sale_level_id);
+                        $hst->execute();
                     }
 
                     $success_message = "Member updated!";
@@ -1028,6 +1061,36 @@ if ($sl_tbl && $sl_tbl->num_rows > 0) {
                                     <option disabled>⚠️ Chưa có data — vào Settings > Sale Level Setup</option>
                                 <?php endif; ?>
                             </select>
+
+                            <div id="level_effective_div"
+                                style="display: none; align-items:center; gap: 8px; margin-top: 10px;">
+                                <div style="flex: 1;">
+                                    <label style="font-size: 11px; color: #5f6368; margin-bottom: 4px;">Hiệu lực từ
+                                        Quý:</label>
+                                    <select name="apply_quarter"
+                                        style="border-radius: 5px; width:100%; padding:6px 10px; border:1px solid #dadce0; font-size:12px; color:#202124;">
+                                        <?php
+                                        $cur_q = ceil(date('n') / 3);
+                                        for ($q = 1; $q <= 4; $q++): ?>
+                                            <option value="<?= $q ?>" <?= ($cur_q == $q) ? 'selected' : '' ?>>Quý <?= $q ?>
+                                            </option>
+                                        <?php endfor; ?>
+                                    </select>
+                                </div>
+                                <div style="flex: 1;">
+                                    <label style="font-size: 11px; color: #5f6368; margin-bottom: 4px;">Hiệu lực từ
+                                        Năm:</label>
+                                    <select name="apply_year"
+                                        style="border-radius: 5px; width:100%; padding:6px 10px; border:1px solid #dadce0; font-size:12px; color:#202124;">
+                                        <?php
+                                        $cur_y = date('Y');
+                                        for ($y = $cur_y - 1; $y <= $cur_y + 2; $y++): ?>
+                                            <option value="<?= $y ?>" <?= ($cur_y == $y) ? 'selected' : '' ?>><?= $y ?>
+                                            </option>
+                                        <?php endfor; ?>
+                                    </select>
+                                </div>
+                            </div>
                             <small style="color:#70757a; margin-top:6px; display:block;">Chọn level KPI phù hợp với vị
                                 trí.</small>
                         </div>
@@ -1152,7 +1215,14 @@ if ($sl_tbl && $sl_tbl->num_rows > 0) {
             }
             // Set sale level
             const saleLevelSel = document.getElementById('sale_level_id');
-            if (saleLevelSel) saleLevelSel.value = user.sale_level_id || '';
+            if (saleLevelSel) {
+                saleLevelSel.value = user.sale_level_id || '';
+                if (user.sale_level_id) {
+                    document.getElementById('level_effective_div').style.display = 'flex';
+                } else {
+                    document.getElementById('level_effective_div').style.display = 'none';
+                }
+            }
             toggleTeamSelect();
 
             modal.classList.add('show');
@@ -1164,7 +1234,19 @@ if ($sl_tbl && $sl_tbl->num_rows > 0) {
         function toggleTeamSelect() {
             const isAmBd = document.getElementById('is_am_bd').checked;
             document.getElementById('team_select_row').style.display = isAmBd ? 'block' : 'none';
+            if (!isAmBd) {
+                document.getElementById('sale_level_id').value = '';
+                document.getElementById('level_effective_div').style.display = 'none';
+            }
         }
+
+        document.getElementById('sale_level_id').addEventListener('change', function () {
+            if (this.value) {
+                document.getElementById('level_effective_div').style.display = 'flex';
+            } else {
+                document.getElementById('level_effective_div').style.display = 'none';
+            }
+        });
 
         function filterTable() {
             var input, filter, table, tr, td, i;
