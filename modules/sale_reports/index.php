@@ -206,6 +206,26 @@ foreach ($filtered_invoices as $inv) {
 }
 ksort($grouped_invoices);
 
+// Fetch user's Sale Level & KPI targets
+$kpi_data = null;
+$u_id = (int) $_SESSION['user_id'];
+$is_am_bd = !empty($_SESSION['is_am_bd']);
+if ($is_am_bd) {
+    $stmt_kpi = $conn->prepare("
+        SELECT u.full_name, sl.level_name, sl.position_type, sl.color_badge,
+               sl.kpi_quarter_vnd, sl.kpi_yearly_vnd, sl.kpi_quarter_usd, sl.kpi_yearly_usd
+        FROM users u
+        LEFT JOIN sale_levels sl ON u.sale_level_id = sl.id
+        WHERE u.id = ?
+    ");
+    $stmt_kpi->bind_param("i", $u_id);
+    $stmt_kpi->execute();
+    $kpi_row = $stmt_kpi->get_result()->fetch_assoc();
+    if ($kpi_row && $kpi_row['level_name']) {
+        $kpi_data = $kpi_row;
+    }
+}
+
 // Helper
 function formatMoney($amount, $currency_code)
 {
@@ -403,13 +423,14 @@ function formatMoney($amount, $currency_code)
         }
 
         .month-group-header td {
-            background: #f8fafc !important;
+            background: #f1f8ff !important;
             color: #1e293b !important;
-            font-size: 14px !important;
+            font-size: 13px !important;
             font-weight: 700 !important;
-            border-top: 1px solid #cbd5e1 !important;
-            border-bottom: 2px solid #cbd5e1 !important;
-            padding: 12px 20px !important;
+            border-top: 2px solid #bfdbfe !important;
+            border-bottom: 1px solid #bfdbfe !important;
+            padding: 10px 16px !important;
+            letter-spacing: 0.3px;
         }
 
         .month-total-row td {
@@ -417,6 +438,154 @@ function formatMoney($amount, $currency_code)
             font-weight: 600 !important;
             color: #475569 !important;
             border-top: 1px solid #e2e8f0 !important;
+        }
+
+        /* ── KPI Report Panel ── */
+        .kpi-report {
+            margin-top: 2rem;
+            background: #fff;
+            border: 1px solid #e2e8f0;
+            border-radius: 16px;
+            padding: 1.5rem 2rem;
+            box-shadow: 0 4px 24px rgba(0,0,0,0.06);
+            flex-shrink: 0;
+        }
+
+        .kpi-report-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 1.25rem;
+            flex-wrap: wrap;
+            gap: 0.5rem;
+        }
+
+        .kpi-report-title {
+            font-size: 15px;
+            font-weight: 700;
+            color: #0f172a;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .kpi-level-badge {
+            display: inline-block;
+            padding: 3px 12px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 600;
+            color: #fff;
+            letter-spacing: 0.2px;
+        }
+
+        .kpi-quarter-label {
+            font-size: 12px;
+            color: #64748b;
+            background: #f1f5f9;
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-weight: 500;
+        }
+
+        .kpi-metrics-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+            gap: 1rem;
+            margin-bottom: 1.25rem;
+        }
+
+        .kpi-metric-card {
+            background: #f8fafc;
+            border: 1px solid #e2e8f0;
+            border-radius: 12px;
+            padding: 1rem 1.25rem;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .kpi-metric-card::before {
+            content: '';
+            position: absolute;
+            top: 0; left: 0; right: 0;
+            height: 3px;
+            border-radius: 12px 12px 0 0;
+        }
+
+        .kpi-metric-card.blue::before  { background: #3b82f6; }
+        .kpi-metric-card.green::before { background: #10b981; }
+        .kpi-metric-card.amber::before { background: #f59e0b; }
+        .kpi-metric-card.rose::before  { background: #f43f5e; }
+
+        .kpi-metric-label {
+            font-size: 11px;
+            font-weight: 600;
+            color: #64748b;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 0.4rem;
+        }
+
+        .kpi-metric-value {
+            font-size: 22px;
+            font-weight: 700;
+            color: #0f172a;
+            line-height: 1.2;
+            margin-bottom: 0.25rem;
+        }
+
+        .kpi-metric-sub {
+            font-size: 11px;
+            color: #94a3b8;
+        }
+
+        .kpi-progress-section {
+            margin-top: 0.25rem;
+        }
+
+        .kpi-progress-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 12px;
+            font-weight: 600;
+            color: #475569;
+            margin-bottom: 0.35rem;
+        }
+
+        .kpi-progress-bar {
+            height: 8px;
+            background: #e2e8f0;
+            border-radius: 99px;
+            overflow: hidden;
+        }
+
+        .kpi-progress-fill {
+            height: 100%;
+            border-radius: 99px;
+            transition: width 0.6s ease;
+        }
+
+        .status-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            padding: 5px 14px;
+            border-radius: 99px;
+            font-size: 13px;
+            font-weight: 600;
+        }
+
+        .status-achieved  { background: #d1fae5; color: #065f46; }
+        .status-on-track  { background: #dbeafe; color: #1d4ed8; }
+        .status-at-risk   { background: #fef3c7; color: #92400e; }
+        .status-behind    { background: #fee2e2; color: #991b1b; }
+
+        .kpi-no-level {
+            text-align: center;
+            padding: 2rem;
+            color: #94a3b8;
+            font-size: 14px;
         }
 
         tr.row-excluded td {
@@ -649,6 +818,129 @@ function formatMoney($amount, $currency_code)
                         <?php endif; ?>
                     </tbody>
                 </table>
+
+                <!-- ── KPI Performance Report ── -->
+                <?php
+                $quarter_label = str_replace('_', ' ', $active_tab);
+                ?>
+                <div class="kpi-report">
+                    <div class="kpi-report-header">
+                        <div class="kpi-report-title">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#2563eb" stroke-width="2.5"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+                            KPI Performance Report
+                            <?php if ($kpi_data): ?>
+                                <span class="kpi-level-badge" style="background: <?= htmlspecialchars($kpi_data['color_badge']) ?>">
+                                    <?= htmlspecialchars($kpi_data['level_name']) ?>
+                                </span>
+                            <?php endif; ?>
+                        </div>
+                        <span class="kpi-quarter-label">📅 <?= htmlspecialchars($quarter_label) ?></span>
+                    </div>
+
+                    <?php if (!$is_am_bd): ?>
+                        <div class="kpi-no-level">⚠️ Tài khoản này không phải AM/BD — không có Sale Level để so sánh KPI.</div>
+                    <?php elseif (!$kpi_data): ?>
+                        <div class="kpi-no-level">ℹ️ Chưa được gán Sale Level. Liên hệ Admin để cập nhật.</div>
+                    <?php else:
+                        $kpi_quarter_vnd  = (float) $kpi_data['kpi_quarter_vnd'];
+                        $kpi_yearly_vnd   = (float) $kpi_data['kpi_yearly_vnd'];
+                        $actual_vnd       = $total_vnd; // already excludes is_excluded
+
+                        $pct_quarter = $kpi_quarter_vnd > 0 ? min(($actual_vnd / $kpi_quarter_vnd) * 100, 999) : 0;
+                        $pct_yearly  = $kpi_yearly_vnd  > 0 ? min(($actual_vnd / $kpi_yearly_vnd)  * 100, 999) : 0;
+
+                        // Remaining months in quarter to estimate pace
+                        $months_in_q = 3;
+
+                        // Determine status
+                        if ($pct_quarter >= 100) {
+                            $status_class = 'status-achieved';
+                            $status_icon  = '🏆';
+                            $status_text  = 'Đạt KPI quý!';
+                        } elseif ($pct_quarter >= 75) {
+                            $status_class = 'status-on-track';
+                            $status_icon  = '✅';
+                            $status_text  = 'Đang đúng lộ trình';
+                        } elseif ($pct_quarter >= 50) {
+                            $status_class = 'status-at-risk';
+                            $status_icon  = '⚠️';
+                            $status_text  = 'Có nguy cơ không đạt';
+                        } else {
+                            $status_class = 'status-behind';
+                            $status_icon  = '🔴';
+                            $status_text  = 'Chưa đạt — cần cải thiện';
+                        }
+
+                        $bar_color_q = $pct_quarter >= 100 ? '#10b981' : ($pct_quarter >= 75 ? '#3b82f6' : ($pct_quarter >= 50 ? '#f59e0b' : '#f43f5e'));
+                        $bar_color_y = $pct_yearly  >= 100 ? '#10b981' : ($pct_yearly  >= 75 ? '#3b82f6' : ($pct_yearly  >= 50 ? '#f59e0b' : '#f43f5e'));
+
+                        $remaining_vnd = max(0, $kpi_quarter_vnd - $actual_vnd);
+                    ?>
+                    <div class="kpi-metrics-grid">
+
+                        <!-- Thực tế quý -->
+                        <div class="kpi-metric-card blue">
+                            <div class="kpi-metric-label">Doanh thu thực tế (Quý)</div>
+                            <div class="kpi-metric-value"><?= number_format($actual_vnd / 1e9, 2) ?>B</div>
+                            <div class="kpi-metric-sub"><?= number_format($actual_vnd, 0, ',', '.') ?> VND</div>
+                            <div class="kpi-progress-section">
+                                <div class="kpi-progress-header">
+                                    <span>vs KPI Quý</span>
+                                    <span style="color: <?= $bar_color_q ?>"><?= number_format($pct_quarter, 1) ?>%</span>
+                                </div>
+                                <div class="kpi-progress-bar">
+                                    <div class="kpi-progress-fill" style="width: <?= min($pct_quarter, 100) ?>%; background: <?= $bar_color_q ?>"></div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- KPI Quý target -->
+                        <div class="kpi-metric-card green">
+                            <div class="kpi-metric-label">KPI Quý (target)</div>
+                            <div class="kpi-metric-value"><?= number_format($kpi_quarter_vnd / 1e9, 2) ?>B</div>
+                            <div class="kpi-metric-sub"><?= number_format($kpi_quarter_vnd, 0, ',', '.') ?> VND</div>
+                            <div class="kpi-progress-section">
+                                <div class="kpi-progress-header">
+                                    <span>Còn thiếu</span>
+                                    <span style="color: #f43f5e"><?= $remaining_vnd > 0 ? number_format($remaining_vnd / 1e9, 2) . 'B VND' : 'Đã đạt 🎉' ?></span>
+                                </div>
+                                <div class="kpi-progress-bar">
+                                    <div class="kpi-progress-fill" style="width: <?= min($pct_quarter, 100) ?>%; background: <?= $bar_color_q ?>"></div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- KPI Năm -->
+                        <div class="kpi-metric-card amber">
+                            <div class="kpi-metric-label">KPI Năm (target)</div>
+                            <div class="kpi-metric-value"><?= number_format($kpi_yearly_vnd / 1e9, 2) ?>B</div>
+                            <div class="kpi-metric-sub"><?= number_format($kpi_yearly_vnd, 0, ',', '.') ?> VND</div>
+                            <div class="kpi-progress-section">
+                                <div class="kpi-progress-header">
+                                    <span>Quý này / Năm</span>
+                                    <span style="color: <?= $bar_color_y ?>"><?= number_format($pct_yearly, 1) ?>%</span>
+                                </div>
+                                <div class="kpi-progress-bar">
+                                    <div class="kpi-progress-fill" style="width: <?= min($pct_yearly, 100) ?>%; background: <?= $bar_color_y ?>"></div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Status card -->
+                        <div class="kpi-metric-card rose" style="display:flex;flex-direction:column;justify-content:space-between;">
+                            <div class="kpi-metric-label">Trạng thái</div>
+                            <div style="margin: 0.5rem 0;">
+                                <span class="status-badge <?= $status_class ?>"><?= $status_icon ?> <?= $status_text ?></span>
+                            </div>
+                            <div class="kpi-metric-sub">
+                                <?= htmlspecialchars($kpi_data['position_type']) ?> &bull; <?= htmlspecialchars($kpi_data['level_name']) ?>
+                            </div>
+                        </div>
+
+                    </div>
+                    <?php endif; ?>
+                </div>
+
             </div>
         </main>
     </div>
