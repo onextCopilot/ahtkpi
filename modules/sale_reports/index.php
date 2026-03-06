@@ -1037,9 +1037,9 @@ function formatMoney($amount, $currency_code)
                                         <td style="text-align: center;">
                                             <?= $stt++ ?>
                                         </td>
-                                        <!-- Invoice # -->
-                                        <td style="font-family: 'Inconsolata', monospace; font-size: 12px; color: #2563eb; white-space: nowrap; font-weight: 500;">
-                                            <?= htmlspecialchars($inv['name'] ?? '') ?>
+                                        <!-- Invoice # (Odoo DB ID) -->
+                                        <td style="font-family: 'Inconsolata', monospace; font-size: 12px; color: #64748b; white-space: nowrap; font-weight: 600; text-align: center;">
+                                            #<?= $odoo_id ?>
                                         </td>
                                         <!-- Loại trừ (cột 2) -->
                                         <td style="text-align: center;">
