@@ -104,6 +104,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
     exit();
 }
 
+// Handle AJAX reset_draft
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'reset_draft') {
+    header('Content-Type: application/json');
+    $quarter_key = preg_replace('/[^A-Za-z0-9_]/', '', $_POST['quarter'] ?? '');
+    $uid = (int) $_SESSION['user_id'];
+    $stmt_d = $conn->prepare("DELETE FROM sale_report_confirmations WHERE user_id=? AND quarter=?");
+    $stmt_d->bind_param("is", $uid, $quarter_key);
+    $stmt_d->execute();
+    echo json_encode(['success' => true]);
+    exit();
+}
+
 // Handle AJAX toggle exclude
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'toggle_exclude') {
     header('Content-Type: application/json');
@@ -313,6 +325,7 @@ while ($conf_row = $conf_res->fetch_assoc()) {
 }
 if (!empty($confirmations))
     $confirmation = $confirmations[0]; // latest
+$is_locked = !empty($confirmation);   // freeze table edits when confirmed
 
 // Helper
 function formatMoney($amount, $currency_code)
@@ -793,6 +806,60 @@ function formatMoney($amount, $currency_code)
             }
         }
 
+        .editable-cell.cell-locked {
+            cursor: not-allowed !important;
+            opacity: 0.75;
+            position: relative;
+        }
+
+        .editable-cell.cell-locked::after {
+            content: '🔒';
+            position: absolute;
+            top: 3px;
+            right: 4px;
+            font-size: 9px;
+            opacity: 0.4;
+            pointer-events: none;
+        }
+
+        .editable-cell.cell-locked:hover {
+            background: inherit !important;
+        }
+
+        .draft-btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 7px 16px;
+            background: #fff;
+            color: #dc2626;
+            border: 1.5px solid #fca5a5;
+            border-radius: 8px;
+            font-size: 12px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .draft-btn:hover {
+            background: #fef2f2;
+            border-color: #f87171;
+        }
+
+        .locked-banner {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            background: #fffbeb;
+            border: 1px solid #fde68a;
+            border-radius: 8px;
+            padding: 8px 14px;
+            font-size: 12px;
+            color: #92400e;
+            font-weight: 500;
+            margin-bottom: 0.5rem;
+        }
+
         tr.row-excluded td {
             background: #fffde7 !important;
             opacity: 0.8;
@@ -955,20 +1022,20 @@ function formatMoney($amount, $currency_code)
                                         </td>
 
                                         <!-- Loại Hợp đồng -->
-                                        <td class="editable-cell" data-required-field="contract_type"
-                                            onclick="makeEditable(this, <?= $odoo_id ?>, 'contract_type', 'select', ['Service', 'Trading', 'Dedicated', 'License'])">
+                                        <td class="editable-cell <?= $is_locked ? 'cell-locked' : '' ?>" data-required-field="contract_type"
+                                            <?= !$is_locked ? "onclick=\"makeEditable(this, $odoo_id, 'contract_type', 'select', ['Service', 'Trading', 'Dedicated', 'License'])\"" : 'title="Đang bị khoá — Reset to Draft để sửa"' ?>>
                                             <?= htmlspecialchars($l['contract_type'] ?? '') ?>
                                         </td>
 
                                         <!-- Presales -->
-                                        <td class="editable-cell" data-required-field="presales"
-                                            onclick="makeEditable(this, <?= $odoo_id ?>, 'presales', 'select', ['No presales', '0%', '0.25%', '0.5%'])">
+                                        <td class="editable-cell <?= $is_locked ? 'cell-locked' : '' ?>" data-required-field="presales"
+                                            <?= !$is_locked ? "onclick=\"makeEditable(this, $odoo_id, 'presales', 'select', ['No presales', '0%', '0.25%', '0.5%'])\"" : 'title="Đang bị khoá — Reset to Draft để sửa"' ?>>
                                             <?= htmlspecialchars($l['presales'] ?? '') ?>
                                         </td>
 
                                         <!-- Loại khách hàng -->
-                                        <td class="editable-cell" data-required-field="client_type"
-                                            onclick="makeEditable(this, <?= $odoo_id ?>, 'client_type', 'select', ['New client', 'Old client'])">
+                                        <td class="editable-cell <?= $is_locked ? 'cell-locked' : '' ?>" data-required-field="client_type"
+                                            <?= !$is_locked ? "onclick=\"makeEditable(this, $odoo_id, 'client_type', 'select', ['New client', 'Old client'])\"" : 'title="Đang bị khoá — Reset to Draft để sửa"' ?>>
                                             <?= htmlspecialchars($l['client_type'] ?? '') ?>
                                         </td>
 
@@ -978,26 +1045,26 @@ function formatMoney($amount, $currency_code)
                                         </td>
 
                                         <!-- %Profit trong PAKD -->
-                                        <td class="editable-cell"
-                                            onclick="makeEditable(this, <?= $odoo_id ?>, 'profit_pakd', 'text')">
+                                        <td class="editable-cell <?= $is_locked ? 'cell-locked' : '' ?>"
+                                            <?= !$is_locked ? "onclick=\"makeEditable(this, $odoo_id, 'profit_pakd', 'text')\"" : 'title="Đang bị khoá"' ?>>
                                             <?= htmlspecialchars($l['profit_pakd'] ?? '') ?>
                                         </td>
 
                                         <!-- Net profit -->
-                                        <td class="editable-cell"
-                                            onclick="makeEditable(this, <?= $odoo_id ?>, 'net_profit', 'text')">
+                                        <td class="editable-cell <?= $is_locked ? 'cell-locked' : '' ?>"
+                                            <?= !$is_locked ? "onclick=\"makeEditable(this, $odoo_id, 'net_profit', 'text')\"" : 'title="Đang bị khoá"' ?>>
                                             <?= htmlspecialchars($l['net_profit'] ?? '') ?>
                                         </td>
 
                                         <!-- % Com (Lead source) -->
-                                        <td class="editable-cell" data-required-field="com_lead_source"
-                                            onclick="makeEditable(this, <?= $odoo_id ?>, 'com_lead_source', 'select', ['Yes', 'No'])">
+                                        <td class="editable-cell <?= $is_locked ? 'cell-locked' : '' ?>" data-required-field="com_lead_source"
+                                            <?= !$is_locked ? "onclick=\"makeEditable(this, $odoo_id, 'com_lead_source', 'select', ['Yes', 'No'])\"" : 'title="Đang bị khoá — Reset to Draft để sửa"' ?>>
                                             <?= htmlspecialchars($l['com_lead_source'] ?? 'No') ?>
                                         </td>
 
                                         <!-- % Bonus License/trading -->
-                                        <td class="editable-cell" data-required-field="bonus_license_trading"
-                                            onclick="makeEditable(this, <?= $odoo_id ?>, 'bonus_license_trading', 'select', ['Yes', 'No'])">
+                                        <td class="editable-cell <?= $is_locked ? 'cell-locked' : '' ?>" data-required-field="bonus_license_trading"
+                                            <?= !$is_locked ? "onclick=\"makeEditable(this, $odoo_id, 'bonus_license_trading', 'select', ['Yes', 'No'])\"" : 'title="Đang bị khoá — Reset to Draft để sửa"' ?>>
                                             <?= htmlspecialchars($l['bonus_license_trading'] ?? 'No') ?>
                                         </td>
 
@@ -1008,13 +1075,13 @@ function formatMoney($amount, $currency_code)
                                         </td>
 
                                         <!-- % Com 2 -->
-                                        <td class="editable-cell"
-                                            onclick="makeEditable(this, <?= $odoo_id ?>, 'com_2', 'select', ['0.5%', '1%', '1.5%', '2%', '2.5%', '3%'])">
+                                        <td class="editable-cell <?= $is_locked ? 'cell-locked' : '' ?>"
+                                            <?= !$is_locked ? "onclick=\"makeEditable(this, $odoo_id, 'com_2', 'select', ['0.5%', '1%', '1.5%', '2%', '2.5%', '3%'])\"" : 'title="Đang bị khoá"' ?>>
                                             <?= htmlspecialchars($l['com_2'] ?? '') ?>
                                         </td>
 
                                         <!-- Note -->
-                                        <td class="editable-cell" onclick="makeEditable(this, <?= $odoo_id ?>, 'note', 'text')">
+                                        <td class="editable-cell <?= $is_locked ? 'cell-locked' : '' ?>" <?= !$is_locked ? "onclick=\"makeEditable(this, $odoo_id, 'note', 'text')\"" : 'title="Đang bị khoá"' ?>>
                                             <?= htmlspecialchars($l['note'] ?? '') ?>
                                         </td>
 
@@ -1175,6 +1242,11 @@ function formatMoney($amount, $currency_code)
                         <div class="kpi-confirm-section">
                             <div style="flex:1;">
                                 <?php if ($confirmation): ?>
+                                    <!-- Locked banner -->
+                                    <div class="locked-banner">
+                                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+                                        Bảng đang bị khoá — chỉ xem. Nhấn <strong style="margin:0 3px;">Reset to Draft</strong> để cho phép chỉnh sửa.
+                                    </div>
                                     <div style="display:flex; align-items:center; gap:1rem; flex-wrap:wrap;">
                                         <div class="confirmed-badge">
                                             <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24"
@@ -1192,6 +1264,10 @@ function formatMoney($amount, $currency_code)
                                                 <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 11" />
                                             </svg>
                                             Xác nhận lại
+                                        </button>
+                                        <button class="draft-btn" onclick="resetToDraft()">
+                                            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18.36 6.64A9 9 0 1 1 5.64 5.64"/><polyline points="15 2 21 2 21 8"/><line x1="21" y1="2" x2="14" y2="9"/></svg>
+                                            Reset to Draft
                                         </button>
                                     </div>
 
@@ -1451,6 +1527,22 @@ function formatMoney($amount, $currency_code)
                     if (btn) { btn.disabled = false; }
                     alert('Lỗi kết nối, vui lòng thử lại.');
                 });
+        }
+
+        function resetToDraft() {
+            if (!confirm('Bạn chắc chắn muốn Reset to Draft? Bảng sẽ được mở khoá để chỉnh sửa.')) return;
+            const formData = new FormData();
+            formData.append('action', 'reset_draft');
+            formData.append('quarter', '<?= $active_tab ?>');
+            fetch('', { method: 'POST', body: formData })
+                .then(res => res.json())
+                .then(data => {
+                    if (data.success) {
+                        showToast('🔓 Đã Reset to Draft!');
+                        setTimeout(() => location.reload(), 700);
+                    }
+                })
+                .catch(() => alert('Lỗi kết nối.'));
         }
 
         function toggleExclude(btn, invoiceId) {
