@@ -186,23 +186,38 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
     $uid = (int) ($_SESSION['user_id'] ?? 0);
     $uname = $_SESSION['full_name'] ?? 'Unknown';
 
-    // Fetch old value for audit
-    $old_val = '';
-    $res_old = $conn->query("SELECT `$field` FROM sale_reports WHERE odoo_invoice_id = $odoo_id LIMIT 1");
-    if ($res_old && $row_old = $res_old->fetch_assoc())
-        $old_val = $row_old[$field] ?? '';
+    // Fetch current values for audit and auto-calc
+    $res_current = $conn->query("SELECT `$field` as old_val, client_type, com_lead_source FROM sale_reports WHERE odoo_invoice_id = $odoo_id LIMIT 1");
+    $db_row = $res_current ? $res_current->fetch_assoc() : null;
+    $old_val = $db_row['old_val'] ?? '';
 
-    // Auto rules for com_1
-    if ($field === 'client_type') {
-        $com1_val = ($val === 'Old client') ? '0.5%' : (($val === 'New client') ? '1%' : '');
-        $stmt = $conn->prepare("INSERT INTO sale_reports (odoo_invoice_id, client_type, com_1) VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE client_type=?, com_1=?");
+    $current_client_type = ($field === 'client_type') ? $val : ($db_row['client_type'] ?? '');
+    $current_lead_source = ($field === 'com_lead_source') ? $val : ($db_row['com_lead_source'] ?? 'No');
+
+    // Auto rules for com_1 (Base + Lead Source Bonus)
+    if ($field === 'client_type' || $field === 'com_lead_source') {
+        $base = 0;
+        if ($current_client_type === 'Old client')
+            $base = 0.5;
+        elseif ($current_client_type === 'New client')
+            $base = 1.0;
+
+        $adder = ($current_lead_source === 'Yes') ? 0.3 : 0;
+
+        $com1_numeric = $base + $adder;
+        $com1_val = ($com1_numeric > 0) ? $com1_numeric . '%' : '';
+
+        // Perform the update
+        $stmt = $conn->prepare("INSERT INTO sale_reports (odoo_invoice_id, `$field`, com_1) VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE `$field`=?, com_1=?");
         $stmt->bind_param("issss", $odoo_id, $val, $com1_val, $val, $com1_val);
         $stmt->execute();
+
         // Log edit
         $now = date('Y-m-d H:i:s');
         $stmt_log = $conn->prepare("INSERT INTO sale_report_edit_log (odoo_invoice_id, quarter, user_id, user_name, field_name, old_value, new_value, edited_at) VALUES (?,?,?,?,?,?,?,?)");
         $stmt_log->bind_param("isssssss", $odoo_id, $quarter_key, $uid, $uname, $field, $old_val, $val, $now);
         $stmt_log->execute();
+
         echo json_encode(['success' => true, 'com_1' => $com1_val]);
     } else {
         $allowed = ['contract_type', 'presales', 'client_type', 'profit_pakd', 'net_profit', 'com_lead_source', 'bonus_license_trading', 'com_1', 'com_2', 'note'];
@@ -2118,8 +2133,8 @@ function formatMoney($amount, $currency_code)
                             cell.innerHTML = newVal;
                             showToast("Đã lưu!");
 
-                            // Trigger auto update for com_1 if client_type was edited
-                            if (fieldName === 'client_type') {
+                            // Trigger auto update for com_1 if client_type or com_lead_source was edited
+                            if (fieldName === 'client_type' || fieldName === 'com_lead_source') {
                                 const com1Cell = document.getElementById('com_1_' + invoiceId);
                                 if (com1Cell && data.com_1 !== undefined) {
                                     com1Cell.innerText = data.com_1;
@@ -2309,7 +2324,9 @@ function formatMoney($amount, $currency_code)
                         }
                     })
                     .catch(err => console.error(err));
-            }
+     
+
+     }
 
             // Make scrolling table scroll sync if needed
         </script>
