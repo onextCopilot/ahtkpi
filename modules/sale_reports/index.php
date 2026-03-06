@@ -1573,6 +1573,8 @@ function formatMoney($amount, $currency_code)
                                             <th style="width:150px;">% Bonus Lic/Trd</th>
                                             <th style="width:75px;">% Com 1</th>
                                             <th style="width:90px;">% Com 2</th>
+                                            <th style="width:130px;text-align:right;">Commission nhận quý này</th>
+                                            <th style="width:130px;text-align:right;">Com giữ lại (Com 2)</th>
                                             <th style="min-width:180px;">Note</th>
                                         </tr>
                                     </thead>
@@ -1581,9 +1583,11 @@ function formatMoney($amount, $currency_code)
                                         foreach ($paid_invoices_grouped as $month_key => $month_invs):
                                             $display_month = $month_key !== 'Unknown' ? date('m / Y', strtotime($month_key . '-01')) : 'Unknown';
                                             $month_sub = 0;
+                                            $month_comm1_vnd = 0;
+                                            $month_comm2_vnd = 0;
                                             ?>
                                             <tr class="month-group-header">
-                                                <td colspan="22">THÁNG <?= $display_month ?></td>
+                                                <td colspan="24">THÁNG <?= $display_month ?></td>
                                             </tr>
                                             <?php foreach ($month_invs as $inv):
                                                 $oid = $inv['id'];
@@ -1596,6 +1600,15 @@ function formatMoney($amount, $currency_code)
                                                 $giaingan_vnd_converted = $inv['parsed_giaingan_vnd'] ?? 0;
                                                 $ngay_tien_ve = $inv['parsed_ngay_tien_ve'] ?? '';
                                                 $month_sub += $giaingan_vnd_converted;
+
+                                                $com1_p = (float)str_replace(['%', ','], '', $l['com_1'] ?? '0');
+                                                $com2_p = (float)str_replace(['%', ','], '', $l['com_2'] ?? '0');
+                                                
+                                                $comm1_val = $giaingan_origin * ($com1_p / 100);
+                                                $comm2_val = $giaingan_origin * ($com2_p / 100);
+                                                
+                                                $month_comm1_vnd += $giaingan_vnd_converted * ($com1_p / 100);
+                                                $month_comm2_vnd += $giaingan_vnd_converted * ($com2_p / 100);
 
                                                 $currency_code = is_array($inv['currency_id']) ? $inv['currency_id'][1] : 'VND';
                                                 $vat_amount = (float) ($inv['amount_total'] ?? 0);
@@ -1650,13 +1663,22 @@ function formatMoney($amount, $currency_code)
                                                         <?= htmlspecialchars($l['com_1'] ?? '') ?>
                                                     </td>
                                                     <td><?= htmlspecialchars($l['com_2'] ?? '') ?></td>
+                                                    <td style="text-align:right;font-family:monospace;color:#b91c1c;font-weight:600;">
+                                                        <?= $comm1_val > 0 ? formatMoney($comm1_val, $currency_code) : '<span style="color:#d1d5db">—</span>' ?>
+                                                    </td>
+                                                    <td style="text-align:right;font-family:monospace;color:#b91c1c;font-weight:600;">
+                                                        <?= $comm2_val > 0 ? formatMoney($comm2_val, $currency_code) : '<span style="color:#d1d5db">—</span>' ?>
+                                                    </td>
                                                     <td><?= htmlspecialchars($l['note'] ?? '') ?></td>
                                                 </tr>
                                             <?php endforeach; ?>
                                             <tr class="month-total-row">
-                                                <td colspan="8" style="text-align:right;">Cộng tháng <?= $display_month ?>:</td>
-                                                <td style="text-align:right;"><?= formatMoney($month_sub, 'VND') ?></td>
-                                                <td colspan="13"></td>
+                                                <td colspan="13" style="text-align:right;">Cộng tháng <?= $display_month ?>:</td>
+                                                <td style="text-align:right;font-weight:700;color:#1d4ed8;"><?= formatMoney($month_sub, 'VND') ?></td>
+                                                <td colspan="7"></td>
+                                                <td style="text-align:right;font-weight:700;color:#b91c1c;"><?= formatMoney($month_comm1_vnd, 'VND') ?></td>
+                                                <td style="text-align:right;font-weight:700;color:#b91c1c;"><?= formatMoney($month_comm2_vnd, 'VND') ?></td>
+                                                <td></td>
                                             </tr>
                                         <?php endforeach; ?>
                                     </tbody>
