@@ -1498,6 +1498,7 @@ function formatMoney($amount, $currency_code)
                             $pw = is_array($pay_widget) ? $pay_widget : json_decode($pay_widget, true);
                             if (is_array($pw)) {
                                 foreach ($pw['content'] ?? [] as $p) {
+                                    if (!empty($p['is_exchange'])) continue; // Không cộng chênh lệch tỷ giá (khác currency)
                                     $giaingan_origin += (float) ($p['amount'] ?? 0);
                                     if (!empty($p['date']))
                                         $ngay_tien_ve_arr[] = $p['date'];
