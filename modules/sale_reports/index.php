@@ -1583,8 +1583,8 @@ function formatMoney($amount, $currency_code)
                                         foreach ($paid_invoices_grouped as $month_key => $month_invs):
                                             $display_month = $month_key !== 'Unknown' ? date('m / Y', strtotime($month_key . '-01')) : 'Unknown';
                                             $month_sub = 0;
-                                            $month_comm1_vnd = 0;
-                                            $month_comm2_vnd = 0;
+                                            $month_comm1_usd = 0;
+                                            $month_comm2_usd = 0;
                                             ?>
                                             <tr class="month-group-header">
                                                 <td colspan="24">THÁNG <?= $display_month ?></td>
@@ -1607,10 +1607,15 @@ function formatMoney($amount, $currency_code)
                                                 $comm1_val = $giaingan_origin * ($com1_p / 100);
                                                 $comm2_val = $giaingan_origin * ($com2_p / 100);
                                                 
-                                                $month_comm1_vnd += $giaingan_vnd_converted * ($com1_p / 100);
-                                                $month_comm2_vnd += $giaingan_vnd_converted * ($com2_p / 100);
-
                                                 $currency_code = is_array($inv['currency_id']) ? $inv['currency_id'][1] : 'VND';
+                                                
+                                                $rateSource = $odoo->getRate($currency_code, $inv_date_str) ?: 1.0;
+                                                $rateUsd = $odoo->getRate('USD', $inv_date_str) ?: 1.0;
+                                                $ratioUsd = $rateSource > 0 ? ($rateUsd / $rateSource) : 1;
+                                                
+                                                $month_comm1_usd += $comm1_val * $ratioUsd;
+                                                $month_comm2_usd += $comm2_val * $ratioUsd;
+
                                                 $vat_amount = (float) ($inv['amount_total'] ?? 0);
                                                 $odoo_link = $odoo_url . '/web#id=' . $oid . '&model=account.move&view_type=form';
                                                 ?>
@@ -1676,8 +1681,8 @@ function formatMoney($amount, $currency_code)
                                                 <td colspan="13" style="text-align:right;">Cộng tháng <?= $display_month ?>:</td>
                                                 <td style="text-align:right;font-weight:700;color:#1d4ed8;"><?= formatMoney($month_sub, 'VND') ?></td>
                                                 <td colspan="7"></td>
-                                                <td style="text-align:right;font-weight:700;color:#b91c1c;"><?= formatMoney($month_comm1_vnd, 'VND') ?></td>
-                                                <td style="text-align:right;font-weight:700;color:#b91c1c;"><?= formatMoney($month_comm2_vnd, 'VND') ?></td>
+                                                <td style="text-align:right;font-weight:700;color:#b91c1c;"><?= formatMoney($month_comm1_usd, 'USD') ?></td>
+                                                <td style="text-align:right;font-weight:700;color:#b91c1c;"><?= formatMoney($month_comm2_usd, 'USD') ?></td>
                                                 <td></td>
                                             </tr>
                                         <?php endforeach; ?>
