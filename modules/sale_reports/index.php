@@ -48,20 +48,36 @@ if ($table_check->num_rows == 0) {
     }
 }
 
-// Ensure confirmations table exists (no UNIQUE constraint — keep all history)
+// Ensure confirmations table exists (append-only, all history kept)
 $conn->query("CREATE TABLE IF NOT EXISTS sale_report_confirmations (
     id INT AUTO_INCREMENT PRIMARY KEY,
     user_id INT NOT NULL,
     quarter VARCHAR(20) NOT NULL,
     confirmed_at DATETIME NOT NULL,
-    confirmed_by_name VARCHAR(255)
+    confirmed_by_name VARCHAR(255),
+    type VARCHAR(20) DEFAULT 'confirmed'
 )");
-// Drop UNIQUE KEY if it still exists from earlier migration
-// Drop UNIQUE KEY if it still exists (MySQL 5.x compatible)
+// Migrate: add type column if missing
+$tc = $conn->query("SHOW COLUMNS FROM sale_report_confirmations LIKE 'type'");
+if ($tc && $tc->num_rows === 0)
+    $conn->query("ALTER TABLE sale_report_confirmations ADD COLUMN type VARCHAR(20) DEFAULT 'confirmed'");
+// Drop old UNIQUE KEY if present (MySQL 5.x compat)
 $idx_check = $conn->query("SHOW INDEX FROM sale_report_confirmations WHERE Key_name = 'uq_user_quarter'");
-if ($idx_check && $idx_check->num_rows > 0) {
+if ($idx_check && $idx_check->num_rows > 0)
     $conn->query("ALTER TABLE sale_report_confirmations DROP INDEX uq_user_quarter");
-}
+
+// Ensure edit audit log table exists
+$conn->query("CREATE TABLE IF NOT EXISTS sale_report_edit_log (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    odoo_invoice_id INT NOT NULL,
+    quarter VARCHAR(20) NOT NULL,
+    user_id INT NOT NULL,
+    user_name VARCHAR(255),
+    field_name VARCHAR(100),
+    old_value TEXT,
+    new_value TEXT,
+    edited_at DATETIME NOT NULL
+)");
 
 // Handle AJAX confirm_kpi
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'confirm_kpi') {
@@ -96,7 +112,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
         echo json_encode(['success' => false, 'missing' => array_values(array_unique($missing))]);
     } else {
         $now = date('Y-m-d H:i:s');
-        $stmt_c = $conn->prepare("INSERT INTO sale_report_confirmations (user_id, quarter, confirmed_at, confirmed_by_name) VALUES (?,?,?,?)");
+        $stmt_c = $conn->prepare("INSERT INTO sale_report_confirmations (user_id, quarter, confirmed_at, confirmed_by_name, type) VALUES (?,?,?,?,'confirmed')");
         $stmt_c->bind_param("isss", $uid, $quarter_key, $now, $uname);
         $stmt_c->execute();
         echo json_encode(['success' => true, 'confirmed_at' => $now, 'confirmed_by' => $uname]);
@@ -104,13 +120,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
     exit();
 }
 
-// Handle AJAX reset_draft
+// Handle AJAX reset_draft — insert a 'reset' event (never delete history)
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'reset_draft') {
     header('Content-Type: application/json');
     $quarter_key = preg_replace('/[^A-Za-z0-9_]/', '', $_POST['quarter'] ?? '');
     $uid = (int) $_SESSION['user_id'];
-    $stmt_d = $conn->prepare("DELETE FROM sale_report_confirmations WHERE user_id=? AND quarter=?");
-    $stmt_d->bind_param("is", $uid, $quarter_key);
+    $uname = $_SESSION['full_name'] ?? 'Unknown';
+    $now = date('Y-m-d H:i:s');
+    $stmt_d = $conn->prepare("INSERT INTO sale_report_confirmations (user_id, quarter, confirmed_at, confirmed_by_name, type) VALUES (?,?,?,?,'reset')");
+    $stmt_d->bind_param("isss", $uid, $quarter_key, $now, $uname);
     $stmt_d->execute();
     echo json_encode(['success' => true]);
     exit();
@@ -141,6 +159,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
     $odoo_id = intval($_POST['odoo_invoice_id']);
     $field = preg_replace('/[^a-zA-Z0-9_]/', '', $_POST['field']);
     $val = $_POST['value'];
+    $quarter_key = preg_replace('/[^A-Za-z0-9_]/', '', $_POST['quarter'] ?? '');
+    $uid  = (int) ($_SESSION['user_id'] ?? 0);
+    $uname = $_SESSION['full_name'] ?? 'Unknown';
+
+    // Fetch old value for audit
+    $old_val = '';
+    $res_old = $conn->query("SELECT `$field` FROM sale_reports WHERE odoo_invoice_id = $odoo_id LIMIT 1");
+    if ($res_old && $row_old = $res_old->fetch_assoc()) $old_val = $row_old[$field] ?? '';
 
     // Auto rules for com_1
     if ($field === 'client_type') {
@@ -148,13 +174,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
         $stmt = $conn->prepare("INSERT INTO sale_reports (odoo_invoice_id, client_type, com_1) VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE client_type=?, com_1=?");
         $stmt->bind_param("issss", $odoo_id, $val, $com1_val, $val, $com1_val);
         $stmt->execute();
+        // Log edit
+        $now = date('Y-m-d H:i:s');
+        $stmt_log = $conn->prepare("INSERT INTO sale_report_edit_log (odoo_invoice_id, quarter, user_id, user_name, field_name, old_value, new_value, edited_at) VALUES (?,?,?,?,?,?,?,?)");
+        $stmt_log->bind_param("isssssss", $odoo_id, $quarter_key, $uid, $uname, $field, $old_val, $val, $now);
+        $stmt_log->execute();
         echo json_encode(['success' => true, 'com_1' => $com1_val]);
     } else {
         $allowed = ['contract_type', 'presales', 'client_type', 'profit_pakd', 'net_profit', 'com_lead_source', 'bonus_license_trading', 'com_1', 'com_2', 'note'];
         if (in_array($field, $allowed)) {
-            $stmt = $conn->prepare("INSERT INTO sale_reports (odoo_invoice_id, $field) VALUES (?, ?) ON DUPLICATE KEY UPDATE $field=?");
+            $stmt = $conn->prepare("INSERT INTO sale_reports (odoo_invoice_id, `$field`) VALUES (?, ?) ON DUPLICATE KEY UPDATE `$field`=?");
             $stmt->bind_param("iss", $odoo_id, $val, $val);
             $stmt->execute();
+            // Log edit
+            $now = date('Y-m-d H:i:s');
+            $stmt_log = $conn->prepare("INSERT INTO sale_report_edit_log (odoo_invoice_id, quarter, user_id, user_name, field_name, old_value, new_value, edited_at) VALUES (?,?,?,?,?,?,?,?)");
+            $stmt_log->bind_param("isssssss", $odoo_id, $quarter_key, $uid, $uname, $field, $old_val, $val, $now);
+            $stmt_log->execute();
             echo json_encode(['success' => true]);
         } else {
             echo json_encode(['success' => false, 'error' => 'Invalid field']);
@@ -323,9 +359,17 @@ $conf_res = $stmt_conf->get_result();
 while ($conf_row = $conf_res->fetch_assoc()) {
     $confirmations[] = $conf_row;
 }
-if (!empty($confirmations))
-    $confirmation = $confirmations[0]; // latest
-$is_locked = !empty($confirmation);   // freeze table edits when confirmed
+if (!empty($confirmations)) $confirmation = $confirmations[0]; // latest
+// locked = latest event is 'confirmed' (not 'reset')
+$is_locked = (!empty($confirmation) && ($confirmation['type'] ?? 'confirmed') === 'confirmed');
+
+// Fetch edit log for this quarter (newest first)
+$edit_log = [];
+$stmt_elog = $conn->prepare("SELECT * FROM sale_report_edit_log WHERE user_id=? AND quarter=? ORDER BY edited_at DESC LIMIT 200");
+$stmt_elog->bind_param("is", $u_id, $active_tab);
+$stmt_elog->execute();
+$elog_res = $stmt_elog->get_result();
+while ($elog_row = $elog_res->fetch_assoc()) $edit_log[] = $elog_row;
 
 // Helper
 function formatMoney($amount, $currency_code)
@@ -1311,6 +1355,72 @@ function formatMoney($amount, $currency_code)
                         </div>
 
                     <?php endif; ?>
+
+                    <!-- ──── Audit Log ──── -->
+                    <?php
+                    // Merge confirmations + edit_log into one timeline sorted by time DESC
+                    $audit_events = [];
+                    foreach ($confirmations as $c) {
+                        $audit_events[] = [
+                            'time'  => $c['confirmed_at'],
+                            'type'  => $c['type'] ?? 'confirmed',
+                            'by'    => $c['confirmed_by_name'],
+                            'data'  => $c,
+                        ];
+                    }
+                    foreach ($edit_log as $e) {
+                        $audit_events[] = [
+                            'time'  => $e['edited_at'],
+                            'type'  => 'edit',
+                            'by'    => $e['user_name'],
+                            'data'  => $e,
+                        ];
+                    }
+                    usort($audit_events, fn($a, $b) => strcmp($b['time'], $a['time']));
+                    ?>
+                    <?php if (!empty($audit_events)): ?>
+                    <div style="border-top: 1px dashed #e2e8f0; margin-top: 1.5rem; padding-top: 1.25rem;">
+                        <div style="font-size: 11px; font-weight:700; color:#64748b; text-transform:uppercase; letter-spacing:.5px; margin-bottom:.75rem; display:flex; align-items:center; gap:6px;">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                            Lịch sử hoạt động (<?= count($audit_events) ?> sự kiện)
+                        </div>
+                        <div style="max-height: 220px; overflow-y: auto; display:flex; flex-direction:column; gap:5px;">
+                            <?php foreach ($audit_events as $ev):
+                                $t = $ev['type'];
+                                if ($t === 'confirmed') {
+                                    $dot_bg='#d1fae5'; $dot_border='#6ee7b7'; $dot_color='#065f46'; $dot_icon='✓';
+                                    $label = '<span style="background:#d1fae5;color:#065f46;padding:1px 8px;border-radius:10px;font-weight:600;font-size:11px;">✅ Đã xác nhận KPI</span>';
+                                } elseif ($t === 'reset') {
+                                    $dot_bg='#fef3c7'; $dot_border='#fde68a'; $dot_color='#92400e'; $dot_icon='↩';
+                                    $label = '<span style="background:#fef3c7;color:#92400e;padding:1px 8px;border-radius:10px;font-weight:600;font-size:11px;">🔓 Reset to Draft</span>';
+                                } else {
+                                    // edit
+                                    $dot_bg='#eff6ff'; $dot_border='#bfdbfe'; $dot_color='#1d4ed8'; $dot_icon='✎';
+                                    $d = $ev['data'];
+                                    $field_labels = [
+                                        'contract_type'=>'Loại HĐ','presales'=>'Presales','client_type'=>'Loại KH',
+                                        'profit_pakd'=>'%Profit PAKD','net_profit'=>'Net profit','com_lead_source'=>'% Com Lead',
+                                        'bonus_license_trading'=>'% Bonus','com_1'=>'% Com 1','com_2'=>'% Com 2','note'=>'Note'
+                                    ];
+                                    $fn = $field_labels[$d['field_name']] ?? $d['field_name'];
+                                    $old = htmlspecialchars($d['old_value'] ?? '');
+                                    $new = htmlspecialchars($d['new_value'] ?? '');
+                                    $inv = $d['odoo_invoice_id'];
+                                    $label = "<span style='font-size:11px;'>Sửa <strong>$fn</strong> (Invoice #$inv): "
+                                           . ($old !== '' ? "<span style='color:#94a3b8;text-decoration:line-through;'>$old</span> → " : '')
+                                           . "<strong style='color:#1d4ed8;'>$new</strong></span>";
+                                }
+                            ?>
+                            <div style="display:flex; align-items:baseline; gap:8px; font-size:12px; color:#475569;">
+                                <span style="width:20px;height:20px;border-radius:50%;background:<?= $dot_bg ?>;border:1.5px solid <?= $dot_border ?>;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;font-size:10px;color:<?= $dot_color ?>;font-weight:700;"><?= $dot_icon ?></span>
+                                <span style="flex:1;"><?= $label ?></span>
+                                <span style="white-space:nowrap;color:#94a3b8;font-size:11px;"><?= date('H:i:s • d/m/Y', strtotime($ev['time'])) ?> — <?= htmlspecialchars($ev['by']) ?></span>
+                            </div>
+                            <?php endforeach; ?>
+                        </div>
+                    </div>
+                    <?php endif; ?>
+
                 </div>
 
             </div>
@@ -1400,6 +1510,7 @@ function formatMoney($amount, $currency_code)
             formData.append('odoo_invoice_id', invoiceId);
             formData.append('field', fieldName);
             formData.append('value', newVal);
+            formData.append('quarter', '<?= $active_tab ?>');
 
             fetch('', {
                 method: 'POST',
