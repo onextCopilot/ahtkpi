@@ -371,14 +371,48 @@ $kpi_data = null;
 $u_id = (int) $_SESSION['user_id'];
 $is_am_bd = !empty($_SESSION['is_am_bd']);
 if ($is_am_bd) {
-    $stmt_kpi = $conn->prepare("
-        SELECT u.full_name, sl.level_name, sl.position_type, sl.color_badge,
-               sl.kpi_quarter_vnd, sl.kpi_yearly_vnd, sl.kpi_quarter_usd, sl.kpi_yearly_usd
-        FROM users u
-        LEFT JOIN sale_levels sl ON u.sale_level_id = sl.id
-        WHERE u.id = ?
-    ");
-    $stmt_kpi->bind_param("i", $u_id);
+    $eff_level_id = null;
+    $v_q = isset($q) ? $q : ceil(date('n') / 3);
+    $v_y = isset($y) ? $y : date('Y');
+
+    try {
+        $stmt_hist = $conn->prepare("
+            SELECT sale_level_id FROM user_sale_level_history 
+            WHERE user_id = ? AND (apply_year < ? OR (apply_year = ? AND apply_quarter <= ?))
+            ORDER BY apply_year DESC, apply_quarter DESC LIMIT 1
+        ");
+        if ($stmt_hist) {
+            $stmt_hist->bind_param("iiii", $u_id, $v_y, $v_y, $v_q);
+            $stmt_hist->execute();
+            $hist_res = $stmt_hist->get_result();
+            if ($row = $hist_res->fetch_assoc()) {
+                $eff_level_id = $row['sale_level_id'];
+            }
+        }
+    } catch (Exception $e) {
+        // Ignored, table might not exist yet or no db error catching
+    }
+
+    if ($eff_level_id) {
+        $stmt_kpi = $conn->prepare("
+            SELECT u.full_name, sl.level_name, sl.position_type, sl.color_badge,
+                   sl.kpi_quarter_vnd, sl.kpi_yearly_vnd, sl.kpi_quarter_usd, sl.kpi_yearly_usd
+            FROM users u
+            LEFT JOIN sale_levels sl ON sl.id = ?
+            WHERE u.id = ?
+        ");
+        $stmt_kpi->bind_param("ii", $eff_level_id, $u_id);
+    } else {
+        $stmt_kpi = $conn->prepare("
+            SELECT u.full_name, sl.level_name, sl.position_type, sl.color_badge,
+                   sl.kpi_quarter_vnd, sl.kpi_yearly_vnd, sl.kpi_quarter_usd, sl.kpi_yearly_usd
+            FROM users u
+            LEFT JOIN sale_levels sl ON u.sale_level_id = sl.id
+            WHERE u.id = ?
+        ");
+        $stmt_kpi->bind_param("i", $u_id);
+    }
+
     $stmt_kpi->execute();
     $kpi_row = $stmt_kpi->get_result()->fetch_assoc();
     if ($kpi_row && $kpi_row['level_name']) {
@@ -1754,120 +1788,120 @@ function formatMoney($amount, $currency_code)
                                             <?php endforeach; ?>
                                             <tr class="month-total-row">
                                                 <td colspan="14" style="text-align:right;">Tổng <?= $display_group ?>:</td>
-                                                            <td style="text-align:right;font-weight:700;color:#1d4ed8;">
-                                                                <?= formatMoney($month_sub, 'VND') ?>
-                                                            </td>
-                                                            <td style="text-align:right;font-weight:700;color:#059669;">
-                                                                <?= formatMoney($month_giaingan_usd, 'USD') ?>
-                                                            </td>
-                                                            <td colspan="7"></td>
-                                                            <td style="text-align:right;font-weight:700;color:#b91c1c;">
-                                                                <?= formatMoney($month_comm1_usd, 'USD') ?>
-                                                            </td>
-                                                            <td style="text-align:right;font-weight:700;color:#b91c1c;">
-                                                                <?= formatMoney($month_comm2_usd, 'USD') ?>
-                                                            </td>
-                                                            <td></td>
-                                                        </tr>
-                                                <?php endforeach; ?>
-                                                <tr style="background:#f1f5f9;font-weight:bold;">
-                                                    <td colspan="15" style="text-align:right;font-size:14px;padding: 1rem 0.75rem;">TỔNG
-                                                        CỘNG QUÝ:</td>
-                                                    <td style="text-align:right;color:#059669;font-size:14px;padding: 1rem 0.75rem;">
-                                                        <?= formatMoney($quarter_total_giaingan_usd, 'USD') ?>
-                                                    </td>
-                                                    <td colspan="7"></td>
-                                                    <td style="text-align:right;color:#b91c1c;font-size:14px;padding: 1rem 0.75rem;">
-                                                        <?= formatMoney($quarter_total_comm1_usd, 'USD') ?>
-                                                    </td>
-                                                    <td style="text-align:right;color:#b91c1c;font-size:14px;padding: 1rem 0.75rem;">
-                                                        <?= formatMoney($quarter_total_comm2_usd, 'USD') ?>
-                                                    </td>
-                                                    <td></td>
-                                                </tr>
-                                            </tbody>
-                                        </table>
+                                                <td style="text-align:right;font-weight:700;color:#1d4ed8;">
+                                                    <?= formatMoney($month_sub, 'VND') ?>
+                                                </td>
+                                                <td style="text-align:right;font-weight:700;color:#059669;">
+                                                    <?= formatMoney($month_giaingan_usd, 'USD') ?>
+                                                </td>
+                                                <td colspan="7"></td>
+                                                <td style="text-align:right;font-weight:700;color:#b91c1c;">
+                                                    <?= formatMoney($month_comm1_usd, 'USD') ?>
+                                                </td>
+                                                <td style="text-align:right;font-weight:700;color:#b91c1c;">
+                                                    <?= formatMoney($month_comm2_usd, 'USD') ?>
+                                                </td>
+                                                <td></td>
+                                            </tr>
+                                        <?php endforeach; ?>
+                                        <tr style="background:#f1f5f9;font-weight:bold;">
+                                            <td colspan="15" style="text-align:right;font-size:14px;padding: 1rem 0.75rem;">TỔNG
+                                                CỘNG QUÝ:</td>
+                                            <td style="text-align:right;color:#059669;font-size:14px;padding: 1rem 0.75rem;">
+                                                <?= formatMoney($quarter_total_giaingan_usd, 'USD') ?>
+                                            </td>
+                                            <td colspan="7"></td>
+                                            <td style="text-align:right;color:#b91c1c;font-size:14px;padding: 1rem 0.75rem;">
+                                                <?= formatMoney($quarter_total_comm1_usd, 'USD') ?>
+                                            </td>
+                                            <td style="text-align:right;color:#b91c1c;font-size:14px;padding: 1rem 0.75rem;">
+                                                <?= formatMoney($quarter_total_comm2_usd, 'USD') ?>
+                                            </td>
+                                            <td></td>
+                                        </tr>
+                                    </tbody>
+                                </table>
 
-                                        <?php
-                                        // Tính Commission theo rule quy định KPI
-                                        $kpi_pct = isset($pct_quarter) ? $pct_quarter : 0;
+                                <?php
+                                // Tính Commission theo rule quy định KPI
+                                $kpi_pct = isset($pct_quarter) ? $pct_quarter : 0;
 
-                                        if ($kpi_pct < 70) {
-                                            $payout_ratio = 0;
-                                            $payout_label = "Dưới 70% KPI -> Nhận 0%";
-                                        } elseif ($kpi_pct < 100) {
-                                            $payout_ratio = 0.7;
-                                            $payout_label = "Từ 70% đến dưới 100% KPI -> Nhận 70%";
-                                        } else {
-                                            $payout_ratio = 1.0;
-                                            $payout_label = "Đạt >= 100% KPI -> Nhận 100%";
-                                        }
+                                if ($kpi_pct < 70) {
+                                    $payout_ratio = 0;
+                                    $payout_label = "Dưới 70% KPI -> Nhận 0%";
+                                } elseif ($kpi_pct < 100) {
+                                    $payout_ratio = 0.7;
+                                    $payout_label = "Từ 70% đến dưới 100% KPI -> Nhận 70%";
+                                } else {
+                                    $payout_ratio = 1.0;
+                                    $payout_label = "Đạt >= 100% KPI -> Nhận 100%";
+                                }
 
-                                        $final_comm1_usd = $quarter_total_comm1_usd * $payout_ratio;
-                                        $final_comm2_usd = $quarter_total_comm2_usd * $payout_ratio;
-                                        $total_com_usd = $final_comm1_usd + $final_comm2_usd;
-                                        ?>
-                                        <div
-                                            style="margin-top: 2rem; background: #fff; border: 1px solid #e2e8f0; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.05); padding: 1.5rem; max-width: 600px;">
-                                            <h3
-                                                style="margin-top:0; margin-bottom: 1rem; color: #1e293b; font-size: 16px; border-bottom: 2px solid #f1f5f9; padding-bottom: 0.5rem; display: flex; align-items: center; gap: 0.5rem;">
-                                                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24"
-                                                    fill="none" stroke="#eab308" stroke-width="2.5">
-                                                    <circle cx="12" cy="8" r="7"></circle>
-                                                    <polyline points="8.21 13.89 7 23 12 20 17 23 15.79 13.88"></polyline>
-                                                </svg>
-                                                TỔNG KẾT COMMISSION ĐƯỢC NHẬN
-                                            </h3>
+                                $final_comm1_usd = $quarter_total_comm1_usd * $payout_ratio;
+                                $final_comm2_usd = $quarter_total_comm2_usd * $payout_ratio;
+                                $total_com_usd = $final_comm1_usd + $final_comm2_usd;
+                                ?>
+                                <div
+                                    style="margin-top: 2rem; background: #fff; border: 1px solid #e2e8f0; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.05); padding: 1.5rem; max-width: 600px;">
+                                    <h3
+                                        style="margin-top:0; margin-bottom: 1rem; color: #1e293b; font-size: 16px; border-bottom: 2px solid #f1f5f9; padding-bottom: 0.5rem; display: flex; align-items: center; gap: 0.5rem;">
+                                        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24"
+                                            fill="none" stroke="#eab308" stroke-width="2.5">
+                                            <circle cx="12" cy="8" r="7"></circle>
+                                            <polyline points="8.21 13.89 7 23 12 20 17 23 15.79 13.88"></polyline>
+                                        </svg>
+                                        TỔNG KẾT COMMISSION ĐƯỢC NHẬN
+                                    </h3>
 
-                                            <div
-                                                style="display: flex; justify-content: space-between; margin-bottom: 0.75rem; color: #475569; font-size: 14px;">
-                                                <span>Tỉ lệ hoàn thành KPI (Quý):</span>
-                                                <span
-                                                    style="font-weight: 600; color: #0f172a;"><?= number_format($kpi_pct, 1) ?>%</span>
-                                            </div>
-                                            <div
-                                                style="display: flex; justify-content: space-between; margin-bottom: 0.75rem; color: #475569; font-size: 14px;">
-                                                <span>Hệ số Payout áp dụng:</span>
-                                                <span
-                                                    style="font-weight: 600; color: <?= $payout_ratio == 0 ? '#ef4444' : ($payout_ratio == 1 ? '#10b981' : '#f59e0b') ?>;">
-                                                    <?= $payout_label ?>
-                                                </span>
-                                            </div>
-
-                                            <div style="height: 1px; background: #e2e8f0; margin: 1rem 0;"></div>
-
-                                            <div
-                                                style="display: flex; justify-content: space-between; margin-bottom: 0.5rem; color: #475569; font-size: 14px;">
-                                                <span>Tổng Commission (Com 1) x <?= $payout_ratio * 100 ?>%:</span>
-                                                <span
-                                                    style="font-weight: 600; font-family: monospace; color: #b91c1c; font-size: 15px;">
-                                                    <?= formatMoney($final_comm1_usd, 'USD') ?>
-                                                </span>
-                                            </div>
-                                            <div
-                                                style="display: flex; justify-content: space-between; margin-bottom: 1rem; color: #475569; font-size: 14px;">
-                                                <span>Tổng Com giữ lại (Com 2) x <?= $payout_ratio * 100 ?>%:</span>
-                                                <span
-                                                    style="font-weight: 600; font-family: monospace; color: #b91c1c; font-size: 15px;">
-                                                    <?= formatMoney($final_comm2_usd, 'USD') ?>
-                                                </span>
-                                            </div>
-
-                                            <div
-                                                style="display: flex; justify-content: space-between; align-items: center; background: #fbbf24; color: #78350f; padding: 1rem; border-radius: 6px; font-weight: bold; font-size: 16px;">
-                                                <span>THỰC NHẬN KỲ NÀY:</span>
-                                                <span style="font-family: monospace; font-size: 20px;">
-                                                    <?= formatMoney($total_com_usd, 'USD') ?>
-                                                </span>
-                                            </div>
-                                            <div
-                                                style="text-align:right; font-size: 12px; color: #94a3b8; margin-top: 0.5rem; font-style: italic;">
-                                                * Phụ thuộc vào chính sách chi trả của công ty theo từng thời kỳ.
-                                            </div>
-                                        </div>
+                                    <div
+                                        style="display: flex; justify-content: space-between; margin-bottom: 0.75rem; color: #475569; font-size: 14px;">
+                                        <span>Tỉ lệ hoàn thành KPI (Quý):</span>
+                                        <span
+                                            style="font-weight: 600; color: #0f172a;"><?= number_format($kpi_pct, 1) ?>%</span>
                                     </div>
-                            <?php endif; ?>
-                        </div>
+                                    <div
+                                        style="display: flex; justify-content: space-between; margin-bottom: 0.75rem; color: #475569; font-size: 14px;">
+                                        <span>Hệ số Payout áp dụng:</span>
+                                        <span
+                                            style="font-weight: 600; color: <?= $payout_ratio == 0 ? '#ef4444' : ($payout_ratio == 1 ? '#10b981' : '#f59e0b') ?>;">
+                                            <?= $payout_label ?>
+                                        </span>
+                                    </div>
+
+                                    <div style="height: 1px; background: #e2e8f0; margin: 1rem 0;"></div>
+
+                                    <div
+                                        style="display: flex; justify-content: space-between; margin-bottom: 0.5rem; color: #475569; font-size: 14px;">
+                                        <span>Tổng Commission (Com 1) x <?= $payout_ratio * 100 ?>%:</span>
+                                        <span
+                                            style="font-weight: 600; font-family: monospace; color: #b91c1c; font-size: 15px;">
+                                            <?= formatMoney($final_comm1_usd, 'USD') ?>
+                                        </span>
+                                    </div>
+                                    <div
+                                        style="display: flex; justify-content: space-between; margin-bottom: 1rem; color: #475569; font-size: 14px;">
+                                        <span>Tổng Com giữ lại (Com 2) x <?= $payout_ratio * 100 ?>%:</span>
+                                        <span
+                                            style="font-weight: 600; font-family: monospace; color: #b91c1c; font-size: 15px;">
+                                            <?= formatMoney($final_comm2_usd, 'USD') ?>
+                                        </span>
+                                    </div>
+
+                                    <div
+                                        style="display: flex; justify-content: space-between; align-items: center; background: #fbbf24; color: #78350f; padding: 1rem; border-radius: 6px; font-weight: bold; font-size: 16px;">
+                                        <span>THỰC NHẬN KỲ NÀY:</span>
+                                        <span style="font-family: monospace; font-size: 20px;">
+                                            <?= formatMoney($total_com_usd, 'USD') ?>
+                                        </span>
+                                    </div>
+                                    <div
+                                        style="text-align:right; font-size: 12px; color: #94a3b8; margin-top: 0.5rem; font-style: italic;">
+                                        * Phụ thuộc vào chính sách chi trả của công ty theo từng thời kỳ.
+                                    </div>
+                                </div>
+                            </div>
+                        <?php endif; ?>
+                    </div>
                 <?php endif; // end of if ($is_confirmed) for paid block ?>
 
             </div><!-- /.report-wrapper -->

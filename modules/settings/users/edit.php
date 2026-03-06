@@ -37,6 +37,19 @@ if ($chk && $chk->num_rows == 0) {
     $conn->query("ALTER TABLE users ADD COLUMN sale_level_id INT DEFAULT NULL");
 }
 
+// Auto-migrate user_sale_level_history table
+$conn->query("
+    CREATE TABLE IF NOT EXISTS user_sale_level_history (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        user_id INT NOT NULL,
+        sale_level_id INT NOT NULL,
+        apply_quarter INT NOT NULL,
+        apply_year INT NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE KEY uidx_history (user_id, apply_year, apply_quarter)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+");
+
 // Fetch User Data
 function fetchUserData($conn, $id)
 {
@@ -70,6 +83,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $can_view_all_debts = isset($_POST['can_view_all_debts']) ? 1 : 0;
         $team_ids = isset($_POST['team_ids']) ? $_POST['team_ids'] : [];
         $sale_level_id = ($is_am_bd && !empty($_POST['sale_level_id'])) ? intval($_POST['sale_level_id']) : null;
+        $apply_quarter = !empty($_POST['apply_quarter']) ? intval($_POST['apply_quarter']) : null;
+        $apply_year = !empty($_POST['apply_year']) ? intval($_POST['apply_year']) : null;
         $role_val = $_POST['role'] ?? 'user';
 
         $username = trim($_POST['username']);
@@ -106,6 +121,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             $ts->bind_param("ii", $id, $tid);
                             $ts->execute();
                         }
+                    }
+
+                    // Insert/Update History
+                    if ($sale_level_id && $apply_quarter && $apply_year) {
+                        $hq = "INSERT INTO user_sale_level_history (user_id, sale_level_id, apply_quarter, apply_year) VALUES (?, ?, ?, ?) ON DUPLICATE KEY UPDATE sale_level_id = ?";
+                        $hst = $conn->prepare($hq);
+                        $hst->bind_param("iiiii", $id, $sale_level_id, $apply_quarter, $apply_year, $sale_level_id);
+                        $hst->execute();
                     }
 
                     $success_message = "User updated successfully!";
@@ -570,9 +593,11 @@ if ($sl_table_check && $sl_table_check->num_rows > 0) {
                                 <?php endif; ?>
                             </div>
                             <h2 style="font-size:1.25rem; color:var(--text-primary); margin-bottom:0.25rem;">
-                                <?php echo htmlspecialchars($user['full_name']); ?></h2>
+                                <?php echo htmlspecialchars($user['full_name']); ?>
+                            </h2>
                             <p style="color:var(--text-secondary); font-size:0.9rem; margin-bottom:1rem;">
-                                <?php echo htmlspecialchars($user['email']); ?></p>
+                                <?php echo htmlspecialchars($user['email']); ?>
+                            </p>
                             <span class="user-status-badge status-<?php echo $user['status']; ?>">
                                 <?php echo ucfirst(str_replace('_', ' ', $user['status'])); ?>
                             </span>
@@ -762,14 +787,49 @@ if ($sl_table_check && $sl_table_check->num_rows > 0) {
                                                 <?php endforeach; ?>
                                             <?php endif; ?>
                                         </select>
+
+                                        <div id="level_effective_div"
+                                            style="display: <?php echo !empty($user['sale_level_id']) ? 'flex' : 'none'; ?>; align-items:center; gap: 1rem; margin-top: 1rem;">
+                                            <div style="flex: 1;">
+                                                <label
+                                                    style="font-size: 13px; color: var(--text-secondary); margin-bottom: 0.25rem;">Hiệu
+                                                    lực từ Quý:</label>
+                                                <select name="apply_quarter"
+                                                    style="border-radius: 8px; width:100%; padding:0.6rem; border:1px solid #D1D5DB; font-size:13px; color:#374151;">
+                                                    <?php
+                                                    $cur_q = ceil(date('n') / 3);
+                                                    for ($q = 1; $q <= 4; $q++): ?>
+                                                        <option value="<?= $q ?>" <?= ($cur_q == $q) ? 'selected' : '' ?>>Quý
+                                                            <?= $q ?></option>
+                                                    <?php endfor; ?>
+                                                </select>
+                                            </div>
+                                            <div style="flex: 1;">
+                                                <label
+                                                    style="font-size: 13px; color: var(--text-secondary); margin-bottom: 0.25rem;">Hiệu
+                                                    lực từ Năm:</label>
+                                                <select name="apply_year"
+                                                    style="border-radius: 8px; width:100%; padding:0.6rem; border:1px solid #D1D5DB; font-size:13px; color:#374151;">
+                                                    <?php
+                                                    $cur_y = date('Y');
+                                                    for ($y = $cur_y - 1; $y <= $cur_y + 2; $y++): ?>
+                                                        <option value="<?= $y ?>" <?= ($cur_y == $y) ? 'selected' : '' ?>>
+                                                            <?= $y ?></option>
+                                                    <?php endfor; ?>
+                                                </select>
+                                            </div>
+                                        </div>
                                         <?php if (empty($sale_levels_flat)): ?>
                                             <small style="color:#EF4444; margin-top:0.5rem; display:block;">
                                                 ⚠️ Chưa có Sale Level nào. Vui lòng vào
-                                                <a href="/settings/sale-levels" target="_blank" style="color:#1D4ED8">Settings → Sale Level Setup</a>
+                                                <a href="/settings/sale-levels" target="_blank"
+                                                    style="color:#1D4ED8">Settings → Sale Level Setup</a>
                                                 để khởi tạo dữ liệu.
                                             </small>
                                         <?php else: ?>
-                                            <small style="color: var(--text-secondary); margin-top: 0.5rem; display: block;">Chọn level KPI phù hợp với vị trí của thành viên này.</small>
+                                            <small
+                                                style="color: var(--text-secondary); margin-top: 0.5rem; display: block;">Chọn
+                                                level KPI phù hợp với vị trí của thành viên này.</small>
                                         <?php endif; ?>
                                     </div>
                                 </div>
@@ -790,8 +850,20 @@ if ($sl_table_check && $sl_table_check->num_rows > 0) {
             const isAmBd = document.getElementById('is_am_bd').checked;
             document.getElementById('team_select_row').style.display = isAmBd ? 'block' : 'none';
             // Reset sale level if unchecking
-            if (!isAmBd) document.getElementById('sale_level_id').value = '';
+            if (!isAmBd) {
+                document.getElementById('sale_level_id').value = '';
+                document.getElementById('level_effective_div').style.display = 'none';
+            }
         }
+
+        document.getElementById('sale_level_id').addEventListener('change', function () {
+            if (this.value) {
+                document.getElementById('level_effective_div').style.display = 'flex';
+            } else {
+                document.getElementById('level_effective_div').style.display = 'none';
+            }
+        });
     </script>
 </body>
+
 </html>
