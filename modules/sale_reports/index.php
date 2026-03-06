@@ -160,13 +160,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
     $field = preg_replace('/[^a-zA-Z0-9_]/', '', $_POST['field']);
     $val = $_POST['value'];
     $quarter_key = preg_replace('/[^A-Za-z0-9_]/', '', $_POST['quarter'] ?? '');
-    $uid  = (int) ($_SESSION['user_id'] ?? 0);
+    $uid = (int) ($_SESSION['user_id'] ?? 0);
     $uname = $_SESSION['full_name'] ?? 'Unknown';
 
     // Fetch old value for audit
     $old_val = '';
     $res_old = $conn->query("SELECT `$field` FROM sale_reports WHERE odoo_invoice_id = $odoo_id LIMIT 1");
-    if ($res_old && $row_old = $res_old->fetch_assoc()) $old_val = $row_old[$field] ?? '';
+    if ($res_old && $row_old = $res_old->fetch_assoc())
+        $old_val = $row_old[$field] ?? '';
 
     // Auto rules for com_1
     if ($field === 'client_type') {
@@ -359,10 +360,11 @@ $conf_res = $stmt_conf->get_result();
 while ($conf_row = $conf_res->fetch_assoc()) {
     $confirmations[] = $conf_row;
 }
-if (!empty($confirmations)) $confirmation = $confirmations[0]; // latest
+if (!empty($confirmations))
+    $confirmation = $confirmations[0]; // latest
 // locked = latest event is 'confirmed' (not 'reset')
-$latest_type  = !empty($confirmation) ? ($confirmation['type'] ?? 'confirmed') : null;
-$is_locked    = ($latest_type === 'confirmed');   // locked only when latest event is 'confirmed'
+$latest_type = !empty($confirmation) ? ($confirmation['type'] ?? 'confirmed') : null;
+$is_locked = ($latest_type === 'confirmed');   // locked only when latest event is 'confirmed'
 $is_confirmed = ($latest_type === 'confirmed');   // for display logic
 
 // Fetch edit log for this quarter (newest first)
@@ -371,7 +373,8 @@ $stmt_elog = $conn->prepare("SELECT * FROM sale_report_edit_log WHERE user_id=? 
 $stmt_elog->bind_param("is", $u_id, $active_tab);
 $stmt_elog->execute();
 $elog_res = $stmt_elog->get_result();
-while ($elog_row = $elog_res->fetch_assoc()) $edit_log[] = $elog_row;
+while ($elog_row = $elog_res->fetch_assoc())
+    $edit_log[] = $elog_row;
 
 // Helper
 function formatMoney($amount, $currency_code)
@@ -1038,7 +1041,8 @@ function formatMoney($amount, $currency_code)
                                             <?= $stt++ ?>
                                         </td>
                                         <!-- Invoice # (Odoo DB ID) -->
-                                        <td style="font-family: 'Inconsolata', monospace; font-size: 12px; color: #64748b; white-space: nowrap; font-weight: 600; text-align: center;">
+                                        <td
+                                            style="font-family: 'Inconsolata', monospace; font-size: 12px; color: #64748b; white-space: nowrap; font-weight: 600; text-align: center;">
                                             #<?= $odoo_id ?>
                                         </td>
                                         <!-- Loại trừ (cột 2) -->
@@ -1073,20 +1077,20 @@ function formatMoney($amount, $currency_code)
                                         </td>
 
                                         <!-- Loại Hợp đồng -->
-                                        <td class="editable-cell <?= $is_locked ? 'cell-locked' : '' ?>" data-required-field="contract_type"
-                                            <?= !$is_locked ? "onclick=\"makeEditable(this, $odoo_id, 'contract_type', 'select', ['Service', 'Trading', 'Dedicated', 'License'])\"" : 'title="Đang bị khoá — Reset to Draft để sửa"' ?>>
+                                        <td class="editable-cell <?= $is_locked ? 'cell-locked' : '' ?>"
+                                            data-required-field="contract_type" <?= !$is_locked ? "onclick=\"makeEditable(this, $odoo_id, 'contract_type', 'select', ['Service', 'Trading', 'Dedicated', 'License'])\"" : 'title="Đang bị khoá — Reset to Draft để sửa"' ?>>
                                             <?= htmlspecialchars($l['contract_type'] ?? '') ?>
                                         </td>
 
                                         <!-- Presales -->
-                                        <td class="editable-cell <?= $is_locked ? 'cell-locked' : '' ?>" data-required-field="presales"
-                                            <?= !$is_locked ? "onclick=\"makeEditable(this, $odoo_id, 'presales', 'select', ['No presales', '0%', '0.25%', '0.5%'])\"" : 'title="Đang bị khoá — Reset to Draft để sửa"' ?>>
+                                        <td class="editable-cell <?= $is_locked ? 'cell-locked' : '' ?>"
+                                            data-required-field="presales" <?= !$is_locked ? "onclick=\"makeEditable(this, $odoo_id, 'presales', 'select', ['No presales', '0%', '0.25%', '0.5%'])\"" : 'title="Đang bị khoá — Reset to Draft để sửa"' ?>>
                                             <?= htmlspecialchars($l['presales'] ?? '') ?>
                                         </td>
 
                                         <!-- Loại khách hàng -->
-                                        <td class="editable-cell <?= $is_locked ? 'cell-locked' : '' ?>" data-required-field="client_type"
-                                            <?= !$is_locked ? "onclick=\"makeEditable(this, $odoo_id, 'client_type', 'select', ['New client', 'Old client'])\"" : 'title="Đang bị khoá — Reset to Draft để sửa"' ?>>
+                                        <td class="editable-cell <?= $is_locked ? 'cell-locked' : '' ?>"
+                                            data-required-field="client_type" <?= !$is_locked ? "onclick=\"makeEditable(this, $odoo_id, 'client_type', 'select', ['New client', 'Old client'])\"" : 'title="Đang bị khoá — Reset to Draft để sửa"' ?>>
                                             <?= htmlspecialchars($l['client_type'] ?? '') ?>
                                         </td>
 
@@ -1096,26 +1100,24 @@ function formatMoney($amount, $currency_code)
                                         </td>
 
                                         <!-- %Profit trong PAKD -->
-                                        <td class="editable-cell <?= $is_locked ? 'cell-locked' : '' ?>"
-                                            <?= !$is_locked ? "onclick=\"makeEditable(this, $odoo_id, 'profit_pakd', 'text')\"" : 'title="Đang bị khoá"' ?>>
+                                        <td class="editable-cell <?= $is_locked ? 'cell-locked' : '' ?>" <?= !$is_locked ? "onclick=\"makeEditable(this, $odoo_id, 'profit_pakd', 'text')\"" : 'title="Đang bị khoá"' ?>>
                                             <?= htmlspecialchars($l['profit_pakd'] ?? '') ?>
                                         </td>
 
                                         <!-- Net profit -->
-                                        <td class="editable-cell <?= $is_locked ? 'cell-locked' : '' ?>"
-                                            <?= !$is_locked ? "onclick=\"makeEditable(this, $odoo_id, 'net_profit', 'text')\"" : 'title="Đang bị khoá"' ?>>
+                                        <td class="editable-cell <?= $is_locked ? 'cell-locked' : '' ?>" <?= !$is_locked ? "onclick=\"makeEditable(this, $odoo_id, 'net_profit', 'text')\"" : 'title="Đang bị khoá"' ?>>
                                             <?= htmlspecialchars($l['net_profit'] ?? '') ?>
                                         </td>
 
                                         <!-- % Com (Lead source) -->
-                                        <td class="editable-cell <?= $is_locked ? 'cell-locked' : '' ?>" data-required-field="com_lead_source"
-                                            <?= !$is_locked ? "onclick=\"makeEditable(this, $odoo_id, 'com_lead_source', 'select', ['Yes', 'No'])\"" : 'title="Đang bị khoá — Reset to Draft để sửa"' ?>>
+                                        <td class="editable-cell <?= $is_locked ? 'cell-locked' : '' ?>"
+                                            data-required-field="com_lead_source" <?= !$is_locked ? "onclick=\"makeEditable(this, $odoo_id, 'com_lead_source', 'select', ['Yes', 'No'])\"" : 'title="Đang bị khoá — Reset to Draft để sửa"' ?>>
                                             <?= htmlspecialchars($l['com_lead_source'] ?? 'No') ?>
                                         </td>
 
                                         <!-- % Bonus License/trading -->
-                                        <td class="editable-cell <?= $is_locked ? 'cell-locked' : '' ?>" data-required-field="bonus_license_trading"
-                                            <?= !$is_locked ? "onclick=\"makeEditable(this, $odoo_id, 'bonus_license_trading', 'select', ['Yes', 'No'])\"" : 'title="Đang bị khoá — Reset to Draft để sửa"' ?>>
+                                        <td class="editable-cell <?= $is_locked ? 'cell-locked' : '' ?>"
+                                            data-required-field="bonus_license_trading" <?= !$is_locked ? "onclick=\"makeEditable(this, $odoo_id, 'bonus_license_trading', 'select', ['Yes', 'No'])\"" : 'title="Đang bị khoá — Reset to Draft để sửa"' ?>>
                                             <?= htmlspecialchars($l['bonus_license_trading'] ?? 'No') ?>
                                         </td>
 
@@ -1126,8 +1128,7 @@ function formatMoney($amount, $currency_code)
                                         </td>
 
                                         <!-- % Com 2 -->
-                                        <td class="editable-cell <?= $is_locked ? 'cell-locked' : '' ?>"
-                                            <?= !$is_locked ? "onclick=\"makeEditable(this, $odoo_id, 'com_2', 'select', ['0.5%', '1%', '1.5%', '2%', '2.5%', '3%'])\"" : 'title="Đang bị khoá"' ?>>
+                                        <td class="editable-cell <?= $is_locked ? 'cell-locked' : '' ?>" <?= !$is_locked ? "onclick=\"makeEditable(this, $odoo_id, 'com_2', 'select', ['0.5%', '1%', '1.5%', '2%', '2.5%', '3%'])\"" : 'title="Đang bị khoá"' ?>>
                                             <?= htmlspecialchars($l['com_2'] ?? '') ?>
                                         </td>
 
@@ -1295,23 +1296,39 @@ function formatMoney($amount, $currency_code)
                                 <?php if ($is_confirmed): ?>
                                     <!-- STATE: Confirmed / Locked -->
                                     <div class="locked-banner">
-                                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
-                                        Bảng đang bị khoá — chỉ xem. Nhấn <strong style="margin:0 3px;">Reset to Draft</strong> để cho phép chỉnh sửa.
+                                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24"
+                                            fill="none" stroke="currentColor" stroke-width="2">
+                                            <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+                                            <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+                                        </svg>
+                                        Bảng đang bị khoá — chỉ xem. Nhấn <strong style="margin:0 3px;">Reset to Draft</strong>
+                                        để cho phép chỉnh sửa.
                                     </div>
                                     <div style="display:flex; align-items:center; gap:1rem; flex-wrap:wrap;">
                                         <div class="confirmed-badge">
-                                            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                                            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24"
+                                                fill="none" stroke="currentColor" stroke-width="2.5">
                                                 <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
                                                 <polyline points="22 4 12 14.01 9 11.01" />
                                             </svg>
                                             Đã xác nhận KPI — <?= date('H:i d/m/Y', strtotime($confirmation['confirmed_at'])) ?>
                                         </div>
-                                        <button class="confirm-btn" onclick="confirmKpi()" style="background:#64748b;box-shadow:none;font-size:12px;padding:7px 16px;">
-                                            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 11 16 11"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 11"/></svg>
+                                        <button class="confirm-btn" onclick="confirmKpi()"
+                                            style="background:#64748b;box-shadow:none;font-size:12px;padding:7px 16px;">
+                                            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24"
+                                                fill="none" stroke="currentColor" stroke-width="2">
+                                                <polyline points="23 4 23 11 16 11" />
+                                                <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 11" />
+                                            </svg>
                                             Xác nhận lại
                                         </button>
                                         <button class="draft-btn" onclick="resetToDraft()">
-                                            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18.36 6.64A9 9 0 1 1 5.64 5.64"/><polyline points="15 2 21 2 21 8"/><line x1="21" y1="2" x2="14" y2="9"/></svg>
+                                            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24"
+                                                fill="none" stroke="currentColor" stroke-width="2">
+                                                <path d="M18.36 6.64A9 9 0 1 1 5.64 5.64" />
+                                                <polyline points="15 2 21 2 21 8" />
+                                                <line x1="21" y1="2" x2="14" y2="9" />
+                                            </svg>
                                             Reset to Draft
                                         </button>
                                     </div>
@@ -1319,11 +1336,17 @@ function formatMoney($amount, $currency_code)
                                 <?php elseif ($latest_type === 'reset'): ?>
                                     <!-- STATE: Draft (after reset) -->
                                     <div class="locked-banner" style="background:#f0fdf4;border-color:#bbf7d0;color:#166534;">
-                                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 9.9-1"/></svg>
-                                        Đang ở trạng thái <strong style="margin:0 3px;">Draft</strong> — bảng đã được mở khoá. Xác nhận lại khi hoàn tất.
+                                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24"
+                                            fill="none" stroke="currentColor" stroke-width="2">
+                                            <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+                                            <path d="M7 11V7a5 5 0 0 1 9.9-1" />
+                                        </svg>
+                                        Đang ở trạng thái <strong style="margin:0 3px;">Draft</strong> — bảng đã được mở khoá.
+                                        Xác nhận lại khi hoàn tất.
                                     </div>
                                     <button class="confirm-btn" onclick="confirmKpi()" id="confirmKpiBtn">
-                                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24"
+                                            fill="none" stroke="currentColor" stroke-width="2.5">
                                             <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
                                             <polyline points="22 4 12 14.01 9 11.01" />
                                         </svg>
@@ -1333,7 +1356,8 @@ function formatMoney($amount, $currency_code)
                                 <?php else: ?>
                                     <!-- STATE: No history yet -->
                                     <button class="confirm-btn" onclick="confirmKpi()" id="confirmKpiBtn">
-                                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24"
+                                            fill="none" stroke="currentColor" stroke-width="2.5">
                                             <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
                                             <polyline points="22 4 12 14.01 9 11.01" />
                                         </svg>
@@ -1352,477 +1376,509 @@ function formatMoney($amount, $currency_code)
                     $audit_events = [];
                     foreach ($confirmations as $c) {
                         $audit_events[] = [
-                            'time'  => $c['confirmed_at'],
-                            'type'  => $c['type'] ?? 'confirmed',
-                            'by'    => $c['confirmed_by_name'],
-                            'data'  => $c,
+                            'time' => $c['confirmed_at'],
+                            'type' => $c['type'] ?? 'confirmed',
+                            'by' => $c['confirmed_by_name'],
+                            'data' => $c,
                         ];
                     }
                     foreach ($edit_log as $e) {
                         $audit_events[] = [
-                            'time'  => $e['edited_at'],
-                            'type'  => 'edit',
-                            'by'    => $e['user_name'],
-                            'data'  => $e,
+                            'time' => $e['edited_at'],
+                            'type' => 'edit',
+                            'by' => $e['user_name'],
+                            'data' => $e,
                         ];
                     }
                     usort($audit_events, fn($a, $b) => strcmp($b['time'], $a['time']));
                     ?>
                     <?php if (!empty($audit_events)): ?>
-                    <div style="border-top: 1px dashed #e2e8f0; margin-top: 1.5rem; padding-top: 1.25rem;">
-                        <div style="font-size: 11px; font-weight:700; color:#64748b; text-transform:uppercase; letter-spacing:.5px; margin-bottom:.75rem; display:flex; align-items:center; gap:6px;">
-                            <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-                            Lịch sử hoạt động (<?= count($audit_events) ?> sự kiện)
-                        </div>
-                        <div style="max-height: 220px; overflow-y: auto; display:flex; flex-direction:column; gap:5px;">
-                            <?php foreach ($audit_events as $ev):
-                                $t = $ev['type'];
-                                if ($t === 'confirmed') {
-                                    $dot_bg='#d1fae5'; $dot_border='#6ee7b7'; $dot_color='#065f46'; $dot_icon='✓';
-                                    $label = '<span style="background:#d1fae5;color:#065f46;padding:1px 8px;border-radius:10px;font-weight:600;font-size:11px;">✅ Đã xác nhận KPI</span>';
-                                } elseif ($t === 'reset') {
-                                    $dot_bg='#fef3c7'; $dot_border='#fde68a'; $dot_color='#92400e'; $dot_icon='↩';
-                                    $label = '<span style="background:#fef3c7;color:#92400e;padding:1px 8px;border-radius:10px;font-weight:600;font-size:11px;">🔓 Reset to Draft</span>';
-                                } else {
-                                    // edit
-                                    $dot_bg='#eff6ff'; $dot_border='#bfdbfe'; $dot_color='#1d4ed8'; $dot_icon='✎';
-                                    $d = $ev['data'];
-                                    $field_labels = [
-                                        'contract_type'=>'Loại HĐ','presales'=>'Presales','client_type'=>'Loại KH',
-                                        'profit_pakd'=>'%Profit PAKD','net_profit'=>'Net profit','com_lead_source'=>'% Com Lead',
-                                        'bonus_license_trading'=>'% Bonus','com_1'=>'% Com 1','com_2'=>'% Com 2','note'=>'Note'
-                                    ];
-                                    $fn = $field_labels[$d['field_name']] ?? $d['field_name'];
-                                    $old = htmlspecialchars($d['old_value'] ?? '');
-                                    $new = htmlspecialchars($d['new_value'] ?? '');
-                                    $inv = $d['odoo_invoice_id'];
-                                    $label = "<span style='font-size:11px;'>Sửa <strong>$fn</strong> (Invoice #$inv): "
-                                           . ($old !== '' ? "<span style='color:#94a3b8;text-decoration:line-through;'>$old</span> → " : '')
-                                           . "<strong style='color:#1d4ed8;'>$new</strong></span>";
-                                }
-                            ?>
-                            <div style="display:flex; align-items:baseline; gap:8px; font-size:12px; color:#475569;">
-                                <span style="width:20px;height:20px;border-radius:50%;background:<?= $dot_bg ?>;border:1.5px solid <?= $dot_border ?>;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;font-size:10px;color:<?= $dot_color ?>;font-weight:700;"><?= $dot_icon ?></span>
-                                <span style="flex:1;"><?= $label ?></span>
-                                <span style="white-space:nowrap;color:#94a3b8;font-size:11px;"><?= date('H:i:s • d/m/Y', strtotime($ev['time'])) ?> — <?= htmlspecialchars($ev['by']) ?></span>
+                        <div style="border-top: 1px dashed #e2e8f0; margin-top: 1.5rem; padding-top: 1.25rem;">
+                            <div
+                                style="font-size: 11px; font-weight:700; color:#64748b; text-transform:uppercase; letter-spacing:.5px; margin-bottom:.75rem; display:flex; align-items:center; gap:6px;">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24"
+                                    fill="none" stroke="currentColor" stroke-width="2">
+                                    <circle cx="12" cy="12" r="10" />
+                                    <polyline points="12 6 12 12 16 14" />
+                                </svg>
+                                Lịch sử hoạt động (<?= count($audit_events) ?> sự kiện)
                             </div>
-                            <?php endforeach; ?>
+                            <div style="max-height: 220px; overflow-y: auto; display:flex; flex-direction:column; gap:5px;">
+                                <?php foreach ($audit_events as $ev):
+                                    $t = $ev['type'];
+                                    if ($t === 'confirmed') {
+                                        $dot_bg = '#d1fae5';
+                                        $dot_border = '#6ee7b7';
+                                        $dot_color = '#065f46';
+                                        $dot_icon = '✓';
+                                        $label = '<span style="background:#d1fae5;color:#065f46;padding:1px 8px;border-radius:10px;font-weight:600;font-size:11px;">✅ Đã xác nhận KPI</span>';
+                                    } elseif ($t === 'reset') {
+                                        $dot_bg = '#fef3c7';
+                                        $dot_border = '#fde68a';
+                                        $dot_color = '#92400e';
+                                        $dot_icon = '↩';
+                                        $label = '<span style="background:#fef3c7;color:#92400e;padding:1px 8px;border-radius:10px;font-weight:600;font-size:11px;">🔓 Reset to Draft</span>';
+                                    } else {
+                                        // edit
+                                        $dot_bg = '#eff6ff';
+                                        $dot_border = '#bfdbfe';
+                                        $dot_color = '#1d4ed8';
+                                        $dot_icon = '✎';
+                                        $d = $ev['data'];
+                                        $field_labels = [
+                                            'contract_type' => 'Loại HĐ',
+                                            'presales' => 'Presales',
+                                            'client_type' => 'Loại KH',
+                                            'profit_pakd' => '%Profit PAKD',
+                                            'net_profit' => 'Net profit',
+                                            'com_lead_source' => '% Com Lead',
+                                            'bonus_license_trading' => '% Bonus',
+                                            'com_1' => '% Com 1',
+                                            'com_2' => '% Com 2',
+                                            'note' => 'Note'
+                                        ];
+                                        $fn = $field_labels[$d['field_name']] ?? $d['field_name'];
+                                        $old = htmlspecialchars($d['old_value'] ?? '');
+                                        $new = htmlspecialchars($d['new_value'] ?? '');
+                                        $inv = $d['odoo_invoice_id'];
+                                        $label = "<span style='font-size:11px;'>Sửa <strong>$fn</strong> (Invoice #$inv): "
+                                            . ($old !== '' ? "<span style='color:#94a3b8;text-decoration:line-through;'>$old</span> → " : '')
+                                            . "<strong style='color:#1d4ed8;'>$new</strong></span>";
+                                    }
+                                    ?>
+                                    <div style="display:flex; align-items:baseline; gap:8px; font-size:12px; color:#475569;">
+                                        <span
+                                            style="width:20px;height:20px;border-radius:50%;background:<?= $dot_bg ?>;border:1.5px solid <?= $dot_border ?>;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;font-size:10px;color:<?= $dot_color ?>;font-weight:700;"><?= $dot_icon ?></span>
+                                        <span style="flex:1;"><?= $label ?></span>
+                                        <span
+                                            style="white-space:nowrap;color:#94a3b8;font-size:11px;"><?= date('H:i:s • d/m/Y', strtotime($ev['time'])) ?>
+                                            — <?= htmlspecialchars($ev['by']) ?></span>
+                                    </div>
+                                <?php endforeach; ?>
+                            </div>
                         </div>
-                    </div>
                     <?php endif; ?>
 
                 </div>
 
-            </div>
-
-            <!-- ══════════════════════════════════════════
-                 BÁO CÁO THANH TOÁN — Paid Invoices
-            ═══════════════════════════════════════════ -->
-            <?php
-            // Build paid-only list for this quarter (already date-filtered, now filter payment_state)
-            $paid_invoices_grouped = [];
-            $paid_total_vnd = 0;
-            foreach ($filtered_invoices as $inv) {
-                if (($inv['payment_state'] ?? '') !== 'paid') continue;
-                if ((int)($inv['is_excluded'] ?? 0) === 1) continue;
-                $inv_date_str = $inv['invoice_date'] ?: $inv['date'];
-                $month_key    = $inv_date_str ? date('Y-m', strtotime($inv_date_str)) : 'Unknown';
-                $paid_invoices_grouped[$month_key][] = $inv;
-                $paid_total_vnd += $inv['calc_amount_vnd'];
-            }
-            ksort($paid_invoices_grouped);
-            $odoo_url = $odoo->getUrl();
-            ?>
-            <div class="kpi-report" style="margin-top: 2rem;">
-                <div class="kpi-report-header">
-                    <div class="kpi-report-title">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#10b981" stroke-width="2.5"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
-                        Báo cáo Thanh toán (Đã thu)
+                <!-- ══════════════════════════════════════════
+                     BÁO CÁO THANH TOÁN — Paid Invoices
+                ═══════════════════════════════════════════ -->
+                <?php
+                $paid_invoices_grouped = [];
+                $paid_total_vnd = 0;
+                foreach ($filtered_invoices as $inv) {
+                    if (($inv['payment_state'] ?? '') !== 'paid')
+                        continue;
+                    if ((int) ($inv['is_excluded'] ?? 0) === 1)
+                        continue;
+                    $inv_date_str = $inv['invoice_date'] ?: $inv['date'];
+                    $month_key = $inv_date_str ? date('Y-m', strtotime($inv_date_str)) : 'Unknown';
+                    $paid_invoices_grouped[$month_key][] = $inv;
+                    $paid_total_vnd += $inv['calc_amount_vnd'];
+                }
+                ksort($paid_invoices_grouped);
+                $odoo_url = $odoo->getUrl();
+                ?>
+                <div class="kpi-report" style="margin-top: 2rem;">
+                    <div class="kpi-report-header">
+                        <div class="kpi-report-title">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24"
+                                fill="none" stroke="#10b981" stroke-width="2.5">
+                                <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+                            </svg>
+                            Báo cáo Thanh toán (Đã thu)
+                        </div>
+                        <span class="kpi-quarter-label">📅 <?= htmlspecialchars($quarter_label) ?> &nbsp;·&nbsp;
+                            <strong><?= array_sum(array_map('count', $paid_invoices_grouped)) ?></strong> hóa đơn
+                            &nbsp;·&nbsp;
+                            Tổng: <strong><?= number_format($paid_total_vnd / 1e9, 3) ?>B VND</strong>
+                        </span>
                     </div>
-                    <span class="kpi-quarter-label">📅 <?= htmlspecialchars($quarter_label) ?> &nbsp;·&nbsp;
-                        <strong><?= array_sum(array_map('count', $paid_invoices_grouped)) ?></strong> hóa đơn &nbsp;·&nbsp;
-                        Tổng: <strong><?= number_format($paid_total_vnd / 1e9, 3) ?>B VND</strong>
-                    </span>
+
+                    <?php if (empty($paid_invoices_grouped)): ?>
+                        <div class="kpi-no-level">✅ Chưa có hóa đơn nào được thanh toán (paid) trong quý này.</div>
+                    <?php else: ?>
+                        <div style="overflow-x: auto;">
+                            <table class="report-table" style="margin-top: 1rem;">
+                                <thead>
+                                    <tr>
+                                        <th style="width:40px;text-align:center;">STT</th>
+                                        <th style="width:100px;">Invoice #</th>
+                                        <th style="width:150px;">Tên khách hàng</th>
+                                        <th style="width:150px;">Tên Dự án</th>
+                                        <th style="width:110px;">Mã dự án</th>
+                                        <th style="width:95px;">Ngày ký HĐ</th>
+                                        <th style="width:110px;">Loại HĐ</th>
+                                        <th style="width:90px;">Presales</th>
+                                        <th style="width:110px;">Loại KH</th>
+                                        <th style="width:145px;text-align:right;">Giá trị HĐ/HD</th>
+                                        <th style="width:120px;">%Profit PAKD</th>
+                                        <th style="width:110px;">Net profit</th>
+                                        <th style="width:140px;text-align:right;">Giá trị xuất VAT</th>
+                                        <th style="width:140px;text-align:right;">Giá trị giải ngân</th>
+                                        <th style="width:80px;text-align:center;">Link Odoo</th>
+                                        <th style="width:105px;">Ngày xuất VAT</th>
+                                        <th style="width:115px;">Ngày tiền về</th>
+                                        <th style="width:130px;">% Com Lead</th>
+                                        <th style="width:150px;">% Bonus Lic/Trd</th>
+                                        <th style="width:75px;">% Com 1</th>
+                                        <th style="width:90px;">% Com 2</th>
+                                        <th style="min-width:180px;">Note</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <?php $pstt = 1;
+                                    foreach ($paid_invoices_grouped as $month_key => $month_invs):
+                                        $display_month = $month_key !== 'Unknown' ? date('m / Y', strtotime($month_key . '-01')) : 'Unknown';
+                                        $month_sub = 0;
+                                        ?>
+                                        <tr class="month-group-header">
+                                            <td colspan="22">THÁNG <?= $display_month ?></td>
+                                        </tr>
+                                        <?php foreach ($month_invs as $inv):
+                                            $oid = $inv['id'];
+                                            $l = $local_data[$oid] ?? [];
+                                            $inv_date_str = $inv['invoice_date'] ?: $inv['date'];
+                                            $month_str = $inv_date_str ? date('d/m/Y', strtotime($inv_date_str)) : '';
+                                            $month_sub += $inv['calc_amount_vnd'];
+                                            $pay_widget = $inv['invoice_payments_widget'] ?? null;
+                                            $giaingan_vnd = 0;
+                                            $ngay_tien_ve_arr = [];
+                                            if ($pay_widget && $pay_widget !== 'false' && is_string($pay_widget)) {
+                                                $pw = json_decode($pay_widget, true);
+                                                foreach ($pw['content'] ?? [] as $p) {
+                                                    $giaingan_vnd += (float) ($p['amount'] ?? 0);
+                                                    if (!empty($p['date']))
+                                                        $ngay_tien_ve_arr[] = $p['date'];
+                                                }
+                                            }
+                                            $ngay_tien_ve = !empty($ngay_tien_ve_arr) ? date('d/m/Y', strtotime(max($ngay_tien_ve_arr))) : '';
+                                            $currency_code = is_array($inv['currency_id']) ? $inv['currency_id'][1] : 'VND';
+                                            $vat_amount = (float) ($inv['amount_total'] ?? 0);
+                                            $odoo_link = $odoo_url . '/web#id=' . $oid . '&model=account.move&view_type=form';
+                                            ?>
+                                            <tr class="invoice-row" data-invoice-id="<?= $oid ?>">
+                                                <td style="text-align:center;"><?= $pstt++ ?></td>
+                                                <td
+                                                    style="font-family:monospace;font-size:12px;color:#64748b;text-align:center;font-weight:600;">
+                                                    #<?= $oid ?></td>
+                                                <td><?= htmlspecialchars(is_array($inv['partner_id']) ? $inv['partner_id'][1] : '') ?>
+                                                </td>
+                                                <td><?= htmlspecialchars($inv['ref'] ?: $inv['name']) ?></td>
+                                                <td><?= htmlspecialchars($inv['x_studio_project_code'] ?? '') ?></td>
+                                                <td><?= $month_str ?></td>
+                                                <td><?= htmlspecialchars($l['contract_type'] ?? '') ?></td>
+                                                <td><?= htmlspecialchars($l['presales'] ?? '') ?></td>
+                                                <td><?= htmlspecialchars($l['client_type'] ?? '') ?></td>
+                                                <td style="text-align:right;font-family:monospace;">
+                                                    <?= formatMoney($vat_amount, $currency_code) ?></td>
+                                                <td><?= htmlspecialchars($l['profit_pakd'] ?? '') ?></td>
+                                                <td><?= htmlspecialchars($l['net_profit'] ?? '') ?></td>
+                                                <td style="text-align:right;font-family:monospace;color:#0f766e;font-weight:600;">
+                                                    <?= formatMoney($vat_amount, $currency_code) ?></td>
+                                                <td style="text-align:right;font-family:monospace;color:#1d4ed8;font-weight:600;">
+                                                    <?= $giaingan_vnd > 0 ? formatMoney($giaingan_vnd, $currency_code) : '<span style="color:#94a3b8">—</span>' ?>
+                                                </td>
+                                                <td style="text-align:center;">
+                                                    <a href="<?= htmlspecialchars($odoo_link) ?>" target="_blank"
+                                                        title="Mở trong Odoo"
+                                                        style="display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;border-radius:6px;background:#eff6ff;border:1.5px solid #bfdbfe;color:#2563eb;text-decoration:none;transition:all .2s;"
+                                                        onmouseover="this.style.background='#2563eb';this.style.color='#fff'"
+                                                        onmouseout="this.style.background='#eff6ff';this.style.color='#2563eb'">
+                                                        <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13"
+                                                            viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                                            stroke-width="2.5">
+                                                            <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
+                                                            <polyline points="15 3 21 3 21 9" />
+                                                            <line x1="10" y1="14" x2="21" y2="3" />
+                                                        </svg>
+                                                    </a>
+                                                </td>
+                                                <td><?= $month_str ?></td>
+                                                <td style="color:#0f766e;font-weight:500;">
+                                                    <?= $ngay_tien_ve ?: '<span style="color:#94a3b8">—</span>' ?></td>
+                                                <td><?= htmlspecialchars($l['com_lead_source'] ?? '') ?></td>
+                                                <td><?= htmlspecialchars($l['bonus_license_trading'] ?? '') ?></td>
+                                                <td style="color:#c5221f;font-weight:600;">
+                                                    <?= htmlspecialchars($l['com_1'] ?? '') ?></td>
+                                                <td><?= htmlspecialchars($l['com_2'] ?? '') ?></td>
+                                                <td><?= htmlspecialchars($l['note'] ?? '') ?></td>
+                                            </tr>
+                                        <?php endforeach; ?>
+                                        <tr class="month-total-row">
+                                            <td colspan="8" style="text-align:right;">Cộng tháng <?= $display_month ?>:</td>
+                                            <td style="text-align:right;"><?= formatMoney($month_sub, 'VND') ?></td>
+                                            <td colspan="13"></td>
+                                        </tr>
+                                    <?php endforeach; ?>
+                                </tbody>
+                            </table>
+                        </div>
+                    <?php endif; ?>
                 </div>
 
-                <?php if (empty($paid_invoices_grouped)): ?>
-                    <div class="kpi-no-level">✅ Chưa có hóa đơn nào được thanh toán (paid) trong quý này.</div>
-                <?php else: ?>
-                <div style="overflow-x: auto;">
-                <table class="report-table" style="margin-top: 1rem;">
-                    <thead>
-                        <tr>
-                            <th style="width:40px;text-align:center;">STT</th>
-                            <th style="width:100px;">Invoice #</th>
-                            <th style="width:150px;">Tên khách hàng</th>
-                            <th style="width:150px;">Tên Dự án</th>
-                            <th style="width:110px;">Mã dự án</th>
-                            <th style="width:95px;">Ngày ký HĐ</th>
-                            <th style="width:110px;">Loại HĐ</th>
-                            <th style="width:90px;">Presales</th>
-                            <th style="width:110px;">Loại KH</th>
-                            <th style="width:145px;text-align:right;">Giá trị HĐ/HD</th>
-                            <th style="width:120px;">%Profit PAKD</th>
-                            <th style="width:110px;">Net profit</th>
-                            <th style="width:140px;text-align:right;">Giá trị xuất VAT</th>
-                            <th style="width:140px;text-align:right;">Giá trị giải ngân</th>
-                            <th style="width:80px;text-align:center;">Link Odoo</th>
-                            <th style="width:105px;">Ngày xuất VAT</th>
-                            <th style="width:115px;">Ngày tiền về</th>
-                            <th style="width:130px;">% Com Lead</th>
-                            <th style="width:150px;">% Bonus Lic/Trd</th>
-                            <th style="width:75px;">% Com 1</th>
-                            <th style="width:90px;">% Com 2</th>
-                            <th style="min-width:180px;">Note</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                    <?php $pstt = 1;
-                    foreach ($paid_invoices_grouped as $month_key => $month_invs):
-                        $display_month = $month_key !== 'Unknown' ? date('m / Y', strtotime($month_key.'-01')) : 'Unknown';
-                        $month_sub = 0;
-                    ?>
-                        <tr class="month-group-header"><td colspan="22">THÁNG <?= $display_month ?></td></tr>
-                        <?php foreach ($month_invs as $inv):
-                            $oid = $inv['id'];
-                            $l   = $local_data[$oid] ?? [];
-                            $inv_date_str = $inv['invoice_date'] ?: $inv['date'];
-                            $month_str    = $inv_date_str ? date('d/m/Y', strtotime($inv_date_str)) : '';
-                            $month_sub   += $inv['calc_amount_vnd'];
-
-                            // Parse invoice_payments_widget for giải ngân & ngày tiền về
-                            $pay_widget   = $inv['invoice_payments_widget'] ?? null;
-                            $giaingan_vnd = 0;
-                            $ngay_tien_ve_arr = [];
-                            if ($pay_widget && $pay_widget !== 'false' && is_string($pay_widget)) {
-                                $pw = json_decode($pay_widget, true);
-                                foreach ($pw['content'] ?? [] as $p) {
-                                    $giaingan_vnd    += (float)($p['amount'] ?? 0);
-                                    if (!empty($p['date'])) $ngay_tien_ve_arr[] = $p['date'];
-                                }
-                            }
-                            $ngay_tien_ve = !empty($ngay_tien_ve_arr) ? date('d/m/Y', strtotime(max($ngay_tien_ve_arr))) : '';
-
-                            // Giá trị xuất VAT = amount_total (total including VAT, in invoice currency)
-                            $currency_code = is_array($inv['currency_id']) ? $inv['currency_id'][1] : 'VND';
-                            $vat_amount    = (float)($inv['amount_total'] ?? 0);
-
-                            // Odoo deeplink
-                            $odoo_link = $odoo_url . '/web#id=' . $oid . '&model=account.move&view_type=form';
-                        ?>
-                        <tr class="invoice-row" data-invoice-id="<?= $oid ?>">
-                            <td style="text-align:center;"><?= $pstt++ ?></td>
-                            <td style="font-family:monospace;font-size:12px;color:#64748b;text-align:center;font-weight:600;">#<?= $oid ?></td>
-                            <td><?= htmlspecialchars(is_array($inv['partner_id']) ? $inv['partner_id'][1] : '') ?></td>
-                            <td><?= htmlspecialchars($inv['ref'] ?: $inv['name']) ?></td>
-                            <td><?= htmlspecialchars($inv['x_studio_project_code'] ?? '') ?></td>
-                            <td><?= $month_str ?></td>
-                            <td><?= htmlspecialchars($l['contract_type'] ?? '') ?></td>
-                            <td><?= htmlspecialchars($l['presales'] ?? '') ?></td>
-                            <td><?= htmlspecialchars($l['client_type'] ?? '') ?></td>
-                            <td style="text-align:right;font-family:monospace;"><?= formatMoney($vat_amount, $currency_code) ?></td>
-                            <td><?= htmlspecialchars($l['profit_pakd'] ?? '') ?></td>
-                            <td><?= htmlspecialchars($l['net_profit'] ?? '') ?></td>
-                            <!-- Giá trị xuất VAT -->
-                            <td style="text-align:right;font-family:monospace;color:#0f766e;font-weight:600;">
-                                <?= formatMoney($vat_amount, $currency_code) ?>
-                            </td>
-                            <!-- Giá trị giải ngân -->
-                            <td style="text-align:right;font-family:monospace;color:#1d4ed8;font-weight:600;">
-                                <?= $giaingan_vnd > 0 ? formatMoney($giaingan_vnd, $currency_code) : '<span style="color:#94a3b8">—</span>' ?>
-                            </td>
-                            <!-- Link Odoo -->
-                            <td style="text-align:center;">
-                                <a href="<?= htmlspecialchars($odoo_link) ?>" target="_blank"
-                                   title="Mở trong Odoo"
-                                   style="display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;border-radius:6px;background:#eff6ff;border:1.5px solid #bfdbfe;color:#2563eb;text-decoration:none;transition:all .2s;"
-                                   onmouseover="this.style.background='#2563eb';this.style.color='#fff'"
-                                   onmouseout="this.style.background='#eff6ff';this.style.color='#2563eb'">
-                                    <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
-                                </a>
-                            </td>
-                            <!-- Ngày xuất VAT -->
-                            <td style="color:#475569;"><?= $month_str ?></td>
-                            <!-- Ngày tiền về -->
-                            <td style="color:#0f766e;font-weight:500;"><?= $ngay_tien_ve ?: '<span style="color:#94a3b8">—</span>' ?></td>
-                            <td><?= htmlspecialchars($l['com_lead_source'] ?? '') ?></td>
-                            <td><?= htmlspecialchars($l['bonus_license_trading'] ?? '') ?></td>
-                            <td style="color:#c5221f;font-weight:600;"><?= htmlspecialchars($l['com_1'] ?? '') ?></td>
-                            <td><?= htmlspecialchars($l['com_2'] ?? '') ?></td>
-                            <td><?= htmlspecialchars($l['note'] ?? '') ?></td>
-                        </tr>
-                        <?php endforeach; ?>
-                        <tr class="month-total-row">
-                            <td colspan="8" style="text-align:right;">Cộng tháng <?= $display_month ?>:</td>
-                            <td style="text-align:right;"><?= formatMoney($month_sub, 'VND') ?></td>
-                            <td colspan="13"></td>
-                        </tr>
-                    <?php endforeach; ?>
-                    </tbody>
-                </table>
-                </div>
-                <?php endif; ?>
-            </div>
+            </div><!-- /.report-wrapper -->
 
         </main>
-    </div>
 
-    <div id="toast" class="toast">Saved!</div>
 
-    <script>
-        let currentEditing = null;
+        <div id="toast" class="toast">Saved!</div>
 
-        function makeEditable(cell, invoiceId, fieldName, inputType, options = []) {
-            if (currentEditing === cell) return;
-            if (currentEditing) saveCurrentEdit();
+        <script>
+            let currentEditing = null;
 
-            currentEditing = cell;
-            const currentVal = cell.innerText.trim();
+            function makeEditable(cell, invoiceId, fieldName, inputType, options = []) {
+                if (currentEditing === cell) return;
+                if (currentEditing) saveCurrentEdit();
 
-            // Save old val
-            cell.setAttribute('data-old-val', currentVal);
-            cell.innerHTML = '';
+                currentEditing = cell;
+                const currentVal = cell.innerText.trim();
 
-            let input;
-            if (inputType === 'select') {
-                input = document.createElement('select');
-                input.className = 'inline-input';
+                // Save old val
+                cell.setAttribute('data-old-val', currentVal);
+                cell.innerHTML = '';
 
-                // Adding a neutral empty option
-                let optNull = document.createElement('option');
-                optNull.value = '';
-                optNull.text = '-- Chọn --';
-                input.appendChild(optNull);
+                let input;
+                if (inputType === 'select') {
+                    input = document.createElement('select');
+                    input.className = 'inline-input';
 
-                options.forEach(opt => {
-                    let option = document.createElement('option');
-                    option.value = opt;
-                    option.text = opt;
-                    if (opt === currentVal) option.selected = true;
-                    input.appendChild(option);
+                    // Adding a neutral empty option
+                    let optNull = document.createElement('option');
+                    optNull.value = '';
+                    optNull.text = '-- Chọn --';
+                    input.appendChild(optNull);
+
+                    options.forEach(opt => {
+                        let option = document.createElement('option');
+                        option.value = opt;
+                        option.text = opt;
+                        if (opt === currentVal) option.selected = true;
+                        input.appendChild(option);
+                    });
+                } else {
+                    input = document.createElement('input');
+                    input.type = 'text';
+                    input.className = 'inline-input';
+                    input.value = currentVal;
+                }
+
+                cell.appendChild(input);
+                input.focus();
+
+                // Handle blur and enter to save
+                input.addEventListener('blur', () => saveEdit(cell, input, invoiceId, fieldName));
+                input.addEventListener('keydown', (e) => {
+                    if (e.key === 'Enter') {
+                        e.preventDefault();
+                        input.blur();
+                    } else if (e.key === 'Escape') {
+                        e.preventDefault();
+                        cell.innerHTML = cell.getAttribute('data-old-val');
+                        currentEditing = null;
+                    }
                 });
-            } else {
-                input = document.createElement('input');
-                input.type = 'text';
-                input.className = 'inline-input';
-                input.value = currentVal;
             }
 
-            cell.appendChild(input);
-            input.focus();
+            function saveCurrentEdit() {
+                if (!currentEditing) return;
+                const input = currentEditing.querySelector('.inline-input');
+                if (input) input.blur();
+            }
 
-            // Handle blur and enter to save
-            input.addEventListener('blur', () => saveEdit(cell, input, invoiceId, fieldName));
-            input.addEventListener('keydown', (e) => {
-                if (e.key === 'Enter') {
-                    e.preventDefault();
-                    input.blur();
-                } else if (e.key === 'Escape') {
-                    e.preventDefault();
-                    cell.innerHTML = cell.getAttribute('data-old-val');
+            function saveEdit(cell, input, invoiceId, fieldName) {
+                const newVal = input.value;
+                const oldVal = cell.getAttribute('data-old-val');
+
+                if (newVal === oldVal) {
+                    cell.innerHTML = newVal;
                     currentEditing = null;
+                    return;
+                }
+
+                // Set optimistic UI
+                cell.innerHTML = '<span style="color:#9aa0a6;">Saving...</span>';
+                currentEditing = null;
+
+                const formData = new FormData();
+                formData.append('action', 'update_inline');
+                formData.append('odoo_invoice_id', invoiceId);
+                formData.append('field', fieldName);
+                formData.append('value', newVal);
+                formData.append('quarter', '<?= $active_tab ?>');
+
+                fetch('', {
+                    method: 'POST',
+                    body: formData
+                })
+                    .then(res => res.json())
+                    .then(data => {
+                        if (data.success) {
+                            cell.innerHTML = newVal;
+                            showToast("Đã lưu!");
+
+                            // Trigger auto update for com_1 if client_type was edited
+                            if (fieldName === 'client_type') {
+                                const com1Cell = document.getElementById('com_1_' + invoiceId);
+                                if (com1Cell && data.com_1 !== undefined) {
+                                    com1Cell.innerText = data.com_1;
+                                }
+                            }
+                        } else {
+                            alert('Lỗi: ' + (data.error || 'Unknown error'));
+                            cell.innerHTML = oldVal;
+                        }
+                    })
+                    .catch(err => {
+                        console.error(err);
+                        cell.innerHTML = oldVal;
+                        alert('Mạng lỗi, không thể lưu.');
+                    });
+            }
+
+            function showToast(msg) {
+                const toast = document.getElementById('toast');
+                toast.innerText = msg;
+                toast.style.display = 'block';
+                toast.style.opacity = '1';
+                setTimeout(() => {
+                    toast.style.opacity = '0';
+                    setTimeout(() => { toast.style.display = 'none'; }, 300);
+                }, 2000);
+            }
+
+            // Auto-save on outside click
+            document.addEventListener('mousedown', function (e) {
+                if (currentEditing && !currentEditing.contains(e.target)) {
+                    saveCurrentEdit();
                 }
             });
-        }
 
-        function saveCurrentEdit() {
-            if (!currentEditing) return;
-            const input = currentEditing.querySelector('.inline-input');
-            if (input) input.blur();
-        }
+            // ── KPI Confirmation ──
+            function confirmKpi() {
+                // 1. Collect all non-excluded invoice rows in the table
+                const rows = document.querySelectorAll('tr.invoice-row:not([data-is-excluded="1"])');
+                const requiredFields = ['project_code', 'contract_type', 'presales', 'client_type', 'com_lead_source', 'bonus_license_trading'];
+                const fieldLabels = {
+                    project_code: 'Mã dự án',
+                    contract_type: 'Loại Hợp đồng',
+                    presales: 'Presales',
+                    client_type: 'Loại khách hàng',
+                    com_lead_source: '% Com (Lead source)',
+                    bonus_license_trading: '% Bonus License/trading'
+                };
 
-        function saveEdit(cell, input, invoiceId, fieldName) {
-            const newVal = input.value;
-            const oldVal = cell.getAttribute('data-old-val');
+                // Clear previous highlights
+                document.querySelectorAll('td.cell-missing').forEach(td => td.classList.remove('cell-missing'));
 
-            if (newVal === oldVal) {
-                cell.innerHTML = newVal;
-                currentEditing = null;
-                return;
-            }
+                const invoiceIds = [];
+                const errors = [];
 
-            // Set optimistic UI
-            cell.innerHTML = '<span style="color:#9aa0a6;">Saving...</span>';
-            currentEditing = null;
-
-            const formData = new FormData();
-            formData.append('action', 'update_inline');
-            formData.append('odoo_invoice_id', invoiceId);
-            formData.append('field', fieldName);
-            formData.append('value', newVal);
-            formData.append('quarter', '<?= $active_tab ?>');
-
-            fetch('', {
-                method: 'POST',
-                body: formData
-            })
-                .then(res => res.json())
-                .then(data => {
-                    if (data.success) {
-                        cell.innerHTML = newVal;
-                        showToast("Đã lưu!");
-
-                        // Trigger auto update for com_1 if client_type was edited
-                        if (fieldName === 'client_type') {
-                            const com1Cell = document.getElementById('com_1_' + invoiceId);
-                            if (com1Cell && data.com_1 !== undefined) {
-                                com1Cell.innerText = data.com_1;
+                rows.forEach(row => {
+                    const invId = row.dataset.invoiceId;
+                    invoiceIds.push(invId);
+                    requiredFields.forEach(field => {
+                        const td = row.querySelector(`td[data-required-field="${field}"]`);
+                        if (td) {
+                            const text = td.innerText.trim().replace(/^-- Chọn --$/, '');
+                            if (!text) {
+                                td.classList.add('cell-missing');
+                                errors.push(`Invoice #${invId}: ${fieldLabels[field]}`);
                             }
                         }
-                    } else {
-                        alert('Lỗi: ' + (data.error || 'Unknown error'));
-                        cell.innerHTML = oldVal;
-                    }
-                })
-                .catch(err => {
-                    console.error(err);
-                    cell.innerHTML = oldVal;
-                    alert('Mạng lỗi, không thể lưu.');
+                    });
                 });
-        }
 
-        function showToast(msg) {
-            const toast = document.getElementById('toast');
-            toast.innerText = msg;
-            toast.style.display = 'block';
-            toast.style.opacity = '1';
-            setTimeout(() => {
-                toast.style.opacity = '0';
-                setTimeout(() => { toast.style.display = 'none'; }, 300);
-            }, 2000);
-        }
+                const errorBox = document.getElementById('confirmErrorBox');
 
-        // Auto-save on outside click
-        document.addEventListener('mousedown', function (e) {
-            if (currentEditing && !currentEditing.contains(e.target)) {
-                saveCurrentEdit();
-            }
-        });
-
-        // ── KPI Confirmation ──
-        function confirmKpi() {
-            // 1. Collect all non-excluded invoice rows in the table
-            const rows = document.querySelectorAll('tr.invoice-row:not([data-is-excluded="1"])');
-            const requiredFields = ['project_code', 'contract_type', 'presales', 'client_type', 'com_lead_source', 'bonus_license_trading'];
-            const fieldLabels = {
-                project_code: 'Mã dự án',
-                contract_type: 'Loại Hợp đồng',
-                presales: 'Presales',
-                client_type: 'Loại khách hàng',
-                com_lead_source: '% Com (Lead source)',
-                bonus_license_trading: '% Bonus License/trading'
-            };
-
-            // Clear previous highlights
-            document.querySelectorAll('td.cell-missing').forEach(td => td.classList.remove('cell-missing'));
-
-            const invoiceIds = [];
-            const errors = [];
-
-            rows.forEach(row => {
-                const invId = row.dataset.invoiceId;
-                invoiceIds.push(invId);
-                requiredFields.forEach(field => {
-                    const td = row.querySelector(`td[data-required-field="${field}"]`);
-                    if (td) {
-                        const text = td.innerText.trim().replace(/^-- Chọn --$/, '');
-                        if (!text) {
-                            td.classList.add('cell-missing');
-                            errors.push(`Invoice #${invId}: ${fieldLabels[field]}`);
-                        }
-                    }
-                });
-            });
-
-            const errorBox = document.getElementById('confirmErrorBox');
-
-            if (errors.length > 0) {
-                errorBox.style.display = 'block';
-                errorBox.innerHTML = `<div class="confirm-error-list">
+                if (errors.length > 0) {
+                    errorBox.style.display = 'block';
+                    errorBox.innerHTML = `<div class="confirm-error-list">
                     <strong style="display:block;margin-bottom:4px">⚠️ ${errors.length} ô chưa điền — vui lòng bổ sung trước khi xác nhận:</strong>
                     <ul style="margin:0;padding-left:16px">${errors.map(e => `<li>${e}</li>`).join('')}</ul>
                 </div>`;
-                // Scroll to first missing
-                const firstMissing = document.querySelector('td.cell-missing');
-                if (firstMissing) firstMissing.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                return;
-            }
+                    // Scroll to first missing
+                    const firstMissing = document.querySelector('td.cell-missing');
+                    if (firstMissing) firstMissing.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    return;
+                }
 
-            // 2. All good — send to server
-            errorBox.style.display = 'none';
-            const btn = document.getElementById('confirmKpiBtn') || document.querySelector('.confirm-btn');
-            if (btn) { btn.disabled = true; btn.textContent = 'Đang xác nhận...'; }
+                // 2. All good — send to server
+                errorBox.style.display = 'none';
+                const btn = document.getElementById('confirmKpiBtn') || document.querySelector('.confirm-btn');
+                if (btn) { btn.disabled = true; btn.textContent = 'Đang xác nhận...'; }
 
-            const formData = new FormData();
-            formData.append('action', 'confirm_kpi');
-            formData.append('quarter', '<?= $active_tab ?>');
-            formData.append('invoice_ids', invoiceIds.join(','));
+                const formData = new FormData();
+                formData.append('action', 'confirm_kpi');
+                formData.append('quarter', '<?= $active_tab ?>');
+                formData.append('invoice_ids', invoiceIds.join(','));
 
-            fetch('', { method: 'POST', body: formData })
-                .then(res => res.json())
-                .then(data => {
-                    if (data.success) {
-                        showToast('✅ Đã xác nhận KPI!');
-                        setTimeout(() => location.reload(), 900);
-                    } else {
-                        if (btn) { btn.disabled = false; btn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg> Xác nhận KPI Quý'; }
-                        const missing = data.missing || [];
-                        errorBox.style.display = 'block';
-                        errorBox.innerHTML = `<div class="confirm-error-list">
+                fetch('', { method: 'POST', body: formData })
+                    .then(res => res.json())
+                    .then(data => {
+                        if (data.success) {
+                            showToast('✅ Đã xác nhận KPI!');
+                            setTimeout(() => location.reload(), 900);
+                        } else {
+                            if (btn) { btn.disabled = false; btn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg> Xác nhận KPI Quý'; }
+                            const missing = data.missing || [];
+                            errorBox.style.display = 'block';
+                            errorBox.innerHTML = `<div class="confirm-error-list">
                             <strong style="display:block;margin-bottom:4px">❌ Server tìm thấy dữ liệu thiếu:</strong>
                             <ul style="margin:0;padding-left:16px">${missing.map(e => `<li>${e}</li>`).join('')}</ul>
                         </div>`;
-                    }
-                })
-                .catch(() => {
-                    if (btn) { btn.disabled = false; }
-                    alert('Lỗi kết nối, vui lòng thử lại.');
-                });
-        }
+                        }
+                    })
+                    .catch(() => {
+                        if (btn) { btn.disabled = false; }
+                        alert('Lỗi kết nối, vui lòng thử lại.');
+                    });
+            }
 
-        function resetToDraft() {
-            if (!confirm('Bạn chắc chắn muốn Reset to Draft? Bảng sẽ được mở khoá để chỉnh sửa.')) return;
-            const formData = new FormData();
-            formData.append('action', 'reset_draft');
-            formData.append('quarter', '<?= $active_tab ?>');
-            fetch('', { method: 'POST', body: formData })
-                .then(res => res.json())
-                .then(data => {
-                    if (data.success) {
-                        showToast('🔓 Đã Reset to Draft!');
-                        setTimeout(() => location.reload(), 700);
-                    }
-                })
-                .catch(() => alert('Lỗi kết nối.'));
-        }
+            function resetToDraft() {
+                if (!confirm('Bạn chắc chắn muốn Reset to Draft? Bảng sẽ được mở khoá để chỉnh sửa.')) return;
+                const formData = new FormData();
+                formData.append('action', 'reset_draft');
+                formData.append('quarter', '<?= $active_tab ?>');
+                fetch('', { method: 'POST', body: formData })
+                    .then(res => res.json())
+                    .then(data => {
+                        if (data.success) {
+                            showToast('🔓 Đã Reset to Draft!');
+                            setTimeout(() => location.reload(), 700);
+                        }
+                    })
+                    .catch(() => alert('Lỗi kết nối.'));
+            }
 
-        function toggleExclude(btn, invoiceId) {
-            const formData = new FormData();
-            formData.append('action', 'toggle_exclude');
-            formData.append('odoo_invoice_id', invoiceId);
+            function toggleExclude(btn, invoiceId) {
+                const formData = new FormData();
+                formData.append('action', 'toggle_exclude');
+                formData.append('odoo_invoice_id', invoiceId);
 
-            const svgExcluded = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" style="width:14px;height:14px;pointer-events:none"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 14.5v-9l6 4.5-6 4.5z"/></svg>';
-            const svgNormal = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" style="width:14px;height:14px;pointer-events:none"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm5 11H7v-2h10v2z"/></svg>';
+                const svgExcluded = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" style="width:14px;height:14px;pointer-events:none"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 14.5v-9l6 4.5-6 4.5z"/></svg>';
+                const svgNormal = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" style="width:14px;height:14px;pointer-events:none"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm5 11H7v-2h10v2z"/></svg>';
 
-            fetch('', { method: 'POST', body: formData })
-                .then(res => res.json())
-                .then(data => {
-                    if (data.success) {
-                        const row = btn.closest('tr');
-                        const isExcluded = data.is_excluded === 1;
-                        row.classList.toggle('row-excluded', isExcluded);
-                        btn.classList.toggle('excluded', isExcluded);
-                        btn.innerHTML = isExcluded ? svgExcluded : svgNormal;
-                        btn.title = isExcluded ? 'Bỏ loại trừ invoice này' : 'Loại trừ invoice này khỏi tổng';
-                        showToast(isExcluded ? 'Đã loại trừ khỏi tổng!' : 'Đã bao gồm lại vào tổng!');
-                        setTimeout(() => location.reload(), 800);
-                    }
-                })
-                .catch(err => console.error(err));
-        }
+                fetch('', { method: 'POST', body: formData })
+                    .then(res => res.json())
+                    .then(data => {
+                        if (data.success) {
+                            const row = btn.closest('tr');
+                            const isExcluded = data.is_excluded === 1;
+                            row.classList.toggle('row-excluded', isExcluded);
+                            btn.classList.toggle('excluded', isExcluded);
+                            btn.innerHTML = isExcluded ? svgExcluded : svgNormal;
+                            btn.title = isExcluded ? 'Bỏ loại trừ invoice này' : 'Loại trừ invoice này khỏi tổng';
+                            showToast(isExcluded ? 'Đã loại trừ khỏi tổng!' : 'Đã bao gồm lại vào tổng!');
+                            setTimeout(() => location.reload(), 800);
+                        }
+                    })
+                    .catch(err => console.error(err));
+            }
 
-        // Make scrolling table scroll sync if needed
-    </script>
+            // Make scrolling table scroll sync if needed
+        </script>
 </body>
 
 </html>
