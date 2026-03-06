@@ -108,6 +108,19 @@ if (isset($_SESSION['is_am_bd']) && $_SESSION['is_am_bd'] == 1) {
         }
     }
 
+    // Auto-create manual warnings table if not exists
+    $conn->query("CREATE TABLE IF NOT EXISTS debt_manual_warnings (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        debt_id INT NOT NULL,
+        sender_id INT NOT NULL,
+        receiver_id INT NOT NULL,
+        is_read TINYINT DEFAULT 0,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (debt_id) REFERENCES debts(id) ON DELETE CASCADE,
+        FOREIGN KEY (sender_id) REFERENCES users(id) ON DELETE CASCADE,
+        FOREIGN KEY (receiver_id) REFERENCES users(id) ON DELETE CASCADE
+    )");
+
     // Fetch manual warnings
     $stmt_manual = $conn->prepare("
         SELECT mw.id as warning_id, mw.created_at as warned_at, d.id, d.client_name, d.project_name, d.expected_payment_date, u.full_name as sender_name
