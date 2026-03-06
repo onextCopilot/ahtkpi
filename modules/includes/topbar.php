@@ -114,12 +114,19 @@ if (isset($_SESSION['is_am_bd']) && $_SESSION['is_am_bd'] == 1) {
         debt_id INT NOT NULL,
         sender_id INT NOT NULL,
         receiver_id INT NOT NULL,
+        warning_type VARCHAR(50) DEFAULT 'manual',
         is_read TINYINT DEFAULT 0,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         FOREIGN KEY (debt_id) REFERENCES debts(id) ON DELETE CASCADE,
         FOREIGN KEY (sender_id) REFERENCES users(id) ON DELETE CASCADE,
         FOREIGN KEY (receiver_id) REFERENCES users(id) ON DELETE CASCADE
     )");
+
+    // Ensure warning_type column exists
+    $check_col = $conn->query("SHOW COLUMNS FROM debt_manual_warnings LIKE 'warning_type'");
+    if ($check_col && $check_col->num_rows == 0) {
+        $conn->query("ALTER TABLE debt_manual_warnings ADD COLUMN warning_type VARCHAR(50) DEFAULT 'manual' AFTER receiver_id");
+    }
 
     // Fetch manual warnings
     $stmt_manual = $conn->prepare("
