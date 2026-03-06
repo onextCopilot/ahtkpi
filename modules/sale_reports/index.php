@@ -987,7 +987,8 @@ function formatMoney($amount, $currency_code)
                     </div>
                 </div>
 
-                <div style="overflow-x: auto; width: 100%;">
+                <div
+                    style="width: 100%; overflow-x: auto; flex-shrink: 0; margin-bottom: 2rem; border-bottom: 1px solid #e2e8f0; padding-bottom: 1rem;">
                     <table class="report-table">
                         <thead>
                             <tr>
@@ -2068,7 +2069,7 @@ function formatMoney($amount, $currency_code)
                             setTimeout(() => location.reload(), 800);
                         }
                     })
-             .catch(err => console.error(err));
+                    .catch(err => console.error(err));
             }
 
             // Make scrolling table scroll sync if needed
