@@ -1573,8 +1573,8 @@ function formatMoney($amount, $currency_code)
                                             <th style="width:150px;">% Bonus Lic/Trd</th>
                                             <th style="width:75px;">% Com 1</th>
                                             <th style="width:90px;">% Com 2</th>
-                                            <th style="width:130px;text-align:right;">Commission nhận quý này</th>
-                                            <th style="width:130px;text-align:right;">Com giữ lại (Com 2)</th>
+                                            <th style="width:130px;text-align:right;">Commission (USD)</th>
+                                            <th style="width:130px;text-align:right;">Com giữ lại (USD)</th>
                                             <th style="min-width:180px;">Note</th>
                                         </tr>
                                     </thead>
@@ -1613,8 +1613,11 @@ function formatMoney($amount, $currency_code)
                                                 $rateUsd = $odoo->getRate('USD', $inv_date_str) ?: 1.0;
                                                 $ratioUsd = $rateSource > 0 ? ($rateUsd / $rateSource) : 1;
                                                 
-                                                $month_comm1_usd += $comm1_val * $ratioUsd;
-                                                $month_comm2_usd += $comm2_val * $ratioUsd;
+                                                $comm1_val_usd = $comm1_val * $ratioUsd;
+                                                $comm2_val_usd = $comm2_val * $ratioUsd;
+                                                
+                                                $month_comm1_usd += $comm1_val_usd;
+                                                $month_comm2_usd += $comm2_val_usd;
 
                                                 $vat_amount = (float) ($inv['amount_total'] ?? 0);
                                                 $odoo_link = $odoo_url . '/web#id=' . $oid . '&model=account.move&view_type=form';
@@ -1669,10 +1672,10 @@ function formatMoney($amount, $currency_code)
                                                     </td>
                                                     <td><?= htmlspecialchars($l['com_2'] ?? '') ?></td>
                                                     <td style="text-align:right;font-family:monospace;color:#b91c1c;font-weight:600;">
-                                                        <?= $comm1_val > 0 ? formatMoney($comm1_val, $currency_code) : '<span style="color:#d1d5db">—</span>' ?>
+                                                        <?= $comm1_val_usd > 0 ? formatMoney($comm1_val_usd, 'USD') : '<span style="color:#d1d5db">—</span>' ?>
                                                     </td>
                                                     <td style="text-align:right;font-family:monospace;color:#b91c1c;font-weight:600;">
-                                                        <?= $comm2_val > 0 ? formatMoney($comm2_val, $currency_code) : '<span style="color:#d1d5db">—</span>' ?>
+                                                        <?= $comm2_val_usd > 0 ? formatMoney($comm2_val_usd, 'USD') : '<span style="color:#d1d5db">—</span>' ?>
                                                     </td>
                                                     <td><?= htmlspecialchars($l['note'] ?? '') ?></td>
                                                 </tr>
