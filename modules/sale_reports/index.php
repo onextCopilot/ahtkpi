@@ -1834,9 +1834,8 @@ function formatMoney($amount, $currency_code)
             function confirmKpi() {
                 // 1. Collect all non-excluded invoice rows in the table
                 const rows = document.querySelectorAll('tr.invoice-row:not([data-is-excluded="1"])');
-                const requiredFields = ['project_code', 'contract_type', 'presales', 'client_type', 'com_lead_source', 'bonus_license_trading'];
+                const requiredFields = ['contract_type', 'presales', 'client_type', 'com_lead_source', 'bonus_license_trading'];
                 const fieldLabels = {
-                    project_code: 'Mã dự án',
                     contract_type: 'Loại Hợp đồng',
                     presales: 'Presales',
                     client_type: 'Loại khách hàng',
