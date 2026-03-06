@@ -226,7 +226,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
 
         echo json_encode(['success' => true, 'com_1' => $com1_val]);
     } elseif ($field === 'bonus_license_trading') {
-        $lic_val = ($val === 'Yes') ? '1%' : '';
+        $lic_val = ($val === 'Yes') ? '10%' : '';
         $stmt = $conn->prepare("INSERT INTO sale_reports (odoo_invoice_id, bonus_license_trading, license_trading) VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE bonus_license_trading=?, license_trading=?");
         $stmt->bind_param("issss", $odoo_id, $val, $lic_val, $val, $lic_val);
         $stmt->execute();
