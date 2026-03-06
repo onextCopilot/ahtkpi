@@ -153,6 +153,29 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
     exit();
 }
 
+// Handle AJAX confirm_commission
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'confirm_commission') {
+    header('Content-Type: application/json');
+    $uid = (int) $_SESSION['user_id'];
+    $uname = $_SESSION['full_name'] ?? 'Unknown';
+    $quarter = $_POST['quarter'] ?? '';
+    if (empty($quarter)) {
+        echo json_encode(['success' => false, 'error' => 'Missing quarter']);
+        exit;
+    }
+
+    $now = date('Y-m-d H:i:s');
+    $stmt = $conn->prepare("INSERT INTO sale_report_confirmations (user_id, quarter, confirmed_at, confirmed_by_name, type) VALUES (?, ?, ?, ?, 'commission_confirmed')");
+    $stmt->bind_param("isss", $uid, $quarter, $now, $uname);
+
+    if ($stmt->execute()) {
+        echo json_encode(['success' => true, 'time' => date('H:i d/m/Y', strtotime($now)), 'by' => $uname]);
+    } else {
+        echo json_encode(['success' => false, 'error' => $conn->error]);
+    }
+    exit();
+}
+
 // Handle AJAX update
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'update_inline') {
     header('Content-Type: application/json');
@@ -432,6 +455,15 @@ while ($conf_row = $conf_res->fetch_assoc()) {
 }
 if (!empty($confirmations))
     $confirmation = $confirmations[0]; // latest
+
+// Fetch specifically Commission Confirmations for history display
+$comm_confirmations = [];
+$res_cc = $conn->query("SELECT * FROM sale_report_confirmations WHERE user_id=$u_id AND quarter='$active_tab' AND type='commission_confirmed' ORDER BY confirmed_at DESC");
+if ($res_cc) {
+    while ($r = $res_cc->fetch_assoc())
+        $comm_confirmations[] = $r;
+}
+
 // locked = latest event is 'confirmed' (not 'reset')
 $latest_type = !empty($confirmation) ? ($confirmation['type'] ?? 'confirmed') : null;
 $is_locked = ($latest_type === 'confirmed');   // locked only when latest event is 'confirmed'
@@ -1895,8 +1927,46 @@ function formatMoney($amount, $currency_code)
                                         </span>
                                     </div>
                                     <div
-                                        style="text-align:right; font-size: 12px; color: #94a3b8; margin-top: 0.5rem; font-style: italic;">
+                                        style="text-align:right; font-size: 12px; color: #94a3b8; margin-top: 0.5rem; font-style: italic; margin-bottom: 1.5rem;">
                                         * Phụ thuộc vào chính sách chi trả của công ty theo từng thời kỳ.
+                                    </div>
+
+                                    <div style="border-top: 1px dashed #ced4da; padding-top: 1.5rem;">
+                                        <button type="button" onclick="confirmCommission('<?= $active_tab ?>')"
+                                            style="width: 100%; padding: 12px; background: #2563eb; color: #fff; border: none; border-radius: 6px; font-weight: 600; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px; transition: all 0.2s;"
+                                            onmouseover="this.style.background='#1d4ed8'"
+                                            onmouseout="this.style.background='#2563eb'">
+                                            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24"
+                                                fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"
+                                                stroke-linejoin="round">
+                                                <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
+                                                <polyline points="22 4 12 14.01 9 11.01"></polyline>
+                                            </svg>
+                                            XÁC NHẬN COMMISSION
+                                        </button>
+
+                                        <div id="comm_history" style="margin-top: 1rem;">
+                                            <?php if (!empty($comm_confirmations)): ?>
+                                                <div
+                                                    style="font-size: 12px; font-weight: 600; color: #64748b; margin-bottom: 0.5rem; text-transform: uppercase; letter-spacing: 0.025em;">
+                                                    Lịch sử xác nhận:
+                                                </div>
+                                                <div
+                                                    style="max-height: 150px; overflow-y: auto; border: 1px solid #f1f5f9; border-radius: 6px; background: #f8fafc;">
+                                                    <?php foreach ($comm_confirmations as $cc): ?>
+                                                        <div
+                                                            style="padding: 8px 12px; border-bottom: 1px solid #f1f5f9; font-size: 12px; color: #475569; display: flex; justify-content: space-between; align-items: center;">
+                                                            <span>
+                                                                <span style="color: #0f172a; font-weight: 500;">✓</span>
+                                                                <?= date('H:i d/m/Y', strtotime($cc['confirmed_at'])) ?>
+                                                            </span>
+                                                            <span style="color: #94a3b8; font-size: 11px;">Bởi:
+                                                                <?= htmlspecialchars($cc['confirmed_by_name']) ?></span>
+                                                        </div>
+                                                    <?php endforeach; ?>
+                                                </div>
+                                            <?php endif; ?>
+                                        </div>
                                     </div>
                                 </div>
                             </div>
@@ -2020,6 +2090,41 @@ function formatMoney($amount, $currency_code)
                         console.error(err);
                         cell.innerHTML = oldVal;
                         alert('Mạng lỗi, không thể lưu.');
+                    });
+            }
+
+            function confirmCommission(quarter) {
+                if (!confirm('Bạn có chắc chắn muốn xác nhận số liệu Commission này không?')) return;
+
+                const btn = event.currentTarget;
+                const oldHtml = btn.innerHTML;
+                btn.disabled = true;
+                btn.innerHTML = 'Đang xử lý...';
+
+                const formData = new FormData();
+                formData.append('action', 'confirm_commission');
+                formData.append('quarter', quarter);
+
+                fetch('', {
+                    method: 'POST',
+                    body: formData
+                })
+                    .then(r => r.json())
+                    .then(res => {
+                        if (res.success) {
+                            showToast('Xác nhận thành công!');
+                            setTimeout(() => location.reload(), 1000);
+                        } else {
+                            alert('Lỗi: ' + res.error);
+                            btn.disabled = false;
+                            btn.innerHTML = oldHtml;
+                        }
+                    })
+                    .catch(err => {
+                        console.error(err);
+                        alert('Đã có lỗi xảy ra');
+                        btn.disabled = false;
+                        btn.innerHTML = oldHtml;
                     });
             }
 
