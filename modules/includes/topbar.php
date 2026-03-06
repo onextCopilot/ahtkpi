@@ -270,7 +270,7 @@ $notif_count = count($am_notifications);
                                     <?php
                                     $month_val = date('m', strtotime($d['invoice_date'] ?? 'now'));
                                     $year_val = date('Y', strtotime($d['invoice_date'] ?? 'now'));
-                                    $update_link = "/modules/my_debt?month=$month_val&year=$year_val";
+                                    $update_link = "/modules/my_debt?month=$month_val&year=$year_val&highlight_id=" . $d['id'];
                                     ?>
                                     <a href="<?php echo $update_link; ?>"
                                         style="font-size: 0.7rem; color: #3b82f6; text-decoration: none; border: 1px solid #3b82f6; padding: 4px 8px; border-radius: 4px; transition: all 0.2s;"

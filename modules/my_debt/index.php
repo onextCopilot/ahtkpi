@@ -1079,6 +1079,14 @@ if ($team_res && $team_res->num_rows > 0) {
         .suggestion-item strong {
             color: #2563eb;
         }
+
+        /* Highlighting Row */
+        .highlight-row {
+            background-color: #fff9c4 !important;
+            /* Soft yellow */
+            transition: background-color 2s ease-out;
+            border: 2px solid #fbc02d;
+        }
     </style>
 </head>
 
@@ -1215,7 +1223,12 @@ if ($team_res && $team_res->num_rows > 0) {
                                     </td>
                                 </tr>
                                 <?php foreach ($monthItems as $d): ?>
-                                    <tr ondblclick="openModal('edit', <?php echo $d['id']; ?>)">
+                                    <?php
+                                    $is_highlight = (isset($_GET['highlight_id']) && $_GET['highlight_id'] == $d['id']);
+                                    ?>
+                                    <tr id="debt-row-<?php echo $d['id']; ?>"
+                                        class="<?php echo $is_highlight ? 'highlight-row' : ''; ?>"
+                                        ondblclick="openModal('edit', <?php echo $d['id']; ?>)">
                                         <td style="text-align: center; padding: 4px;"><?php echo $globalIdx++; ?></td>
                                         <td style="text-align:center; white-space: nowrap; padding: 0;">
                                             <button class="btn-sync-row"
@@ -1680,6 +1693,26 @@ if ($team_res && $team_res->num_rows > 0) {
             }
         }
 
+        // Highlight and scroll logic
+        document.addEventListener('DOMContentLoaded', function () {
+            const urlParams = new URLSearchParams(window.location.search);
+            const highlightId = urlParams.get('highlight_id');
+            if (highlightId) {
+                const targetRow = document.getElementById('debt-row-' + highlightId);
+                if (targetRow) {
+                    setTimeout(() => {
+                        targetRow.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    }, 500);
+
+                    // Remove highlight effect after a while
+                    setTimeout(() => {
+                        targetRow.classList.remove('highlight-row');
+                        targetRow.style.border = 'none';
+                    }, 5000);
+                }
+            }
+        });
+
         // Autocomplete Logic
         const clientInput = document.getElementById('client_name');
 
@@ -1690,18 +1723,18 @@ if ($team_res && $team_res->num_rows > 0) {
         const suggestionsBox = document.createElement('div');
         suggestionsBox.id = 'client_suggestions';
         suggestionsBox.style.cssText = `
-            position: fixed;
-            z-index: 2147483647;
-            background: #ffffff;
-            border: 1px solid #cbd5e1;
-            border-radius: 6px;
-            max-height: 250px;
-            overflow-y: auto;
-            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
-            display: none;
-            font-family: 'Inter', sans-serif;
-            font-size: 14px;
-        `;
+    position: fixed;
+    z-index: 2147483647;
+    background: #ffffff;
+    border: 1px solid #cbd5e1;
+    border-radius: 6px;
+    max-height: 250px;
+    overflow-y: auto;
+    box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+    display: none;
+    font-family: 'Inter', sans-serif;
+    font-size: 14px;
+    `;
         document.body.appendChild(suggestionsBox);
 
         let searchTimeout = null;
@@ -1710,12 +1743,7 @@ if ($team_res && $team_res->num_rows > 0) {
             const query = this.value.trim();
             if (searchTimeout) clearTimeout(searchTimeout);
 
-            if (query.length < 1) {
-                suggestionsBox.style.display = 'none';
-                return;
-            }
-
-            searchTimeout = setTimeout(() => {
+            if (query.length < 1) { suggestionsBox.style.display = 'none'; return; } searchTimeout = setTimeout(() => {
                 fetchSuggestions(query);
             }, 300);
         });
@@ -1846,11 +1874,7 @@ if ($team_res && $team_res->num_rows > 0) {
                 const query = this.value.trim();
                 if (projectSearchTimeout) clearTimeout(projectSearchTimeout);
 
-                if (query.length < 1) {
-                    projectSuggestionsBox.style.display = 'none';
-                    return;
-                }
-
+                if (query.length < 1) { projectSuggestionsBox.style.display = 'none'; return; }
                 projectSearchTimeout = setTimeout(() => {
                     fetchProjectSuggestions(query);
                 }, 300);
@@ -1956,7 +1980,10 @@ if ($team_res && $team_res->num_rows > 0) {
 
             const originalIcon = btn.innerHTML;
             // Simple spinner
-            btn.innerHTML = '<svg style="animation: spin 1s linear infinite;" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-6.219-8.56"></path></svg>';
+            btn.innerHTML = '<svg style="animation: spin 1s linear infinite;" width="16" height="16" viewBox="0 0 24 24"
+            fill = "none" stroke = "currentColor" stroke - width="2" stroke - linecap="round" stroke - linejoin="round" >
+                <path d="M21 12a9 9 0 1 1-6.219-8.56"></path>
+            </svg > ';
             btn.disabled = true;
 
             const formData = new FormData();
@@ -2004,7 +2031,10 @@ if ($team_res && $team_res->num_rows > 0) {
                             // Success Tick
                             const parent = el.parentElement;
                             const tick = document.createElement('span');
-                            tick.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#16a34a" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>';
+                            tick.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#16a34a"
+                            stroke - width="3" stroke - linecap="round" stroke - linejoin="round" >
+                                <polyline points="20 6 9 17 4 12"></polyline>
+            </svg > ';
                             tick.style.position = 'absolute';
                             tick.style.right = '5px';
                             tick.style.top = '50%';
@@ -2057,28 +2087,24 @@ if ($team_res && $team_res->num_rows > 0) {
 
                 cols.forEach((th, index) => {
                     const colIndex = index + 1;
-                    const isSticky = colIndex <= 7;
-                    let w = widths[colIndex];
-
-                    if (isSticky) {
-                        let actualW = w || defaultStickyWidths[index];
-                        css += `\n#${tableId} th:nth-child(${colIndex}), #${tableId} tr:not(.group-header) td:nth-child(${colIndex}) { left: ${runningLeft}px !important; }`;
-                        if (w) {
-                            css += `\n#${tableId} th:nth-child(${colIndex}), #${tableId} tr:not(.group-header) td:nth-child(${colIndex}) { width: ${w}px !important; min-width: ${w}px !important; max-width: ${w}px !important; }`;
+                    const isSticky = colIndex <= 7; let w = widths[colIndex]; if (isSticky) {
+                        let actualW = w ||
+                            defaultStickyWidths[index]; css += `\n#${tableId} th:nth-child(${colIndex}), #${tableId}
+                tr:not(.group-header) td:nth-child(${colIndex}) { left: ${runningLeft}px !important; }`; if (w) {
+                            css
+                            += `\n#${tableId} th:nth-child(${colIndex}), #${tableId} tr:not(.group-header) td:nth-child(${colIndex})
+                { width: ${w}px !important; min-width: ${w}px !important; max-width: ${w}px !important; }`;
                         }
                         runningLeft += actualW;
                     } else {
                         if (w) {
-                            css += `\n#${tableId} th:nth-child(${colIndex}), #${tableId} tr:not(.group-header) td:nth-child(${colIndex}) { width: ${w}px !important; min-width: ${w}px !important; max-width: ${w}px !important; }`;
+                            css += `\n#${tableId} th:nth-child(${colIndex}), #${tableId}
+                tr:not(.group-header) td:nth-child(${colIndex}) { width: ${w}px !important; min-width: ${w}px
+                !important; max-width: ${w}px !important; }`;
                         }
                     }
-                });
-
-                styleEl.innerHTML = css;
-            }
-
-            renderStyles();
-
+                }); styleEl.innerHTML = css;
+            } renderStyles();
             cols.forEach((th, index) => {
                 const colIndex = index + 1;
 
@@ -2102,27 +2128,16 @@ if ($team_res && $team_res->num_rows > 0) {
                 const mouseMoveHandler = function (e) {
                     const dx = e.clientX - x;
                     let newW = w + dx;
-                    if (newW < 30) newW = 30; // Min width
-
-                    widths[colIndex] = newW;
-                    renderStyles();
-                    e.stopPropagation();
+                    if (newW < 30) newW = 30; // Min width widths[colIndex]=newW; renderStyles(); e.stopPropagation();
                     e.preventDefault();
+                }; const mouseUpHandler = function () {
+                    document.removeEventListener('mousemove',
+                        mouseMoveHandler); document.removeEventListener('mouseup', mouseUpHandler);
+                    document.body.style.cursor = ''; localStorage.setItem(storeKey, JSON.stringify(widths));
                 };
-
-                const mouseUpHandler = function () {
-                    document.removeEventListener('mousemove', mouseMoveHandler);
-                    document.removeEventListener('mouseup', mouseUpHandler);
-                    document.body.style.cursor = '';
-
-                    localStorage.setItem(storeKey, JSON.stringify(widths));
-                };
-
                 resizer.addEventListener('mousedown', mouseDownHandler);
             });
-        });
-
-    </script>
+        }); </script>
 </body>
 
 </html>
