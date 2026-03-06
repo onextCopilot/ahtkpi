@@ -164,7 +164,15 @@ foreach ($invoices as &$inv) {
     $filtered_invoices[] = $inv;
 }
 unset($inv);
-$invoices = $filtered_invoices;
+
+// Group by month
+$grouped_invoices = [];
+foreach ($filtered_invoices as $inv) {
+    $inv_date_str = $inv['invoice_date'] ?: $inv['date'];
+    $month_key = $inv_date_str ? date('Y-m', strtotime($inv_date_str)) : 'Unknown';
+    $grouped_invoices[$month_key][] = $inv;
+}
+ksort($grouped_invoices);
 
 // Helper
 function formatMoney($amount, $currency_code)
@@ -361,6 +369,23 @@ function formatMoney($amount, $currency_code)
             opacity: 0;
             transition: opacity 0.3s;
         }
+
+        .month-group-header td {
+            background: #f8fafc !important;
+            color: #1e293b !important;
+            font-size: 14px !important;
+            font-weight: 700 !important;
+            border-top: 1px solid #cbd5e1 !important;
+            border-bottom: 2px solid #cbd5e1 !important;
+            padding: 12px 20px !important;
+        }
+
+        .month-total-row td {
+            background: #f1f5f9 !important;
+            font-weight: 600 !important;
+            color: #475569 !important;
+            border-top: 1px solid #e2e8f0 !important;
+        }
     </style>
 </head>
 
@@ -421,99 +446,113 @@ function formatMoney($amount, $currency_code)
                         </tr>
                     </thead>
                     <tbody>
-                        <?php if (empty($invoices)): ?>
+                        <?php if (empty($grouped_invoices)): ?>
                             <tr>
                                 <td colspan="16" style="text-align:center; padding: 2rem;">No invoices found.</td>
                             </tr>
                         <?php else: ?>
                             <?php $stt = 1;
-                            foreach ($invoices as $inv):
-                                $odoo_id = $inv['id'];
-                                $l = $local_data[$odoo_id] ?? [];
-                                $inv_date_str = $inv['invoice_date'] ?: $inv['date'];
-                                $month_str = $inv_date_str ? date('m/Y', strtotime($inv_date_str)) : '';
+                            foreach ($grouped_invoices as $month_key => $month_invoices):
+                                $display_month = $month_key !== 'Unknown' ? date('m / Y', strtotime($month_key . '-01')) : 'Unknown';
+                                $month_subtotal = 0;
                                 ?>
-                                <tr>
-                                    <td style="text-align: center;">
-                                        <?= $stt++ ?>
-                                    </td>
-                                    <td>
-                                        <?= htmlspecialchars(is_array($inv['partner_id']) ? $inv['partner_id'][1] : '') ?>
-                                    </td>
-                                    <td>
-                                        <?= htmlspecialchars($inv['ref'] ?: $inv['name']) ?>
-                                    </td>
-                                    <td>
-                                        <?= htmlspecialchars($inv['x_studio_project_code'] ?? '') ?>
-                                    </td>
-                                    <td>
-                                        <?= $month_str ?>
-                                    </td>
+                                <tr class="month-group-header">
+                                    <td colspan="16">THÁNG <?= $display_month ?></td>
+                                </tr>
+                                <?php foreach ($month_invoices as $inv):
+                                    $odoo_id = $inv['id'];
+                                    $l = $local_data[$odoo_id] ?? [];
+                                    $inv_date_str = $inv['invoice_date'] ?: $inv['date'];
+                                    $month_str = $inv_date_str ? date('d/m/Y', strtotime($inv_date_str)) : '';
+                                    $month_subtotal += $inv['calc_amount_vnd'];
+                                    ?>
+                                    <tr>
+                                        <td style="text-align: center;">
+                                            <?= $stt++ ?>
+                                        </td>
+                                        <td>
+                                            <?= htmlspecialchars(is_array($inv['partner_id']) ? $inv['partner_id'][1] : '') ?>
+                                        </td>
+                                        <td>
+                                            <?= htmlspecialchars($inv['ref'] ?: $inv['name']) ?>
+                                        </td>
+                                        <td>
+                                            <?= htmlspecialchars($inv['x_studio_project_code'] ?? '') ?>
+                                        </td>
+                                        <td>
+                                            <?= $month_str ?>
+                                        </td>
 
-                                    <!-- Loại Hợp đồng -->
-                                    <td class="editable-cell"
-                                        onclick="makeEditable(this, <?= $odoo_id ?>, 'contract_type', 'select', ['Service', 'Trading', 'Dedicated', 'License'])">
-                                        <?= htmlspecialchars($l['contract_type'] ?? '') ?>
-                                    </td>
+                                        <!-- Loại Hợp đồng -->
+                                        <td class="editable-cell"
+                                            onclick="makeEditable(this, <?= $odoo_id ?>, 'contract_type', 'select', ['Service', 'Trading', 'Dedicated', 'License'])">
+                                            <?= htmlspecialchars($l['contract_type'] ?? '') ?>
+                                        </td>
 
-                                    <!-- Presales -->
-                                    <td class="editable-cell"
-                                        onclick="makeEditable(this, <?= $odoo_id ?>, 'presales', 'select', ['No presales', '0%', '0.25%', '0.5%'])">
-                                        <?= htmlspecialchars($l['presales'] ?? '') ?>
-                                    </td>
+                                        <!-- Presales -->
+                                        <td class="editable-cell"
+                                            onclick="makeEditable(this, <?= $odoo_id ?>, 'presales', 'select', ['No presales', '0%', '0.25%', '0.5%'])">
+                                            <?= htmlspecialchars($l['presales'] ?? '') ?>
+                                        </td>
 
-                                    <!-- Loại khách hàng -->
-                                    <td class="editable-cell"
-                                        onclick="makeEditable(this, <?= $odoo_id ?>, 'client_type', 'select', ['New client', 'Old client'])">
-                                        <?= htmlspecialchars($l['client_type'] ?? '') ?>
-                                    </td>
+                                        <!-- Loại khách hàng -->
+                                        <td class="editable-cell"
+                                            onclick="makeEditable(this, <?= $odoo_id ?>, 'client_type', 'select', ['New client', 'Old client'])">
+                                            <?= htmlspecialchars($l['client_type'] ?? '') ?>
+                                        </td>
 
-                                    <!-- Giá trị -->
-                                    <td style="text-align:right; font-family: Inconsolata, monospace;">
-                                        <?= formatMoney($inv['amount_total'], is_array($inv['currency_id']) ? $inv['currency_id'][1] : 'VND') ?>
-                                    </td>
+                                        <!-- Giá trị -->
+                                        <td style="text-align:right; font-family: Inconsolata, monospace;">
+                                            <?= formatMoney($inv['amount_total'], is_array($inv['currency_id']) ? $inv['currency_id'][1] : 'VND') ?>
+                                        </td>
 
-                                    <!-- %Profit trong PAKD -->
-                                    <td class="editable-cell"
-                                        onclick="makeEditable(this, <?= $odoo_id ?>, 'profit_pakd', 'text')">
-                                        <?= htmlspecialchars($l['profit_pakd'] ?? '') ?>
-                                    </td>
+                                        <!-- %Profit trong PAKD -->
+                                        <td class="editable-cell"
+                                            onclick="makeEditable(this, <?= $odoo_id ?>, 'profit_pakd', 'text')">
+                                            <?= htmlspecialchars($l['profit_pakd'] ?? '') ?>
+                                        </td>
 
-                                    <!-- Net profit -->
-                                    <td class="editable-cell"
-                                        onclick="makeEditable(this, <?= $odoo_id ?>, 'net_profit', 'text')">
-                                        <?= htmlspecialchars($l['net_profit'] ?? '') ?>
-                                    </td>
+                                        <!-- Net profit -->
+                                        <td class="editable-cell"
+                                            onclick="makeEditable(this, <?= $odoo_id ?>, 'net_profit', 'text')">
+                                            <?= htmlspecialchars($l['net_profit'] ?? '') ?>
+                                        </td>
 
-                                    <!-- % Com (Lead source) -->
-                                    <td class="editable-cell"
-                                        onclick="makeEditable(this, <?= $odoo_id ?>, 'com_lead_source', 'select', ['Yes', 'No'])">
-                                        <?= htmlspecialchars($l['com_lead_source'] ?? 'No') ?>
-                                    </td>
+                                        <!-- % Com (Lead source) -->
+                                        <td class="editable-cell"
+                                            onclick="makeEditable(this, <?= $odoo_id ?>, 'com_lead_source', 'select', ['Yes', 'No'])">
+                                            <?= htmlspecialchars($l['com_lead_source'] ?? 'No') ?>
+                                        </td>
 
-                                    <!-- % Bonus License/trading -->
-                                    <td class="editable-cell"
-                                        onclick="makeEditable(this, <?= $odoo_id ?>, 'bonus_license_trading', 'select', ['Yes', 'No'])">
-                                        <?= htmlspecialchars($l['bonus_license_trading'] ?? 'No') ?>
-                                    </td>
+                                        <!-- % Bonus License/trading -->
+                                        <td class="editable-cell"
+                                            onclick="makeEditable(this, <?= $odoo_id ?>, 'bonus_license_trading', 'select', ['Yes', 'No'])">
+                                            <?= htmlspecialchars($l['bonus_license_trading'] ?? 'No') ?>
+                                        </td>
 
-                                    <!-- % Com 1 -->
-                                    <td id="com_1_<?= $odoo_id ?>"
-                                        style="color: #c5221f; font-weight:600; background: #fdfaf6;">
-                                        <?= htmlspecialchars($l['com_1'] ?? '') ?>
-                                    </td>
+                                        <!-- % Com 1 -->
+                                        <td id="com_1_<?= $odoo_id ?>"
+                                            style="color: #c5221f; font-weight:600; background: #fdfaf6;">
+                                            <?= htmlspecialchars($l['com_1'] ?? '') ?>
+                                        </td>
 
-                                    <!-- % Com 2 -->
-                                    <td class="editable-cell"
-                                        onclick="makeEditable(this, <?= $odoo_id ?>, 'com_2', 'select', ['0.5%', '1%', '1.5%', '2%', '2.5%', '3%'])">
-                                        <?= htmlspecialchars($l['com_2'] ?? '') ?>
-                                    </td>
+                                        <!-- % Com 2 -->
+                                        <td class="editable-cell"
+                                            onclick="makeEditable(this, <?= $odoo_id ?>, 'com_2', 'select', ['0.5%', '1%', '1.5%', '2%', '2.5%', '3%'])">
+                                            <?= htmlspecialchars($l['com_2'] ?? '') ?>
+                                        </td>
 
-                                    <!-- Note -->
-                                    <td class="editable-cell" onclick="makeEditable(this, <?= $odoo_id ?>, 'note', 'text')">
-                                        <?= htmlspecialchars($l['note'] ?? '') ?>
-                                    </td>
+                                        <!-- Note -->
+                                        <td class="editable-cell" onclick="makeEditable(this, <?= $odoo_id ?>, 'note', 'text')">
+                                            <?= htmlspecialchars($l['note'] ?? '') ?>
+                                        </td>
 
+                                    </tr>
+                                <?php endforeach; ?>
+                                <tr class="month-total-row">
+                                    <td colspan="8" style="text-align: right;">Cộng tháng <?= $display_month ?>:</td>
+                                    <td style="text-align: right;"><?= formatMoney($month_subtotal, 'VND') ?></td>
+                                    <td colspan="7"></td>
                                 </tr>
                             <?php endforeach; ?>
                         <?php endif; ?>
