@@ -1536,8 +1536,13 @@ function formatMoney($amount, $currency_code)
                                         $dot_color = '#92400e';
                                         $dot_icon = '↩';
                                         $label = '<span style="background:#fef3c7;color:#92400e;padding:1px 8px;border-radius:10px;font-weight:600;font-size:11px;">🔓 Reset to Draft</span>';
-                                    } else {
-                                        // edit
+                                    } elseif ($t === 'commission_confirmed') {
+                                        $dot_bg = '#dcfce7';
+                                        $dot_border = '#86efac';
+                                        $dot_color = '#166534';
+                                        $dot_icon = '💰';
+                                        $label = '<span style="background:#dcfce7;color:#166534;padding:1px 8px;border-radius:10px;font-weight:600;font-size:11px;">✅ Đã xác nhận Commission</span>';
+                                    } elseif ($t === 'edit') {
                                         $dot_bg = '#eff6ff';
                                         $dot_border = '#bfdbfe';
                                         $dot_color = '#1d4ed8';
@@ -1558,10 +1563,16 @@ function formatMoney($amount, $currency_code)
                                         $fn = $field_labels[$d['field_name']] ?? $d['field_name'];
                                         $old = htmlspecialchars($d['old_value'] ?? '');
                                         $new = htmlspecialchars($d['new_value'] ?? '');
-                                        $inv = $d['odoo_invoice_id'];
+                                        $inv = $d['odoo_invoice_id'] ?? 'N/A';
                                         $label = "<span style='font-size:11px;'>Sửa <strong>$fn</strong> (Invoice #$inv): "
                                             . ($old !== '' ? "<span style='color:#94a3b8;text-decoration:line-through;'>$old</span> → " : '')
                                             . "<strong style='color:#1d4ed8;'>$new</strong></span>";
+                                    } else {
+                                        $dot_bg = '#f1f5f9';
+                                        $dot_border = '#e2e8f0';
+                                        $dot_color = '#475569';
+                                        $dot_icon = '•';
+                                        $label = '<span style="font-size:11px;">Hoạt động: ' . htmlspecialchars($t) . '</span>';
                                     }
                                     ?>
                                     <div style="display:flex; align-items:baseline; gap:8px; font-size:12px; color:#475569;">
