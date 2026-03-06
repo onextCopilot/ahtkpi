@@ -226,7 +226,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
 
         echo json_encode(['success' => true, 'com_1' => $com1_val]);
     } elseif ($field === 'bonus_license_trading') {
-        $lic_val = ($val === 'Yes') ? '10%' : '';
+        $lic_val = ($val === 'Yes') ? '1%' : '';
         $stmt = $conn->prepare("INSERT INTO sale_reports (odoo_invoice_id, bonus_license_trading, license_trading) VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE bonus_license_trading=?, license_trading=?");
         $stmt->bind_param("issss", $odoo_id, $val, $lic_val, $val, $lic_val);
         $stmt->execute();
@@ -1826,10 +1826,10 @@ function formatMoney($amount, $currency_code)
                                                 // Convert disbursed amount to USD FIRST before multiplying by commission
                                                 $giaingan_usd = $giaingan_origin * $ratioUsd;
 
-                                                // Bonus calculation: 10% of Net profit if Bonus is Yes
+                                                // Bonus calculation: 1% of Net profit if Bonus is Yes ($10 for $1000)
                                                 $is_bonus_yes = ($l['bonus_license_trading'] ?? 'No') === 'Yes';
                                                 $net_profit_f = (float) str_replace(['$', ','], '', $l['net_profit'] ?? '0');
-                                                $bonus_extra = ($is_bonus_yes && $net_profit_f > 0) ? ($net_profit_f * 0.1) : 0;
+                                                $bonus_extra = ($is_bonus_yes && $net_profit_f > 0) ? ($net_profit_f * 0.01) : 0;
 
                                                 $comm1_val_usd = ($giaingan_usd * ($com1_p / 100)) + $bonus_extra;
                                                 $comm2_val_usd = $giaingan_usd * ($com2_p / 100);
