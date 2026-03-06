@@ -48,7 +48,7 @@ if (isset($_SESSION['is_am_bd']) && $_SESSION['is_am_bd'] == 1) {
     // get debts that are not paid and belong to this AM
     $am_name = $_SESSION['full_name'];
     $stmt_notif = $conn->prepare("
-        SELECT d.id, d.client_name, d.project_name, d.expected_payment_date 
+        SELECT d.id, d.client_name, d.project_name, d.expected_payment_date, d.odoo_invoice_id, d.invoice_date 
         FROM debts d 
         WHERE d.am = ? AND d.payment_status = 'Not paid' 
         AND d.expected_payment_date IS NOT NULL AND d.expected_payment_date > '2000-01-01'
@@ -130,7 +130,7 @@ if (isset($_SESSION['is_am_bd']) && $_SESSION['is_am_bd'] == 1) {
 
     // Fetch manual warnings
     $stmt_manual = $conn->prepare("
-        SELECT mw.id as warning_id, mw.created_at as warned_at, mw.warning_type, d.id, d.client_name, d.project_name, d.expected_payment_date, u.full_name as sender_name
+        SELECT mw.id as warning_id, mw.created_at as warned_at, mw.warning_type, d.id, d.client_name, d.project_name, d.expected_payment_date, d.odoo_invoice_id, d.invoice_date, u.full_name as sender_name
         FROM debt_manual_warnings mw
         JOIN debts d ON mw.debt_id = d.id
         JOIN users u ON mw.sender_id = u.id
@@ -252,6 +252,10 @@ $notif_count = count($am_notifications);
                                 <div style="font-size: 0.8rem; color: #475569; margin-bottom: 8px;">
                                     <strong><?php echo htmlspecialchars($d['client_name'] ?? ''); ?></strong> -
                                     <?php echo htmlspecialchars($d['project_name'] ?? ''); ?>
+                                    <?php if (!empty($d['odoo_invoice_id'])): ?>
+                                        <br><span style="font-size: 0.75rem; color: #64748b;">Odoo ID:
+                                            <strong><?php echo htmlspecialchars($d['odoo_invoice_id']); ?></strong></span>
+                                    <?php endif; ?>
                                     <br><span style="color: #94a3b8; font-size: 0.75rem;">Hạn thanh toán:
                                         <?php
                                         $p_date = $d['expected_payment_date'] ?? '';
@@ -266,7 +270,7 @@ $notif_count = count($am_notifications);
                                     <?php
                                     $month_val = date('m', strtotime($d['invoice_date'] ?? 'now'));
                                     $year_val = date('Y', strtotime($d['invoice_date'] ?? 'now'));
-                                    $update_link = "/modules/my_debts?month=$month_val&year=$year_val";
+                                    $update_link = "/modules/my_debt?month=$month_val&year=$year_val";
                                     ?>
                                     <a href="<?php echo $update_link; ?>"
                                         style="font-size: 0.7rem; color: #3b82f6; text-decoration: none; border: 1px solid #3b82f6; padding: 4px 8px; border-radius: 4px; transition: all 0.2s;"
