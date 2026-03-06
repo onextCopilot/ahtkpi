@@ -989,6 +989,7 @@ function formatMoney($amount, $currency_code)
                     <thead>
                         <tr>
                             <th style="width: 40px; text-align: center;">STT</th>
+                            <th style="width: 130px;">Invoice #</th>
                             <th style="width: 50px; text-align: center;">Loại trừ</th>
                             <th style="width: 150px;">Tên khách hàng</th>
                             <th style="width: 150px;">Tên Dự án</th>
@@ -1011,7 +1012,7 @@ function formatMoney($amount, $currency_code)
                     <tbody>
                         <?php if (empty($grouped_invoices)): ?>
                             <tr>
-                                <td colspan="16" style="text-align:center; padding: 2rem;">No invoices found.</td>
+                                <td colspan="17" style="text-align:center; padding: 2rem;">No invoices found.</td>
                             </tr>
                         <?php else: ?>
                             <?php $stt = 1;
@@ -1020,7 +1021,7 @@ function formatMoney($amount, $currency_code)
                                 $month_subtotal = 0;
                                 ?>
                                 <tr class="month-group-header">
-                                    <td colspan="16">THÁNG <?= $display_month ?></td>
+                                    <td colspan="17">THÁNG <?= $display_month ?></td>
                                 </tr>
                                 <?php foreach ($month_invoices as $inv):
                                     $odoo_id = $inv['id'];
@@ -1035,6 +1036,10 @@ function formatMoney($amount, $currency_code)
                                         data-invoice-id="<?= $odoo_id ?>" data-is-excluded="<?= $is_excluded ?>">
                                         <td style="text-align: center;">
                                             <?= $stt++ ?>
+                                        </td>
+                                        <!-- Invoice # -->
+                                        <td style="font-family: 'Inconsolata', monospace; font-size: 12px; color: #2563eb; white-space: nowrap; font-weight: 500;">
+                                            <?= htmlspecialchars($inv['name'] ?? '') ?>
                                         </td>
                                         <!-- Loại trừ (cột 2) -->
                                         <td style="text-align: center;">
@@ -1134,7 +1139,7 @@ function formatMoney($amount, $currency_code)
                                     </tr>
                                 <?php endforeach; ?>
                                 <tr class="month-total-row">
-                                    <td colspan="8" style="text-align: right;">Cộng tháng <?= $display_month ?>:</td>
+                                    <td colspan="9" style="text-align: right;">Cộng tháng <?= $display_month ?>:</td>
                                     <td style="text-align: right;"><?= formatMoney($month_subtotal, 'VND') ?></td>
                                     <td colspan="7"></td>
                                 </tr>
