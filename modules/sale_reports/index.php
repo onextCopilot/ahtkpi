@@ -1494,12 +1494,14 @@ function formatMoney($amount, $currency_code)
                         $pay_widget = $inv['invoice_payments_widget'] ?? null;
                         $giaingan_origin = 0;
                         $ngay_tien_ve_arr = [];
-                        if ($pay_widget && $pay_widget !== 'false' && is_string($pay_widget)) {
-                            $pw = json_decode($pay_widget, true);
-                            foreach ($pw['content'] ?? [] as $p) {
-                                $giaingan_origin += (float) ($p['amount'] ?? 0);
-                                if (!empty($p['date']))
-                                    $ngay_tien_ve_arr[] = $p['date'];
+                        if ($pay_widget && $pay_widget !== 'false') {
+                            $pw = is_array($pay_widget) ? $pay_widget : json_decode($pay_widget, true);
+                            if (is_array($pw)) {
+                                foreach ($pw['content'] ?? [] as $p) {
+                                    $giaingan_origin += (float) ($p['amount'] ?? 0);
+                                    if (!empty($p['date']))
+                                        $ngay_tien_ve_arr[] = $p['date'];
+                                }
                             }
                         }
                         if ($giaingan_origin <= 0)
