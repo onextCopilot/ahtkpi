@@ -1676,7 +1676,7 @@ function formatMoney($amount, $currency_code)
         <script>
             let currentEditing = null;
 
-            func                tion makeEditable(cell, invoiceId, fieldName, inputType, options = []) {
+            function makeEditable(cell, invoiceId, fieldName, inputType, options = []) {
                 if (currentEditing === cell) return;
                 if (currentEditing) saveCurrentEdit();
 
