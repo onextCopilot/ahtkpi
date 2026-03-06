@@ -25,17 +25,22 @@ if ($action === 'mark_all') {
     // We expect the client to send a list of [{debt_id, warning_level}] to mark all currently unread ones.
     $notifications = isset($input['notifications']) ? $input['notifications'] : [];
     if (!empty($notifications) && is_array($notifications)) {
-        $stmt = $conn->prepare("INSERT IGNORE INTO debt_notifications_read (user_id, debt_id, warning_level) VALUES (?, ?, ?)");
-        if ($stmt) {
-            foreach ($notifications as $n) {
-                $d_id = intval($n['debt_id']);
-                $w_lvl = intval($n['warning_level']);
-                if ($d_id > 0 && in_array($w_lvl, [30, 60])) {
+        foreach ($notifications as $n) {
+            $d_id = intval($n['debt_id']);
+            $w_lvl = intval($n['warning_level']);
+            if ($d_id > 0 && in_array($w_lvl, [30, 60, 99])) {
+                if ($w_lvl == 99) {
+                    $stmt = $conn->prepare("UPDATE debt_manual_warnings SET is_read = 1 WHERE debt_id = ? AND receiver_id = ?");
+                    $stmt->bind_param("ii", $d_id, $user_id);
+                    $stmt->execute();
+                    $stmt->close();
+                } else {
+                    $stmt = $conn->prepare("INSERT IGNORE INTO debt_notifications_read (user_id, debt_id, warning_level) VALUES (?, ?, ?)");
                     $stmt->bind_param("iii", $user_id, $d_id, $w_lvl);
                     $stmt->execute();
+                    $stmt->close();
                 }
             }
-            $stmt->close();
         }
     }
     echo json_encode(['success' => true]);
@@ -43,16 +48,21 @@ if ($action === 'mark_all') {
 }
 
 // Mark one
-if ($debt_id <= 0 || !in_array($warning_level, [30, 60])) {
+if ($debt_id <= 0 || !in_array($warning_level, [30, 60, 99])) {
     http_response_code(400);
     echo json_encode(['success' => false, 'error' => 'Invalid parameters']);
     exit();
 }
 
-$stmt = $conn->prepare("INSERT IGNORE INTO debt_notifications_read (user_id, debt_id, warning_level) VALUES (?, ?, ?)");
-if ($stmt) {
+if ($warning_level == 99) {
+    $stmt = $conn->prepare("UPDATE debt_manual_warnings SET is_read = 1 WHERE debt_id = ? AND receiver_id = ?");
+    $stmt->bind_param("ii", $debt_id, $user_id);
+} else {
+    $stmt = $conn->prepare("INSERT IGNORE INTO debt_notifications_read (user_id, debt_id, warning_level) VALUES (?, ?, ?)");
     $stmt->bind_param("iii", $user_id, $debt_id, $warning_level);
-    $stmt->execute();
+}
+
+if ($stmt && $stmt->execute()) {
     echo json_encode(['success' => true]);
     $stmt->close();
 } else {

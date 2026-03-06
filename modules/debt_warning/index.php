@@ -1061,6 +1061,36 @@ if ($res_am && $res_am->num_rows > 0) {
         .data-table-wrapper::-webkit-scrollbar-thumb:hover {
             background: #94a3b8;
         }
+
+        .btn-warn {
+            background: none;
+            border: none;
+            color: #eab308;
+            cursor: pointer;
+            padding: 4px;
+            border-radius: 4px;
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin: 0 auto;
+        }
+
+        .btn-warn:hover {
+            color: #ca8a04;
+            background: #fef9c3;
+            transform: scale(1.1);
+        }
+
+        .btn-warn.sent {
+            color: #2563eb;
+            background: #dbeafe;
+        }
+
+        .btn-warn.loading {
+            opacity: 0.5;
+            cursor: wait;
+        }
     </style>
 </head>
 
@@ -1182,6 +1212,7 @@ if ($res_am && $res_am->num_rows > 0) {
                         <thead>
                             <tr>
                                 <th style="width: 30px !important; text-align: center;">#</th>
+                                <th style="width: 50px; text-align: center;">Warning</th>
                                 <th>CTY</th>
                                 <th>AM</th>
                                 <th>Sale Team</th>
@@ -1214,6 +1245,17 @@ if ($res_am && $res_am->num_rows > 0) {
                                     <tr style="user-select: none;">
                                         <td style="text-align: center; color: #94a3b8; font-weight: 500;">
                                             <?php echo $globalIdx++; ?>
+                                        </td>
+                                        <td style="text-align: center;">
+                                            <button class="btn-warn" onclick="sendDebtWarning(<?= $item['id'] ?>, event)"
+                                                title="Gửi cảnh báo cho AM">
+                                                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16"
+                                                    viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                                                    stroke-linecap="round" stroke-linejoin="round">
+                                                    <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path>
+                                                    <path d="M13.73 21a2 2 0 0 1-3.46 0"></path>
+                                                </svg>
+                                            </button>
                                         </td>
                                         <td class="cell-company"><?php echo htmlspecialchars($item['company'] ?? ''); ?></td>
                                         <td>
@@ -1314,7 +1356,7 @@ if ($res_am && $res_am->num_rows > 0) {
                                 <?php endforeach; ?>
                             <?php else: ?>
                                 <tr>
-                                    <td colspan="21" style="text-align: center; padding: 20px; color: #64748b;">
+                                    <td colspan="22" style="text-align: center; padding: 20px; color: #64748b;">
                                         Không có dữ liệu
                                     </td>
                                 </tr>
@@ -1325,6 +1367,45 @@ if ($res_am && $res_am->num_rows > 0) {
             </div>
         </main>
     </div>
+
+    <script>
+        function sendDebtWarning(debtId, event) {
+            const btn = event.currentTarget;
+            if (btn.classList.contains('loading')) return;
+
+            btn.classList.add('loading');
+            fetch('/api/send_debt_warning.php', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    debt_id: debtId
+                })
+            })
+                .then(res => res.json())
+                .then(data => {
+                    btn.classList.remove('loading');
+                    if (data.success) {
+                        btn.classList.add('sent');
+                        btn.innerHTML = `
+                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path>
+                            <path d="M13.73 21a2 2 0 0 1-3.46 0"></path>
+                        </svg>
+                    `;
+                        alert('Đã gửi cảnh báo thành công cho AM!');
+                    } else {
+                        alert('Lỗi: ' + (data.error || 'Không thể gửi cảnh báo'));
+                    }
+                })
+                .catch(err => {
+                    btn.classList.remove('loading');
+                    console.error(err);
+                    alert('Lỗi kết nối server');
+                });
+        }
+    </script>
 </body>
 
 </html>

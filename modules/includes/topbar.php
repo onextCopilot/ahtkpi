@@ -107,6 +107,29 @@ if (isset($_SESSION['is_am_bd']) && $_SESSION['is_am_bd'] == 1) {
             }
         }
     }
+
+    // Fetch manual warnings
+    $stmt_manual = $conn->prepare("
+        SELECT mw.id as warning_id, mw.created_at as warned_at, d.id, d.client_name, d.project_name, d.expected_payment_date, u.full_name as sender_name
+        FROM debt_manual_warnings mw
+        JOIN debts d ON mw.debt_id = d.id
+        JOIN users u ON mw.sender_id = u.id
+        WHERE mw.receiver_id = ? AND mw.is_read = 0
+    ");
+    if ($stmt_manual) {
+        $stmt_manual->bind_param("i", $current_user_id);
+        $stmt_manual->execute();
+        $res_manual = $stmt_manual->get_result();
+        while ($rm = $res_manual->fetch_assoc()) {
+            $am_notifications[] = [
+                'debt' => $rm,
+                'level' => 99, // Custom level for manual warnings
+                'sender' => $rm['sender_name'],
+                'at' => $rm['warned_at']
+            ];
+        }
+        $stmt_manual->close();
+    }
 }
 $notif_count = count($am_notifications);
 ?>
@@ -165,16 +188,17 @@ $notif_count = count($am_notifications);
                             $d = $notif['debt'];
                             $lvl = $notif['level'];
                             $is_critical = ($lvl == 60);
-                            $bg_col = $is_critical ? '#fef2f2' : '#fffbeb';
-                            $text_col = $is_critical ? '#dc2626' : '#d97706';
-                            $title = $is_critical ? 'Quá hạn > 60 ngày' : 'Cảnh báo quá hạn > 30 ngày';
+                            $bg_col = $is_critical ? '#fef2f2' : ($lvl == 99 ? '#fff7ed' : '#fffbeb');
+                            $text_col = $is_critical ? '#dc2626' : ($lvl == 99 ? '#ea580c' : '#d97706');
+                            $title = $is_critical ? 'Quá hạn > 60 ngày' : ($lvl == 99 ? '🔔 CẢNH BÁO TỪ ' . strtoupper($notif['sender']) : 'Cảnh báo quá hạn > 30 ngày');
                             ?>
                             <div class="notif-item" id="notif-item-<?php echo $d['id'] . '-' . $lvl; ?>"
                                 style="padding: 12px 16px; border-bottom: 1px solid #f1f5f9; background: <?php echo $bg_col; ?>; transition: background 0.2s; position: relative;"
                                 onmouseover="this.style.filter='brightness(0.98)'" onmouseout="this.style.filter='none'">
                                 <div
                                     style="font-size: 0.85rem; font-weight: 700; color: <?php echo $text_col; ?>; margin-bottom: 4px;">
-                                    <?php echo $title; ?></div>
+                                    <?php echo $title; ?>
+                                </div>
                                 <div style="font-size: 0.8rem; color: #475569; margin-bottom: 8px;">
                                     <strong><?php echo htmlspecialchars($d['client_name'] ?? ''); ?></strong> -
                                     <?php echo htmlspecialchars($d['project_name'] ?? ''); ?>
