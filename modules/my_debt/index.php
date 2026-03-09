@@ -634,7 +634,7 @@ if ($team_res && $team_res->num_rows > 0) {
             user-select: none;
         }
 
-        .col-resizer:hover {
+        .col-resizer:hover , .col-resizer.active {
             background-color: rgba(14, 165, 233, 0.5);
             /* Blue highlight on hover */
             border-right: 2px solid #0ea5e9;
@@ -2219,7 +2219,6 @@ if ($team_res && $team_res->num_rows > 0) {
                         if (el) el.style.backgroundColor = '#fee2e2';
                     } else {
                         if (el) {
-                            // Success Tick
                             const parent = el.parentElement;
                             const tick = document.createElement('span');
                             tick.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#16a34a" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>';
@@ -2277,14 +2276,21 @@ if ($team_res && $team_res->num_rows > 0) {
                     let w = widths[colIndex];
 
                     if (isSticky) {
-                        let actualW = w || defaultStickyWidths[index];
-                        css += `#${tableId} th:nth-child(${colIndex}), #${tableId} tr:not(.group-header) td:nth-child(${colIndex}) { left: ${runningLeft}px !important; }\n`;
-                        if (w) {
-                            css += `#${tableId} th:nth-child(${colIndex}), #${tableId} tr:not(.group-header) td:nth-child(${colIndex}) { width: ${w}px !important; min-width: ${w}px !important; max-width: ${w}px !important; }\n`;
-                        }
+                        const actualW = w || defaultStickyWidths[index];
+                        // ALWAYS set width for sticky columns to match math
+                        css += `#${tableId} th:nth-child(${colIndex}), #${tableId} tr:not(.group-header) td:nth-child(${colIndex}) { 
+                            left: ${runningLeft}px !important; 
+                            width: ${actualW}px !important; 
+                            min-width: ${actualW}px !important; 
+                            max-width: ${actualW}px !important; 
+                        }\n`;
                         runningLeft += actualW;
                     } else if (w) {
-                        css += `#${tableId} th:nth-child(${colIndex}), #${tableId} tr:not(.group-header) td:nth-child(${colIndex}) { width: ${w}px !important; min-width: ${w}px !important; max-width: ${w}px !important; }\n`;
+                        css += `#${tableId} th:nth-child(${colIndex}), #${tableId} tr:not(.group-header) td:nth-child(${colIndex}) { 
+                            width: ${w}px !important; 
+                            min-width: ${w}px !important; 
+                            max-width: ${w}px !important; 
+                        }\n`;
                     }
                 });
                 styleEl.innerHTML = css;
@@ -2307,7 +2313,9 @@ if ($team_res && $team_res->num_rows > 0) {
                     document.addEventListener('mouseup', mouseUpHandler);
                     document.body.style.cursor = 'col-resize';
                     document.body.classList.add('resizing');
+                    resizer.classList.add('active'); // Persistent highlight during drag
                     e.stopPropagation();
+                    e.preventDefault();
                 };
 
                 const mouseMoveHandler = function (e) {
@@ -2316,7 +2324,6 @@ if ($team_res && $team_res->num_rows > 0) {
                     if (newW < 30) newW = 30;
                     widths[colIndex] = newW;
                     renderStyles();
-                    e.preventDefault();
                 };
 
                 const mouseUpHandler = function () {
@@ -2324,6 +2331,7 @@ if ($team_res && $team_res->num_rows > 0) {
                     document.removeEventListener('mouseup', mouseUpHandler);
                     document.body.style.cursor = '';
                     document.body.classList.remove('resizing');
+                    resizer.classList.remove('active');
                     localStorage.setItem(storeKey, JSON.stringify(widths));
                 };
 
