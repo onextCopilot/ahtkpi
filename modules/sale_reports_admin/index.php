@@ -401,22 +401,22 @@ $budget_placeholder = 0;
                                 <tr>
                                     <td></td>
                                     <td class="am-name"><?= htmlspecialchars($am) ?></td>
-                                    <td class="text-right"><?= formatMoney($b_q1) ?></td>
+                                    <td class="text-right" style="color: #cbd5e1;">-</td>
                                     <td class="text-right"><?= formatMoney($actual_q1) ?></td>
-                                    <td class="text-center"><?= calcPercent($actual_q1, $b_q1) ?></td>
-                                    <td class="text-right"><?= formatMoney($b_q2) ?></td>
+                                    <td class="text-center" style="color: #cbd5e1;">-</td>
+                                    <td class="text-right" style="color: #cbd5e1;">-</td>
                                     <td class="text-right"><?= formatMoney($actual_q2) ?></td>
-                                    <td class="text-center"><?= calcPercent($actual_q2, $b_q2) ?></td>
-                                    <td class="text-right"><?= formatMoney($b_h1) ?></td>
+                                    <td class="text-center" style="color: #cbd5e1;">-</td>
+                                    <td class="text-right" style="color: #cbd5e1;">-</td>
                                     <td class="text-right"><?= formatMoney($actual_h1) ?></td>
-                                    <td class="text-center"><?= calcPercent($actual_h1, $b_h1) ?></td>
-                                    <td class="text-right"><?= formatMoney($b_q3) ?></td>
+                                    <td class="text-center" style="color: #cbd5e1;">-</td>
+                                    <td class="text-right" style="color: #cbd5e1;">-</td>
                                     <td class="text-right"><?= formatMoney($actual_q3) ?></td>
-                                    <td class="text-center"><?= calcPercent($actual_q3, $b_q3) ?></td>
+                                    <td class="text-center" style="color: #cbd5e1;">-</td>
                                     <!-- Q4 specific columns from image -->
-                                    <td class="text-right"><?= formatMoney($b_q4) ?></td>
-                                    <td class="text-right"><?= formatMoney($b_q4 * 0.8) ?></td>
-                                    <td class="text-right"><?= formatMoney($b_q4 * 0.5) ?></td>
+                                    <td class="text-right" style="color: #cbd5e1;">-</td>
+                                    <td class="text-right" style="color: #cbd5e1;">-</td>
+                                    <td class="text-right" style="color: #cbd5e1;">-</td>
                                 </tr>
                             <?php endforeach; ?>
 
