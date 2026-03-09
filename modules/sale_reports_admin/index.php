@@ -354,6 +354,16 @@ $budget_placeholder = 0;
             padding-left: 24px;
         }
 
+        table.revenue-table tbody tr.total-row {
+            background-color: #f8fafc;
+            border-top: 2px solid #cbd5e1;
+        }
+
+        table.revenue-table tbody tr.total-row td {
+            font-weight: 700;
+            color: #0f172a;
+        }
+
         /* Alternating row colors for Invoiced Revenue */
         table.revenue-table tbody tr.invoiced-row:nth-child(odd) td {
             background-color: #ffffff;
@@ -405,6 +415,8 @@ $budget_placeholder = 0;
                                 <th colspan="3">H1</th>
                                 <th colspan="3">Q3</th>
                                 <th colspan="3">Q4</th>
+                                <th colspan="3">Year Total</th>
+                            </tr>
                             </tr>
                             <tr>
                                 <th>Budget/KPI</th>
@@ -419,19 +431,23 @@ $budget_placeholder = 0;
                                 <th>Budget/KPI</th>
                                 <th>Actual</th>
                                 <th>% Achieved</th>
-                                <th>Budget/KPI - Tốt</th>
-                                <th>Budget/KPI - Trung Bình</th>
-                                <th>Budget/KPI - Xấu</th>
+                                <th>Budget/KPI</th>
+                                <th>Actual</th>
+                                <th>% Achieved</th>
+                                <th>Budget/KPI</th>
+                                <th>Actual</th>
+                                <th>% Achieved</th>
+                            </tr>
                             </tr>
                         </thead>
                         <tbody>
                             <tr class="section-header">
-                                <td colspan="17">Revenue</td>
+                                <td colspan="20">Revenue</td>
                             </tr>
 
                             <!-- RECOGNISED REVENUE -->
                             <tr class="group-header">
-                                <td colspan="17">Recognised Revenue</td>
+                                <td colspan="20">Recognised Revenue</td>
                             </tr>
                             <?php
                             $stt_rec = 1;
@@ -469,12 +485,47 @@ $budget_placeholder = 0;
                                     <td class="text-right" style="color: #cbd5e1;">-</td>
                                     <td class="text-right" style="color: #cbd5e1;">-</td>
                                     <td class="text-right" style="color: #cbd5e1;">-</td>
+                                    <td class="text-right" style="color: #cbd5e1;">-</td>
+                                    <td class="text-right">
+                                        <?= formatMoney($actual_q1 + $actual_q2 + $actual_q3 + $actual_q4) ?></td>
+                                    <td class="text-center" style="color: #cbd5e1;">-</td>
                                 </tr>
                             <?php endforeach; ?>
 
+                            <tr class="total-row">
+                                <td></td>
+                                <td>Total Recognised</td>
+                                <td class="text-right">-</td>
+                                <td class="text-right"><?= formatMoney(array_sum(array_column($am_recognised, 'Q1'))) ?>
+                                </td>
+                                <td class="text-center">-</td>
+                                <td class="text-right">-</td>
+                                <td class="text-right"><?= formatMoney(array_sum(array_column($am_recognised, 'Q2'))) ?>
+                                </td>
+                                <td class="text-center">-</td>
+                                <td class="text-right">-</td>
+                                <td class="text-right">
+                                    <?= formatMoney(array_sum(array_column($am_recognised, 'Q1')) + array_sum(array_column($am_recognised, 'Q2'))) ?>
+                                </td>
+                                <td class="text-center">-</td>
+                                <td class="text-right">-</td>
+                                <td class="text-right"><?= formatMoney(array_sum(array_column($am_recognised, 'Q3'))) ?>
+                                </td>
+                                <td class="text-center">-</td>
+                                <td class="text-right">-</td>
+                                <td class="text-right"><?= formatMoney(array_sum(array_column($am_recognised, 'Q4'))) ?>
+                                </td>
+                                <td class="text-center">-</td>
+                                <td class="text-right">-</td>
+                                <td class="text-right">
+                                    <?= formatMoney(array_sum(array_column($am_recognised, 'Q1')) + array_sum(array_column($am_recognised, 'Q2')) + array_sum(array_column($am_recognised, 'Q3')) + array_sum(array_column($am_recognised, 'Q4'))) ?>
+                                </td>
+                                <td class="text-center">-</td>
+                            </tr>
+
                             <!-- INVOICED REVENUE -->
                             <tr class="group-header">
-                                <td colspan="17">Invoiced Revenue</td>
+                                <td colspan="20">Invoiced Revenue</td>
                             </tr>
                             <?php
                             $stt_inv = 1;
@@ -510,10 +561,58 @@ $budget_placeholder = 0;
                                     <td class="text-center"><?= calcPercent($actual_q3, $b_q3) ?></td>
                                     <!-- Q4 specific columns from image -->
                                     <td class="text-right"><?= formatMoney($b_q4) ?></td>
-                                    <td class="text-right"><?= formatMoney($b_q4 * 0.8) ?></td>
-                                    <td class="text-right"><?= formatMoney($b_q4 * 0.5) ?></td>
+                                    <td class="text-right"><?= formatMoney($actual_q4) ?></td>
+                                    <td class="text-center"><?= calcPercent($actual_q4, $b_q4) ?></td>
+                                    <td class="text-right"><?= formatMoney($b_q1 + $b_q2 + $b_q3 + $b_q4) ?></td>
+                                    <td class="text-right">
+                                        <?= formatMoney($actual_q1 + $actual_q2 + $actual_q3 + $actual_q4) ?></td>
+                                    <td class="text-center">
+                                        <?= calcPercent($actual_q1 + $actual_q2 + $actual_q3 + $actual_q4, $b_q1 + $b_q2 + $b_q3 + $b_q4) ?>
+                                    </td>
                                 </tr>
                             <?php endforeach; ?>
+
+                            <tr class="total-row">
+                                <td></td>
+                                <td>Total Invoiced</td>
+                                <?php
+                                $total_b_q1 = array_sum(array_column($am_budgets, 'Q1'));
+                                $total_a_q1 = array_sum(array_column($am_invoiced, 'Q1'));
+
+                                $total_b_q2 = array_sum(array_column($am_budgets, 'Q2'));
+                                $total_a_q2 = array_sum(array_column($am_invoiced, 'Q2'));
+
+                                $total_b_q3 = array_sum(array_column($am_budgets, 'Q3'));
+                                $total_a_q3 = array_sum(array_column($am_invoiced, 'Q3'));
+
+                                $total_b_q4 = array_sum(array_column($am_budgets, 'Q4'));
+                                $total_a_q4 = array_sum(array_column($am_invoiced, 'Q4'));
+
+                                $total_b_h1 = $total_b_q1 + $total_b_q2;
+                                $total_a_h1 = $total_a_q1 + $total_a_q2;
+
+                                $total_b_year = $total_b_q1 + $total_b_q2 + $total_b_q3 + $total_b_q4;
+                                $total_a_year = $total_a_q1 + $total_a_q2 + $total_a_q3 + $total_a_year;
+                                ?>
+                                <td class="text-right"><?= formatMoney($total_b_q1) ?></td>
+                                <td class="text-right"><?= formatMoney($total_a_q1) ?></td>
+                                <td class="text-center"><?= calcPercent($total_a_q1, $total_b_q1) ?></td>
+                                <td class="text-right"><?= formatMoney($total_b_q2) ?></td>
+                                <td class="text-right"><?= formatMoney($total_a_q2) ?></td>
+                                <td class="text-center"><?= calcPercent($total_a_q2, $total_b_q2) ?></td>
+                                <td class="text-right"><?= formatMoney($total_b_h1) ?></td>
+                                <td class="text-right"><?= formatMoney($total_a_h1) ?></td>
+                                <td class="text-center"><?= calcPercent($total_a_h1, $total_b_h1) ?></td>
+                                <td class="text-right"><?= formatMoney($total_b_q3) ?></td>
+                                <td class="text-right"><?= formatMoney($total_a_q3) ?></td>
+                                <td class="text-center"><?= calcPercent($total_a_q3, $total_b_q3) ?></td>
+                                <td class="text-right"><?= formatMoney($total_b_q4) ?></td>
+                                <td class="text-right"><?= formatMoney($total_a_q4) ?></td>
+                                <td class="text-center"><?= calcPercent($total_a_q4, $total_b_q4) ?></td>
+                                <td class="text-right"><?= formatMoney($total_b_year) ?></td>
+                                <td class="text-right"><?= formatMoney($total_a_year) ?></td>
+                                <td class="text-center"><?= calcPercent($total_a_year, $total_b_year) ?></td>
+                            </tr>
                         </tbody>
                     </table>
                 </div>
