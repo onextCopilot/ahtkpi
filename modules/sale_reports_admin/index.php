@@ -600,6 +600,56 @@ $budget_placeholder = 0;
             background: #fee2e2;
             color: #991b1b;
         }
+
+        /* Report Info Box Style */
+        .report-guide-box {
+            background: #eff6ff;
+            border: 1px solid #bfdbfe;
+            border-left: 5px solid #3b82f6;
+            padding: 1.25rem 1.5rem;
+            border-radius: 8px;
+            margin-bottom: 2rem;
+            box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+        }
+
+        .report-guide-box h3 {
+            color: #1e40af;
+            font-size: 1rem;
+            margin-top: 0;
+            margin-bottom: 0.75rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .report-guide-list {
+            margin: 0;
+            padding: 0;
+            list-style: none;
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 1rem;
+        }
+
+        .report-guide-item {
+            font-size: 0.875rem;
+            color: #475569;
+            line-height: 1.5;
+            position: relative;
+            padding-left: 1.25rem;
+        }
+
+        .report-guide-item::before {
+            content: "•";
+            position: absolute;
+            left: 0;
+            color: #3b82f6;
+            font-weight: bold;
+        }
+
+        .report-guide-item strong {
+            color: #1e293b;
+        }
     </style>
 </head>
 
@@ -621,6 +671,40 @@ $budget_placeholder = 0;
                             <?php endforeach; ?>
                         </select>
                     </form>
+                </div>
+
+                <div class="report-guide-box">
+                    <h3>
+                        <svg xmlns="http://www.w3.org/2000/svg" style="width:20px; height:20px" fill="none"
+                            viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                        Hướng dẫn & Cơ chế lấy dữ liệu
+                    </h3>
+                    <ul class="report-guide-list">
+                        <li class="report-guide-item">
+                            <strong>Nguồn dữ liệu:</strong> Dữ liệu được đồng bộ trực tiếp từ hệ thống Odoo Invoices
+                            (Hóa đơn) và Payments (Thanh toán).
+                        </li>
+                        <li class="report-guide-item">
+                            <strong>Doanh thu KPI (Recognised):</strong> Tính dựa trên các hóa đơn Odoo ở trạng thái
+                            <code>Posted</code>. Không bao gồm các hóa đơn bị loại trừ thủ công.
+                        </li>
+                        <li class="report-guide-item">
+                            <strong>Invoiced Revenue (Actual):</strong> Tổng giá trị Invoice được ghi nhận trên hệ thống
+                            Debts (Công nợ) tại trạng thái <code>Posted</code>.
+                        </li>
+                        <li class="report-guide-item">
+                            <strong>Commission (Ước tính):</strong> Tính dựa trên số tiền khách hàng thực trả trong Quý.
+                            Tỷ lệ nhận Commission (Payout Ratio) phụ thuộc vào % đạt KPI doanh thu của từng Quý (70-100%
+                            nhận 70%, trên 100% nhận đủ 100%).
+                        </li>
+                        <li class="report-guide-item">
+                            <strong>Tương tác:</strong> Click vào từng dòng hoặc ô trong bảng <strong>TỔNG KẾT
+                                COMMISSION</strong> để xem chi tiết tính toán theo từng hóa đơn của AM/BD.
+                        </li>
+                    </ul>
                 </div>
 
                 <?php if (!empty($all_ams)): ?>
@@ -948,10 +1032,12 @@ $budget_placeholder = 0;
                                                 </td>
                                                 <td class="text-right"
                                                     onclick="event.stopPropagation(); viewReport(<?= (int) ($c['uid'] ?? 0) ?>, 'Q<?= $i ?>_<?= $current_year ?>')">
-                                                    <?= formatUSD($c[$qi]['com1'] ?? 0) ?></td>
+                                                    <?= formatUSD($c[$qi]['com1'] ?? 0) ?>
+                                                </td>
                                                 <td class="text-right"
                                                     onclick="event.stopPropagation(); viewReport(<?= (int) ($c['uid'] ?? 0) ?>, 'Q<?= $i ?>_<?= $current_year ?>')">
-                                                    <?= formatUSD($c[$qi]['com2'] ?? 0) ?></td>
+                                                    <?= formatUSD($c[$qi]['com2'] ?? 0) ?>
+                                                </td>
                                                 <td class="text-right"
                                                     onclick="event.stopPropagation(); viewReport(<?= (int) ($c['uid'] ?? 0) ?>, 'Q<?= $i ?>_<?= $current_year ?>')"
                                                     style="font-weight: 700; border-right: 2px solid #cbd5e1; background: #f8fafc; color: #0f172a;">
