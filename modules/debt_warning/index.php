@@ -1116,6 +1116,89 @@ if ($res_am && $res_am->num_rows > 0) {
         .btn-bulk-warn:active {
             transform: translateY(0);
         }
+
+        /* ── User Guide Section ── */
+        .user-guide-section {
+            margin: 2rem 1rem;
+            background: #ffffff;
+            border: 1px solid #e2e8f0;
+            border-radius: 12px;
+            padding: 2rem;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
+            line-height: 1.6;
+            max-width: 100%;
+        }
+
+        .user-guide-header {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 1.5rem;
+            padding-bottom: 1rem;
+            border-bottom: 2px solid #f1f5f9;
+        }
+
+        .user-guide-header h2 {
+            margin: 0;
+            font-size: 1.15rem;
+            font-weight: 800;
+            color: #1e293b;
+            text-transform: uppercase;
+            letter-spacing: 0.025em;
+        }
+
+        .guide-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+            gap: 2rem;
+        }
+
+        .guide-item h3 {
+            margin: 0 0 12px 0;
+            font-size: 15px;
+            font-weight: 700;
+            color: #2563eb;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .guide-content {
+            font-size: 13px;
+            color: #475569;
+        }
+
+        .guide-content ul {
+            margin: 0;
+            padding-left: 1.25rem;
+        }
+
+        .guide-content li {
+            margin-bottom: 8px;
+        }
+
+        .level-tag {
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 11px;
+            font-weight: 700;
+            margin-right: 4px;
+        }
+
+        .lv-1 {
+            background: #fef9c3;
+            color: #a16207;
+        }
+
+        .lv-2 {
+            background: #ffedd5;
+            color: #c2410c;
+        }
+
+        .lv-crit {
+            background: #fee2e2;
+            color: #b91c1c;
+        }
     </style>
 </head>
 
@@ -1415,6 +1498,67 @@ if ($res_am && $res_am->num_rows > 0) {
                     </table>
                 </div>
             </div>
+
+            <!-- ── HƯỚNG DẪN QUẢN LÝ CÔNG NỢ ── -->
+            <section class="user-guide-section">
+                <div class="user-guide-header">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none"
+                        stroke="#2563eb" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                        <circle cx="12" cy="12" r="10"></circle>
+                        <path d="M12 16v-4"></path>
+                        <path d="M12 8h.01"></path>
+                    </svg>
+                    <h2>Hướng dẫn quản lý & Phân loại công nợ</h2>
+                </div>
+
+                <div class="guide-grid">
+                    <div class="guide-item">
+                        <h3>⚠️ Các mức độ cảnh báo (Warning Levels)</h3>
+                        <div class="guide-content">
+                            <ul>
+                                <li><strong><span class="level-tag lv-1">Level 1</span> (> 30 ngày):</strong> Công nợ đã
+                                    quá hạn thanh toán trên 1 tháng so với ngày dự kiến. AM cần liên hệ nhắc nợ gấp.
+                                </li>
+                                <li><strong><span class="level-tag lv-2">Level 2</span> (> 60 ngày):</strong> Công nợ
+                                    quá hạn trên 2 tháng. Cần có giải pháp quyết liệt hoặc tạm dừng dịch vụ nếu cần.
+                                </li>
+                                <li><strong><span class="level-tag lv-crit">Critical</span> (Empty Date):</strong> Các
+                                    Invoice chưa được cập nhật "Ngày dự kiến thu tiền". Đây là lỗi dữ liệu cần bổ sung
+                                    ngay để hệ thống theo dõi.</li>
+                            </ul>
+                        </div>
+                    </div>
+
+                    <div class="guide-item">
+                        <h3>📈 Phân loại P&L Level</h3>
+                        <div class="guide-content">
+                            <ul>
+                                <li><strong>Tốt (Xanh):</strong> Khách hàng thanh toán đúng hạn trong quá khứ, rủi ro
+                                    thấp.</li>
+                                <li><strong>Trung bình (Cam):</strong> Khách thỉnh thoảng chậm thanh toán 1-2 tuần.</li>
+                                <li><strong>Xấu (Đỏ):</strong> Khách thường xuyên nợ đọng, khó liên lạc hoặc có tranh
+                                    chấp.</li>
+                            </ul>
+                            <p style="margin-top:8px; font-style:italic">Note: P&L Level ảnh hưởng đến xếp hạng tín dụng
+                                của khách hàng trong tương lai.</p>
+                        </div>
+                    </div>
+
+                    <div class="guide-item">
+                        <h3>🛠 Hướng dẫn cho AM / BD</h3>
+                        <div class="guide-content">
+                            <ol>
+                                <li>Sử dụng ô <strong>"AM Note"</strong> để cập nhật tình hình liên hệ mới nhất với
+                                    khách hàng.</li>
+                                <li>Theo dõi cột <strong>"Weekly Update"</strong> để biết các chỉ đạo từ cấp quản lý
+                                    hoặc bộ phận kế toán.</li>
+                                <li>Nút <strong>"Gửi thông báo"</strong> (Chuông): Chỉ nhấn khi đã có thông tin cụ thể
+                                    để hệ thống ghi nhận vết log xử lý nợ.</li>
+                            </ol>
+                        </div>
+                    </div>
+                </div>
+            </section>
         </main>
     </div>
 
