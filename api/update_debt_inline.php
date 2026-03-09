@@ -1,6 +1,8 @@
 <?php
 // api/update_debt_inline.php
-header('Content-Type: application/json');
+if (!headers_sent()) {
+    header('Content-Type: application/json');
+}
 require_once __DIR__ . '/../config/config.php';
 
 // Check session
