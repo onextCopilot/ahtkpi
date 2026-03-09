@@ -283,6 +283,14 @@ $budget_placeholder = 0;
             font-size: 13px;
         }
 
+        table.revenue-table thead {
+            background-color: #004b75;
+            position: sticky;
+            top: 0;
+            z-index: 11;
+            /* Ensure thead stays above the body */
+        }
+
         table.revenue-table thead th {
             position: sticky;
             top: 0;
@@ -300,8 +308,10 @@ $budget_placeholder = 0;
         }
 
         table.revenue-table thead tr:nth-child(2) th {
-            top: 40px;
-            /* Adjusted from 41px to 40px to remove the white gap */
+            top: 38px;
+            /* Safe overlap */
+            box-shadow: 0 -2px 0 0 #004b75;
+            /* Cover any potential gaps */
             z-index: 9;
             border-top: none;
         }
