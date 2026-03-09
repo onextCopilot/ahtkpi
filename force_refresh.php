@@ -1,11 +1,11 @@
 <?php
-require_once __DIR__ . '/libs/OdooAPI.php';
-
-$odoo = new OdooAPI();
+require 'config/config.php';
+require 'libs/OdooAPI.php';
 try {
-    echo "Refreshing cache...\n";
+    $odoo = new OdooAPI();
+    echo "Refreshing invoice cache...\n";
     $count = $odoo->refreshInvoiceCache();
-    echo "Refreshed $count invoices.\n";
+    echo "Done! Found $count invoices.\n";
 } catch (Exception $e) {
-    echo "Error: " . $e->getMessage() . "\n";
+    echo "ERROR: " . $e->getMessage() . "\n";
 }

@@ -28,7 +28,7 @@ $domain_inv = [
     ['invoice_date', '>=', "$current_year-01-01"],
     ['invoice_date', '<=', "$current_year-12-31"]
 ];
-$fields_inv = ['invoice_user_id', 'amount_total_signed', 'invoice_date', 'id', 'state', 'amount_total', 'currency_id'];
+$fields_inv = ['invoice_user_id', 'amount_total_signed', 'invoice_date', 'id', 'state', 'amount_total', 'currency_id', 'invoice_payments_widget', 'date'];
 $all_invoices_year = [];
 try {
     $all_invoices_year = $odoo->searchRead('account.move', $domain_inv, $fields_inv, 0, 0);
@@ -37,9 +37,20 @@ try {
 
 $am_recognised = []; 
 $am_invoiced = []; 
+$odoo_map = [];
+
+// Pre-fetch sale_reports for exclusion check to avoid N+1 queries
+$local_sale_reports = [];
+$res_sr = $conn->query("SELECT * FROM sale_reports");
+if ($res_sr) {
+    while ($sr = $res_sr->fetch_assoc()) {
+        $local_sale_reports[(int)$sr['odoo_invoice_id']] = $sr;
+    }
+}
 
 foreach ($all_invoices_year as $inv) {
     if (($inv['state'] ?? '') !== 'posted') continue;
+    $odoo_map[$inv['id']] = $inv;
 
     $date = $inv['invoice_date'];
     if (!$date) continue;
@@ -62,12 +73,9 @@ foreach ($all_invoices_year as $inv) {
         $amount_vnd = $inv['amount_total'] * ($rateVnd / $rateSource);
     }
 
-    // Check exclusion (using local table)
-    $oid = (int) $inv['id'];
-    $res_ex = $conn->query("SELECT is_excluded FROM sale_reports WHERE odoo_invoice_id = $oid");
-    if ($res_ex && ($row_ex = $res_ex->fetch_assoc())) {
-        if ($row_ex['is_excluded'])
-            continue;
+    // Check exclusion (using local map)
+    if (!empty($local_sale_reports[$inv['id']]['is_excluded'])) {
+        continue;
     }
 
     if (!isset($am_recognised[$am_name])) {
@@ -155,14 +163,6 @@ foreach ($all_ams as $am_name) {
 
 // --- NEW: Calculate Commission for AM BD users ---
 $am_commissions = [];
-$local_sale_reports = [];
-$res_sr = $conn->query("SELECT * FROM sale_reports");
-if ($res_sr) {
-    while ($sr = $res_sr->fetch_assoc()) {
-        $local_sale_reports[$sr['odoo_invoice_id']] = $sr;
-    }
-}
-
 // Group Odoo invoices by AM from cache
 $odoo_invoices_by_am = [];
 foreach ($odoo_map as $oid => $inv) {
