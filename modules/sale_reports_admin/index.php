@@ -145,8 +145,7 @@ if ($res_am) {
         }
     }
 }
-$all_ams = array_unique(array_merge($db_ams, array_keys($am_recognised), array_keys($am_invoiced)));
-// Filter out 'Unknown' if desired, but we'll leave it in case there's actual data
+$all_ams = array_unique($db_ams);
 sort($all_ams);
 
 // Fetch budgets
