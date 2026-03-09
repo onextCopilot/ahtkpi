@@ -338,9 +338,6 @@ $budget_placeholder = 0;
         .report-page-container {
             padding: 1rem 2rem;
             max-width: 100%;
-            height: calc(100vh - 80px);
-            overflow-x: auto;
-            overflow-y: auto;
         }
 
         .filter-controls {
@@ -365,8 +362,7 @@ $budget_placeholder = 0;
             background: #fff;
             border-radius: 8px;
             box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
-            overflow: auto;
-            max-height: calc(100vh - 180px);
+            overflow-x: auto;
             border: 1px solid #ccc;
         }
 
