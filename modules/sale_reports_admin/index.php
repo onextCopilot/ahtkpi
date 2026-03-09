@@ -189,18 +189,107 @@ foreach ($all_ams as $am_name) {
                 $eff_level_id = $fallback_sale_level_id;
             }
 
-            if ($eff_level_id) {
-                $stmt_kpi = $conn->prepare("SELECT kpi_quarter_vnd FROM sale_levels WHERE id = ?");
-                if ($stmt_kpi) {
-                    $stmt_kpi->bind_param("i", $eff_level_id);
-                    $stmt_kpi->execute();
-                    $kpi_res = $stmt_kpi->get_result();
-                    if ($kr = $kpi_res->fetch_assoc()) {
-                        $am_budgets[$am_name]["Q$q"] = (float) $kr['kpi_quarter_vnd'];
+        }
+    }
+}
+
+// --- NEW: Calculate Commission for AM BD users ---
+$am_commissions = [];
+$local_sale_reports = [];
+$res_sr = $conn->query("SELECT * FROM sale_reports");
+if ($res_sr) {
+    while ($sr = $res_sr->fetch_assoc()) {
+        $local_sale_reports[$sr['odoo_invoice_id']] = $sr;
+    }
+}
+
+// Group Odoo invoices by AM from cache
+$odoo_invoices_by_am = [];
+foreach ($odoo_map as $oid => $inv) {
+    $inv_am = '';
+    if (!empty($inv['invoice_user_id']) && is_array($inv['invoice_user_id'])) {
+        $inv_am = trim($inv['invoice_user_id'][1]);
+    }
+    if ($inv_am) {
+        $odoo_invoices_by_am[$inv_am][] = $inv;
+    }
+}
+
+foreach ($all_ams as $am_name) {
+    if ($am_name === 'Unknown' || empty($am_name))
+        continue;
+
+    $am_commissions[$am_name] = [];
+    $am_invoices = $odoo_invoices_by_am[$am_name] ?? [];
+
+    for ($q = 1; $q <= 4; $q++) {
+        $am_commissions[$am_name]["Q$q"] = ['com1' => 0, 'com2' => 0, 'total' => 0, 'kpi_pct' => 0];
+
+        // 1. KPI Achievement Percentage
+        $actual = $am_recognised[$am_name]["Q$q"] ?? 0;
+        $budget = $am_budgets[$am_name]["Q$q"] ?? 0;
+        $kpi_pct = ($budget > 0) ? ($actual / $budget) * 100 : 0;
+        $am_commissions[$am_name]["Q$q"]['kpi_pct'] = $kpi_pct;
+
+        // Payout Ratio Rules
+        $payout_ratio = 1.0;
+        if ($kpi_pct < 70)
+            $payout_ratio = 0;
+        elseif ($kpi_pct < 100)
+            $payout_ratio = 0.7;
+
+        // 2. Sum up commissions from payments in this quarter
+        $q_com1 = 0;
+        $q_com2 = 0;
+
+        foreach ($am_invoices as $inv) {
+            $oid = $inv['id'];
+            if (!empty($local_sale_reports[$oid]['is_excluded']))
+                continue;
+
+            $pay_widget = $inv['invoice_payments_widget'] ?? null;
+            if ($pay_widget && $pay_widget !== 'false') {
+                $pw = is_array($pay_widget) ? $pay_widget : json_decode($pay_widget, true);
+                if (is_array($pw) && isset($pw['content'])) {
+                    foreach ($pw['content'] as $p) {
+                        $pdate = $p['date'] ?? null;
+                        if (!$pdate)
+                            continue;
+
+                        $pm = (int) date('n', strtotime($pdate));
+                        $py = (int) date('Y', strtotime($pdate));
+                        $pq = ceil($pm / 3);
+
+                        // If payment happened in the specific year and quarter
+                        if ($py == $current_year && $pq == $q && empty($p['is_exchange'])) {
+                            $paid_amount_origin = (float) ($p['amount'] ?? 0);
+                            $l = $local_sale_reports[$oid] ?? [];
+                            $com1_pct = (float) str_replace('%', '', $l['com_1'] ?? '0');
+                            $com2_pct = (float) str_replace('%', '', $l['com_2'] ?? '0');
+
+                            // Convert to USD for commission (standardizing on USD as in individual reports)
+                            $currency_code = is_array($inv['currency_id']) ? $inv['currency_id'][1] : 'VND';
+                            $ratio_usd = 1.0;
+                            if ($currency_code !== 'USD') {
+                                $inv_date = $inv['invoice_date'] ?: $inv['date'];
+                                $rateSource = $odoo->getRate($currency_code, $inv_date) ?: 1.0;
+                                $rateUsd = $odoo->getRate('USD', $inv_date) ?: 1.0;
+                                if ($rateSource > 0)
+                                    $ratio_usd = $rateUsd / $rateSource;
+                            }
+
+                            $paid_usd = $paid_amount_origin * $ratio_usd;
+                            $q_com1 += $paid_usd * ($com1_pct / 100);
+                            $q_com2 += $paid_usd * ($com2_pct / 100);
+                        }
                     }
                 }
             }
         }
+
+        $am_commissions[$am_name]["Q$q"]['com1'] = $q_com1 * $payout_ratio;
+        $am_commissions[$am_name]["Q$q"]['com2'] = $q_com2 * $payout_ratio;
+        $am_commissions[$am_name]["Q$q"]['total'] = ($q_com1 + $q_com2) * $payout_ratio;
     }
 }
 
@@ -218,6 +307,13 @@ function calcPercent($actual, $budget)
         return '#DIV/0!';
     $pct = ($actual / $budget) * 100;
     return number_format($pct, 2) . '%';
+}
+
+function formatUSD($val)
+{
+    if ($val == 0)
+        return '-';
+    return '$' . number_format($val, 2, '.', ',');
 }
 
 // Budget Placeholder (We will assume 0 budget for now)
@@ -635,6 +731,159 @@ $budget_placeholder = 0;
                                 <td class="text-center"><?= calcPercent($total_a_year, $total_b_year) ?></td>
                             </tr>
                         </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Commission Summary Table -->
+            <div class="card" style="margin-top: 2rem;">
+                <div class="card-header">
+                    <h2 class="card-title">TỔNG KẾT COMMISSION ĐƯỢC NHẬN (ƯỚC TÍNH)</h2>
+                </div>
+                <div style="overflow-x: auto;">
+                    <table class="report-table">
+                        <thead>
+                            <tr>
+                                <th rowspan="2" style="background: #f8fafc; position: sticky; left: 0; z-index: 10;">AM
+                                    BD</th>
+                                <th colspan="4" style="background: #eff6ff;"> QUÝ 1 (USD)</th>
+                                <th colspan="4" style="background: #f0fdf4;"> QUÝ 2 (USD)</th>
+                                <th colspan="4" style="background: #fffbeb;"> QUÝ 3 (USD)</th>
+                                <th colspan="4" style="background: #fdf2f8;"> QUÝ 4 (USD)</th>
+                                <th rowspan="2" style="background: #1e293b; color: #fff;">TỔNG CẢ NĂM</th>
+                            </tr>
+                            <tr style="font-size: 11px;">
+                                <!-- Q1 -->
+                                <th style="background: #eff6ff;">% KPI</th>
+                                <th style="background: #eff6ff;">Com 1</th>
+                                <th style="background: #eff6ff;">Com 2</th>
+                                <th style="background: #eff6ff; border-right: 2px solid #cbd5e1;">Tổng</th>
+                                <!-- Q2 -->
+                                <th style="background: #f0fdf4;">% KPI</th>
+                                <th style="background: #f0fdf4;">Com 1</th>
+                                <th style="background: #f0fdf4;">Com 2</th>
+                                <th style="background: #f0fdf4; border-right: 2px solid #cbd5e1;">Tổng</th>
+                                <!-- Q3 -->
+                                <th style="background: #fffbeb;">% KPI</th>
+                                <th style="background: #fffbeb;">Com 1</th>
+                                <th style="background: #fffbeb;">Com 2</th>
+                                <th style="background: #fffbeb; border-right: 2px solid #cbd5e1;">Tổng</th>
+                                <!-- Q4 -->
+                                <th style="background: #fdf2f8;">% KPI</th>
+                                <th style="background: #fdf2f8;">Com 1</th>
+                                <th style="background: #fdf2f8;">Com 2</th>
+                                <th style="background: #fdf2f8; border-right: 2px solid #cbd5e1;">Tổng</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <?php
+                            $grand_total_year = 0;
+                            $q_totals = [
+                                1 => ['com1' => 0, 'com2' => 0, 'total' => 0],
+                                2 => ['com1' => 0, 'com2' => 0, 'total' => 0],
+                                3 => ['com1' => 0, 'com2' => 0, 'total' => 0],
+                                4 => ['com1' => 0, 'com2' => 0, 'total' => 0]
+                            ];
+
+                            foreach ($all_ams as $am):
+                                if ($am === 'Unknown' || empty($am))
+                                    continue;
+                                $c = $am_commissions[$am] ?? null;
+                                if (!$c)
+                                    continue;
+
+                                $am_year_total = $c['Q1']['total'] + $c['Q2']['total'] + $c['Q3']['total'] + $c['Q4']['total'];
+                                $grand_total_year += $am_year_total;
+
+                                for ($i = 1; $i <= 4; $i++) {
+                                    $q_totals[$i]['com1'] += $c["Q$i"]['com1'];
+                                    $q_totals[$i]['com2'] += $c["Q$i"]['com2'];
+                                    $q_totals[$i]['total'] += $c["Q$i"]['total'];
+                                }
+                                ?>
+                                <tr>
+                                    <td style="background: #f8fafc; position: sticky; left: 0; font-weight: 600;">
+                                        <?= htmlspecialchars($am) ?>
+                                    </td>
+                                    <!-- Q1 -->
+                                    <td class="text-center"
+                                        style="<?= $c['Q1']['kpi_pct'] >= 100 ? 'color: #10b981; font-weight:bold;' : ($c['Q1']['kpi_pct'] < 70 ? 'color: #ef4444;' : 'color: #f59e0b;') ?>">
+                                        <?= number_format($c['Q1']['kpi_pct'], 1) ?>%
+                                    </td>
+                                    <td class="text-right"><?= formatUSD($c['Q1']['com1']) ?></td>
+                                    <td class="text-right"><?= formatUSD($c['Q1']['com2']) ?></td>
+                                    <td class="text-right" style="font-weight: 600; border-right: 2px solid #cbd5e1;">
+                                        <?= formatUSD($c['Q1']['total']) ?></td>
+
+                                    <!-- Q2 -->
+                                    <td class="text-center"
+                                        style="<?= $c['Q2']['kpi_pct'] >= 100 ? 'color: #10b981; font-weight:bold;' : ($c['Q2']['kpi_pct'] < 70 ? 'color: #ef4444;' : 'color: #f59e0b;') ?>">
+                                        <?= number_format($c['Q2']['kpi_pct'], 1) ?>%
+                                    </td>
+                                    <td class="text-right"><?= formatUSD($c['Q2']['com1']) ?></td>
+                                    <td class="text-right"><?= formatUSD($c['Q2']['com2']) ?></td>
+                                    <td class="text-right" style="font-weight: 600; border-right: 2px solid #cbd5e1;">
+                                        <?= formatUSD($c['Q2']['total']) ?></td>
+
+                                    <!-- Q3 -->
+                                    <td class="text-center"
+                                        style="<?= $c['Q3']['kpi_pct'] >= 100 ? 'color: #10b981; font-weight:bold;' : ($c['Q3']['kpi_pct'] < 70 ? 'color: #ef4444;' : 'color: #f59e0b;') ?>">
+                                        <?= number_format($c['Q3']['kpi_pct'], 1) ?>%
+                                    </td>
+                                    <td class="text-right"><?= formatUSD($c['Q3']['com1']) ?></td>
+                                    <td class="text-right"><?= formatUSD($c['Q3']['com2']) ?></td>
+                                    <td class="text-right" style="font-weight: 600; border-right: 2px solid #cbd5e1;">
+                                        <?= formatUSD($c['Q3']['total']) ?></td>
+
+                                    <!-- Q4 -->
+                                    <td class="text-center"
+                                        style="<?= $c['Q4']['kpi_pct'] >= 100 ? 'color: #10b981; font-weight:bold;' : ($c['Q4']['kpi_pct'] < 70 ? 'color: #ef4444;' : 'color: #f59e0b;') ?>">
+                                        <?= number_format($c['Q4']['kpi_pct'], 1) ?>%
+                                    </td>
+                                    <td class="text-right"><?= formatUSD($c['Q4']['com1']) ?></td>
+                                    <td class="text-right"><?= formatUSD($c['Q4']['com2']) ?></td>
+                                    <td class="text-right" style="font-weight: 600; border-right: 2px solid #cbd5e1;">
+                                        <?= formatUSD($c['Q4']['total']) ?></td>
+
+                                    <td class="text-right" style="background: #f1f5f9; font-weight: 700;">
+                                        <?= formatUSD($am_year_total) ?>
+                                    </td>
+                                </tr>
+                            <?php endforeach; ?>
+                        </tbody>
+                        <tfoot>
+                            <tr style="background: #f8fafc; font-weight: 700;">
+                                <td style="position: sticky; left: 0; background: #f8fafc;">TỔNG CỘNG</td>
+                                <!-- Q1 -->
+                                <td></td>
+                                <td class="text-right"><?= formatUSD($q_totals[1]['com1']) ?></td>
+                                <td class="text-right"><?= formatUSD($q_totals[1]['com2']) ?></td>
+                                <td class="text-right" style="border-right: 2px solid #cbd5e1;">
+                                    <?= formatUSD($q_totals[1]['total']) ?></td>
+                                <!-- Q2 -->
+                                <td></td>
+                                <td class="text-right"><?= formatUSD($q_totals[2]['com1']) ?></td>
+                                <td class="text-right"><?= formatUSD($q_totals[2]['com2']) ?></td>
+                                <td class="text-right" style="border-right: 2px solid #cbd5e1;">
+                                    <?= formatUSD($q_totals[2]['total']) ?></td>
+                                <!-- Q3 -->
+                                <td></td>
+                                <td class="text-right"><?= formatUSD($q_totals[3]['com1']) ?></td>
+                                <td class="text-right"><?= formatUSD($q_totals[3]['com2']) ?></td>
+                                <td class="text-right" style="border-right: 2px solid #cbd5e1;">
+                                    <?= formatUSD($q_totals[3]['total']) ?></td>
+                                <!-- Q4 -->
+                                <td></td>
+                                <td class="text-right"><?= formatUSD($q_totals[4]['com1']) ?></td>
+                                <td class="text-right"><?= formatUSD($q_totals[4]['com2']) ?></td>
+                                <td class="text-right" style="border-right: 2px solid #cbd5e1;">
+                                    <?= formatUSD($q_totals[4]['total']) ?></td>
+
+                                <td class="text-right" style="background: #1e293b; color: #fff;">
+                                    <?= formatUSD($grand_total_year) ?>
+                                </td>
+                            </tr>
+                        </tfoot>
                     </table>
                 </div>
             </div>
