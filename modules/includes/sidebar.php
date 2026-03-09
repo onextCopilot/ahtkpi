@@ -36,8 +36,12 @@ function isMenuItemActive($path, $current_uri)
 
         <!-- Debts Management Dropdown -->
         <?php if (!empty($_SESSION['is_am_bd']) || $_SESSION['role'] === 'admin'): ?>
-            <div class="nav-item nav-item-parent <?php echo (strpos($current_uri, '/debt') !== false || strpos($current_uri, '/my-debt') !== false || strpos($current_uri, '/debt-warning') !== false || strpos($current_uri, '/sale-reports') !== false) ? 'open' : ''; ?>"
-                onclick="toggleSubmenu(this)">
+            <div class="nav-item nav-item-parent <?php
+            $is_debt_open = strpos($current_uri, '/debt') !== false ||
+                strpos($current_uri, '/my-debt') !== false ||
+                strpos($current_uri, '/debt-warning') !== false ||
+                (strpos($current_uri, '/sale-reports') !== false && strpos($current_uri, '/sale-reports-admin') === false);
+            echo $is_debt_open ? 'open' : ''; ?>" onclick="toggleSubmenu(this)">
                 <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
                     stroke-linecap="round" stroke-linejoin="round">
                     <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
@@ -51,8 +55,7 @@ function isMenuItemActive($path, $current_uri)
                     <polyline points="6 9 12 15 18 9"></polyline>
                 </svg>
             </div>
-            <div
-                class="submenu <?php echo (strpos($current_uri, '/debt') !== false || strpos($current_uri, '/my-debt') !== false || strpos($current_uri, '/debt-warning') !== false || strpos($current_uri, '/sale-reports') !== false) ? 'open' : ''; ?>">
+            <div class="submenu <?php echo $is_debt_open ? 'open' : ''; ?>">
                 <a href="/debt" class="submenu-item <?php echo ($current_uri === '/debt') ? 'active' : ''; ?>">
                     <span>All Debts</span>
                 </a>
@@ -65,7 +68,7 @@ function isMenuItemActive($path, $current_uri)
                     <span>Debts Warning</span>
                 </a>
                 <a href="/sale-reports"
-                    class="submenu-item <?php echo ($current_uri === '/sale-reports' || strpos($current_uri, '/sale-reports') !== false) ? 'active' : ''; ?>">
+                    class="submenu-item <?php echo ($current_uri === '/sale-reports' || (strpos($current_uri, '/sale-reports') !== false && strpos($current_uri, '/sale-reports-admin') === false)) ? 'active' : ''; ?>">
                     <span>My Reports</span>
                 </a>
             </div>
@@ -125,6 +128,19 @@ function isMenuItemActive($path, $current_uri)
             </svg>
             <span>General KPI Management</span>
         </a>
+
+        <?php if ($_SESSION['role'] === 'admin'): ?>
+            <a href="/sale-reports-admin"
+                class="nav-item <?php echo (strpos($current_uri, '/sale-reports-admin') !== false) ? 'active' : ''; ?>">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                    stroke-linecap="round" stroke-linejoin="round">
+                    <line x1="12" y1="20" x2="12" y2="10"></line>
+                    <line x1="18" y1="20" x2="18" y2="4"></line>
+                    <line x1="6" y1="20" x2="6" y2="16"></line>
+                </svg>
+                <span>Sale Reports</span>
+            </a>
+        <?php endif; ?>
 
         <a href="/profile" class="nav-item <?php echo isMenuItemActive('/profile', $current_uri); ?>">
             <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
