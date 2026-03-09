@@ -312,6 +312,16 @@ if ($res) {
                 $changed = true;
             }
 
+            // Sync VAT Invoice if different
+            $newVat = $inv['name'] ?? '';
+            if ($newVat && $newVat !== ($row['vat_invoice'] ?? '')) {
+                $upSql[] = "vat_invoice = ?";
+                $upParams[] = $newVat;
+                $upTypes .= "s";
+                $row['vat_invoice'] = $newVat;
+                $changed = true;
+            }
+
             // Sync Invoice Date if different
             $newInvDateVal = $inv['invoice_date'] ?: $inv['date'];
             if ($newInvDateVal && $newInvDateVal !== ($row['invoice_date'] ?? '')) {
@@ -1360,215 +1370,231 @@ if ($team_res && $team_res->num_rows > 0) {
                         <tbody>
                             <?php $globalIdx = 1; ?>
                             <?php foreach ($groupedDebts as $monthName => $monthItems): ?>
-                                <tr class="group-header">
-                                    <td colspan="23">
-                                        <div style="position: sticky; left: 20px; display: inline-block; z-index: 13;">
-                                            Tháng <?php echo $monthName; ?>
-                                            <span class="group-total">(Total:
-                                                <?php echo formatVND($monthTotals[$monthName]); ?>)</span>
-                                        </div>
-                                    </td>
-                                </tr>
-                                <?php foreach ($monthItems as $d): ?>
-                                    <?php
-                                    $is_highlight = (isset($_GET['highlight_id']) && $_GET['highlight_id'] == $d['id']);
-                                    ?>
-                                    <tr id="debt-row-<?php echo $d['id']; ?>"
-                                        class="<?php echo $is_highlight ? 'highlight-row' : ''; ?>"
-                                        ondblclick="openModal('edit', <?php echo $d['id']; ?>)">
-                                        <td style="text-align: center; padding: 4px;"><?php echo $globalIdx++; ?></td>
-                                        <td style="text-align:center; white-space: nowrap; padding: 0;">
-                                            <button class="btn-sync-row"
-                                                onclick="syncDebt(<?php echo $d['id']; ?>, '<?php echo htmlspecialchars($d['vat_invoice']); ?>', this); event.stopPropagation();"
-                                                title="Sync from Odoo"
-                                                style="background:none; border:none; cursor:pointer; color:#0ea5e9; padding: 4px; margin-right: 5px;">
-                                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
-                                                    stroke="currentColor" stroke-width="2" stroke-linecap="round"
-                                                    stroke-linejoin="round">
-                                                    <path d="M23 4v6h-6"></path>
-                                                    <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path>
-                                                </svg>
-                                            </button>
-                                            <button class="btn-edit-row"
-                                                onclick="openModal('edit', <?php echo $d['id']; ?>); event.stopPropagation();"
-                                                title="Edit">
-                                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
-                                                    stroke="currentColor" stroke-width="2">
-                                                    <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
-                                                    <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
-                                                </svg>
-                                            </button>
-                                            <form method="POST"
-                                                onsubmit="return confirm('Are you sure you want to delete this debt?');"
-                                                style="display:inline-block; margin-left: 5px;"
-                                                onclick="event.stopPropagation();">
-                                                <input type="hidden" name="action" value="delete">
-                                                <input type="hidden" name="id" value="<?php echo $d['id']; ?>">
-                                                <button type="submit" class="btn-delete-row"
-                                                    style="background:none; border:none; cursor:pointer; color:#ef4444; padding: 4px;"
-                                                    title="Delete">
-                                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
-                                                        stroke="currentColor" stroke-width="2">
-                                                        <polyline points="3 6 5 6 21 6"></polyline>
-                                                        <path
-                                                            d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2">
-                                                        </path>
-                                                    </svg>
-                                                </button>
-                                            </form>
-                                        </td>
-                                        <td class="cell-company"><?php echo htmlspecialchars($d['company']); ?></td>
-                                        <td><?php echo htmlspecialchars($d['team_name'] ?? ''); ?></td>
-                                        <td>
-                                            <?php
-                                            // Format AM Badge
-                                            $am_class = 'am-default';
-                                            if (stripos($d['am'], 'Emily') !== false)
-                                                $am_class = 'am-emily';
-                                            if (stripos($d['am'], 'Hyun') !== false)
-                                                $am_class = 'am-hyun';
-                                            if (stripos($d['am'], 'Ryan') !== false)
-                                                $am_class = 'am-ryan';
-                                            ?>
-                                            <span
-                                                class="badge am-badge <?php echo $am_class; ?>"><?php echo htmlspecialchars($d['am']); ?></span>
-                                        </td>
-                                        <td class="cell-company"><?php echo htmlspecialchars($d['client_name'] ?? ''); ?></td>
-                                        <td><?php echo htmlspecialchars($d['project_name'] ?? ''); ?></td>
-                                        <td><?php echo formatDate($d['invoice_date']); ?></td>
-                                        <td style="position: relative;">
-                                            <input type="text"
-                                                value="<?php echo htmlspecialchars($d['payment_milestone'] ?? ''); ?>"
-                                                onclick="event.stopPropagation();"
-                                                onfocus="this.style.borderColor = '#cbd5e1'; this.style.backgroundColor = '#fff';"
-                                                onblur="this.style.borderColor = 'transparent'; this.style.backgroundColor = 'transparent'; updateInline(<?php echo $d['id']; ?>, 'payment_milestone', this.value, this)"
-                                                style="width: 100%; border: 1px solid transparent; background: transparent; padding: 8px 10px; font-family: inherit; font-size: inherit; outline: none; box-sizing: border-box;">
-                                        </td>
-                                        <td style="position: relative;">
-                                            <input type="date" value="<?php echo $d['expected_prod_date']; ?>"
-                                                onclick="event.stopPropagation();"
-                                                onfocus="this.style.borderColor = '#cbd5e1'; this.style.backgroundColor = '#fff';"
-                                                onblur="this.style.borderColor = 'transparent'; this.style.backgroundColor = 'transparent'; updateInline(<?php echo $d['id']; ?>, 'expected_prod_date', this.value, this)"
-                                                style="width: 100%; border: 1px solid transparent; background: transparent; padding: 8px 10px; font-family: inherit; font-size: inherit; outline: none; box-sizing: border-box;">
-                                        </td>
-                                        <td style="position: relative;">
-                                            <input type="date" value="<?php echo $d['expected_payment_date']; ?>"
-                                                onclick="event.stopPropagation();"
-                                                onfocus="this.style.borderColor = '#cbd5e1'; this.style.backgroundColor = '#fff';"
-                                                onblur="this.style.borderColor = 'transparent'; this.style.backgroundColor = 'transparent'; updateInline(<?php echo $d['id']; ?>, 'expected_payment_date', this.value, this)"
-                                                style="width: 100%; border: 1px solid transparent; background: transparent; padding: 8px 10px; font-family: inherit; font-size: inherit; outline: none; box-sizing: border-box;">
-                                        </td>
-                                        <td style="position: relative; text-align: center;">
-                                            <?php
-                                            $st = $d['invoice_status_class'] ?? '';
-                                            $bgClass = 'status-chuaxacdinh'; // Default
-                                            if ($st === 'Done')
-                                                $bgClass = 'status-done';
-                                            elseif ($st === 'Tím')
-                                                $bgClass = 'status-tim';
-                                            elseif ($st === 'Xanh')
-                                                $bgClass = 'status-xanh';
-                                            elseif ($st === 'Trắng')
-                                                $bgClass = 'status-trang';
-                                            elseif ($st === 'Tốt')
-                                                $bgClass = 'status-xanh'; // Legacy
-                                            elseif ($st === 'Chưa xác định')
-                                                $bgClass = 'status-chuaxacdinh';
-                                            elseif ($st === 'Đỏ')
-                                                $bgClass = 'status-do';
-                                            elseif ($st === 'PP')
-                                                $bgClass = 'status-pp';
-                                            elseif ($st === 'Draft')
-                                                $bgClass = 'status-draft';
-
-                                            if ($st === 'Done' || $st === 'Tím' || $st === 'Đỏ') {
-                                                echo "<span class='$bgClass' style='margin-top: 6px;'>" . htmlspecialchars($st) . "</span>";
-                                            } else {
-                                                // Editable Select
-                                                ?>
-                                                <select class="status-select <?php echo $bgClass; ?>" autocomplete="off"
-                                                    onchange="this.className = 'status-select status-' + this.value.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\s+/g, ''); updateInline(<?php echo $d['id']; ?>, 'invoice_status_class', this.value, this)"
-                                                    onclick="event.stopPropagation();">
-                                                    <option value="Trắng" <?php echo ($st === 'Trắng') ? 'selected' : ''; ?>>Trắng
-                                                    </option>
-                                                    <option value="Xanh" <?php echo ($st === 'Xanh' || $st === 'Tốt') ? 'selected' : ''; ?>>Xanh</option>
-                                                    <option value="Tím" <?php echo ($st === 'Tím') ? 'selected' : ''; ?>>Tím</option>
-                                                    <option value="PP" <?php echo ($st === 'PP') ? 'selected' : ''; ?>>PP</option>
-                                                    <option value="Draft" <?php echo ($st === 'Draft') ? 'selected' : ''; ?>>Draft
-                                                    </option>
-                                                    <option value="Chưa xác định" <?php echo ($st === 'Chưa xác định' || ($st !== 'Trắng' && $st !== 'Xanh' && $st !== 'Tốt' && $st !== 'PP' && $st !== 'Draft' && $st !== 'Tím')) ? 'selected' : ''; ?>>Chưa xác định</option>
-                                                </select>
-                                                <?php
-                                            }
-                                            ?>
-                                        </td>
-                                        <td class="cell-amount" style="color: #64748b;">
-                                            <?php echo !empty($d['original_amount']) ? formatCurrency($d['original_amount'], $d['original_currency'] ?? $d['currency'] ?? 'USD') : '-'; ?>
-                                        </td>
-                                        <td class="cell-amount">
-                                            <?php echo formatCurrency($d['amount'] ?? 0, $d['currency'] ?? 'USD'); ?>
-                                        </td>
-                                        <td>
-                                            <span
-                                                class="badge <?php echo (stripos($d['pl_class'] ?? '', 'Xấu') !== false ? 'pl-xau' : ((stripos($d['pl_class'] ?? '', 'TB') !== false) ? 'pl-tb' : 'pl-tot')); ?>">
-                                                <?php echo htmlspecialchars($d['pl_class'] ?? ''); ?>
-                                            </span>
-                                        </td>
-                                        <td style="position: relative;">
-                                            <input type="text"
-                                                value="<?php echo htmlspecialchars($d['invoice_status'] ?? ''); ?>"
-                                                onclick="event.stopPropagation();"
-                                                onfocus="this.style.borderColor = '#cbd5e1'; this.style.backgroundColor = '#fff';"
-                                                onblur="this.style.borderColor = 'transparent'; this.style.backgroundColor = 'transparent'; updateInline(<?php echo $d['id']; ?>, 'invoice_status', this.value, this)"
-                                                style="width: 100%; border: 1px solid transparent; background: transparent; padding: 8px 10px; font-family: inherit; font-size: inherit; outline: none; box-sizing: border-box;">
-                                        </td>
-                                        <td><?php echo htmlspecialchars($d['vat_invoice'] ?? ''); ?></td>
-                                        <td>
-                                            <span
-                                                class="badge <?php echo (stripos($d['payment_status'] ?? '', 'Not') !== false ? 'pay-not-paid' : 'pay-paid'); ?>">
-                                                <?php echo htmlspecialchars($d['payment_status'] ?? ''); ?>
-                                            </span>
-                                        </td>
-                                        <td><?php echo htmlspecialchars($d['payment_month'] ?? ''); ?></td>
-                                        <td><?php echo htmlspecialchars($d['weekly_update'] ?? ''); ?></td>
-                                        <td style="position: relative;">
-                                            <input type="text" value="<?php echo htmlspecialchars($d['am_notes'] ?? ''); ?>"
-                                                onclick="event.stopPropagation();"
-                                                onfocus="this.style.borderColor = '#cbd5e1'; this.style.backgroundColor = '#fff';"
-                                                onblur="this.style.borderColor = 'transparent'; this.style.backgroundColor = 'transparent'; updateInline(<?php echo $d['id']; ?>, 'am_notes', this.value, this)"
-                                                style="width: 100%; border: 1px solid transparent; background: transparent; padding: 8px 10px; font-family: inherit; font-size: 0.85rem; color: #555; outline: none; box-sizing: border-box; text-overflow: ellipsis;">
-                                        </td>
-                                        <td style="position: relative;">
-                                            <input type="text"
-                                                value="<?php echo htmlspecialchars($d['delivery_notes'] ?? ''); ?>"
-                                                onclick="event.stopPropagation();"
-                                                onfocus="this.style.borderColor = '#cbd5e1'; this.style.backgroundColor = '#fff';"
-                                                onblur="this.style.borderColor = 'transparent'; this.style.backgroundColor = 'transparent'; updateInline(<?php echo $d['id']; ?>, 'delivery_notes', this.value, this)"
-                                                style="width: 100%; border: 1px solid transparent; background: transparent; padding: 8px 10px; font-family: inherit; font-size: 0.85rem; color: #555; outline: none; box-sizing: border-box; text-overflow: ellipsis;">
-                                        </td>
-                                        <td style="position: relative; text-align: center;">
-                                            <?php
-                                            $ps = $d['production_status'] ?? '';
-                                            $prodClass = 'prod-dc2';
-                                            if (stripos($ps, 'Overdue') !== false || stripos($ps, 'DC5') !== false)
-                                                $prodClass = 'prod-dc5';
-                                            elseif (stripos($ps, 'DC1') !== false)
-                                                $prodClass = 'prod-dc1';
-                                            ?>
-                                            <select
-                                                onchange="updateInline(<?php echo $d['id']; ?>, 'production_status', this.value, this)"
-                                                onclick="event.stopPropagation();"
-                                                style="width: 100%; border: 1px solid transparent; background: transparent; padding: 4px 8px; font-family: inherit; font-size: 0.85rem; cursor: pointer; border-radius: 4px; outline: none;">
-                                                <option value="">-- Trạng thái --</option>
-                                                <option value="BCITO" <?php echo ($ps === 'BCITO') ? 'selected' : ''; ?>>BCITO
-                                                </option>
-                                                <?php for ($i = 3; $i <= 10; $i++): ?>
-                                                    <option value="BC<?php echo $i; ?>" <?php echo ($ps === 'BC' . $i) ? 'selected' : ''; ?>>BC<?php echo $i; ?></option>
-                                                <?php endfor; ?>
-                                            </select>
+                                    <tr class="group-header">
+                                        <td colspan="23">
+                                            <div style="position: sticky; left: 20px; display: inline-block; z-index: 13;">
+                                                Tháng <?php echo $monthName; ?>
+                                                <span class="group-total">(Total:
+                                                    <?php echo formatVND($monthTotals[$monthName]); ?>)</span>
+                                            </div>
                                         </td>
                                     </tr>
-                                <?php endforeach; ?>
+                                    <?php foreach ($monthItems as $d): ?>
+                                            <?php
+                                            $is_highlight = (isset($_GET['highlight_id']) && $_GET['highlight_id'] == $d['id']);
+                                            ?>
+                                            <tr id="debt-row-<?php echo $d['id']; ?>"
+                                                class="<?php echo $is_highlight ? 'highlight-row' : ''; ?>"
+                                                ondblclick="openModal('edit', <?php echo $d['id']; ?>)">
+                                                <td style="text-align: center; padding: 4px;"><?php echo $globalIdx++; ?></td>
+                                                <td style="text-align:center; white-space: nowrap; padding: 0;">
+                                                    <button class="btn-sync-row"
+                                                        onclick="syncDebt(<?php echo $d['id']; ?>, '<?php echo htmlspecialchars($d['vat_invoice']); ?>', this); event.stopPropagation();"
+                                                        title="Sync from Odoo"
+                                                        style="background:none; border:none; cursor:pointer; color:#0ea5e9; padding: 4px; margin-right: 5px;">
+                                                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
+                                                            stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                                                            stroke-linejoin="round">
+                                                            <path d="M23 4v6h-6"></path>
+                                                            <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path>
+                                                        </svg>
+                                                    </button>
+                                                    <button class="btn-edit-row"
+                                                        onclick="openModal('edit', <?php echo $d['id']; ?>); event.stopPropagation();"
+                                                        title="Edit">
+                                                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
+                                                            stroke="currentColor" stroke-width="2">
+                                                            <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+                                                            <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+                                                        </svg>
+                                                    </button>
+                                                    <form method="POST"
+                                                        onsubmit="return confirm('Are you sure you want to delete this debt?');"
+                                                        style="display:inline-block; margin-left: 5px;"
+                                                        onclick="event.stopPropagation();">
+                                                        <input type="hidden" name="action" value="delete">
+                                                        <input type="hidden" name="id" value="<?php echo $d['id']; ?>">
+                                                        <button type="submit" class="btn-delete-row"
+                                                            style="background:none; border:none; cursor:pointer; color:#ef4444; padding: 4px;"
+                                                            title="Delete">
+                                                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
+                                                                stroke="currentColor" stroke-width="2">
+                                                                <polyline points="3 6 5 6 21 6"></polyline>
+                                                                <path
+                                                                    d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2">
+                                                                </path>
+                                                            </svg>
+                                                        </button>
+                                                    </form>
+                                                </td>
+                                                <td class="cell-company"><?php echo htmlspecialchars($d['company']); ?></td>
+                                                <td><?php echo htmlspecialchars($d['team_name'] ?? ''); ?></td>
+                                                <td>
+                                                    <?php
+                                                    // Format AM Badge
+                                                    $am_class = 'am-default';
+                                                    if (stripos($d['am'], 'Emily') !== false)
+                                                        $am_class = 'am-emily';
+                                                    if (stripos($d['am'], 'Hyun') !== false)
+                                                        $am_class = 'am-hyun';
+                                                    if (stripos($d['am'], 'Ryan') !== false)
+                                                        $am_class = 'am-ryan';
+                                                    ?>
+                                                    <span
+                                                        class="badge am-badge <?php echo $am_class; ?>"><?php echo htmlspecialchars($d['am']); ?></span>
+                                                </td>
+                                                <td class="cell-company"><?php echo htmlspecialchars($d['client_name'] ?? ''); ?></td>
+                                                <td style="position: relative;">
+                                                    <input type="text"
+                                                        value="<?php echo htmlspecialchars($d['project_name'] ?? ''); ?>"
+                                                        onclick="event.stopPropagation();"
+                                                        onfocus="this.style.borderColor = '#cbd5e1'; this.style.backgroundColor = '#fff';"
+                                                        onblur="this.style.borderColor = 'transparent'; this.style.backgroundColor = 'transparent'; updateInline(<?php echo $d['id']; ?>, 'project_name', this.value, this)"
+                                                        style="width: 100%; border: 1px solid transparent; background: transparent; padding: 8px 10px; font-family: inherit; font-size: inherit; outline: none; box-sizing: border-box;">
+                                                </td>
+                                                <td><?php echo formatDate($d['invoice_date']); ?></td>
+                                                <td style="position: relative;">
+                                                    <input type="text"
+                                                        value="<?php echo htmlspecialchars($d['payment_milestone'] ?? ''); ?>"
+                                                        onclick="event.stopPropagation();"
+                                                        onfocus="this.style.borderColor = '#cbd5e1'; this.style.backgroundColor = '#fff';"
+                                                        onblur="this.style.borderColor = 'transparent'; this.style.backgroundColor = 'transparent'; updateInline(<?php echo $d['id']; ?>, 'payment_milestone', this.value, this)"
+                                                        style="width: 100%; border: 1px solid transparent; background: transparent; padding: 8px 10px; font-family: inherit; font-size: inherit; outline: none; box-sizing: border-box;">
+                                                </td>
+                                                <td style="position: relative;">
+                                                    <input type="date" value="<?php echo $d['expected_prod_date']; ?>"
+                                                        onclick="event.stopPropagation();"
+                                                        onfocus="this.style.borderColor = '#cbd5e1'; this.style.backgroundColor = '#fff';"
+                                                        onblur="this.style.borderColor = 'transparent'; this.style.backgroundColor = 'transparent'; updateInline(<?php echo $d['id']; ?>, 'expected_prod_date', this.value, this)"
+                                                        style="width: 100%; border: 1px solid transparent; background: transparent; padding: 8px 10px; font-family: inherit; font-size: inherit; outline: none; box-sizing: border-box;">
+                                                </td>
+                                                <td style="position: relative;">
+                                                    <input type="date" value="<?php echo $d['expected_payment_date']; ?>"
+                                                        onclick="event.stopPropagation();"
+                                                        onfocus="this.style.borderColor = '#cbd5e1'; this.style.backgroundColor = '#fff';"
+                                                        onblur="this.style.borderColor = 'transparent'; this.style.backgroundColor = 'transparent'; updateInline(<?php echo $d['id']; ?>, 'expected_payment_date', this.value, this)"
+                                                        style="width: 100%; border: 1px solid transparent; background: transparent; padding: 8px 10px; font-family: inherit; font-size: inherit; outline: none; box-sizing: border-box;">
+                                                </td>
+                                                <td style="position: relative; text-align: center;">
+                                                    <?php
+                                                    $st = $d['invoice_status_class'] ?? '';
+                                                    $bgClass = 'status-chuaxacdinh'; // Default
+                                                    if ($st === 'Done')
+                                                        $bgClass = 'status-done';
+                                                    elseif ($st === 'Tím')
+                                                        $bgClass = 'status-tim';
+                                                    elseif ($st === 'Xanh')
+                                                        $bgClass = 'status-xanh';
+                                                    elseif ($st === 'Trắng')
+                                                        $bgClass = 'status-trang';
+                                                    elseif ($st === 'Tốt')
+                                                        $bgClass = 'status-xanh'; // Legacy
+                                                    elseif ($st === 'Chưa xác định')
+                                                        $bgClass = 'status-chuaxacdinh';
+                                                    elseif ($st === 'Đỏ')
+                                                        $bgClass = 'status-do';
+                                                    elseif ($st === 'PP')
+                                                        $bgClass = 'status-pp';
+                                                    elseif ($st === 'Draft')
+                                                        $bgClass = 'status-draft';
+
+                                                    if ($st === 'Done' || $st === 'Tím' || $st === 'Đỏ') {
+                                                        echo "<span class='$bgClass' style='margin-top: 6px;'>" . htmlspecialchars($st) . "</span>";
+                                                    } else {
+                                                        // Editable Select
+                                                        ?>
+                                                            <select class="status-select <?php echo $bgClass; ?>" autocomplete="off"
+                                                                onchange="this.className = 'status-select status-' + this.value.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\s+/g, ''); updateInline(<?php echo $d['id']; ?>, 'invoice_status_class', this.value, this)"
+                                                                onclick="event.stopPropagation();">
+                                                                <option value="Trắng" <?php echo ($st === 'Trắng') ? 'selected' : ''; ?>>Trắng
+                                                                </option>
+                                                                <option value="Xanh" <?php echo ($st === 'Xanh' || $st === 'Tốt') ? 'selected' : ''; ?>>Xanh</option>
+                                                                <option value="Tím" <?php echo ($st === 'Tím') ? 'selected' : ''; ?>>Tím</option>
+                                                                <option value="PP" <?php echo ($st === 'PP') ? 'selected' : ''; ?>>PP</option>
+                                                                <option value="Draft" <?php echo ($st === 'Draft') ? 'selected' : ''; ?>>Draft
+                                                                </option>
+                                                                <option value="Chưa xác định" <?php echo ($st === 'Chưa xác định' || ($st !== 'Trắng' && $st !== 'Xanh' && $st !== 'Tốt' && $st !== 'PP' && $st !== 'Draft' && $st !== 'Tím')) ? 'selected' : ''; ?>>Chưa xác định</option>
+                                                            </select>
+                                                            <?php
+                                                    }
+                                                    ?>
+                                                </td>
+                                                <td class="cell-amount" style="color: #64748b;">
+                                                    <?php echo !empty($d['original_amount']) ? formatCurrency($d['original_amount'], $d['original_currency'] ?? $d['currency'] ?? 'USD') : '-'; ?>
+                                                </td>
+                                                <td class="cell-amount">
+                                                    <?php echo formatCurrency($d['amount'] ?? 0, $d['currency'] ?? 'USD'); ?>
+                                                </td>
+                                                <td style="position: relative; text-align: center;">
+                                                    <?php
+                                                    $plVal = $d['pl_class'] ?? '';
+                                                    $plBadgeClass = (stripos($plVal, 'Xấu') !== false ? 'pl-xau' : ((stripos($plVal, 'TB') !== false) ? 'pl-tb' : 'pl-tot'));
+                                                    ?>
+                                                    <select 
+                                                        class="badge <?php echo $plBadgeClass; ?>"
+                                                        onchange="this.className = 'badge ' + (this.value.includes('Xấu') ? 'pl-xau' : (this.value.includes('TB') ? 'pl-tb' : 'pl-tot')); updateInline(<?php echo $d['id']; ?>, 'pl_class', this.value, this)"
+                                                        onclick="event.stopPropagation();"
+                                                        style="width: 100%; border: 1px solid transparent; background: transparent; padding: 4px 8px; font-family: inherit; font-size: 0.85rem; cursor: pointer; text-align-last: center; outline: none;">
+                                                        <option value="Tốt" <?php echo ($plVal === 'Tốt') ? 'selected' : ''; ?>>Tốt</option>
+                                                        <option value="TB" <?php echo ($plVal === 'TB') ? 'selected' : ''; ?>>TB</option>
+                                                        <option value="Xấu" <?php echo ($plVal === 'Xấu') ? 'selected' : ''; ?>>Xấu</option>
+                                                    </select>
+                                                </td>
+                                                <td style="position: relative;">
+                                                    <input type="text"
+                                                        value="<?php echo htmlspecialchars($d['invoice_status'] ?? ''); ?>"
+                                                        onclick="event.stopPropagation();"
+                                                        onfocus="this.style.borderColor = '#cbd5e1'; this.style.backgroundColor = '#fff';"
+                                                        onblur="this.style.borderColor = 'transparent'; this.style.backgroundColor = 'transparent'; updateInline(<?php echo $d['id']; ?>, 'invoice_status', this.value, this)"
+                                                        style="width: 100%; border: 1px solid transparent; background: transparent; padding: 8px 10px; font-family: inherit; font-size: inherit; outline: none; box-sizing: border-box;">
+                                                </td>
+                                                <td><?php echo htmlspecialchars($d['vat_invoice'] ?? ''); ?></td>
+                                                <td>
+                                                    <span
+                                                        class="badge <?php echo (stripos($d['payment_status'] ?? '', 'Not') !== false ? 'pay-not-paid' : 'pay-paid'); ?>">
+                                                        <?php echo htmlspecialchars($d['payment_status'] ?? ''); ?>
+                                                    </span>
+                                                </td>
+                                                <td><?php echo htmlspecialchars($d['payment_month'] ?? ''); ?></td>
+                                                <td><?php echo htmlspecialchars($d['weekly_update'] ?? ''); ?></td>
+                                                <td style="position: relative;">
+                                                    <input type="text" value="<?php echo htmlspecialchars($d['am_notes'] ?? ''); ?>"
+                                                        onclick="event.stopPropagation();"
+                                                        onfocus="this.style.borderColor = '#cbd5e1'; this.style.backgroundColor = '#fff';"
+                                                        onblur="this.style.borderColor = 'transparent'; this.style.backgroundColor = 'transparent'; updateInline(<?php echo $d['id']; ?>, 'am_notes', this.value, this)"
+                                                        style="width: 100%; border: 1px solid transparent; background: transparent; padding: 8px 10px; font-family: inherit; font-size: 0.85rem; color: #555; outline: none; box-sizing: border-box; text-overflow: ellipsis;">
+                                                </td>
+                                                <td style="position: relative;">
+                                                    <input type="text"
+                                                        value="<?php echo htmlspecialchars($d['delivery_notes'] ?? ''); ?>"
+                                                        onclick="event.stopPropagation();"
+                                                        onfocus="this.style.borderColor = '#cbd5e1'; this.style.backgroundColor = '#fff';"
+                                                        onblur="this.style.borderColor = 'transparent'; this.style.backgroundColor = 'transparent'; updateInline(<?php echo $d['id']; ?>, 'delivery_notes', this.value, this)"
+                                                        style="width: 100%; border: 1px solid transparent; background: transparent; padding: 8px 10px; font-family: inherit; font-size: 0.85rem; color: #555; outline: none; box-sizing: border-box; text-overflow: ellipsis;">
+                                                </td>
+                                                <td style="position: relative; text-align: center;">
+                                                    <?php
+                                                    $ps = $d['production_status'] ?? '';
+                                                    $prodClass = 'prod-dc2';
+                                                    if (stripos($ps, 'Overdue') !== false || stripos($ps, 'DC5') !== false)
+                                                        $prodClass = 'prod-dc5';
+                                                    elseif (stripos($ps, 'DC1') !== false)
+                                                        $prodClass = 'prod-dc1';
+                                                    ?>
+                                                    <select
+                                                        onchange="updateInline(<?php echo $d['id']; ?>, 'production_status', this.value, this)"
+                                                        onclick="event.stopPropagation();"
+                                                        style="width: 100%; border: 1px solid transparent; background: transparent; padding: 4px 8px; font-family: inherit; font-size: 0.85rem; cursor: pointer; border-radius: 4px; outline: none;">
+                                                        <option value="">-- Trạng thái --</option>
+                                                        <option value="BCITO" <?php echo ($ps === 'BCITO') ? 'selected' : ''; ?>>BCITO
+                                                        </option>
+                                                        <?php for ($i = 3; $i <= 10; $i++): ?>
+                                                                <option value="BC<?php echo $i; ?>" <?php echo ($ps === 'BC' . $i) ? 'selected' : ''; ?>>BC<?php echo $i; ?></option>
+                                                        <?php endfor; ?>
+                                                    </select>
+                                                </td>
+                                            </tr>
+                                    <?php endforeach; ?>
                             <?php endforeach; ?>
                         </tbody>
                     </table>
@@ -1613,9 +1639,9 @@ if ($team_res && $team_res->num_rows > 0) {
                                 <option value="">-- Select Team
                                     --</option>
                                 <?php foreach ($all_teams as $team): ?>
-                                    <option value="<?php echo htmlspecialchars($team['id']); ?>">
-                                        <?php echo htmlspecialchars($team['name']); ?>
-                                    </option>
+                                        <option value="<?php echo htmlspecialchars($team['id']); ?>">
+                                            <?php echo htmlspecialchars($team['name']); ?>
+                                        </option>
                                 <?php endforeach; ?>
                             </select>
                         </div>
@@ -1626,9 +1652,9 @@ if ($team_res && $team_res->num_rows > 0) {
                             <label>AM</label>
                             <select name="am" id="am">
                                 <?php foreach ($am_list as $am_name): ?>
-                                    <option value="<?php echo htmlspecialchars($am_name); ?>">
-                                        <?php echo htmlspecialchars($am_name); ?>
-                                    </option>
+                                        <option value="<?php echo htmlspecialchars($am_name); ?>">
+                                            <?php echo htmlspecialchars($am_name); ?>
+                                        </option>
                                 <?php endforeach; ?>
                             </select>
                         </div>
