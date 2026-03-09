@@ -300,8 +300,8 @@ $budget_placeholder = 0;
         }
 
         table.revenue-table thead tr:nth-child(2) th {
-            top: 41px;
-            /* Approximation for the second header row */
+            top: 40px;
+            /* Adjusted from 41px to 40px to remove the white gap */
             z-index: 9;
             border-top: none;
         }
