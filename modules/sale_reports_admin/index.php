@@ -673,40 +673,6 @@ $budget_placeholder = 0;
                     </form>
                 </div>
 
-                <div class="report-guide-box">
-                    <h3>
-                        <svg xmlns="http://www.w3.org/2000/svg" style="width:20px; height:20px" fill="none"
-                            viewBox="0 0 24 24" stroke="currentColor">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                        </svg>
-                        Hướng dẫn & Cơ chế lấy dữ liệu
-                    </h3>
-                    <ul class="report-guide-list">
-                        <li class="report-guide-item">
-                            <strong>Nguồn dữ liệu:</strong> Dữ liệu được đồng bộ trực tiếp từ hệ thống Odoo Invoices
-                            (Hóa đơn) và Payments (Thanh toán).
-                        </li>
-                        <li class="report-guide-item">
-                            <strong>Doanh thu KPI (Recognised):</strong> Tính dựa trên các hóa đơn Odoo ở trạng thái
-                            <code>Posted</code>. Không bao gồm các hóa đơn bị loại trừ thủ công.
-                        </li>
-                        <li class="report-guide-item">
-                            <strong>Invoiced Revenue (Actual):</strong> Tổng giá trị Invoice được ghi nhận trên hệ thống
-                            Debts (Công nợ) tại trạng thái <code>Posted</code>.
-                        </li>
-                        <li class="report-guide-item">
-                            <strong>Commission (Ước tính):</strong> Tính dựa trên số tiền khách hàng thực trả trong Quý.
-                            Tỷ lệ nhận Commission (Payout Ratio) phụ thuộc vào % đạt KPI doanh thu của từng Quý (70-100%
-                            nhận 70%, trên 100% nhận đủ 100%).
-                        </li>
-                        <li class="report-guide-item">
-                            <strong>Tương tác:</strong> Click vào từng dòng hoặc ô trong bảng <strong>TỔNG KẾT
-                                COMMISSION</strong> để xem chi tiết tính toán theo từng hóa đơn của AM/BD.
-                        </li>
-                    </ul>
-                </div>
-
                 <?php if (!empty($all_ams)): ?>
                     <div class="table-responsive">
                         <table class="revenue-table">
@@ -1086,6 +1052,41 @@ $budget_placeholder = 0;
                         <p style="font-size: 0.875rem;">Vui lòng kiểm tra lại cấu hình người dùng (is_am_bd = 1).</p>
                     </div>
                 <?php endif; ?>
+
+                <div class="report-guide-box" style="margin-top: 3rem;">
+                    <h3>
+                        <svg xmlns="http://www.w3.org/2000/svg" style="width:20px; height:20px" fill="none"
+                            viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                        Hướng dẫn & Cơ chế lấy dữ liệu
+                    </h3>
+                    <ul class="report-guide-list">
+                        <li class="report-guide-item">
+                            <strong>Nguồn dữ liệu:</strong> Dữ liệu được đồng bộ trực tiếp từ hệ thống Odoo Invoices
+                            (Hóa đơn) và Payments (Thanh toán).
+                        </li>
+                        <li class="report-guide-item">
+                            <strong>Doanh thu KPI (Recognised):</strong> Tính dựa trên các hóa đơn Odoo ở trạng thái
+                            <code>Posted</code>. Không bao gồm các hóa đơn bị loại trừ thủ công.
+                        </li>
+                        <li class="report-guide-item">
+                            <strong>Invoiced Revenue (Actual):</strong> Tổng giá trị Invoice được ghi nhận trên hệ thống
+                            Debts (Công nợ) tại trạng thái <code>Posted</code>.
+                        </li>
+                        <li class="report-guide-item">
+                            <strong>Commission (Ước tính):</strong> Tính dựa trên số tiền khách hàng thực trả trong Quý.
+                            Tỷ lệ nhận Commission (Payout Ratio) phụ thuộc vào % đạt KPI doanh thu của từng Quý (70-100%
+                            nhận 70%, trên 100% nhận đủ 100%).
+                        </li>
+                        <li class="report-guide-item">
+                            <strong>Tương tác:</strong> Click vào từng dòng hoặc ô trong bảng <strong>TỔNG KẾT
+                                COMMISSION</strong> để xem chi tiết tính toán theo từng hóa đơn của AM/BD.
+                        </li>
+                    </ul>
+                </div>
+            </div>
         </main>
     </div>
     <script>
