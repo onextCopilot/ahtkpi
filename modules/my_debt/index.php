@@ -1394,7 +1394,7 @@ if ($team_res && $team_res->num_rows > 0) {
                                                 <td style="text-align: center; padding: 4px;"><?php echo $globalIdx++; ?></td>
                                                 <td style="text-align:center; white-space: nowrap; padding: 0;">
                                                     <button class="btn-sync-row"
-                                                        onclick="syncDebt(<?php echo $d['id']; ?>, '<?php echo htmlspecialchars($d['vat_invoice']); ?>', this); event.stopPropagation();"
+                                                        onclick="syncDebt(<?php echo $d['id']; ?>, <?php echo htmlspecialchars(json_encode((string) ($d['vat_invoice'] ?? '')), ENT_QUOTES); ?>, this); event.stopPropagation();"
                                                         title="Sync from Odoo"
                                                         style="background:none; border:none; cursor:pointer; color:#0ea5e9; padding: 4px; margin-right: 5px;">
                                                         <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
@@ -2203,7 +2203,7 @@ if ($team_res && $team_res->num_rows > 0) {
                 .then(data => {
                     if (!data.success) {
                         alert('Update failed: ' + (data.error || 'Unknown error'));
-                        if (el) el.style.backgroundColor = '#fee2e2'; // Red flash
+                        if (el) el.style.backgroundColor = '#fee2e2';
                     } else {
                         if (el) {
                             // Success Tick
@@ -2217,14 +2217,12 @@ if ($team_res && $team_res->num_rows > 0) {
                             tick.style.zIndex = '10';
                             tick.style.pointerEvents = 'none';
 
-                            // Remove existing tick if any
                             const oldTick = parent.querySelector('.inline-success-tick');
                             if (oldTick) oldTick.remove();
 
                             tick.classList.add('inline-success-tick');
                             parent.appendChild(tick);
 
-                            // Fade out
                             setTimeout(() => {
                                 tick.style.transition = 'opacity 0.5s';
                                 tick.style.opacity = '0';
@@ -2234,7 +2232,7 @@ if ($team_res && $team_res->num_rows > 0) {
                     }
                 })
                 .catch(err => {
-                    console.error('Update valid error:', err);
+                    console.error('Update Error:', err);
                     if (el) el.style.backgroundColor = '#fee2e2';
                 });
         }
@@ -2262,38 +2260,36 @@ if ($team_res && $team_res->num_rows > 0) {
 
                 cols.forEach((th, index) => {
                     const colIndex = index + 1;
-                    const isSticky = colIndex <= 7; let w = widths[colIndex]; if (isSticky) {
-                        let actualW = w ||
-                            defaultStickyWidths[index]; css += `\n#${tableId} th:nth-child(${colIndex}), #${tableId}
-                tr:not(.group-header) td:nth-child(${colIndex}) { left: ${runningLeft}px !important; }`; if (w) {
-                            css
-                                += `\n#${tableId} th:nth-child(${colIndex}), #${tableId} tr:not(.group-header) td:nth-child(${colIndex})
-                { width: ${w}px !important; min-width: ${w}px !important; max-width: ${w}px !important; }`;
+                    const isSticky = colIndex <= 7;
+                    let w = widths[colIndex];
+
+                    if (isSticky) {
+                        let actualW = w || defaultStickyWidths[index];
+                        css += `#${tableId} th:nth-child(${colIndex}), #${tableId} tr:not(.group-header) td:nth-child(${colIndex}) { left: ${runningLeft}px !important; }\n`;
+                        if (w) {
+                            css += `#${tableId} th:nth-child(${colIndex}), #${tableId} tr:not(.group-header) td:nth-child(${colIndex}) { width: ${w}px !important; min-width: ${w}px !important; max-width: ${w}px !important; }\n`;
                         }
                         runningLeft += actualW;
-                    } else {
-                        if (w) {
-                            css += `\n#${tableId} th:nth-child(${colIndex}), #${tableId}
-                tr:not(.group-header) td:nth-child(${colIndex}) { width: ${w}px !important; min-width: ${w}px
-                !important; max-width: ${w}px !important; }`;
-                        }
+                    } else if (w) {
+                        css += `#${tableId} th:nth-child(${colIndex}), #${tableId} tr:not(.group-header) td:nth-child(${colIndex}) { width: ${w}px !important; min-width: ${w}px !important; max-width: ${w}px !important; }\n`;
                     }
-                }); styleEl.innerHTML = css;
-            } renderStyles();
+                });
+                styleEl.innerHTML = css;
+            }
+
+            renderStyles();
+
             cols.forEach((th, index) => {
                 const colIndex = index + 1;
-
                 const resizer = document.createElement('div');
                 resizer.className = 'col-resizer';
                 th.appendChild(resizer);
 
-                let x = 0;
-                let w = 0;
+                let x = 0, w = 0;
 
                 const mouseDownHandler = function (e) {
                     x = e.clientX;
                     w = th.getBoundingClientRect().width;
-
                     document.addEventListener('mousemove', mouseMoveHandler);
                     document.addEventListener('mouseup', mouseUpHandler);
                     document.body.style.cursor = 'col-resize';
@@ -2303,13 +2299,19 @@ if ($team_res && $team_res->num_rows > 0) {
                 const mouseMoveHandler = function (e) {
                     const dx = e.clientX - x;
                     let newW = w + dx;
-                    if (newW < 30) newW = 30; // Min width widths[colIndex]=newW; renderStyles(); e.stopPropagation();
+                    if (newW < 30) newW = 30;
+                    widths[colIndex] = newW;
+                    renderStyles();
                     e.preventDefault();
-                }; const mouseUpHandler = function () {
-                    document.removeEventListener('mousemove',
-                        mouseMoveHandler); document.removeEventListener('mouseup', mouseUpHandler);
-                    document.body.style.cursor = ''; localStorage.setItem(storeKey, JSON.stringify(widths));
                 };
+
+                const mouseUpHandler = function () {
+                    document.removeEventListener('mousemove', mouseMoveHandler);
+                    document.removeEventListener('mouseup', mouseUpHandler);
+                    document.body.style.cursor = '';
+                    localStorage.setItem(storeKey, JSON.stringify(widths));
+                };
+
                 resizer.addEventListener('mousedown', mouseDownHandler);
             });
         }); </script>
