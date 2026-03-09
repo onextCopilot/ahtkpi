@@ -48,21 +48,49 @@ if ($res_sr) {
     }
 }
 
+// Fetch all AMs from DB for mapping
+$all_ams_data = [];
+$res_am_all = $conn->query("SELECT id, full_name, email, sale_level_id FROM users WHERE is_am_bd = 1 ORDER BY full_name ASC");
+if ($res_am_all) {
+    while ($r = $res_am_all->fetch_assoc()) {
+        $all_ams_data[] = $r;
+    }
+}
+
+// Build mapping: Odoo Salesperson ID -> Local Full Name
+$sid_to_local_name = [];
+foreach ($all_ams_data as $u) {
+    if (empty($u['email']))
+        continue;
+    try {
+        $oid = $odoo->getOdooUserId($u['email']);
+        if ($oid) {
+            $sid_to_local_name[$oid] = trim($u['full_name']);
+        }
+    } catch (Exception $e) {
+    }
+}
+
 foreach ($all_invoices_year as $inv) {
-    if (($inv['state'] ?? '') !== 'posted') continue;
+    if (($inv['state'] ?? '') !== 'posted')
+        continue;
     $odoo_map[$inv['id']] = $inv;
 
-    $date = $inv['invoice_date'];
-    if (!$date) continue;
+    $date = $inv['invoice_date'] ?: ($inv['date'] ?? null);
+    if (!$date)
+        continue;
     $q = ceil((int) date('n', strtotime($date)) / 3);
 
-    $am_name = 'Unknown';
-    if (!empty($inv['invoice_user_id']) && is_array($inv['invoice_user_id'])) {
-        $am_name = trim($inv['invoice_user_id'][1]);
+    $sid = (isset($inv['invoice_user_id']) && is_array($inv['invoice_user_id'])) ? $inv['invoice_user_id'][0] : 0;
+    $am_name = $sid_to_local_name[$sid] ?? 'Unknown';
+
+    // Fallback if not matched by ID, try name match as last resort
+    if ($am_name === 'Unknown' && !empty($inv['invoice_user_id'])) {
+        $oname = trim($inv['invoice_user_id'][1]);
+        $am_name = $oname;
     }
 
     // Use absolute match with my-reports logic (total_vnd)
-    // Use amount_total_signed for 100% accuracy from Odoo if present
     $amount_vnd = isset($inv['amount_total_signed']) ? (float) $inv['amount_total_signed'] : 0;
 
     // Fallback if missing (same as sale_reports/index.php)
@@ -85,47 +113,29 @@ foreach ($all_invoices_year as $inv) {
         $am_invoiced[$am_name] = ['Q1' => 0, 'Q2' => 0, 'Q3' => 0, 'Q4' => 0];
     }
 
-    // Both tables now match my-reports "Doanh thu thực tế (Quý)"
     $am_recognised[$am_name]["Q$q"] += $amount_vnd;
     $am_invoiced[$am_name]["Q$q"] += $amount_vnd;
 }
 
-// 2. am_invoiced has been populated above from Odoo to ensure consistency with my-reports
-
 // Merge AM lists
-$db_ams = [];
-$res_am = $conn->query("SELECT full_name FROM users WHERE is_am_bd = 1 ORDER BY full_name ASC");
-if ($res_am) {
-    while ($r = $res_am->fetch_assoc()) {
-        $n = trim($r['full_name']);
-        if (!empty($n)) {
-            $db_ams[] = $n;
-        }
+$all_ams = [];
+foreach ($all_ams_data as $r) {
+    $n = trim($r['full_name']);
+    if (!empty($n)) {
+        $all_ams[] = $n;
     }
 }
-$all_ams = array_unique($db_ams);
+$all_ams = array_unique($all_ams);
 sort($all_ams);
 
 // Fetch budgets
 $am_budgets = [];
 $am_to_uid = [];
-foreach ($all_ams as $am_name) {
-    if ($am_name === 'Unknown' || empty($am_name)) {
-        $am_budgets[$am_name] = ['Q1' => 0, 'Q2' => 0, 'Q3' => 0, 'Q4' => 0];
-        continue;
-    }
-
-    // find user by full name
-    $stmt_u = $conn->prepare("SELECT id, sale_level_id FROM users WHERE full_name LIKE ? OR username LIKE ? LIMIT 1");
-    $like_name = "%" . $am_name . "%";
-    $stmt_u->bind_param("ss", $like_name, $like_name);
-    $stmt_u->execute();
-    $u_res = $stmt_u->get_result();
-    $u_row = $u_res->fetch_assoc();
-
-    $uid = $u_row ? (int) $u_row['id'] : 0;
+foreach ($all_ams_data as $u_row) {
+    $am_name = trim($u_row['full_name']);
+    $uid = (int) $u_row['id'];
     $am_to_uid[$am_name] = $uid;
-    $fallback_sale_level_id = $u_row ? (int) $u_row['sale_level_id'] : 0;
+    $fallback_sale_level_id = (int) $u_row['sale_level_id'];
 
     $am_budgets[$am_name] = ['Q1' => 0, 'Q2' => 0, 'Q3' => 0, 'Q4' => 0];
 
@@ -166,12 +176,15 @@ $am_commissions = [];
 // Group Odoo invoices by AM from cache
 $odoo_invoices_by_am = [];
 foreach ($odoo_map as $oid => $inv) {
-    $inv_am = '';
-    if (!empty($inv['invoice_user_id']) && is_array($inv['invoice_user_id'])) {
-        $inv_am = trim($inv['invoice_user_id'][1]);
+    $sid = (isset($inv['invoice_user_id']) && is_array($inv['invoice_user_id'])) ? $inv['invoice_user_id'][0] : 0;
+    $am_name = $sid_to_local_name[$sid] ?? 'Unknown';
+
+    if ($am_name === 'Unknown' && !empty($inv['invoice_user_id'])) {
+        $am_name = trim($inv['invoice_user_id'][1]);
     }
-    if ($inv_am) {
-        $odoo_invoices_by_am[$inv_am][] = $inv;
+
+    if ($am_name) {
+        $odoo_invoices_by_am[$am_name][] = $inv;
     }
 }
 
