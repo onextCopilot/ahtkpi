@@ -40,7 +40,7 @@ function isMenuItemActive($path, $current_uri)
             $is_debt_open = strpos($current_uri, '/debt') !== false ||
                 strpos($current_uri, '/my-debt') !== false ||
                 strpos($current_uri, '/debt-warning') !== false ||
-                (strpos($current_uri, '/sale-reports') !== false && strpos($current_uri, '/sale-reports-admin') === false);
+                (strpos($current_uri, '/my-reports') !== false && strpos($current_uri, '/sale-reports-admin') === false);
             echo $is_debt_open ? 'open' : ''; ?>" onclick="toggleSubmenu(this)">
                 <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
                     stroke-linecap="round" stroke-linejoin="round">
@@ -67,8 +67,8 @@ function isMenuItemActive($path, $current_uri)
                     class="submenu-item <?php echo ($current_uri === '/debt-warning' || strpos($current_uri, '/debt-warning') !== false) ? 'active' : ''; ?>">
                     <span>Debts Warning</span>
                 </a>
-                <a href="/sale-reports"
-                    class="submenu-item <?php echo ($current_uri === '/sale-reports' || (strpos($current_uri, '/sale-reports') !== false && strpos($current_uri, '/sale-reports-admin') === false)) ? 'active' : ''; ?>">
+                <a href="/my-reports"
+                    class="submenu-item <?php echo ($current_uri === '/my-reports' || (strpos($current_uri, '/my-reports') !== false && strpos($current_uri, '/sale-reports-admin') === false)) ? 'active' : ''; ?>">
                     <span>My Reports</span>
                 </a>
             </div>
