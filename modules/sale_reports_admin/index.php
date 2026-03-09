@@ -993,7 +993,12 @@ $budget_placeholder = 0;
                                                         for ($qi = 1; $qi <= 4; $qi++) {
                                                             $q_key = "Q{$qi}_{$current_year}";
                                                             if (!empty($confirmations[$uid][$q_key])) {
-                                                                echo '<span title="Đã xác nhận Q' . $qi . '" style="color:#10b981; font-size: 14px; margin-left: 2px;">✅</span>';
+                                                                echo '<span title="Đã xác nhận Q' . $qi . '" style="margin-left: 2px; display: inline-flex; align-items: center;">
+                                                                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="#fbbf24" stroke="#d97706" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                                                        <circle cx="12" cy="8" r="7"></circle>
+                                                                        <polyline points="8.21 13.89 7 23 12 20 17 23 15.79 13.88"></polyline>
+                                                                    </svg>
+                                                                </span>';
                                                             }
                                                         }
                                                         ?>
