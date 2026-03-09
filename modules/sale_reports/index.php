@@ -138,7 +138,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
     } else {
         $now = date('Y-m-d H:i:s');
         $stmt_c = $conn->prepare("INSERT INTO sale_report_confirmations (user_id, quarter, confirmed_at, confirmed_by_name, type) VALUES (?,?,?,?,'confirmed')");
-        $stmt_c->bind_param("isss", $uid, $quarter_key, $now, $uname);
+        $stmt_c->bind_param("isss", $uid_target, $quarter_key, $now, $uname);
         $stmt_c->execute();
         echo json_encode(['success' => true, 'confirmed_at' => $now, 'confirmed_by' => $uname]);
     }
@@ -149,11 +149,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'reset_draft') {
     header('Content-Type: application/json');
     $quarter_key = preg_replace('/[^A-Za-z0-9_]/', '', $_POST['quarter'] ?? '');
-    $uid = (int) $_SESSION['user_id'];
+    $uid_target = (int) ($_POST['user_id'] ?? $view_user_id);
     $uname = $_SESSION['full_name'] ?? 'Unknown';
     $now = date('Y-m-d H:i:s');
     $stmt_d = $conn->prepare("INSERT INTO sale_report_confirmations (user_id, quarter, confirmed_at, confirmed_by_name, type) VALUES (?,?,?,?,'reset')");
-    $stmt_d->bind_param("isss", $uid, $quarter_key, $now, $uname);
+    $stmt_d->bind_param("isss", $uid_target, $quarter_key, $now, $uname);
     $stmt_d->execute();
     echo json_encode(['success' => true]);
     exit();
