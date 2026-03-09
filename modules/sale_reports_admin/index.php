@@ -23,21 +23,29 @@ $odoo = new OdooAPI();
 // 0. Pre-map Odoo User IDs to AM Names
 $am_bd_users = [];
 $odoo_id_to_am_name = [];
+$odoo_name_to_am_name = [];
+
 $res_users = $conn->query("SELECT id, full_name, email, sale_level_id FROM users WHERE is_am_bd = 1");
 if ($res_users) {
     while ($u = $res_users->fetch_assoc()) {
         $name = trim($u['full_name']);
         if (empty($name))
             continue;
+
         $am_bd_users[$name] = [
             'id' => $u['id'],
             'email' => $u['email'],
             'sale_level_id' => $u['sale_level_id']
         ];
+
+        // Map by Email -> Odoo ID
         $oid = $odoo->getOdooUserId($u['email']);
         if ($oid) {
             $odoo_id_to_am_name[$oid] = $name;
         }
+
+        // Also map by Display Name as fallback
+        $odoo_name_to_am_name[strtolower($name)] = $name;
     }
 }
 $all_ams = array_keys($am_bd_users);
@@ -50,7 +58,7 @@ $domain_inv = [
     ['invoice_date', '>=', "$current_year-01-01"],
     ['invoice_date', '<=', "$current_year-12-31"]
 ];
-$fields_inv = ['invoice_user_id', 'amount_total_signed', 'invoice_date', 'id'];
+$fields_inv = ['invoice_user_id', 'amount_total_signed', 'amount_total', 'currency_id', 'invoice_date', 'id'];
 $all_invoices_year = [];
 try {
     $all_invoices_year = $odoo->searchRead('account.move', $domain_inv, $fields_inv, 20000, 0);
@@ -72,7 +80,15 @@ foreach ($all_invoices_year as $inv) {
         $am_name = trim($inv['invoice_user_id'][1]);
     }
 
-    $amount_vnd = abs((float) ($inv['amount_total_signed'] ?? 0));
+    // Use amount_total_signed for 100% accuracy from Odoo (Mirror Individual Report Logic)
+    $amount_vnd = isset($inv['amount_total_signed']) ? abs((float) $inv['amount_total_signed']) : 0;
+    if ($amount_vnd == 0 && ($inv['amount_total'] ?? 0) > 0) {
+        $currencyCode = is_array($inv['currency_id'] ?? null) ? $inv['currency_id'][1] : 'VND';
+        $rateSource = $odoo->getRate($currencyCode, $date) ?: 1.0;
+        $rateVnd = $odoo->getRate('VND', $date) ?: 1.0;
+        $amount_vnd = $inv['amount_total'] * ($rateVnd / $rateSource);
+    }
+
     $oid = (int) $inv['id'];
     $res_ex = $conn->query("SELECT is_excluded FROM sale_reports WHERE odoo_invoice_id = $oid");
     if ($res_ex && ($row_ex = $res_ex->fetch_assoc())) {
@@ -209,11 +225,14 @@ $odoo_invoices_by_am = [];
 foreach ($odoo_map as $oid => $inv) {
     $am_name = 'Unknown';
     $oid_ref = isset($inv['invoice_user_id']) && is_array($inv['invoice_user_id']) ? $inv['invoice_user_id'][0] : null;
+    $oname_ref = isset($inv['invoice_user_id']) && is_array($inv['invoice_user_id']) ? trim($inv['invoice_user_id'][1]) : '';
 
     if ($oid_ref && isset($odoo_id_to_am_name[$oid_ref])) {
         $am_name = $odoo_id_to_am_name[$oid_ref];
-    } elseif (!empty($inv['invoice_user_id']) && is_array($inv['invoice_user_id'])) {
-        $am_name = trim($inv['invoice_user_id'][1]);
+    } elseif ($oname_ref && isset($odoo_name_to_am_name[strtolower($oname_ref)])) {
+        $am_name = $odoo_name_to_am_name[strtolower($oname_ref)];
+    } elseif ($oname_ref) {
+        $am_name = $oname_ref; // Keep Odoo name as is if unmapped
     }
 
     if ($am_name && $am_name !== 'Unknown') {
@@ -231,7 +250,7 @@ foreach ($all_ams as $am_name) {
     for ($q = 1; $q <= 4; $q++) {
         $am_commissions[$am_name]["Q$q"] = ['com1' => 0, 'com2' => 0, 'total' => 0, 'kpi_pct' => 0];
 
-        // 1. KPI Achievement Percentage
+        // 1. KPI Achievement Percentage (Invoiced this year)
         $actual = $am_recognised[$am_name]["Q$q"] ?? 0;
         $budget = $am_budgets[$am_name]["Q$q"] ?? 0;
         $kpi_pct = ($budget > 0) ? ($actual / $budget) * 100 : 0;
@@ -304,6 +323,10 @@ foreach ($all_ams as $am_name) {
         $am_commissions[$am_name]["Q$q"]['total'] = ($am_commissions[$am_name]["Q$q"]['com1'] + $am_commissions[$am_name]["Q$q"]['com2']);
     }
 }
+
+// Consolidate all_ams with any additional names found in Odoo invoices (to ensure parity with individual reports)
+$all_ams = array_unique(array_merge($all_ams, array_keys($odoo_invoices_by_am)));
+sort($all_ams);
 
 // Helpers
 function formatMoney($val)
