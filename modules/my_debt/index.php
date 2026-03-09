@@ -505,7 +505,6 @@ if ($team_res && $team_res->num_rows > 0) {
             position: sticky;
             top: 0;
             background-color: #004b75;
-            /* Darker Blue */
             color: white;
             font-weight: 600;
             padding: 10px 12px;
@@ -516,10 +515,16 @@ if ($team_res && $team_res->num_rows > 0) {
             line-height: 1.3;
             vertical-align: middle;
             min-width: 100px;
-            /* Increased from 80px */
             max-height: 52px;
-            /* ~2 lines at line-height 1.3 */
-            overflow: hidden;
+            overflow: visible;
+            /* Changed from hidden to allow resizer handles */
+            position: sticky !important;
+            /* Ensure sticky wins */
+        }
+
+        /* Ensure th is relative for resizers */
+        table.debt-table thead th {
+            position: sticky !important;
         }
 
         /* Column borders in header */
@@ -617,19 +622,27 @@ if ($team_res && $team_res->num_rows > 0) {
         }
 
         .col-resizer {
-            width: 6px;
+            width: 8px;
+            /* Slightly wider */
             height: 100%;
             position: absolute;
             right: 0;
             top: 0;
             cursor: col-resize;
-            z-index: 15;
-            transition: background 0.2s;
+            z-index: 20;
+            /* Higher than sticky columns */
+            user-select: none;
         }
 
-        .col-resizer:hover,
-        .col-resizer:active {
-            background-color: rgba(255, 255, 255, 0.4);
+        .col-resizer:hover {
+            background-color: rgba(14, 165, 233, 0.5);
+            /* Blue highlight on hover */
+            border-right: 2px solid #0ea5e9;
+        }
+
+        .resizing {
+            cursor: col-resize;
+            user-select: none;
         }
 
         .sticky-editable-cell {
@@ -2293,6 +2306,7 @@ if ($team_res && $team_res->num_rows > 0) {
                     document.addEventListener('mousemove', mouseMoveHandler);
                     document.addEventListener('mouseup', mouseUpHandler);
                     document.body.style.cursor = 'col-resize';
+                    document.body.classList.add('resizing');
                     e.stopPropagation();
                 };
 
@@ -2309,6 +2323,7 @@ if ($team_res && $team_res->num_rows > 0) {
                     document.removeEventListener('mousemove', mouseMoveHandler);
                     document.removeEventListener('mouseup', mouseUpHandler);
                     document.body.style.cursor = '';
+                    document.body.classList.remove('resizing');
                     localStorage.setItem(storeKey, JSON.stringify(widths));
                 };
 
