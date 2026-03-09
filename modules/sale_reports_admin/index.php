@@ -54,9 +54,9 @@ foreach ($sale_orders as $so) {
     // Determine AM name
     $am_name = 'Unknown';
     if (!empty($so['user_id']) && is_array($so['user_id'])) {
-        $am_name = $so['user_id'][1];
+        $am_name = trim($so['user_id'][1]);
     } elseif (!empty($so['team_id']) && is_array($so['team_id'])) {
-        $am_name = $so['team_id'][1];
+        $am_name = trim($so['team_id'][1]);
     }
 
     $amount = (float) $so['amount_total'];
@@ -487,39 +487,47 @@ $budget_placeholder = 0;
                                     <td class="text-right" style="color: #cbd5e1;">-</td>
                                     <td class="text-right" style="color: #cbd5e1;">-</td>
                                     <td class="text-right">
-                                        <?= formatMoney($actual_q1 + $actual_q2 + $actual_q3 + $actual_q4) ?></td>
+                                        <?= formatMoney($actual_q1 + $actual_q2 + $actual_q3 + $actual_q4) ?>
+                                    </td>
                                     <td class="text-center" style="color: #cbd5e1;">-</td>
                                 </tr>
                             <?php endforeach; ?>
 
+                            <?php
+                            $total_rec_q1 = 0;
+                            $total_rec_q2 = 0;
+                            $total_rec_q3 = 0;
+                            $total_rec_q4 = 0;
+                            foreach ($all_ams as $am) {
+                                $data = $am_recognised[$am] ?? ['Q1' => 0, 'Q2' => 0, 'Q3' => 0, 'Q4' => 0];
+                                $total_rec_q1 += $data['Q1'];
+                                $total_rec_q2 += $data['Q2'];
+                                $total_rec_q3 += $data['Q3'];
+                                $total_rec_q4 += $data['Q4'];
+                            }
+                            $total_rec_h1 = $total_rec_q1 + $total_rec_q2;
+                            $total_rec_year = $total_rec_q1 + $total_rec_q2 + $total_rec_q3 + $total_rec_q4;
+                            ?>
                             <tr class="total-row">
                                 <td></td>
                                 <td>Total Recognised</td>
                                 <td class="text-right">-</td>
-                                <td class="text-right"><?= formatMoney(array_sum(array_column($am_recognised, 'Q1'))) ?>
-                                </td>
+                                <td class="text-right"><?= formatMoney($total_rec_q1) ?></td>
                                 <td class="text-center">-</td>
                                 <td class="text-right">-</td>
-                                <td class="text-right"><?= formatMoney(array_sum(array_column($am_recognised, 'Q2'))) ?>
-                                </td>
+                                <td class="text-right"><?= formatMoney($total_rec_q2) ?></td>
                                 <td class="text-center">-</td>
                                 <td class="text-right">-</td>
-                                <td class="text-right">
-                                    <?= formatMoney(array_sum(array_column($am_recognised, 'Q1')) + array_sum(array_column($am_recognised, 'Q2'))) ?>
-                                </td>
+                                <td class="text-right"><?= formatMoney($total_rec_h1) ?></td>
                                 <td class="text-center">-</td>
                                 <td class="text-right">-</td>
-                                <td class="text-right"><?= formatMoney(array_sum(array_column($am_recognised, 'Q3'))) ?>
-                                </td>
+                                <td class="text-right"><?= formatMoney($total_rec_q3) ?></td>
                                 <td class="text-center">-</td>
                                 <td class="text-right">-</td>
-                                <td class="text-right"><?= formatMoney(array_sum(array_column($am_recognised, 'Q4'))) ?>
-                                </td>
+                                <td class="text-right"><?= formatMoney($total_rec_q4) ?></td>
                                 <td class="text-center">-</td>
                                 <td class="text-right">-</td>
-                                <td class="text-right">
-                                    <?= formatMoney(array_sum(array_column($am_recognised, 'Q1')) + array_sum(array_column($am_recognised, 'Q2')) + array_sum(array_column($am_recognised, 'Q3')) + array_sum(array_column($am_recognised, 'Q4'))) ?>
-                                </td>
+                                <td class="text-right"><?= formatMoney($total_rec_year) ?></td>
                                 <td class="text-center">-</td>
                             </tr>
 
@@ -565,7 +573,8 @@ $budget_placeholder = 0;
                                     <td class="text-center"><?= calcPercent($actual_q4, $b_q4) ?></td>
                                     <td class="text-right"><?= formatMoney($b_q1 + $b_q2 + $b_q3 + $b_q4) ?></td>
                                     <td class="text-right">
-                                        <?= formatMoney($actual_q1 + $actual_q2 + $actual_q3 + $actual_q4) ?></td>
+                                        <?= formatMoney($actual_q1 + $actual_q2 + $actual_q3 + $actual_q4) ?>
+                                    </td>
                                     <td class="text-center">
                                         <?= calcPercent($actual_q1 + $actual_q2 + $actual_q3 + $actual_q4, $b_q1 + $b_q2 + $b_q3 + $b_q4) ?>
                                     </td>
@@ -576,23 +585,35 @@ $budget_placeholder = 0;
                                 <td></td>
                                 <td>Total Invoiced</td>
                                 <?php
-                                $total_b_q1 = array_sum(array_column($am_budgets, 'Q1'));
-                                $total_a_q1 = array_sum(array_column($am_invoiced, 'Q1'));
+                                $total_b_q1 = 0;
+                                $total_b_q2 = 0;
+                                $total_b_q3 = 0;
+                                $total_b_q4 = 0;
+                                $total_a_q1 = 0;
+                                $total_a_q2 = 0;
+                                $total_a_q3 = 0;
+                                $total_a_q4 = 0;
 
-                                $total_b_q2 = array_sum(array_column($am_budgets, 'Q2'));
-                                $total_a_q2 = array_sum(array_column($am_invoiced, 'Q2'));
+                                foreach ($all_ams as $am) {
+                                    $b_data = $am_budgets[$am] ?? ['Q1' => 0, 'Q2' => 0, 'Q3' => 0, 'Q4' => 0];
+                                    $a_data = $am_invoiced[$am] ?? ['Q1' => 0, 'Q2' => 0, 'Q3' => 0, 'Q4' => 0];
 
-                                $total_b_q3 = array_sum(array_column($am_budgets, 'Q3'));
-                                $total_a_q3 = array_sum(array_column($am_invoiced, 'Q3'));
+                                    $total_b_q1 += $b_data['Q1'];
+                                    $total_b_q2 += $b_data['Q2'];
+                                    $total_b_q3 += $b_data['Q3'];
+                                    $total_b_q4 += $b_data['Q4'];
 
-                                $total_b_q4 = array_sum(array_column($am_budgets, 'Q4'));
-                                $total_a_q4 = array_sum(array_column($am_invoiced, 'Q4'));
+                                    $total_a_q1 += $a_data['Q1'];
+                                    $total_a_q2 += $a_data['Q2'];
+                                    $total_a_q3 += $a_data['Q3'];
+                                    $total_a_q4 += $a_data['Q4'];
+                                }
 
                                 $total_b_h1 = $total_b_q1 + $total_b_q2;
                                 $total_a_h1 = $total_a_q1 + $total_a_q2;
 
                                 $total_b_year = $total_b_q1 + $total_b_q2 + $total_b_q3 + $total_b_q4;
-                                $total_a_year = $total_a_q1 + $total_a_q2 + $total_a_q3 + $total_a_year;
+                                $total_a_year = $total_a_q1 + $total_a_q2 + $total_a_q3 + $total_a_q4;
                                 ?>
                                 <td class="text-right"><?= formatMoney($total_b_q1) ?></td>
                                 <td class="text-right"><?= formatMoney($total_a_q1) ?></td>
