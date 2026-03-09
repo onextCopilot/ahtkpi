@@ -28,18 +28,21 @@ $domain_inv = [
     ['invoice_date', '>=', "$current_year-01-01"],
     ['invoice_date', '<=', "$current_year-12-31"]
 ];
-$fields_inv = ['invoice_user_id', 'amount_total_signed', 'invoice_date', 'id'];
+$fields_inv = ['invoice_user_id', 'amount_total_signed', 'invoice_date', 'id', 'state', 'amount_total', 'currency_id'];
 $all_invoices_year = [];
 try {
     $all_invoices_year = $odoo->searchRead('account.move', $domain_inv, $fields_inv, 0, 0);
 } catch (Exception $e) {
 }
 
-$am_recognised = []; // Achieved VND for KPI
+$am_recognised = []; 
+$am_invoiced = []; 
+
 foreach ($all_invoices_year as $inv) {
+    if (($inv['state'] ?? '') !== 'posted') continue;
+
     $date = $inv['invoice_date'];
-    if (!$date)
-        continue;
+    if (!$date) continue;
     $q = ceil((int) date('n', strtotime($date)) / 3);
 
     $am_name = 'Unknown';
@@ -47,7 +50,17 @@ foreach ($all_invoices_year as $inv) {
         $am_name = trim($inv['invoice_user_id'][1]);
     }
 
-    $amount_vnd = abs((float) ($inv['amount_total_signed'] ?? 0));
+    // Use absolute match with my-reports logic (total_vnd)
+    // Use amount_total_signed for 100% accuracy from Odoo if present
+    $amount_vnd = isset($inv['amount_total_signed']) ? (float) $inv['amount_total_signed'] : 0;
+
+    // Fallback if missing (same as sale_reports/index.php)
+    if ($amount_vnd == 0 && ($inv['amount_total'] ?? 0) > 0) {
+        $currencyCode = is_array($inv['currency_id'] ?? null) ? $inv['currency_id'][1] : 'VND';
+        $rateSource = $odoo->getRate($currencyCode, $date) ?: 1.0;
+        $rateVnd = $odoo->getRate('VND', $date) ?: 1.0;
+        $amount_vnd = $inv['amount_total'] * ($rateVnd / $rateSource);
+    }
 
     // Check exclusion (using local table)
     $oid = (int) $inv['id'];
@@ -60,69 +73,16 @@ foreach ($all_invoices_year as $inv) {
     if (!isset($am_recognised[$am_name])) {
         $am_recognised[$am_name] = ['Q1' => 0, 'Q2' => 0, 'Q3' => 0, 'Q4' => 0];
     }
-    $am_recognised[$am_name]["Q$q"] += $amount_vnd;
-}
-
-// 2. Fetch Invoiced Revenue from Debts
-$stmt = $conn->prepare("
-    SELECT d.am, d.amount, d.currency, d.invoice_date, d.odoo_invoice_id, sr.is_excluded 
-    FROM debts d 
-    LEFT JOIN sale_reports sr ON d.odoo_invoice_id = sr.odoo_invoice_id 
-    WHERE d.invoice_date >= ? AND d.invoice_date <= ?
-");
-$start_date = "$current_year-01-01";
-$end_date = "$current_year-12-31";
-$stmt->bind_param("ss", $start_date, $end_date);
-$stmt->execute();
-$res = $stmt->get_result();
-
-$odoo->getInvoices(10000, 0, []);
-$odoo_map = $odoo->getInvoiceMap();
-
-$am_invoiced = []; // group by AM name
-while ($row = $res->fetch_assoc()) {
-    if (!empty($row['is_excluded'])) {
-        continue;
-    }
-
-    $date = $row['invoice_date'];
-    if (!$date)
-        continue;
-
-    $m = (int) date('n', strtotime($date));
-    $q = ceil($m / 3);
-
-    $am_name = $row['am'] ? trim($row['am']) : 'Unknown';
-
-    $amount = (float) $row['amount'];
-    $currency_code = $row['currency'] ?? 'VND';
-    $oid = $row['odoo_invoice_id'];
-
-    $vnd_value = 0;
-    if (!empty($oid) && isset($odoo_map[$oid])) {
-        $inv = $odoo_map[$oid];
-        // Only include POSTED invoices as requested
-        if (($inv['state'] ?? '') !== 'posted') {
-            continue;
-        }
-
-        $tot = (float) $inv['amount_total'];
-        $sig = abs((float) $inv['amount_total_signed']);
-        if ($tot > 0) {
-            $vnd_value = $amount * ($sig / $tot);
-        }
-    } else {
-        // If not found in Odoo map, we can't verify 'posted' state. 
-        // User request: "phải là các debts là các invoice odoo posted"
-        // Skip if not verifiable as posted.
-        continue;
-    }
-
     if (!isset($am_invoiced[$am_name])) {
         $am_invoiced[$am_name] = ['Q1' => 0, 'Q2' => 0, 'Q3' => 0, 'Q4' => 0];
     }
-    $am_invoiced[$am_name]["Q$q"] += $vnd_value;
+
+    // Both tables now match my-reports "Doanh thu thực tế (Quý)"
+    $am_recognised[$am_name]["Q$q"] += $amount_vnd;
+    $am_invoiced[$am_name]["Q$q"] += $amount_vnd;
 }
+
+// 2. am_invoiced has been populated above from Odoo to ensure consistency with my-reports
 
 // Merge AM lists
 $db_ams = [];
