@@ -35,8 +35,22 @@ try {
 } catch (Exception $e) {
 }
 
-$am_recognised = []; 
-$am_invoiced = []; 
+// 2. Fetch Recognised Revenue from Odoo (Sale Orders)
+// We want state in ['sale', 'done'] and date_order in the selected year.
+$domain_so = [
+    ['state', 'in', ['sale', 'done']],
+    ['date_order', '>=', "$current_year-01-01"],
+    ['date_order', '<=', "$current_year-12-31"]
+];
+$fields_so = ['user_id', 'amount_total', 'date_order', 'currency_id', 'id'];
+$all_orders_year = [];
+try {
+    $all_orders_year = $odoo->searchRead('sale.order', $domain_so, $fields_so, 0, 0);
+} catch (Exception $e) {
+}
+
+$am_recognised = [];
+$am_invoiced = [];
 $odoo_map = [];
 
 // Pre-fetch sale_reports for exclusion check to avoid N+1 queries
@@ -44,7 +58,7 @@ $local_sale_reports = [];
 $res_sr = $conn->query("SELECT * FROM sale_reports");
 if ($res_sr) {
     while ($sr = $res_sr->fetch_assoc()) {
-        $local_sale_reports[(int)$sr['odoo_invoice_id']] = $sr;
+        $local_sale_reports[(int) $sr['odoo_invoice_id']] = $sr;
     }
 }
 
@@ -106,19 +120,40 @@ foreach ($all_invoices_year as $inv) {
         continue;
     }
 
-    // Revenue tables (am_recognised/am_invoiced) should only include the current reporting year
+    // Only Invoiced Revenue from current year invoices
     $iy = (int) date('Y', strtotime($date));
     if ($iy == $current_year) {
-        if (!isset($am_recognised[$am_name])) {
-            $am_recognised[$am_name] = ['Q1' => 0, 'Q2' => 0, 'Q3' => 0, 'Q4' => 0];
-        }
         if (!isset($am_invoiced[$am_name])) {
             $am_invoiced[$am_name] = ['Q1' => 0, 'Q2' => 0, 'Q3' => 0, 'Q4' => 0];
         }
-
-        $am_recognised[$am_name]["Q$q"] += $amount_vnd;
         $am_invoiced[$am_name]["Q$q"] += $amount_vnd;
     }
+}
+
+// Process Sale Orders for Recognised Revenue
+foreach ($all_orders_year as $order) {
+    $date = $order['date_order'];
+    if (!$date)
+        continue;
+    $q = ceil((int) date('n', strtotime($date)) / 3);
+
+    $sid = (isset($order['user_id']) && is_array($order['user_id'])) ? $order['user_id'][0] : 0;
+    $am_name = $sid_to_local_name[$sid] ?? 'Unknown';
+
+    if ($am_name === 'Unknown' && !empty($order['user_id'])) {
+        $am_name = trim($order['user_id'][1]);
+    }
+
+    // Convert SO amount to VND
+    $currencyCode = is_array($order['currency_id'] ?? null) ? $order['currency_id'][1] : 'VND';
+    $rateSource = $odoo->getRate($currencyCode, $date) ?: 1.0;
+    $rateVnd = $odoo->getRate('VND', $date) ?: 1.0;
+    $amount_vnd = $order['amount_total'] * ($rateVnd / $rateSource);
+
+    if (!isset($am_recognised[$am_name])) {
+        $am_recognised[$am_name] = ['Q1' => 0, 'Q2' => 0, 'Q3' => 0, 'Q4' => 0];
+    }
+    $am_recognised[$am_name]["Q$q"] += $amount_vnd;
 }
 
 // Merge AM lists
@@ -233,11 +268,15 @@ foreach ($all_ams as $am_name) {
         $end_m = $q * 3;
         $q_start_date = "$current_year-" . str_pad($start_m, 2, '0', STR_PAD_LEFT) . "-01";
         $q_end_date = date('Y-m-d', strtotime("$current_year-" . str_pad($end_m, 2, '0', STR_PAD_LEFT) . "-01 +3 month -1 day"));
-        
-        if ($q == 1) $q_end_date = "$current_year-03-31";
-        elseif ($q == 2) $q_end_date = "$current_year-06-30";
-        elseif ($q == 3) $q_end_date = "$current_year-09-30";
-        elseif ($q == 4) $q_end_date = "$current_year-12-31";
+
+        if ($q == 1)
+            $q_end_date = "$current_year-03-31";
+        elseif ($q == 2)
+            $q_end_date = "$current_year-06-30";
+        elseif ($q == 3)
+            $q_end_date = "$current_year-09-30";
+        elseif ($q == 4)
+            $q_end_date = "$current_year-12-31";
 
         foreach ($am_invoices as $inv) {
             $oid = $inv['id'];
@@ -245,7 +284,8 @@ foreach ($all_ams as $am_name) {
                 continue;
 
             $inv_date_str = $inv['invoice_date'] ?: ($inv['date'] ?? null);
-            if (!$inv_date_str) continue;
+            if (!$inv_date_str)
+                continue;
 
             $is_in_quarter = ($inv_date_str >= $q_start_date && $inv_date_str <= $q_end_date);
             $has_payment_in_quarter = false;
@@ -256,10 +296,11 @@ foreach ($all_ams as $am_name) {
                 $pw = is_array($pay_widget) ? $pay_widget : json_decode($pay_widget, true);
                 if (is_array($pw) && isset($pw['content'])) {
                     foreach ($pw['content'] as $p) {
-                        if (!empty($p['is_exchange'])) continue;
-                        
+                        if (!empty($p['is_exchange']))
+                            continue;
+
                         $giaingan_origin += (float) ($p['amount'] ?? 0);
-                        
+
                         $pdate = $p['date'] ?? null;
                         if ($pdate && $pdate >= $q_start_date && $pdate <= $q_end_date) {
                             $has_payment_in_quarter = true;
@@ -983,13 +1024,15 @@ $budget_placeholder = 0;
                                         <tr style="cursor: pointer;"
                                             onclick="viewReport(<?= (int) ($c['uid'] ?? 0) ?>, 'Q1_<?= $current_year ?>')">
                                             <td class="sticky-col">
-                                                <div style="display: flex; align-items: center; justify-content: space-between; gap: 4px;">
-                                                    <span style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 150px;">
+                                                <div
+                                                    style="display: flex; align-items: center; justify-content: space-between; gap: 4px;">
+                                                    <span
+                                                        style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 150px;">
                                                         <?= htmlspecialchars($am) ?>
                                                     </span>
                                                     <div style="display: flex; flex-shrink: 0;">
-                                                        <?php 
-                                                        $uid = (int)($c['uid'] ?? 0);
+                                                        <?php
+                                                        $uid = (int) ($c['uid'] ?? 0);
                                                         for ($qi = 1; $qi <= 4; $qi++) {
                                                             $q_key = "Q{$qi}_{$current_year}";
                                                             if (!empty($confirmations[$uid][$q_key])) {
