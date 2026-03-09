@@ -135,7 +135,18 @@ while ($row = $res->fetch_assoc()) {
 }
 
 // Merge AM lists
-$all_ams = array_unique(array_merge(array_keys($am_recognised), array_keys($am_invoiced)));
+$db_ams = [];
+$res_am = $conn->query("SELECT full_name FROM users WHERE is_am_bd = 1 ORDER BY full_name ASC");
+if ($res_am) {
+    while ($r = $res_am->fetch_assoc()) {
+        $n = trim($r['full_name']);
+        if (!empty($n)) {
+            $db_ams[] = $n;
+        }
+    }
+}
+$all_ams = array_unique(array_merge($db_ams, array_keys($am_recognised), array_keys($am_invoiced)));
+// Filter out 'Unknown' if desired, but we'll leave it in case there's actual data
 sort($all_ams);
 
 // Fetch budgets
