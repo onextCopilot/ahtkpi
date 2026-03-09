@@ -37,7 +37,9 @@ $allowedFields = [
     'am_notes',
     'delivery_notes',
     'production_status',
-    'invoice_status'
+    'invoice_status',
+    'project_name',
+    'pl_class'
 ];
 
 if (!in_array($field, $allowedFields)) {
