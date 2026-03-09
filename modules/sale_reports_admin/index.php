@@ -477,6 +477,131 @@ $budget_placeholder = 0;
             max-width: 40px;
             text-align: center;
         }
+
+        /* Specialized CSS for the Commission Summary Table */
+        .card {
+            background: #fff;
+            border-radius: 12px;
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+            margin-bottom: 2.5rem;
+            border: 1px solid #cbd5e1;
+            overflow: hidden;
+        }
+
+        .card-header {
+            padding: 1.5rem;
+            border-bottom: 1px solid #e2e8f0;
+            background: linear-gradient(to right, #f8fafc, #eff6ff);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .card-title {
+            margin: 0;
+            font-size: 1.125rem;
+            font-weight: 800;
+            color: #1e293b;
+            text-transform: uppercase;
+            letter-spacing: 0.025em;
+        }
+
+        .report-table-container {
+            overflow-x: auto;
+            position: relative;
+            background: #fff;
+        }
+
+        table.report-table {
+            width: 100%;
+            border-collapse: separate;
+            border-spacing: 0;
+            font-size: 12px;
+            white-space: nowrap;
+        }
+
+        table.report-table th {
+            padding: 14px 12px;
+            text-align: center;
+            font-weight: 700;
+            border-bottom: 1px solid #cbd5e1;
+            border-right: 1px solid #e2e8f0;
+            vertical-align: middle;
+        }
+
+        table.report-table td {
+            padding: 8px 10px;
+            border-bottom: 1px solid #f1f5f9;
+            border-right: 1px solid #f1f5f9;
+            color: #475569;
+            vertical-align: middle;
+        }
+
+        table.report-table thead tr:first-child th {
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: 0.075em;
+            background-color: #f8fafc;
+        }
+
+        table.report-table td.text-right {
+            text-align: right;
+            font-family: 'JetBrains Mono', 'Fira Code', 'Courier New', monospace;
+            font-weight: 500;
+            font-size: 13px;
+        }
+
+        table.report-table td.text-center {
+            text-align: center;
+        }
+
+        table.report-table tbody tr:hover td {
+            background-color: #f1f5f9 !important;
+        }
+
+        table.report-table .sticky-col {
+            position: sticky;
+            left: 0;
+            z-index: 10;
+            background-color: #fff;
+            border-right: 2px solid #cbd5e1 !important;
+            font-weight: 600;
+            color: #0f172a;
+            box-shadow: 2px 0 5px -2px rgba(0, 0, 0, 0.05);
+        }
+
+        table.report-table thead th.sticky-col {
+            background-color: #f8fafc;
+            z-index: 20;
+        }
+
+        table.report-table tfoot td.sticky-col {
+            background-color: #f8fafc;
+            z-index: 10;
+        }
+
+        .kpi-badge {
+            display: inline-block;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-weight: 700;
+            font-size: 11px;
+        }
+
+        .kpi-high {
+            background: #dcfce7;
+            color: #166534;
+        }
+
+        .kpi-mid {
+            background: #fef9c3;
+            color: #854d0e;
+        }
+
+        .kpi-low {
+            background: #fee2e2;
+            color: #991b1b;
+        }
     </style>
 </head>
 
@@ -736,43 +861,39 @@ $budget_placeholder = 0;
             </div>
 
             <!-- Commission Summary Table -->
-            <div class="card" style="margin-top: 2rem;">
+            <div class="card" style="margin-top: 3rem;">
                 <div class="card-header">
                     <h2 class="card-title">TỔNG KẾT COMMISSION ĐƯỢC NHẬN (ƯỚC TÍNH)</h2>
+                    <span style="font-size: 12px; color: #64748b; font-weight: 500;">Năm <?= $current_year ?> • Toàn bộ
+                        AM/BD</span>
                 </div>
-                <div style="overflow-x: auto;">
+                <div class="report-table-container">
                     <table class="report-table">
                         <thead>
                             <tr>
-                                <th rowspan="2" style="background: #f8fafc; position: sticky; left: 0; z-index: 10;">AM
-                                    BD</th>
-                                <th colspan="4" style="background: #eff6ff;"> QUÝ 1 (USD)</th>
-                                <th colspan="4" style="background: #f0fdf4;"> QUÝ 2 (USD)</th>
-                                <th colspan="4" style="background: #fffbeb;"> QUÝ 3 (USD)</th>
-                                <th colspan="4" style="background: #fdf2f8;"> QUÝ 4 (USD)</th>
-                                <th rowspan="2" style="background: #1e293b; color: #fff;">TỔNG CẢ NĂM</th>
+                                <th rowspan="2" class="sticky-col">AM BD</th>
+                                <th colspan="4"
+                                    style="background: #eff6ff; border-bottom: 3px solid #3b82f6; color: #1d4ed8;">QUÝ 1
+                                    (USD)</th>
+                                <th colspan="4"
+                                    style="background: #f0fdf4; border-bottom: 3px solid #10b981; color: #059669;">QUÝ 2
+                                    (USD)</th>
+                                <th colspan="4"
+                                    style="background: #fffbeb; border-bottom: 3px solid #f59e0b; color: #b45309;">QUÝ 3
+                                    (USD)</th>
+                                <th colspan="4"
+                                    style="background: #fdf2f8; border-bottom: 3px solid #db2777; color: #9d174d;">QUÝ 4
+                                    (USD)</th>
+                                <th rowspan="2" style="background: #1e293b; color: #fff; width: 120px;">TỔNG CẢ NĂM</th>
                             </tr>
-                            <tr style="font-size: 11px;">
-                                <!-- Q1 -->
-                                <th style="background: #eff6ff;">% KPI</th>
-                                <th style="background: #eff6ff;">Com 1</th>
-                                <th style="background: #eff6ff;">Com 2</th>
-                                <th style="background: #eff6ff; border-right: 2px solid #cbd5e1;">Tổng</th>
-                                <!-- Q2 -->
-                                <th style="background: #f0fdf4;">% KPI</th>
-                                <th style="background: #f0fdf4;">Com 1</th>
-                                <th style="background: #f0fdf4;">Com 2</th>
-                                <th style="background: #f0fdf4; border-right: 2px solid #cbd5e1;">Tổng</th>
-                                <!-- Q3 -->
-                                <th style="background: #fffbeb;">% KPI</th>
-                                <th style="background: #fffbeb;">Com 1</th>
-                                <th style="background: #fffbeb;">Com 2</th>
-                                <th style="background: #fffbeb; border-right: 2px solid #cbd5e1;">Tổng</th>
-                                <!-- Q4 -->
-                                <th style="background: #fdf2f8;">% KPI</th>
-                                <th style="background: #fdf2f8;">Com 1</th>
-                                <th style="background: #fdf2f8;">Com 2</th>
-                                <th style="background: #fdf2f8; border-right: 2px solid #cbd5e1;">Tổng</th>
+                            <tr style="background: #f8fafc;">
+                                <?php for ($i = 1; $i <= 4; $i++): ?>
+                                    <th>% KPI</th>
+                                    <th>Com 1</th>
+                                    <th>Com 2</th>
+                                    <th style="border-right: 2px solid #cbd5e1; color: #1e293b; background: #f1f5f9;">Tổng
+                                    </th>
+                                <?php endfor; ?>
                             </tr>
                         </thead>
                         <tbody>
@@ -802,84 +923,52 @@ $budget_placeholder = 0;
                                 }
                                 ?>
                                 <tr>
-                                    <td style="background: #f8fafc; position: sticky; left: 0; font-weight: 600;">
+                                    <td class="sticky-col">
                                         <?= htmlspecialchars($am) ?>
                                     </td>
-                                    <!-- Q1 -->
-                                    <td class="text-center"
-                                        style="<?= $c['Q1']['kpi_pct'] >= 100 ? 'color: #10b981; font-weight:bold;' : ($c['Q1']['kpi_pct'] < 70 ? 'color: #ef4444;' : 'color: #f59e0b;') ?>">
-                                        <?= number_format($c['Q1']['kpi_pct'], 1) ?>%
-                                    </td>
-                                    <td class="text-right"><?= formatUSD($c['Q1']['com1']) ?></td>
-                                    <td class="text-right"><?= formatUSD($c['Q1']['com2']) ?></td>
-                                    <td class="text-right" style="font-weight: 600; border-right: 2px solid #cbd5e1;">
-                                        <?= formatUSD($c['Q1']['total']) ?></td>
+                                    <?php for ($i = 1; $i <= 4; $i++):
+                                        $qi = "Q$i";
+                                        $kpi = $c[$qi]['kpi_pct'] ?? 0;
+                                        $badge_class = 'kpi-low';
+                                        if ($kpi >= 100)
+                                            $badge_class = 'kpi-high';
+                                        elseif ($kpi >= 70)
+                                            $badge_class = 'kpi-mid';
+                                        ?>
+                                        <td class="text-center">
+                                            <span class="kpi-badge <?= $badge_class ?>">
+                                                <?= number_format($kpi, 1) ?>%
+                                            </span>
+                                        </td>
+                                        <td class="text-right"><?= formatUSD($c[$qi]['com1'] ?? 0) ?></td>
+                                        <td class="text-right"><?= formatUSD($c[$qi]['com2'] ?? 0) ?></td>
+                                        <td class="text-right"
+                                            style="font-weight: 700; border-right: 2px solid #cbd5e1; background: #f8fafc; color: #0f172a;">
+                                            <?= formatUSD($c[$qi]['total'] ?? 0) ?>
+                                        </td>
+                                    <?php endfor; ?>
 
-                                    <!-- Q2 -->
-                                    <td class="text-center"
-                                        style="<?= $c['Q2']['kpi_pct'] >= 100 ? 'color: #10b981; font-weight:bold;' : ($c['Q2']['kpi_pct'] < 70 ? 'color: #ef4444;' : 'color: #f59e0b;') ?>">
-                                        <?= number_format($c['Q2']['kpi_pct'], 1) ?>%
-                                    </td>
-                                    <td class="text-right"><?= formatUSD($c['Q2']['com1']) ?></td>
-                                    <td class="text-right"><?= formatUSD($c['Q2']['com2']) ?></td>
-                                    <td class="text-right" style="font-weight: 600; border-right: 2px solid #cbd5e1;">
-                                        <?= formatUSD($c['Q2']['total']) ?></td>
-
-                                    <!-- Q3 -->
-                                    <td class="text-center"
-                                        style="<?= $c['Q3']['kpi_pct'] >= 100 ? 'color: #10b981; font-weight:bold;' : ($c['Q3']['kpi_pct'] < 70 ? 'color: #ef4444;' : 'color: #f59e0b;') ?>">
-                                        <?= number_format($c['Q3']['kpi_pct'], 1) ?>%
-                                    </td>
-                                    <td class="text-right"><?= formatUSD($c['Q3']['com1']) ?></td>
-                                    <td class="text-right"><?= formatUSD($c['Q3']['com2']) ?></td>
-                                    <td class="text-right" style="font-weight: 600; border-right: 2px solid #cbd5e1;">
-                                        <?= formatUSD($c['Q3']['total']) ?></td>
-
-                                    <!-- Q4 -->
-                                    <td class="text-center"
-                                        style="<?= $c['Q4']['kpi_pct'] >= 100 ? 'color: #10b981; font-weight:bold;' : ($c['Q4']['kpi_pct'] < 70 ? 'color: #ef4444;' : 'color: #f59e0b;') ?>">
-                                        <?= number_format($c['Q4']['kpi_pct'], 1) ?>%
-                                    </td>
-                                    <td class="text-right"><?= formatUSD($c['Q4']['com1']) ?></td>
-                                    <td class="text-right"><?= formatUSD($c['Q4']['com2']) ?></td>
-                                    <td class="text-right" style="font-weight: 600; border-right: 2px solid #cbd5e1;">
-                                        <?= formatUSD($c['Q4']['total']) ?></td>
-
-                                    <td class="text-right" style="background: #f1f5f9; font-weight: 700;">
+                                    <td class="text-right" style="background: #1e293b; color: #fff; font-weight: 700;">
                                         <?= formatUSD($am_year_total) ?>
                                     </td>
                                 </tr>
                             <?php endforeach; ?>
                         </tbody>
                         <tfoot>
-                            <tr style="background: #f8fafc; font-weight: 700;">
-                                <td style="position: sticky; left: 0; background: #f8fafc;">TỔNG CỘNG</td>
-                                <!-- Q1 -->
-                                <td></td>
-                                <td class="text-right"><?= formatUSD($q_totals[1]['com1']) ?></td>
-                                <td class="text-right"><?= formatUSD($q_totals[1]['com2']) ?></td>
-                                <td class="text-right" style="border-right: 2px solid #cbd5e1;">
-                                    <?= formatUSD($q_totals[1]['total']) ?></td>
-                                <!-- Q2 -->
-                                <td></td>
-                                <td class="text-right"><?= formatUSD($q_totals[2]['com1']) ?></td>
-                                <td class="text-right"><?= formatUSD($q_totals[2]['com2']) ?></td>
-                                <td class="text-right" style="border-right: 2px solid #cbd5e1;">
-                                    <?= formatUSD($q_totals[2]['total']) ?></td>
-                                <!-- Q3 -->
-                                <td></td>
-                                <td class="text-right"><?= formatUSD($q_totals[3]['com1']) ?></td>
-                                <td class="text-right"><?= formatUSD($q_totals[3]['com2']) ?></td>
-                                <td class="text-right" style="border-right: 2px solid #cbd5e1;">
-                                    <?= formatUSD($q_totals[3]['total']) ?></td>
-                                <!-- Q4 -->
-                                <td></td>
-                                <td class="text-right"><?= formatUSD($q_totals[4]['com1']) ?></td>
-                                <td class="text-right"><?= formatUSD($q_totals[4]['com2']) ?></td>
-                                <td class="text-right" style="border-right: 2px solid #cbd5e1;">
-                                    <?= formatUSD($q_totals[4]['total']) ?></td>
+                            <tr style="background: #f8fafc; font-weight: 800; color: #0f172a;">
+                                <td class="sticky-col">TỔNG CỘNG</td>
+                                <?php for ($i = 1; $i <= 4; $i++): ?>
+                                    <td></td>
+                                    <td class="text-right"><?= formatUSD($q_totals[$i]['com1']) ?></td>
+                                    <td class="text-right"><?= formatUSD($q_totals[$i]['com2']) ?></td>
+                                    <td class="text-right"
+                                        style="border-right: 2px solid #cbd5e1; background: #f1f5f9; color: #1e293b;">
+                                        <?= formatUSD($q_totals[$i]['total']) ?>
+                                    </td>
+                                <?php endfor; ?>
 
-                                <td class="text-right" style="background: #1e293b; color: #fff;">
+                                <td class="text-right"
+                                    style="background: #0f172a; color: #fff; font-size: 14px; border: none;">
                                     <?= formatUSD($grand_total_year) ?>
                                 </td>
                             </tr>
