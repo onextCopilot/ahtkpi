@@ -22,11 +22,11 @@ $odoo = new OdooAPI();
 
 // 1. Fetch Achieved Revenue from Odoo (Invoices)
 // We want move_type='out_invoice' and state='posted' and date in the selected year.
+$start_date_fetch = ($current_year - 1) . "-01-01";
 $domain_inv = [
     ['move_type', '=', 'out_invoice'],
     ['state', '=', 'posted'],
-    ['invoice_date', '>=', "$current_year-01-01"],
-    ['invoice_date', '<=', "$current_year-12-31"]
+    ['invoice_date', '>=', $start_date_fetch]
 ];
 $fields_inv = ['invoice_user_id', 'amount_total_signed', 'invoice_date', 'id', 'state', 'amount_total', 'currency_id', 'invoice_payments_widget', 'date'];
 $all_invoices_year = [];
@@ -106,15 +106,19 @@ foreach ($all_invoices_year as $inv) {
         continue;
     }
 
-    if (!isset($am_recognised[$am_name])) {
-        $am_recognised[$am_name] = ['Q1' => 0, 'Q2' => 0, 'Q3' => 0, 'Q4' => 0];
-    }
-    if (!isset($am_invoiced[$am_name])) {
-        $am_invoiced[$am_name] = ['Q1' => 0, 'Q2' => 0, 'Q3' => 0, 'Q4' => 0];
-    }
+    // Revenue tables (am_recognised/am_invoiced) should only include the current reporting year
+    $iy = (int) date('Y', strtotime($date));
+    if ($iy == $current_year) {
+        if (!isset($am_recognised[$am_name])) {
+            $am_recognised[$am_name] = ['Q1' => 0, 'Q2' => 0, 'Q3' => 0, 'Q4' => 0];
+        }
+        if (!isset($am_invoiced[$am_name])) {
+            $am_invoiced[$am_name] = ['Q1' => 0, 'Q2' => 0, 'Q3' => 0, 'Q4' => 0];
+        }
 
-    $am_recognised[$am_name]["Q$q"] += $amount_vnd;
-    $am_invoiced[$am_name]["Q$q"] += $amount_vnd;
+        $am_recognised[$am_name]["Q$q"] += $amount_vnd;
+        $am_invoiced[$am_name]["Q$q"] += $amount_vnd;
+    }
 }
 
 // Merge AM lists
@@ -211,54 +215,72 @@ foreach ($all_ams as $am_name) {
         elseif ($kpi_pct < 100)
             $payout_ratio = 0.7;
 
-        // 2. Sum up commissions from payments in this quarter
+        // 2. Sum up commissions for invoices relevant to this quarter
         $q_com1 = 0;
         $q_com2 = 0;
+
+        // Define quarter date range
+        $start_m = ($q - 1) * 3 + 1;
+        $end_m = $q * 3;
+        $q_start_date = "$current_year-" . str_pad($start_m, 2, '0', STR_PAD_LEFT) . "-01";
+        $q_end_date = date('Y-m-d', strtotime("$current_year-" . str_pad($end_m, 2, '0', STR_PAD_LEFT) . "-01 +3 month -1 day"));
+        
+        if ($q == 1) $q_end_date = "$current_year-03-31";
+        elseif ($q == 2) $q_end_date = "$current_year-06-30";
+        elseif ($q == 3) $q_end_date = "$current_year-09-30";
+        elseif ($q == 4) $q_end_date = "$current_year-12-31";
 
         foreach ($am_invoices as $inv) {
             $oid = $inv['id'];
             if (!empty($local_sale_reports[$oid]['is_excluded']))
                 continue;
 
+            $inv_date_str = $inv['invoice_date'] ?: ($inv['date'] ?? null);
+            if (!$inv_date_str) continue;
+
+            $is_in_quarter = ($inv_date_str >= $q_start_date && $inv_date_str <= $q_end_date);
+            $has_payment_in_quarter = false;
+
             $pay_widget = $inv['invoice_payments_widget'] ?? null;
+            $giaingan_origin = 0;
             if ($pay_widget && $pay_widget !== 'false') {
                 $pw = is_array($pay_widget) ? $pay_widget : json_decode($pay_widget, true);
                 if (is_array($pw) && isset($pw['content'])) {
                     foreach ($pw['content'] as $p) {
+                        if (!empty($p['is_exchange'])) continue;
+                        
+                        $giaingan_origin += (float) ($p['amount'] ?? 0);
+                        
                         $pdate = $p['date'] ?? null;
-                        if (!$pdate)
-                            continue;
-
-                        $pm = (int) date('n', strtotime($pdate));
-                        $py = (int) date('Y', strtotime($pdate));
-                        $pq = ceil($pm / 3);
-
-                        // If payment happened in the specific year and quarter
-                        if ($py == $current_year && $pq == $q && empty($p['is_exchange'])) {
-                            $paid_amount_origin = (float) ($p['amount'] ?? 0);
-                            $l = $local_sale_reports[$oid] ?? [];
-                            $com1_pct = (float) str_replace(['%', ','], '', $l['com_1'] ?? '0');
-                            $com2_pct = (float) str_replace(['%', ','], '', $l['com_2'] ?? '0');
-
-                            $currency_code = is_array($inv['currency_id']) ? $inv['currency_id'][1] : 'VND';
-                            $inv_date = $inv['invoice_date'] ?: $inv['date'];
-
-                            $rateSource = $odoo->getRate($currency_code, $inv_date) ?: 1.0;
-                            $rateUsd = $odoo->getRate('USD', $inv_date) ?: 1.0;
-                            $ratio_usd = $rateSource > 0 ? ($rateUsd / $rateSource) : 1;
-
-                            $paid_usd = $paid_amount_origin * $ratio_usd;
-
-                            // Bonus logic
-                            $is_bonus_yes = ($l['bonus_license_trading'] ?? 'No') === 'Yes';
-                            $net_profit_f = (float) str_replace(['$', ','], '', $l['net_profit'] ?? '0');
-                            $bonus_extra = ($is_bonus_yes && $net_profit_f > 0) ? ($net_profit_f * 0.1) : 0;
-
-                            $q_com1 += ($paid_usd * ($com1_pct / 100)) + $bonus_extra;
-                            $q_com2 += ($paid_usd * ($com2_pct / 100));
+                        if ($pdate && $pdate >= $q_start_date && $pdate <= $q_end_date) {
+                            $has_payment_in_quarter = true;
                         }
                     }
                 }
+            }
+
+            // An invoice contributes to this quarter's total commission if:
+            // 1. It is dated in this quarter (and paid)
+            // 2. OR it is from a past quarter but was paid in this quarter
+            if (($is_in_quarter && $giaingan_origin > 0) || ($inv_date_str < $q_start_date && $has_payment_in_quarter)) {
+                $l = $local_sale_reports[$oid] ?? [];
+                $com1_pct = (float) str_replace(['%', ','], '', $l['com_1'] ?? '0');
+                $com2_pct = (float) str_replace(['%', ','], '', $l['com_2'] ?? '0');
+
+                $currency_code = is_array($inv['currency_id']) ? $inv['currency_id'][1] : 'VND';
+                $rateSource = $odoo->getRate($currency_code, $inv_date_str) ?: 1.0;
+                $rateUsd = $odoo->getRate('USD', $inv_date_str) ?: 1.0;
+                $ratio_usd = $rateSource > 0 ? ($rateUsd / $rateSource) : 1;
+
+                $giaingan_usd = $giaingan_origin * $ratio_usd;
+
+                // Bonus logic (10% of Net profit)
+                $is_bonus_yes = ($l['bonus_license_trading'] ?? 'No') === 'Yes';
+                $net_profit_f = (float) str_replace(['$', ','], '', $l['net_profit'] ?? '0');
+                $bonus_extra = ($is_bonus_yes && $net_profit_f > 0) ? ($net_profit_f * 0.1) : 0;
+
+                $q_com1 += ($giaingan_usd * ($com1_pct / 100)) + $bonus_extra;
+                $q_com2 += ($giaingan_usd * ($com2_pct / 100));
             }
         }
 
