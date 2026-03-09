@@ -348,6 +348,11 @@ $filtered_invoices = [];
 $past_paid_invoices = []; // For invoices from past quarters paid in this quarter
 
 foreach ($invoices as &$inv) {
+    // Only process 'posted' invoices as requested
+    if (($inv['state'] ?? '') !== 'posted') {
+        continue;
+    }
+
     $inv_date_str = $inv['invoice_date'] ?: $inv['date'];
 
     // Filter by quarter date
@@ -420,6 +425,10 @@ $ytd_start_date = isset($y) ? "$y-01-01" : date('Y') . '-01-01';
 $ytd_end_date = $end_date; // same as end of active quarter
 $ytd_vnd = 0;
 foreach ($invoices as $inv_ytd) {
+    // Only include 'posted' in YTD calculation
+    if (($inv_ytd['state'] ?? '') !== 'posted') {
+        continue;
+    }
     $inv_date_str_ytd = $inv_ytd['invoice_date'] ?: $inv_ytd['date'];
     if (!$inv_date_str_ytd || $inv_date_str_ytd < $ytd_start_date || $inv_date_str_ytd > $ytd_end_date)
         continue;
@@ -427,10 +436,6 @@ foreach ($invoices as $inv_ytd) {
     if ($is_excluded_ytd)
         continue;
     $ytd_vnd += isset($inv_ytd['amount_total_signed']) ? (float) $inv_ytd['amount_total_signed'] : 0;
-    // Fallback conversion for non-VND invoices
-    if ($ytd_vnd == 0 && $inv_ytd['amount_total'] > 0) {
-        // Already converted invoices are stored, but for safety keep simple approach here
-    }
 }
 
 // Group by month
