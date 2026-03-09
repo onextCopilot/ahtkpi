@@ -1000,6 +1000,113 @@ function formatMoney($amount, $currency_code)
             border: 2px solid #6ee7b7;
         }
 
+        /* ── User Guide Section ── */
+        .user-guide-section {
+            margin-top: 3rem;
+            background: #ffffff;
+            border: 1px solid #e2e8f0;
+            border-radius: 16px;
+            padding: 2rem;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.05);
+            line-height: 1.6;
+        }
+
+        .user-guide-header {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 1.5rem;
+            padding-bottom: 1rem;
+            border-bottom: 2px solid #f1f5f9;
+        }
+
+        .user-guide-header h2 {
+            margin: 0;
+            font-size: 1.25rem;
+            font-weight: 800;
+            color: #1e293b;
+            text-transform: uppercase;
+            letter-spacing: 0.025em;
+        }
+
+        .guide-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 2rem;
+        }
+
+        .guide-item {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .guide-item h3 {
+            margin: 0;
+            font-size: 15px;
+            font-weight: 700;
+            color: #2563eb;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .guide-content {
+            font-size: 13.5px;
+            color: #475569;
+        }
+
+        .guide-content ul {
+            margin: 0;
+            padding-left: 1.25rem;
+        }
+
+        .guide-content ul li {
+            margin-bottom: 8px;
+        }
+
+        .guide-content strong {
+            color: #0f172a;
+        }
+
+        .payout-rules-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 8px;
+            font-size: 12px;
+        }
+
+        .payout-rules-table td,
+        .payout-rules-table th {
+            border: 1px solid #e2e8f0;
+            padding: 6px 10px;
+            text-align: center;
+        }
+
+        .payout-rules-table th {
+            background: #f8fafc;
+            color: #64748b;
+            font-weight: 600;
+        }
+
+        .payout-success {
+            background: #d1fae5;
+            color: #065f46;
+            font-weight: 700;
+        }
+
+        .payout-warning {
+            background: #fffbeb;
+            color: #92400e;
+            font-weight: 700;
+        }
+
+        .payout-danger {
+            background: #fee2e2;
+            color: #991b1b;
+            font-weight: 700;
+        }
+
         .confirm-error-list {
             background: #fef2f2;
             border: 1px solid #fecaca;
@@ -2098,6 +2205,86 @@ function formatMoney($amount, $currency_code)
                         <?php endif; ?>
                     </div>
                 <?php endif; // end of if ($is_confirmed) for paid block ?>
+
+                <!-- ── HƯỚNG DẪN SỬ DỤNG ── -->
+                <section class="user-guide-section">
+                    <div class="user-guide-header">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none"
+                            stroke="#2563eb" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                            <circle cx="12" cy="12" r="10"></circle>
+                            <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path>
+                            <line x1="12" y1="17" x2="12.01" y2="17"></line>
+                        </svg>
+                        <h2>Hướng dẫn sử dụng & Quy tắc hệ thống</h2>
+                    </div>
+
+                    <div class="guide-grid">
+                        <div class="guide-item">
+                            <h3>📊 Giải thích bảng dữ liệu</h3>
+                            <div class="guide-content">
+                                <ul>
+                                    <li><strong>Doanh thu thực tế (Quý):</strong> Tổng hợp tất cả Invoice mà bạn là
+                                        Salesperson trong Odoo của quý hiện tại, dựa trên ngày Invoice.</li>
+                                    <li><strong>Giải ngân (USD):</strong> Số tiền thực tế khách đã trả, quy đổi sang USD
+                                        tại thời điểm Invoice.</li>
+                                    <li><strong>Các Invoice Đã Thanh Toán:</strong> Danh sách chi tiết các Invoice đã
+                                        được kế toán xác nhận thanh toán. Đây là dữ liệu dùng để <strong>tính
+                                            Commission</strong>.</li>
+                                    <li><strong>Phần trăm Com 1:</strong> Mặc định: Old client: 0.5%, New client: 1.0%.
+                                        Nếu chọn <i>Lead source = Yes</i>, cộng thêm 0.3%.</li>
+                                </ul>
+                            </div>
+                        </div>
+
+                        <div class="guide-item">
+                            <h3>💰 Quy tắc chi trả Commission</h3>
+                            <div class="guide-content">
+                                <p>Tỷ lệ chi trả (Payout Ratio) được tính dựa trên mức độ hoàn thành KPI Quý (Invoiced
+                                    Revenue / Budget):</p>
+                                <table class="payout-rules-table">
+                                    <thead>
+                                        <tr>
+                                            <th>Phần trăm đạt KPI</th>
+                                            <th>Tỷ lệ chi trả</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <tr>
+                                            <td>Từ 100% trở lên</td>
+                                            <td class="payout-success">Nhận 100% Com</td>
+                                        </tr>
+                                        <tr>
+                                            <td>Từ 70% đến 99.9%</td>
+                                            <td class="payout-warning">Nhận 70% Com</td>
+                                        </tr>
+                                        <tr>
+                                            <td>Dưới 70%</td>
+                                            <td class="payout-danger">Nhận 0% Com</td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                                <p style="margin-top:10px; font-style: italic;">* Nếu dự án có lợi nhuận và chọn % Bonus
+                                    Lic/Trd = Yes, bạn nhận thêm 10% của Net Profit (USD) vào tổng Commission.</p>
+                            </div>
+                        </div>
+
+                        <div class="guide-item">
+                            <h3>📝 Quy trình xác nhận</h3>
+                            <div class="guide-content">
+                                <ol>
+                                    <li><strong>Bước 1:</strong> Click vào các ô có nội dung "-- Chọn --" hoặc số liệu
+                                        màu nhạt để bổ sung thông tin (Presales, Loại khách, Lead source, Bonus...).
+                                    </li>
+                                    <li><strong>Bước 2:</strong> Kiểm tra các Invoice bị loại trừ (nút 🚫). Nếu Invoice
+                                        bị loại trừ, nó sẽ không được tính vào KPI và Commission.</li>
+                                    <li><strong>Bước 3:</strong> Nhấn <strong>"Xác nhận báo cáo"</strong>. Sau khi xác
+                                        nhận, dữ liệu sẽ bị <strong>KHÓA</strong>. Bạn cần liên hệ Admin nếu muốn chỉnh
+                                        sửa lại.</li>
+                                </ol>
+                            </div>
+                        </div>
+                    </div>
+                </section>
 
             </div><!-- /.report-wrapper -->
 
