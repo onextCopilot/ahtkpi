@@ -3,7 +3,11 @@
 if (!headers_sent()) {
     header('Content-Type: application/json');
 }
+
+// Suppress potential session warnings from config.php on live server
+$old_error_level = error_reporting(0);
 require_once __DIR__ . '/../config/config.php';
+error_reporting($old_error_level);
 
 // Check session
 if (!isset($_SESSION['user_id'])) {

@@ -1,7 +1,11 @@
 <?php
 // api/sync_debt.php
 header('Content-Type: application/json');
+
+// Suppress potential session warnings from config.php on live server
+$old_error_level = error_reporting(0);
 require_once __DIR__ . '/../config/config.php';
+error_reporting($old_error_level);
 require_once __DIR__ . '/../libs/OdooAPI.php';
 require_once __DIR__ . '/../libs/JiraAPI.php';
 

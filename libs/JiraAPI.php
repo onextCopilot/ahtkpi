@@ -1,5 +1,8 @@
 <?php
+// Suppress potential session warnings from config.php on live server
+$old_error_level = error_reporting(0);
 require_once __DIR__ . '/../config/config.php';
+error_reporting($old_error_level);
 
 class JiraAPI
 {
@@ -85,7 +88,7 @@ class JiraAPI
             "Accept: application/json"
         ]);
         curl_setopt($ch, CURLOPT_TIMEOUT, 30);
-        // curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false); 
+        // curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
 
         if ($method === 'POST') {
             curl_setopt($ch, CURLOPT_POST, true);
