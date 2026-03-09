@@ -324,6 +324,11 @@ $budget_placeholder = 0;
             color: #333;
         }
 
+        table.revenue-table tbody tr.section-header td,
+        table.revenue-table tbody tr.group-header td {
+            border-right: none;
+        }
+
         table.revenue-table tbody tr.section-header td {
             background-color: #61A667;
             color: white;
@@ -333,6 +338,7 @@ $budget_placeholder = 0;
         table.revenue-table tbody tr.group-header td {
             background-color: #e2e8f0;
             font-weight: 600;
+            padding-left: 10px;
         }
 
         table.revenue-table tbody td.text-right {
@@ -420,15 +426,12 @@ $budget_placeholder = 0;
                         </thead>
                         <tbody>
                             <tr class="section-header">
-                                <td>Revenue</td>
-                                <td colspan="16"></td>
+                                <td colspan="17">Revenue</td>
                             </tr>
 
                             <!-- RECOGNISED REVENUE -->
                             <tr class="group-header">
-                                <td style="background:#fff"></td>
-                                <td>Recognised Revenue</td>
-                                <td colspan="15"></td>
+                                <td colspan="17">Recognised Revenue</td>
                             </tr>
                             <?php
                             $stt_rec = 1;
@@ -471,9 +474,7 @@ $budget_placeholder = 0;
 
                             <!-- INVOICED REVENUE -->
                             <tr class="group-header">
-                                <td style="background:#fff"></td>
-                                <td>Invoiced Revenue</td>
-                                <td colspan="15"></td>
+                                <td colspan="17">Invoiced Revenue</td>
                             </tr>
                             <?php
                             $stt_inv = 1;
