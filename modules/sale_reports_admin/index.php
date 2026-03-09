@@ -20,58 +20,47 @@ $years = [$current_year + 1, $current_year, $current_year - 1, $current_year - 2
 // Helper: Convert to VND
 $odoo = new OdooAPI();
 
-// 1. Fetch Recognised Revenue from Odoo (Sale Orders)
-// We want state in ('sale', 'done') and date_order in the selected year.
-$domain_so = [
-    ['state', 'in', ['sale', 'done']],
-    ['date_order', '>=', "$current_year-01-01"],
-    ['date_order', '<=', "$current_year-12-31"]
+// 1. Fetch Achieved Revenue from Odoo (Invoices)
+// We want move_type='out_invoice' and state='posted' and date in the selected year.
+$domain_inv = [
+    ['move_type', '=', 'out_invoice'],
+    ['state', '=', 'posted'],
+    ['invoice_date', '>=', "$current_year-01-01"],
+    ['invoice_date', '<=', "$current_year-12-31"]
 ];
-$fields_so = [
-    'user_id',
-    'team_id',
-    'amount_total',
-    'currency_id',
-    'date_order'
-];
-
-$sale_orders = [];
+$fields_inv = ['invoice_user_id', 'amount_total_signed', 'invoice_date', 'id'];
+$all_invoices_year = [];
 try {
-    $sale_orders = $odoo->searchRead('sale.order', $domain_so, $fields_so, 0, 0);
+    $all_invoices_year = $odoo->searchRead('account.move', $domain_inv, $fields_inv, 0, 0);
 } catch (Exception $e) {
-    // Ignore error
 }
 
-$am_recognised = []; // group by AM name
-foreach ($sale_orders as $so) {
-    $date = $so['date_order'];
+$am_recognised = []; // Achieved VND for KPI
+foreach ($all_invoices_year as $inv) {
+    $date = $inv['invoice_date'];
     if (!$date)
         continue;
+    $q = ceil((int) date('n', strtotime($date)) / 3);
 
-    $m = (int) date('n', strtotime($date));
-    $q = ceil($m / 3);
-
-    // Determine AM name
     $am_name = 'Unknown';
-    if (!empty($so['user_id']) && is_array($so['user_id'])) {
-        $am_name = trim($so['user_id'][1]);
-    } elseif (!empty($so['team_id']) && is_array($so['team_id'])) {
-        $am_name = trim($so['team_id'][1]);
+    if (!empty($inv['invoice_user_id']) && is_array($inv['invoice_user_id'])) {
+        $am_name = trim($inv['invoice_user_id'][1]);
     }
 
-    $amount = (float) $so['amount_total'];
-    $currency_code = is_array($so['currency_id']) ? $so['currency_id'][1] : ($so['currency_id'] ?? 'VND');
+    $amount_vnd = abs((float) ($inv['amount_total_signed'] ?? 0));
 
-    if ($currency_code !== 'VND') {
-        $rateSource = $odoo->getRate($currency_code, $date) ?: 1.0;
-        $rateVnd = $odoo->getRate('VND', $date) ?: 1.0;
-        $amount = $amount * ($rateVnd / $rateSource);
+    // Check exclusion (using local table)
+    $oid = (int) $inv['id'];
+    $res_ex = $conn->query("SELECT is_excluded FROM sale_reports WHERE odoo_invoice_id = $oid");
+    if ($res_ex && ($row_ex = $res_ex->fetch_assoc())) {
+        if ($row_ex['is_excluded'])
+            continue;
     }
 
     if (!isset($am_recognised[$am_name])) {
         $am_recognised[$am_name] = ['Q1' => 0, 'Q2' => 0, 'Q3' => 0, 'Q4' => 0];
     }
-    $am_recognised[$am_name]["Q$q"] += $amount;
+    $am_recognised[$am_name]["Q$q"] += $amount_vnd;
 }
 
 // 2. Fetch Invoiced Revenue from Debts
@@ -264,23 +253,25 @@ foreach ($all_ams as $am_name) {
                         if ($py == $current_year && $pq == $q && empty($p['is_exchange'])) {
                             $paid_amount_origin = (float) ($p['amount'] ?? 0);
                             $l = $local_sale_reports[$oid] ?? [];
-                            $com1_pct = (float) str_replace('%', '', $l['com_1'] ?? '0');
-                            $com2_pct = (float) str_replace('%', '', $l['com_2'] ?? '0');
+                            $com1_pct = (float) str_replace(['%', ','], '', $l['com_1'] ?? '0');
+                            $com2_pct = (float) str_replace(['%', ','], '', $l['com_2'] ?? '0');
 
-                            // Convert to USD for commission (standardizing on USD as in individual reports)
                             $currency_code = is_array($inv['currency_id']) ? $inv['currency_id'][1] : 'VND';
-                            $ratio_usd = 1.0;
-                            if ($currency_code !== 'USD') {
-                                $inv_date = $inv['invoice_date'] ?: $inv['date'];
-                                $rateSource = $odoo->getRate($currency_code, $inv_date) ?: 1.0;
-                                $rateUsd = $odoo->getRate('USD', $inv_date) ?: 1.0;
-                                if ($rateSource > 0)
-                                    $ratio_usd = $rateUsd / $rateSource;
-                            }
+                            $inv_date = $inv['invoice_date'] ?: $inv['date'];
+
+                            $rateSource = $odoo->getRate($currency_code, $inv_date) ?: 1.0;
+                            $rateUsd = $odoo->getRate('USD', $inv_date) ?: 1.0;
+                            $ratio_usd = $rateSource > 0 ? ($rateUsd / $rateSource) : 1;
 
                             $paid_usd = $paid_amount_origin * $ratio_usd;
-                            $q_com1 += $paid_usd * ($com1_pct / 100);
-                            $q_com2 += $paid_usd * ($com2_pct / 100);
+
+                            // Bonus logic
+                            $is_bonus_yes = ($l['bonus_license_trading'] ?? 'No') === 'Yes';
+                            $net_profit_f = (float) str_replace(['$', ','], '', $l['net_profit'] ?? '0');
+                            $bonus_extra = ($is_bonus_yes && $net_profit_f > 0) ? ($net_profit_f * 0.1) : 0;
+
+                            $q_com1 += ($paid_usd * ($com1_pct / 100)) + $bonus_extra;
+                            $q_com2 += ($paid_usd * ($com2_pct / 100));
                         }
                     }
                 }
@@ -289,7 +280,7 @@ foreach ($all_ams as $am_name) {
 
         $am_commissions[$am_name]["Q$q"]['com1'] = $q_com1 * $payout_ratio;
         $am_commissions[$am_name]["Q$q"]['com2'] = $q_com2 * $payout_ratio;
-        $am_commissions[$am_name]["Q$q"]['total'] = ($q_com1 + $q_com2) * $payout_ratio;
+        $am_commissions[$am_name]["Q$q"]['total'] = ($am_commissions[$am_name]["Q$q"]['com1'] + $am_commissions[$am_name]["Q$q"]['com2']);
     }
 }
 
@@ -978,15 +969,19 @@ $budget_placeholder = 0;
                             </table>
                         </div>
                     </div>
-            <?php else: ?>
-                    <div class="card" style="margin: 2rem; padding: 2rem; text-align: center; border: 2px dashed #cbd5e1; border-radius: 12px; color: #64748b;">
-                        <svg xmlns="http://www.w3.org/2000/svg" style="width: 48px; height: 48px; margin-bottom: 1rem; opacity: 0.5; margin-left: auto; margin-right: auto;" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                <?php else: ?>
+                    <div class="card"
+                        style="margin: 2rem; padding: 2rem; text-align: center; border: 2px dashed #cbd5e1; border-radius: 12px; color: #64748b;">
+                        <svg xmlns="http://www.w3.org/2000/svg"
+                            style="width: 48px; height: 48px; margin-bottom: 1rem; opacity: 0.5; margin-left: auto; margin-right: auto;"
+                            fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
                         </svg>
                         <p style="font-size: 1.125rem; font-weight: 600;">Không tìm thấy dữ liệu AM/BD</p>
                         <p style="font-size: 0.875rem;">Vui lòng kiểm tra lại cấu hình người dùng (is_am_bd = 1).</p>
                     </div>
-            <?php endif; ?>
+                <?php endif; ?>
         </main>
     </div>
 </body>
