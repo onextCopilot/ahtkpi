@@ -247,7 +247,7 @@ foreach ($all_ams as $am_name) {
         $am_commissions[$am_name]["Q$q"] = ['com1' => 0, 'com2' => 0, 'total' => 0, 'kpi_pct' => 0];
 
         // 1. KPI Achievement Percentage
-        $actual = $am_recognised[$am_name]["Q$q"] ?? 0;
+        $actual = $am_invoiced[$am_name]["Q$q"] ?? 0;
         $budget = $am_budgets[$am_name]["Q$q"] ?? 0;
         $kpi_pct = ($budget > 0) ? ($actual / $budget) * 100 : 0;
         $am_commissions[$am_name]["Q$q"]['kpi_pct'] = $kpi_pct;
