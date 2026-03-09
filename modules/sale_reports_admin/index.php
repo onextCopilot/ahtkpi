@@ -75,15 +75,27 @@ foreach ($sale_orders as $so) {
 }
 
 // 2. Fetch Invoiced Revenue from Debts
-$stmt = $conn->prepare("SELECT am, amount, currency, invoice_date FROM debts WHERE invoice_date >= ? AND invoice_date <= ?");
+$stmt = $conn->prepare("
+    SELECT d.am, d.amount, d.currency, d.invoice_date, d.odoo_invoice_id, sr.is_excluded 
+    FROM debts d 
+    LEFT JOIN sale_reports sr ON d.odoo_invoice_id = sr.odoo_invoice_id 
+    WHERE d.invoice_date >= ? AND d.invoice_date <= ?
+");
 $start_date = "$current_year-01-01";
 $end_date = "$current_year-12-31";
 $stmt->bind_param("ss", $start_date, $end_date);
 $stmt->execute();
 $res = $stmt->get_result();
 
+$odoo->getInvoices(10000, 0, []);
+$odoo_map = $odoo->getInvoiceMap();
+
 $am_invoiced = []; // group by AM name
 while ($row = $res->fetch_assoc()) {
+    if (!empty($row['is_excluded'])) {
+        continue;
+    }
+
     $date = $row['invoice_date'];
     if (!$date)
         continue;
@@ -95,16 +107,31 @@ while ($row = $res->fetch_assoc()) {
 
     $amount = (float) $row['amount'];
     $currency_code = $row['currency'] ?? 'VND';
-    if ($currency_code !== 'VND') {
+    $oid = $row['odoo_invoice_id'];
+
+    $vnd_value = 0;
+    if (!empty($oid) && isset($odoo_map[$oid])) {
+        $inv = $odoo_map[$oid];
+        $tot = (float) $inv['amount_total'];
+        $sig = abs((float) $inv['amount_total_signed']);
+        if ($tot > 0) {
+            $vnd_value = $amount * ($sig / $tot);
+        }
+    }
+
+    // Fallback to manual rate calculation
+    if ($vnd_value <= 0 && $currency_code === 'VND') {
+        $vnd_value = $amount;
+    } elseif ($vnd_value <= 0 && $currency_code !== 'VND') {
         $rateSource = $odoo->getRate($currency_code, $date) ?: 1.0;
         $rateVnd = $odoo->getRate('VND', $date) ?: 1.0;
-        $amount = $amount * ($rateVnd / $rateSource);
+        $vnd_value = $amount * ($rateVnd / $rateSource);
     }
 
     if (!isset($am_invoiced[$am_name])) {
         $am_invoiced[$am_name] = ['Q1' => 0, 'Q2' => 0, 'Q3' => 0, 'Q4' => 0];
     }
-    $am_invoiced[$am_name]["Q$q"] += $amount;
+    $am_invoiced[$am_name]["Q$q"] += $vnd_value;
 }
 
 // Merge AM lists
