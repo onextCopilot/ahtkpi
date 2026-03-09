@@ -1024,29 +1024,7 @@ $budget_placeholder = 0;
                                         <tr style="cursor: pointer;"
                                             onclick="viewReport(<?= (int) ($c['uid'] ?? 0) ?>, 'Q1_<?= $current_year ?>')">
                                             <td class="sticky-col">
-                                                <div
-                                                    style="display: flex; align-items: center; justify-content: space-between; gap: 4px;">
-                                                    <span
-                                                        style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 150px;">
-                                                        <?= htmlspecialchars($am) ?>
-                                                    </span>
-                                                    <div style="display: flex; flex-shrink: 0;">
-                                                        <?php
-                                                        $uid = (int) ($c['uid'] ?? 0);
-                                                        for ($qi = 1; $qi <= 4; $qi++) {
-                                                            $q_key = "Q{$qi}_{$current_year}";
-                                                            if (!empty($confirmations[$uid][$q_key])) {
-                                                                echo '<span title="Đã xác nhận Q' . $qi . '" style="margin-left: 2px; display: inline-flex; align-items: center;">
-                                                                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="#fbbf24" stroke="#d97706" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                                                        <circle cx="12" cy="8" r="7"></circle>
-                                                                        <polyline points="8.21 13.89 7 23 12 20 17 23 15.79 13.88"></polyline>
-                                                                    </svg>
-                                                                </span>';
-                                                            }
-                                                        }
-                                                        ?>
-                                                    </div>
-                                                </div>
+                                                <?= htmlspecialchars($am) ?>
                                             </td>
                                             <?php for ($i = 1; $i <= 4; $i++):
                                                 $qi = "Q$i";
@@ -1059,9 +1037,27 @@ $budget_placeholder = 0;
                                                 ?>
                                                 <td class="text-center"
                                                     onclick="event.stopPropagation(); viewReport(<?= (int) ($c['uid'] ?? 0) ?>, 'Q<?= $i ?>_<?= $current_year ?>')">
-                                                    <span class="kpi-badge <?= $badge_class ?>">
-                                                        <?= number_format($kpi, 1) ?>%
-                                                    </span>
+                                                    <div
+                                                        style="display: flex; align-items: center; justify-content: center; gap: 6px;">
+                                                        <span class="kpi-badge <?= $badge_class ?>">
+                                                            <?= number_format($kpi, 1) ?>%
+                                                        </span>
+                                                        <?php
+                                                        $uid = (int) ($c['uid'] ?? 0);
+                                                        $q_key = "Q{$i}_{$current_year}";
+                                                        if (!empty($confirmations[$uid][$q_key])): ?>
+                                                            <span title="Đã xác nhận Q<?= $i ?>"
+                                                                style="display: inline-flex; align-items: center;">
+                                                                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16"
+                                                                    viewBox="0 0 24 24" fill="#fbbf24" stroke="#d97706" stroke-width="2"
+                                                                    stroke-linecap="round" stroke-linejoin="round">
+                                                                    <circle cx="12" cy="8" r="7"></circle>
+                                                                    <polyline points="8.21 13.89 7 23 12 20 17 23 15.79 13.88">
+                                                                    </polyline>
+                                                                </svg>
+                                                            </span>
+                                                        <?php endif; ?>
+                                                    </div>
                                                 </td>
                                                 <td class="text-right"
                                                     onclick="event.stopPropagation(); viewReport(<?= (int) ($c['uid'] ?? 0) ?>, 'Q<?= $i ?>_<?= $current_year ?>')">
