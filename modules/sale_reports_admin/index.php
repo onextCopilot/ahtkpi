@@ -20,30 +20,8 @@ $years = [$current_year + 1, $current_year, $current_year - 1, $current_year - 2
 // Helper: Convert to VND
 $odoo = new OdooAPI();
 
-// 0. Pre-map Odoo User IDs to AM Names
-$am_bd_users = [];
-$odoo_id_to_am_name = [];
-$res_users = $conn->query("SELECT id, full_name, email, sale_level_id FROM users WHERE is_am_bd = 1");
-if ($res_users) {
-    while ($u = $res_users->fetch_assoc()) {
-        $name = trim($u['full_name']);
-        if (empty($name))
-            continue;
-        $am_bd_users[$name] = [
-            'id' => $u['id'],
-            'email' => $u['email'],
-            'sale_level_id' => $u['sale_level_id']
-        ];
-        $oid = $odoo->getOdooUserId($u['email']);
-        if ($oid) {
-            $odoo_id_to_am_name[$oid] = $name;
-        }
-    }
-}
-$all_ams = array_keys($am_bd_users);
-sort($all_ams);
-
-// 1. Fetch Achieved Revenue from Odoo (Invoices issued in THIS Year)
+// 1. Fetch Achieved Revenue from Odoo (Invoices)
+// We want move_type='out_invoice' and state='posted' and date in the selected year.
 $domain_inv = [
     ['move_type', '=', 'out_invoice'],
     ['state', '=', 'posted'],
@@ -53,7 +31,7 @@ $domain_inv = [
 $fields_inv = ['invoice_user_id', 'amount_total_signed', 'invoice_date', 'id'];
 $all_invoices_year = [];
 try {
-    $all_invoices_year = $odoo->searchRead('account.move', $domain_inv, $fields_inv, 20000, 0);
+    $all_invoices_year = $odoo->searchRead('account.move', $domain_inv, $fields_inv, 0, 0);
 } catch (Exception $e) {
 }
 
@@ -65,14 +43,13 @@ foreach ($all_invoices_year as $inv) {
     $q = ceil((int) date('n', strtotime($date)) / 3);
 
     $am_name = 'Unknown';
-    $oid_ref = isset($inv['invoice_user_id']) && is_array($inv['invoice_user_id']) ? $inv['invoice_user_id'][0] : null;
-    if ($oid_ref && isset($odoo_id_to_am_name[$oid_ref])) {
-        $am_name = $odoo_id_to_am_name[$oid_ref];
-    } elseif (!empty($inv['invoice_user_id']) && is_array($inv['invoice_user_id'])) {
+    if (!empty($inv['invoice_user_id']) && is_array($inv['invoice_user_id'])) {
         $am_name = trim($inv['invoice_user_id'][1]);
     }
 
     $amount_vnd = abs((float) ($inv['amount_total_signed'] ?? 0));
+
+    // Check exclusion (using local table)
     $oid = (int) $inv['id'];
     $res_ex = $conn->query("SELECT is_excluded FROM sale_reports WHERE odoo_invoice_id = $oid");
     if ($res_ex && ($row_ex = $res_ex->fetch_assoc())) {
@@ -146,7 +123,19 @@ while ($row = $res->fetch_assoc()) {
     $am_invoiced[$am_name]["Q$q"] += $vnd_value;
 }
 
-// Budget loop already handles $all_ams derived from mapped users.
+// Merge AM lists
+$db_ams = [];
+$res_am = $conn->query("SELECT full_name FROM users WHERE is_am_bd = 1 ORDER BY full_name ASC");
+if ($res_am) {
+    while ($r = $res_am->fetch_assoc()) {
+        $n = trim($r['full_name']);
+        if (!empty($n)) {
+            $db_ams[] = $n;
+        }
+    }
+}
+$all_ams = array_unique($db_ams);
+sort($all_ams);
 
 // Fetch budgets
 $am_budgets = [];
@@ -156,9 +145,16 @@ foreach ($all_ams as $am_name) {
         continue;
     }
 
-    $u_info = $am_bd_users[$am_name] ?? null;
-    $uid = $u_info['id'] ?? 0;
-    $fallback_sale_level_id = $u_info['sale_level_id'] ?? 0;
+    // find user by full name
+    $stmt_u = $conn->prepare("SELECT id, sale_level_id FROM users WHERE full_name LIKE ? OR username LIKE ? LIMIT 1");
+    $like_name = "%" . $am_name . "%";
+    $stmt_u->bind_param("ss", $like_name, $like_name);
+    $stmt_u->execute();
+    $u_res = $stmt_u->get_result();
+    $u_row = $u_res->fetch_assoc();
+
+    $uid = $u_row ? (int) $u_row['id'] : 0;
+    $fallback_sale_level_id = $u_row ? (int) $u_row['sale_level_id'] : 0;
 
     $am_budgets[$am_name] = ['Q1' => 0, 'Q2' => 0, 'Q3' => 0, 'Q4' => 0];
 
@@ -204,20 +200,15 @@ if ($res_sr) {
     }
 }
 
-// Group Odoo invoices by mapped AM name
+// Group Odoo invoices by AM from cache
 $odoo_invoices_by_am = [];
 foreach ($odoo_map as $oid => $inv) {
-    $am_name = 'Unknown';
-    $oid_ref = isset($inv['invoice_user_id']) && is_array($inv['invoice_user_id']) ? $inv['invoice_user_id'][0] : null;
-
-    if ($oid_ref && isset($odoo_id_to_am_name[$oid_ref])) {
-        $am_name = $odoo_id_to_am_name[$oid_ref];
-    } elseif (!empty($inv['invoice_user_id']) && is_array($inv['invoice_user_id'])) {
-        $am_name = trim($inv['invoice_user_id'][1]);
+    $inv_am = '';
+    if (!empty($inv['invoice_user_id']) && is_array($inv['invoice_user_id'])) {
+        $inv_am = trim($inv['invoice_user_id'][1]);
     }
-
-    if ($am_name && $am_name !== 'Unknown') {
-        $odoo_invoices_by_am[$am_name][] = $inv;
+    if ($inv_am) {
+        $odoo_invoices_by_am[$inv_am][] = $inv;
     }
 }
 
