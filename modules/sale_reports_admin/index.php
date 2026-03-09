@@ -177,6 +177,15 @@ foreach ($all_ams_data as $u_row) {
 
 // --- NEW: Calculate Commission for AM BD users ---
 $am_commissions = [];
+// Fetch KPI confirmation status
+$confirmations = [];
+$res_conf = $conn->query("SELECT user_id, quarter, type FROM sale_report_confirmations WHERE type = 'confirmed' AND quarter LIKE '%_$current_year'");
+if ($res_conf) {
+    while ($rc = $res_conf->fetch_assoc()) {
+        $confirmations[$rc['user_id']][$rc['quarter']] = true;
+    }
+}
+
 // Group Odoo invoices by AM from cache
 $odoo_invoices_by_am = [];
 foreach ($odoo_map as $oid => $inv) {
@@ -974,7 +983,22 @@ $budget_placeholder = 0;
                                         <tr style="cursor: pointer;"
                                             onclick="viewReport(<?= (int) ($c['uid'] ?? 0) ?>, 'Q1_<?= $current_year ?>')">
                                             <td class="sticky-col">
-                                                <?= htmlspecialchars($am) ?>
+                                                <div style="display: flex; align-items: center; justify-content: space-between; gap: 4px;">
+                                                    <span style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 150px;">
+                                                        <?= htmlspecialchars($am) ?>
+                                                    </span>
+                                                    <div style="display: flex; flex-shrink: 0;">
+                                                        <?php 
+                                                        $uid = (int)($c['uid'] ?? 0);
+                                                        for ($qi = 1; $qi <= 4; $qi++) {
+                                                            $q_key = "Q{$qi}_{$current_year}";
+                                                            if (!empty($confirmations[$uid][$q_key])) {
+                                                                echo '<span title="Đã xác nhận Q' . $qi . '" style="color:#10b981; font-size: 14px; margin-left: 2px;">✅</span>';
+                                                            }
+                                                        }
+                                                        ?>
+                                                    </div>
+                                                </div>
                                             </td>
                                             <?php for ($i = 1; $i <= 4; $i++):
                                                 $qi = "Q$i";
