@@ -101,20 +101,21 @@ while ($row = $res->fetch_assoc()) {
     $vnd_value = 0;
     if (!empty($oid) && isset($odoo_map[$oid])) {
         $inv = $odoo_map[$oid];
+        // Only include POSTED invoices as requested
+        if (($inv['state'] ?? '') !== 'posted') {
+            continue;
+        }
+
         $tot = (float) $inv['amount_total'];
         $sig = abs((float) $inv['amount_total_signed']);
         if ($tot > 0) {
             $vnd_value = $amount * ($sig / $tot);
         }
-    }
-
-    // Fallback to manual rate calculation
-    if ($vnd_value <= 0 && $currency_code === 'VND') {
-        $vnd_value = $amount;
-    } elseif ($vnd_value <= 0 && $currency_code !== 'VND') {
-        $rateSource = $odoo->getRate($currency_code, $date) ?: 1.0;
-        $rateVnd = $odoo->getRate('VND', $date) ?: 1.0;
-        $vnd_value = $amount * ($rateVnd / $rateSource);
+    } else {
+        // If not found in Odoo map, we can't verify 'posted' state. 
+        // User request: "phải là các debts là các invoice odoo posted"
+        // Skip if not verifiable as posted.
+        continue;
     }
 
     if (!isset($am_invoiced[$am_name])) {
@@ -939,14 +940,20 @@ $budget_placeholder = 0;
                                                 elseif ($kpi >= 70)
                                                     $badge_class = 'kpi-mid';
                                                 ?>
-                                                <td class="text-center" onclick="event.stopPropagation(); viewReport(<?= (int) ($c['uid'] ?? 0) ?>, 'Q<?= $i ?>_<?= $current_year ?>')">
+                                                <td class="text-center"
+                                                    onclick="event.stopPropagation(); viewReport(<?= (int) ($c['uid'] ?? 0) ?>, 'Q<?= $i ?>_<?= $current_year ?>')">
                                                     <span class="kpi-badge <?= $badge_class ?>">
                                                         <?= number_format($kpi, 1) ?>%
                                                     </span>
                                                 </td>
-                                                <td class="text-right" onclick="event.stopPropagation(); viewReport(<?= (int) ($c['uid'] ?? 0) ?>, 'Q<?= $i ?>_<?= $current_year ?>')"><?= formatUSD($c[$qi]['com1'] ?? 0) ?></td>
-                                                <td class="text-right" onclick="event.stopPropagation(); viewReport(<?= (int) ($c['uid'] ?? 0) ?>, 'Q<?= $i ?>_<?= $current_year ?>')"><?= formatUSD($c[$qi]['com2'] ?? 0) ?></td>
-                                                <td class="text-right" onclick="event.stopPropagation(); viewReport(<?= (int) ($c['uid'] ?? 0) ?>, 'Q<?= $i ?>_<?= $current_year ?>')"
+                                                <td class="text-right"
+                                                    onclick="event.stopPropagation(); viewReport(<?= (int) ($c['uid'] ?? 0) ?>, 'Q<?= $i ?>_<?= $current_year ?>')">
+                                                    <?= formatUSD($c[$qi]['com1'] ?? 0) ?></td>
+                                                <td class="text-right"
+                                                    onclick="event.stopPropagation(); viewReport(<?= (int) ($c['uid'] ?? 0) ?>, 'Q<?= $i ?>_<?= $current_year ?>')">
+                                                    <?= formatUSD($c[$qi]['com2'] ?? 0) ?></td>
+                                                <td class="text-right"
+                                                    onclick="event.stopPropagation(); viewReport(<?= (int) ($c['uid'] ?? 0) ?>, 'Q<?= $i ?>_<?= $current_year ?>')"
                                                     style="font-weight: 700; border-right: 2px solid #cbd5e1; background: #f8fafc; color: #0f172a;">
                                                     <?= formatUSD($c[$qi]['total'] ?? 0) ?>
                                                 </td>
