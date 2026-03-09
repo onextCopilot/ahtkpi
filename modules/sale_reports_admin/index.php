@@ -270,38 +270,57 @@ $budget_placeholder = 0;
             border-radius: 8px;
             box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
             overflow: auto;
+            max-height: calc(100vh - 180px);
+            border: 1px solid #ccc;
         }
 
         table.revenue-table {
-            width: 100%;
-            border-collapse: collapse;
+            width: max-content;
+            min-width: 100%;
+            border-collapse: separate;
+            border-spacing: 0;
             white-space: nowrap;
             font-size: 13px;
         }
 
-        table.revenue-table th,
-        table.revenue-table td {
-            border: 1px solid #e2e8f0;
-            padding: 10px 14px;
-        }
-
         table.revenue-table thead th {
-            background-color: #0f172a;
-            color: #fff;
-            font-weight: 600;
-            text-align: center;
             position: sticky;
             top: 0;
+            background-color: #004b75;
+            color: white;
+            font-weight: 600;
+            padding: 10px 12px;
+            text-align: center;
+            border-bottom: 2px solid #003655;
             z-index: 10;
         }
 
-        table.revenue-table tbody tr.section-header {
+        table.revenue-table thead th:not(:last-child) {
+            border-right: 1px solid rgba(255, 255, 255, 0.2);
+        }
+
+        table.revenue-table thead tr:nth-child(2) th {
+            top: 41px;
+            /* Approximation for the second header row */
+            z-index: 9;
+            border-top: none;
+        }
+
+        table.revenue-table tbody td {
+            padding: 8px 10px;
+            border-bottom: 1px solid #e0e0e0;
+            border-right: 1px solid #f0f0f0;
+            vertical-align: middle;
+            color: #333;
+        }
+
+        table.revenue-table tbody tr.section-header td {
             background-color: #61A667;
             color: white;
             font-weight: bold;
         }
 
-        table.revenue-table tbody tr.group-header {
+        table.revenue-table tbody tr.group-header td {
             background-color: #e2e8f0;
             font-weight: 600;
         }
@@ -317,6 +336,24 @@ $budget_placeholder = 0;
 
         table.revenue-table tbody td.am-name {
             padding-left: 24px;
+        }
+
+        /* Alternating row colors for Invoiced Revenue */
+        table.revenue-table tbody tr.invoiced-row:nth-child(odd) td {
+            background-color: #ffffff;
+        }
+
+        table.revenue-table tbody tr.invoiced-row:nth-child(even) td {
+            background-color: #f1f5f9;
+        }
+
+        /* Set STT Column Width */
+        table.revenue-table th:nth-child(1),
+        table.revenue-table td:nth-child(1) {
+            width: 40px;
+            min-width: 40px;
+            max-width: 40px;
+            text-align: center;
         }
     </style>
 </head>
@@ -345,7 +382,7 @@ $budget_placeholder = 0;
                     <table class="revenue-table">
                         <thead>
                             <tr>
-                                <th rowspan="2">Category</th>
+                                <th rowspan="2">STT</th>
                                 <th rowspan="2">Sub-Category / AM</th>
                                 <th colspan="3">Q1</th>
                                 <th colspan="3">Q2</th>
@@ -383,7 +420,9 @@ $budget_placeholder = 0;
                                 <td>Recognised Revenue</td>
                                 <td colspan="15"></td>
                             </tr>
-                            <?php foreach ($all_ams as $am):
+                            <?php
+                            $stt_rec = 1;
+                            foreach ($all_ams as $am):
                                 $data = $am_recognised[$am] ?? ['Q1' => 0, 'Q2' => 0, 'Q3' => 0, 'Q4' => 0];
                                 $actual_q1 = $data['Q1'];
                                 $actual_q2 = $data['Q2'];
@@ -398,8 +437,8 @@ $budget_placeholder = 0;
                                 $b_q4 = $b_data['Q4'];
                                 $b_h1 = $b_q1 + $b_q2;
                                 ?>
-                                <tr>
-                                    <td></td>
+                                <tr class="recognised-row">
+                                    <td class="text-center"><?= $stt_rec++ ?></td>
                                     <td class="am-name"><?= htmlspecialchars($am) ?></td>
                                     <td class="text-right" style="color: #cbd5e1;">-</td>
                                     <td class="text-right"><?= formatMoney($actual_q1) ?></td>
@@ -426,7 +465,9 @@ $budget_placeholder = 0;
                                 <td>Invoiced Revenue</td>
                                 <td colspan="15"></td>
                             </tr>
-                            <?php foreach ($all_ams as $am):
+                            <?php
+                            $stt_inv = 1;
+                            foreach ($all_ams as $am):
                                 $data = $am_invoiced[$am] ?? ['Q1' => 0, 'Q2' => 0, 'Q3' => 0, 'Q4' => 0];
                                 $actual_q1 = $data['Q1'];
                                 $actual_q2 = $data['Q2'];
@@ -441,8 +482,8 @@ $budget_placeholder = 0;
                                 $b_q4 = $b_data['Q4'];
                                 $b_h1 = $b_q1 + $b_q2;
                                 ?>
-                                <tr>
-                                    <td></td>
+                                <tr class="invoiced-row">
+                                    <td class="text-center"><?= $stt_inv++ ?></td>
                                     <td class="am-name"><?= htmlspecialchars($am) ?></td>
                                     <td class="text-right"><?= formatMoney($b_q1) ?></td>
                                     <td class="text-right"><?= formatMoney($actual_q1) ?></td>
