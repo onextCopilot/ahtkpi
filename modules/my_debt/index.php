@@ -179,7 +179,15 @@ $total_amount_vnd = 0;
 
 $res = $conn->query("SELECT d.*, st.name as team_name FROM debts d LEFT JOIN sale_teams st ON d.sale_team_id = st.id $where_sql ORDER BY d.invoice_date DESC, d.id DESC");
 
+// Trigger cache refresh if needed (OdooAPI::getInvoices handles the 1-hour check internally)
+$odoo->getInvoices(1, 0);
 $odoo_map = $odoo->getInvoiceMap();
+$odoo_name_map = [];
+foreach ($odoo_map as $inv) {
+    if (!empty($inv['name'])) {
+        $odoo_name_map[$inv['name']] = $inv;
+    }
+}
 
 if ($res) {
     while ($row = $res->fetch_assoc()) {
@@ -187,6 +195,148 @@ if ($res) {
         $curr = $row['currency'] ?: 'USD';
         $date = !empty($row['invoice_date']) ? $row['invoice_date'] : date('Y-m-d');
         $oid = $row['odoo_invoice_id'];
+
+        // AUTO SYNC LOGIC: Update debt record from Odoo map if mismatch found
+        $inv = null;
+        if (!empty($oid) && isset($odoo_map[$oid])) {
+            $inv = $odoo_map[$oid];
+        } elseif (!empty($row['vat_invoice']) && isset($odoo_name_map[$row['vat_invoice']])) {
+            $inv = $odoo_name_map[$row['vat_invoice']];
+        }
+
+        if ($inv) {
+            $changed = false;
+            $upSql = [];
+            $upParams = [];
+            $upTypes = "";
+
+            // 1. Odoo ID check
+            if (empty($oid) && !empty($inv['id'])) {
+                $upSql[] = "odoo_invoice_id = ?";
+                $upParams[] = $inv['id'];
+                $upTypes .= "i";
+                $row['odoo_invoice_id'] = $inv['id'];
+                $oid = $inv['id'];
+                $changed = true;
+            }
+
+            // 2. Amount and Currency
+            $newAmt = (float) $inv['amount_total'];
+            $newCurr = is_array($inv['currency_id']) ? $inv['currency_id'][1] : 'VND';
+            if (abs($newAmt - (float) $row['amount']) > 0.01 || $newCurr !== ($row['currency'] ?? '')) {
+                $upSql[] = "amount = ?, original_amount = ?, currency = ?";
+                $upParams[] = $newAmt;
+                $upParams[] = $newAmt;
+                $upParams[] = $newCurr;
+                $upTypes .= "dds";
+                $row['amount'] = $newAmt;
+                $row['currency'] = $newCurr;
+                $amount = $newAmt; // update local for VND calc
+                $curr = $newCurr;   // update local
+                $changed = true;
+            }
+
+            // 3. Payment Status & Fields (Logic from api/sync_debt.php)
+            $pState = $inv['payment_state'] ?? '';
+            $newPayStat = ($pState === 'paid' || $pState === 'in_payment') ? 'Paid' : 'Not paid';
+
+            // Calculate Payment Date for status class/month/week
+            $paymentDate = $inv['write_date'] ?? null;
+            if (!empty($inv['invoice_payments_widget'])) {
+                $widget = $inv['invoice_payments_widget'];
+                if (is_string($widget))
+                    $widget = json_decode($widget, true);
+                if (!empty($widget['content'])) {
+                    $dates = array_column($widget['content'], 'date');
+                    if ($dates)
+                        $paymentDate = max($dates);
+                }
+            }
+
+            $paymentMonth = '';
+            $weeklyUpdate = '';
+            $invoiceStatusClass = $row['invoice_status_class']; // Start with existing
+
+            if ($newPayStat === 'Paid') {
+                if (!empty($paymentDate)) {
+                    $ts = strtotime($paymentDate);
+                    $currentMonth = date('Y-m');
+                    $paidMonth = date('Y-m', $ts);
+                    $paymentMonth = date('m/Y', $ts);
+                    $dayOfMonth = date('j', $ts);
+                    $weekOfMonth = ceil($dayOfMonth / 7);
+                    $weeklyUpdate = "Tuần " . $weekOfMonth;
+
+                    if ($paidMonth === $currentMonth)
+                        $invoiceStatusClass = 'Tím';
+                    else if ($paidMonth < $currentMonth)
+                        $invoiceStatusClass = 'Done';
+                    else
+                        $invoiceStatusClass = 'Tím';
+                } else {
+                    $invoiceStatusClass = 'Done';
+                }
+            } else {
+                // Not paid - check if overdue (> 60 days from invoice date)
+                $invDate = $inv['invoice_date'] ?? $inv['date'] ?? '';
+                if (!empty($invDate)) {
+                    $invTs = strtotime($invDate);
+                    if (floor((time() - $invTs) / 86400) > 60)
+                        $invoiceStatusClass = 'Đỏ';
+                    else if ($pState === 'draft')
+                        $invoiceStatusClass = 'Draft';
+                }
+            }
+
+            $plClass = ($newPayStat === 'Paid') ? 'Tốt' : 'Xấu';
+
+            // Check if any of these derived fields changed
+            if (
+                $newPayStat !== ($row['payment_status'] ?? '') ||
+                $paymentMonth !== ($row['payment_month'] ?? '') ||
+                $weeklyUpdate !== ($row['weekly_update'] ?? '') ||
+                $invoiceStatusClass !== ($row['invoice_status_class'] ?? '') ||
+                $plClass !== ($row['pl_class'] ?? '')
+            ) {
+
+                $upSql[] = "payment_status = ?, payment_month = ?, weekly_update = ?, invoice_status_class = ?, pl_class = ?";
+                $upParams[] = $newPayStat;
+                $upParams[] = $paymentMonth;
+                $upParams[] = $weeklyUpdate;
+                $upParams[] = $invoiceStatusClass;
+                $upParams[] = $plClass;
+                $upTypes .= "sssss";
+
+                $row['payment_status'] = $newPayStat;
+                $row['payment_month'] = $paymentMonth;
+                $row['weekly_update'] = $weeklyUpdate;
+                $row['invoice_status_class'] = $invoiceStatusClass;
+                $row['pl_class'] = $plClass;
+                $changed = true;
+            }
+
+            // Sync Invoice Date if different
+            $newInvDateVal = $inv['invoice_date'] ?: $inv['date'];
+            if ($newInvDateVal && $newInvDateVal !== ($row['invoice_date'] ?? '')) {
+                $upSql[] = "invoice_date = ?";
+                $upParams[] = $newInvDateVal;
+                $upTypes .= "s";
+                $row['invoice_date'] = $newInvDateVal;
+                $date = $newInvDateVal; // update local
+                $changed = true;
+            }
+
+            if ($changed) {
+                $upSql[] = "updated_at = NOW()";
+                $updateStr = implode(", ", $upSql);
+                $stmtUp = $conn->prepare("UPDATE debts SET $updateStr WHERE id = ?");
+                $upParams[] = $row['id'];
+                $upTypes .= "i";
+                $stmtUp->bind_param($upTypes, ...$upParams);
+                $stmtUp->execute();
+                $stmtUp->close();
+            }
+        }
 
         // Convert to VND using Odoo exchange rate ratio if available
         $vnd_value = 0;
@@ -2092,7 +2242,7 @@ if ($team_res && $team_res->num_rows > 0) {
                             defaultStickyWidths[index]; css += `\n#${tableId} th:nth-child(${colIndex}), #${tableId}
                 tr:not(.group-header) td:nth-child(${colIndex}) { left: ${runningLeft}px !important; }`; if (w) {
                             css
-                            += `\n#${tableId} th:nth-child(${colIndex}), #${tableId} tr:not(.group-header) td:nth-child(${colIndex})
+                                += `\n#${tableId} th:nth-child(${colIndex}), #${tableId} tr:not(.group-header) td:nth-child(${colIndex})
                 { width: ${w}px !important; min-width: ${w}px !important; max-width: ${w}px !important; }`;
                         }
                         runningLeft += actualW;
