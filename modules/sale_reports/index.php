@@ -384,11 +384,11 @@ foreach ($invoices as &$inv) {
 
     $inv['calc_amount_vnd'] = $amountVnd;
 
-    // Only add to total if not excluded AND POSTED (Match Admin logic)
+    // Only add to total if not excluded
     $is_excluded = (int) ($local_data[$inv['id']]['is_excluded'] ?? 0);
     $inv['is_excluded'] = $is_excluded;
-    if (!$is_excluded && ($inv['state'] ?? '') === 'posted') {
-        $total_vnd += abs($amountVnd);
+    if (!$is_excluded) {
+        $total_vnd += $amountVnd;
     }
 
     $filtered_invoices[] = $inv;
@@ -1696,15 +1696,10 @@ function formatMoney($amount, $currency_code)
                             if (is_array($pw)) {
                                 foreach ($pw['content'] ?? [] as $p) {
                                     if (!empty($p['is_exchange']))
-                                        continue;
-
-                                    // FIXED: Only sum payments received WITHIN the active quarter
-                                    $pdate = $p['date'] ?? null;
-                                    if ($pdate && $pdate >= $start_date && $pdate <= $end_date) {
-                                        $giaingan_origin += (float) ($p['amount'] ?? 0);
-                                        if (!empty($p['date']))
-                                            $ngay_tien_ve_arr[] = $p['date'];
-                                    }
+                                        continue; // Không cộng chênh lệch tỷ giá (khác currency)
+                                    $giaingan_origin += (float) ($p['amount'] ?? 0);
+                                    if (!empty($p['date']))
+                                        $ngay_tien_ve_arr[] = $p['date'];
                                 }
                             }
                         }
@@ -1831,14 +1826,10 @@ function formatMoney($amount, $currency_code)
                                                 // Convert disbursed amount to USD FIRST before multiplying by commission
                                                 $giaingan_usd = $giaingan_origin * $ratioUsd;
 
-                                                // Proportional Bonus calculation: 10% of Net profit if Bonus is Yes
+                                                // Bonus calculation: 10% of Net profit if Bonus is Yes ($100 for $1000)
                                                 $is_bonus_yes = ($l['bonus_license_trading'] ?? 'No') === 'Yes';
                                                 $net_profit_f = (float) str_replace(['$', ','], '', $l['net_profit'] ?? '0');
-                                                $inv_total_origin = (float) ($inv['amount_total'] ?? 0);
-                                                $bonus_extra = 0;
-                                                if ($is_bonus_yes && $net_profit_f > 0 && $inv_total_origin > 0) {
-                                                    $bonus_extra = ($net_profit_f * 0.1) * ($giaingan_origin / $inv_total_origin);
-                                                }
+                                                $bonus_extra = ($is_bonus_yes && $net_profit_f > 0) ? ($net_profit_f * 0.1) : 0;
 
                                                 $comm1_val_usd = ($giaingan_usd * ($com1_p / 100)) + $bonus_extra;
                                                 $comm2_val_usd = $giaingan_usd * ($com2_p / 100);
