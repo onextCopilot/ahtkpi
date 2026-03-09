@@ -9,13 +9,33 @@ if (!isset($_SESSION['user_id'])) {
 }
 
 // Check permission: only admin or is_am_bd
-if (empty($_SESSION['is_am_bd']) && $_SESSION['role'] !== 'admin') {
+$is_admin = ($_SESSION['role'] === 'admin');
+$is_am_bd = !empty($_SESSION['is_am_bd']);
+
+if (!$is_am_bd && !$is_admin) {
     header("Location: /dashboard");
     exit();
 }
 
-$full_name = $_SESSION['full_name'];
-$avatar = $_SESSION['avatar'] ?? null;
+$view_user_id = (int) ($_GET['user_id'] ?? $_SESSION['user_id']);
+
+// Force individual user to see only their own report
+if (!$is_admin && $view_user_id != $_SESSION['user_id']) {
+    $view_user_id = (int) $_SESSION['user_id'];
+}
+
+// Fetch user data for the viewed user
+$stmt_vu = $conn->prepare("SELECT full_name, avatar FROM users WHERE id = ?");
+$stmt_vu->bind_param("i", $view_user_id);
+$stmt_vu->execute();
+$vu_row = $stmt_vu->get_result()->fetch_assoc();
+
+if (!$vu_row) {
+    die("User not found.");
+}
+
+$full_name = $vu_row['full_name'];
+$avatar = $vu_row['avatar'] ?? null;
 
 // Ensure table exists
 $table_check = $conn->query("SHOW TABLES LIKE 'sale_reports'");
@@ -88,7 +108,7 @@ $conn->query("CREATE TABLE IF NOT EXISTS sale_report_edit_log (
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'confirm_kpi') {
     header('Content-Type: application/json');
     $quarter_key = preg_replace('/[^A-Za-z0-9_]/', '', $_POST['quarter'] ?? '');
-    $uid = (int) $_SESSION['user_id'];
+    $uid_target = (int) ($_POST['user_id'] ?? $view_user_id);
     $uname = $_SESSION['full_name'] ?? 'Unknown';
     // Server-side check on local fields for non-excluded invoices
     $ids_str = $_POST['invoice_ids'] ?? '';
@@ -266,10 +286,9 @@ $filters = [];
 // Admin bypasses email filter but we can keep it for the user if strictly "theo users đăng nhập"
 // User requested: "list toàn bộ từ phần quản lý invoice theo users đăng nhập có type is am bd"
 // We'll enforce the current user's email filter just like My Invoices
-if ($_SESSION['role'] !== 'admin' || true) { // Always filter by logged-in user email
-    $u_id = (int) $_SESSION['user_id'];
+if (true) { // Always filter by the viewed user context
     $stmt = $conn->prepare("SELECT email FROM users WHERE id = ?");
-    $stmt->bind_param("i", $u_id);
+    $stmt->bind_param("i", $view_user_id);
     $stmt->execute();
     $res = $stmt->get_result();
     if ($row = $res->fetch_assoc()) {
@@ -425,9 +444,9 @@ ksort($grouped_invoices);
 
 // Fetch user's Sale Level & KPI targets
 $kpi_data = null;
-$u_id = (int) $_SESSION['user_id'];
-$is_am_bd = !empty($_SESSION['is_am_bd']);
-if ($is_am_bd) {
+$u_id = (int) $view_user_id;
+$is_am_bd_view = true; // Since we are viewing from AM reports context
+if ($is_am_bd_view) {
     $eff_level_id = null;
     $v_q = isset($q) ? $q : ceil(date('n') / 3);
     $v_y = isset($y) ? $y : date('Y');

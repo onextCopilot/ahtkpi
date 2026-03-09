@@ -139,6 +139,7 @@ sort($all_ams);
 
 // Fetch budgets
 $am_budgets = [];
+$am_to_uid = [];
 foreach ($all_ams as $am_name) {
     if ($am_name === 'Unknown' || empty($am_name)) {
         $am_budgets[$am_name] = ['Q1' => 0, 'Q2' => 0, 'Q3' => 0, 'Q4' => 0];
@@ -154,6 +155,7 @@ foreach ($all_ams as $am_name) {
     $u_row = $u_res->fetch_assoc();
 
     $uid = $u_row ? (int) $u_row['id'] : 0;
+    $am_to_uid[$am_name] = $uid;
     $fallback_sale_level_id = $u_row ? (int) $u_row['sale_level_id'] : 0;
 
     $am_budgets[$am_name] = ['Q1' => 0, 'Q2' => 0, 'Q3' => 0, 'Q4' => 0];
@@ -216,7 +218,7 @@ foreach ($all_ams as $am_name) {
     if ($am_name === 'Unknown' || empty($am_name))
         continue;
 
-    $am_commissions[$am_name] = [];
+    $am_commissions[$am_name] = ['uid' => $am_to_uid[$am_name] ?? 0];
     $am_invoices = $odoo_invoices_by_am[$am_name] ?? [];
 
     for ($q = 1; $q <= 4; $q++) {
@@ -614,384 +616,394 @@ $budget_placeholder = 0;
                         <label style="font-weight:600; margin-right:8px">Năm:</label>
                         <select name="year" onchange="this.form.submit()">
                             <?php foreach ($years as $y): ?>
-                                    <option value="<?= $y ?>" <?= $y === $current_year ? 'selected' : '' ?>><?= $y ?></option>
+                                <option value="<?= $y ?>" <?= $y === $current_year ? 'selected' : '' ?>><?= $y ?></option>
                             <?php endforeach; ?>
                         </select>
                     </form>
                 </div>
 
                 <?php if (!empty($all_ams)): ?>
-                        <div class="table-responsive">
-                            <table class="revenue-table">
+                    <div class="table-responsive">
+                        <table class="revenue-table">
+                            <thead>
+                                <tr>
+                                    <th rowspan="2">STT</th>
+                                    <th rowspan="2">Sub-Category / AM</th>
+                                    <th colspan="3">Q1</th>
+                                    <th colspan="3">Q2</th>
+                                    <th colspan="3">H1</th>
+                                    <th colspan="3">Q3</th>
+                                    <th colspan="3">Q4</th>
+                                    <th colspan="3">Year Total</th>
+                                </tr>
+                                <tr>
+                                    <th>Budget/KPI</th>
+                                    <th>Actual</th>
+                                    <th>% Achieved</th>
+                                    <th>Budget/KPI</th>
+                                    <th>Actual</th>
+                                    <th>% Achieved</th>
+                                    <th>Budget/KPI</th>
+                                    <th>Actual</th>
+                                    <th>% Achieved</th>
+                                    <th>Budget/KPI</th>
+                                    <th>Actual</th>
+                                    <th>% Achieved</th>
+                                    <th>Budget/KPI</th>
+                                    <th>Actual</th>
+                                    <th>% Achieved</th>
+                                    <th>Budget/KPI</th>
+                                    <th>Actual</th>
+                                    <th>% Achieved</th>
+                                </tr>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr class="section-header">
+                                    <td colspan="20">Revenue</td>
+                                </tr>
+
+                                <!-- RECOGNISED REVENUE -->
+                                <tr class="group-header">
+                                    <td colspan="20">Recognised Revenue</td>
+                                </tr>
+                                <?php
+                                $stt_rec = 1;
+                                foreach ($all_ams as $am):
+                                    $data = $am_recognised[$am] ?? ['Q1' => 0, 'Q2' => 0, 'Q3' => 0, 'Q4' => 0];
+                                    $actual_q1 = $data['Q1'];
+                                    $actual_q2 = $data['Q2'];
+                                    $actual_q3 = $data['Q3'];
+                                    $actual_q4 = $data['Q4'];
+                                    $actual_h1 = $actual_q1 + $actual_q2;
+
+                                    $b_data = $am_budgets[$am] ?? ['Q1' => 0, 'Q2' => 0, 'Q3' => 0, 'Q4' => 0];
+                                    $b_q1 = $b_data['Q1'];
+                                    $b_q2 = $b_data['Q2'];
+                                    $b_q3 = $b_data['Q3'];
+                                    $b_q4 = $b_data['Q4'];
+                                    $b_h1 = $b_q1 + $b_q2;
+                                    ?>
+                                    <tr class="recognised-row">
+                                        <td class="text-center"><?= $stt_rec++ ?></td>
+                                        <td class="am-name"><?= htmlspecialchars($am) ?></td>
+                                        <td class="text-right" style="color: #cbd5e1;">-</td>
+                                        <td class="text-right"><?= formatMoney($actual_q1) ?></td>
+                                        <td class="text-center" style="color: #cbd5e1;">-</td>
+                                        <td class="text-right" style="color: #cbd5e1;">-</td>
+                                        <td class="text-right"><?= formatMoney($actual_q2) ?></td>
+                                        <td class="text-center" style="color: #cbd5e1;">-</td>
+                                        <td class="text-right" style="color: #cbd5e1;">-</td>
+                                        <td class="text-right"><?= formatMoney($actual_h1) ?></td>
+                                        <td class="text-center" style="color: #cbd5e1;">-</td>
+                                        <td class="text-right" style="color: #cbd5e1;">-</td>
+                                        <td class="text-right"><?= formatMoney($actual_q3) ?></td>
+                                        <td class="text-center" style="color: #cbd5e1;">-</td>
+                                        <!-- Q4 specific columns from image -->
+                                        <td class="text-right" style="color: #cbd5e1;">-</td>
+                                        <td class="text-right" style="color: #cbd5e1;">-</td>
+                                        <td class="text-right" style="color: #cbd5e1;">-</td>
+                                        <td class="text-right" style="color: #cbd5e1;">-</td>
+                                        <td class="text-right">
+                                            <?= formatMoney($actual_q1 + $actual_q2 + $actual_q3 + $actual_q4) ?>
+                                        </td>
+                                        <td class="text-center" style="color: #cbd5e1;">-</td>
+                                    </tr>
+                                <?php endforeach; ?>
+
+                                <?php
+                                $total_rec_q1 = 0;
+                                $total_rec_q2 = 0;
+                                $total_rec_q3 = 0;
+                                $total_rec_q4 = 0;
+                                foreach ($all_ams as $am) {
+                                    $data = $am_recognised[$am] ?? ['Q1' => 0, 'Q2' => 0, 'Q3' => 0, 'Q4' => 0];
+                                    $total_rec_q1 += $data['Q1'];
+                                    $total_rec_q2 += $data['Q2'];
+                                    $total_rec_q3 += $data['Q3'];
+                                    $total_rec_q4 += $data['Q4'];
+                                }
+                                $total_rec_h1 = $total_rec_q1 + $total_rec_q2;
+                                $total_rec_year = $total_rec_q1 + $total_rec_q2 + $total_rec_q3 + $total_rec_q4;
+                                ?>
+                                <tr class="total-row">
+                                    <td></td>
+                                    <td>Total Recognised</td>
+                                    <td class="text-right">-</td>
+                                    <td class="text-right"><?= formatMoney($total_rec_q1) ?></td>
+                                    <td class="text-center">-</td>
+                                    <td class="text-right">-</td>
+                                    <td class="text-right"><?= formatMoney($total_rec_q2) ?></td>
+                                    <td class="text-center">-</td>
+                                    <td class="text-right">-</td>
+                                    <td class="text-right"><?= formatMoney($total_rec_h1) ?></td>
+                                    <td class="text-center">-</td>
+                                    <td class="text-right">-</td>
+                                    <td class="text-right"><?= formatMoney($total_rec_q3) ?></td>
+                                    <td class="text-center">-</td>
+                                    <td class="text-right">-</td>
+                                    <td class="text-right"><?= formatMoney($total_rec_q4) ?></td>
+                                    <td class="text-center">-</td>
+                                    <td class="text-right">-</td>
+                                    <td class="text-right"><?= formatMoney($total_rec_year) ?></td>
+                                    <td class="text-center">-</td>
+                                </tr>
+
+                                <!-- INVOICED REVENUE -->
+                                <tr class="group-header">
+                                    <td colspan="20">Invoiced Revenue</td>
+                                </tr>
+                                <?php
+                                $stt_inv = 1;
+                                foreach ($all_ams as $am):
+                                    $data = $am_invoiced[$am] ?? ['Q1' => 0, 'Q2' => 0, 'Q3' => 0, 'Q4' => 0];
+                                    $actual_q1 = $data['Q1'];
+                                    $actual_q2 = $data['Q2'];
+                                    $actual_q3 = $data['Q3'];
+                                    $actual_q4 = $data['Q4'];
+                                    $actual_h1 = $actual_q1 + $actual_q2;
+
+                                    $b_data = $am_budgets[$am] ?? ['Q1' => 0, 'Q2' => 0, 'Q3' => 0, 'Q4' => 0];
+                                    $b_q1 = $b_data['Q1'];
+                                    $b_q2 = $b_data['Q2'];
+                                    $b_q3 = $b_data['Q3'];
+                                    $b_q4 = $b_data['Q4'];
+                                    $b_h1 = $b_q1 + $b_q2;
+                                    ?>
+                                    <tr class="invoiced-row">
+                                        <td class="text-center"><?= $stt_inv++ ?></td>
+                                        <td class="am-name"><?= htmlspecialchars($am) ?></td>
+                                        <td class="text-right"><?= formatMoney($b_q1) ?></td>
+                                        <td class="text-right"><?= formatMoney($actual_q1) ?></td>
+                                        <td class="text-center"><?= calcPercent($actual_q1, $b_q1) ?></td>
+                                        <td class="text-right"><?= formatMoney($b_q2) ?></td>
+                                        <td class="text-right"><?= formatMoney($actual_q2) ?></td>
+                                        <td class="text-center"><?= calcPercent($actual_q2, $b_q2) ?></td>
+                                        <td class="text-right"><?= formatMoney($b_h1) ?></td>
+                                        <td class="text-right"><?= formatMoney($actual_h1) ?></td>
+                                        <td class="text-center"><?= calcPercent($actual_h1, $b_h1) ?></td>
+                                        <td class="text-right"><?= formatMoney($b_q3) ?></td>
+                                        <td class="text-right"><?= formatMoney($actual_q3) ?></td>
+                                        <td class="text-center"><?= calcPercent($actual_q3, $b_q3) ?></td>
+                                        <!-- Q4 specific columns from image -->
+                                        <td class="text-right"><?= formatMoney($b_q4) ?></td>
+                                        <td class="text-right"><?= formatMoney($actual_q4) ?></td>
+                                        <td class="text-center"><?= calcPercent($actual_q4, $b_q4) ?></td>
+                                        <td class="text-right"><?= formatMoney($b_q1 + $b_q2 + $b_q3 + $b_q4) ?></td>
+                                        <td class="text-right">
+                                            <?= formatMoney($actual_q1 + $actual_q2 + $actual_q3 + $actual_q4) ?>
+                                        </td>
+                                        <td class="text-center">
+                                            <?= calcPercent($actual_q1 + $actual_q2 + $actual_q3 + $actual_q4, $b_q1 + $b_q2 + $b_q3 + $b_q4) ?>
+                                        </td>
+                                    </tr>
+                                <?php endforeach; ?>
+
+                                <tr class="total-row">
+                                    <td></td>
+                                    <td>Total Invoiced</td>
+                                    <?php
+                                    $total_b_q1 = 0;
+                                    $total_b_q2 = 0;
+                                    $total_b_q3 = 0;
+                                    $total_b_q4 = 0;
+                                    $total_a_q1 = 0;
+                                    $total_a_q2 = 0;
+                                    $total_a_q3 = 0;
+                                    $total_a_q4 = 0;
+
+                                    foreach ($all_ams as $am) {
+                                        $b_data = $am_budgets[$am] ?? ['Q1' => 0, 'Q2' => 0, 'Q3' => 0, 'Q4' => 0];
+                                        $a_data = $am_invoiced[$am] ?? ['Q1' => 0, 'Q2' => 0, 'Q3' => 0, 'Q4' => 0];
+
+                                        $total_b_q1 += $b_data['Q1'];
+                                        $total_b_q2 += $b_data['Q2'];
+                                        $total_b_q3 += $b_data['Q3'];
+                                        $total_b_q4 += $b_data['Q4'];
+
+                                        $total_a_q1 += $a_data['Q1'];
+                                        $total_a_q2 += $a_data['Q2'];
+                                        $total_a_q3 += $a_data['Q3'];
+                                        $total_a_q4 += $a_data['Q4'];
+                                    }
+
+                                    $total_b_h1 = $total_b_q1 + $total_b_q2;
+                                    $total_a_h1 = $total_a_q1 + $total_a_q2;
+
+                                    $total_b_year = $total_b_q1 + $total_b_q2 + $total_b_q3 + $total_b_q4;
+                                    $total_a_year = $total_a_q1 + $total_a_q2 + $total_a_q3 + $total_a_q4;
+                                    ?>
+                                    <td class="text-right"><?= formatMoney($total_b_q1) ?></td>
+                                    <td class="text-right"><?= formatMoney($total_a_q1) ?></td>
+                                    <td class="text-center"><?= calcPercent($total_a_q1, $total_b_q1) ?></td>
+                                    <td class="text-right"><?= formatMoney($total_b_q2) ?></td>
+                                    <td class="text-right"><?= formatMoney($total_a_q2) ?></td>
+                                    <td class="text-center"><?= calcPercent($total_a_q2, $total_b_q2) ?></td>
+                                    <td class="text-right"><?= formatMoney($total_b_h1) ?></td>
+                                    <td class="text-right"><?= formatMoney($total_a_h1) ?></td>
+                                    <td class="text-center"><?= calcPercent($total_a_h1, $total_b_h1) ?></td>
+                                    <td class="text-right"><?= formatMoney($total_b_q3) ?></td>
+                                    <td class="text-right"><?= formatMoney($total_a_q3) ?></td>
+                                    <td class="text-center"><?= calcPercent($total_a_q3, $total_b_q3) ?></td>
+                                    <td class="text-right"><?= formatMoney($total_b_q4) ?></td>
+                                    <td class="text-right"><?= formatMoney($total_a_q4) ?></td>
+                                    <td class="text-center"><?= calcPercent($total_a_q4, $total_b_q4) ?></td>
+                                    <td class="text-right"><?= formatMoney($total_b_year) ?></td>
+                                    <td class="text-right"><?= formatMoney($total_a_year) ?></td>
+                                    <td class="text-center"><?= calcPercent($total_a_year, $total_b_year) ?></td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <!-- Commission Summary Table -->
+                    <div class="card" style="margin-top: 3rem;">
+                        <div class="card-header">
+                            <h2 class="card-title">TỔNG KẾT COMMISSION ĐƯỢC NHẬN (ƯỚC TÍNH)</h2>
+                            <span style="font-size: 12px; color: #64748b; font-weight: 500;">Năm <?= $current_year ?> • Toàn
+                                bộ
+                                AM/BD</span>
+                        </div>
+                        <div class="report-table-container">
+                            <table class="report-table">
                                 <thead>
                                     <tr>
-                                        <th rowspan="2">STT</th>
-                                        <th rowspan="2">Sub-Category / AM</th>
-                                        <th colspan="3">Q1</th>
-                                        <th colspan="3">Q2</th>
-                                        <th colspan="3">H1</th>
-                                        <th colspan="3">Q3</th>
-                                        <th colspan="3">Q4</th>
-                                        <th colspan="3">Year Total</th>
+                                        <th rowspan="2" class="sticky-col">AM BD</th>
+                                        <th colspan="4"
+                                            style="background: #eff6ff; border-bottom: 3px solid #3b82f6; color: #1d4ed8;">
+                                            QUÝ 1
+                                            (USD)</th>
+                                        <th colspan="4"
+                                            style="background: #f0fdf4; border-bottom: 3px solid #10b981; color: #059669;">
+                                            QUÝ 2
+                                            (USD)</th>
+                                        <th colspan="4"
+                                            style="background: #fffbeb; border-bottom: 3px solid #f59e0b; color: #b45309;">
+                                            QUÝ 3
+                                            (USD)</th>
+                                        <th colspan="4"
+                                            style="background: #fdf2f8; border-bottom: 3px solid #db2777; color: #9d174d;">
+                                            QUÝ 4
+                                            (USD)</th>
+                                        <th rowspan="2" style="background: #1e293b; color: #fff; width: 120px;">TỔNG CẢ NĂM
+                                        </th>
                                     </tr>
-                                    <tr>
-                                        <th>Budget/KPI</th>
-                                        <th>Actual</th>
-                                        <th>% Achieved</th>
-                                        <th>Budget/KPI</th>
-                                        <th>Actual</th>
-                                        <th>% Achieved</th>
-                                        <th>Budget/KPI</th>
-                                        <th>Actual</th>
-                                        <th>% Achieved</th>
-                                        <th>Budget/KPI</th>
-                                        <th>Actual</th>
-                                        <th>% Achieved</th>
-                                        <th>Budget/KPI</th>
-                                        <th>Actual</th>
-                                        <th>% Achieved</th>
-                                        <th>Budget/KPI</th>
-                                        <th>Actual</th>
-                                        <th>% Achieved</th>
-                                    </tr>
+                                    <tr style="background: #f8fafc;">
+                                        <?php for ($i = 1; $i <= 4; $i++): ?>
+                                            <th>% KPI</th>
+                                            <th>Com 1</th>
+                                            <th>Com 2</th>
+                                            <th style="border-right: 2px solid #cbd5e1; color: #1e293b; background: #f1f5f9;">
+                                                Tổng
+                                            </th>
+                                        <?php endfor; ?>
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    <tr class="section-header">
-                                        <td colspan="20">Revenue</td>
-                                    </tr>
-
-                                    <!-- RECOGNISED REVENUE -->
-                                    <tr class="group-header">
-                                        <td colspan="20">Recognised Revenue</td>
-                                    </tr>
                                     <?php
-                                    $stt_rec = 1;
+                                    $grand_total_year = 0;
+                                    $q_totals = [
+                                        1 => ['com1' => 0, 'com2' => 0, 'total' => 0],
+                                        2 => ['com1' => 0, 'com2' => 0, 'total' => 0],
+                                        3 => ['com1' => 0, 'com2' => 0, 'total' => 0],
+                                        4 => ['com1' => 0, 'com2' => 0, 'total' => 0]
+                                    ];
+
                                     foreach ($all_ams as $am):
-                                        $data = $am_recognised[$am] ?? ['Q1' => 0, 'Q2' => 0, 'Q3' => 0, 'Q4' => 0];
-                                        $actual_q1 = $data['Q1'];
-                                        $actual_q2 = $data['Q2'];
-                                        $actual_q3 = $data['Q3'];
-                                        $actual_q4 = $data['Q4'];
-                                        $actual_h1 = $actual_q1 + $actual_q2;
+                                        if ($am === 'Unknown' || empty($am))
+                                            continue;
+                                        $c = $am_commissions[$am] ?? null;
+                                        if (!$c)
+                                            continue;
 
-                                        $b_data = $am_budgets[$am] ?? ['Q1' => 0, 'Q2' => 0, 'Q3' => 0, 'Q4' => 0];
-                                        $b_q1 = $b_data['Q1'];
-                                        $b_q2 = $b_data['Q2'];
-                                        $b_q3 = $b_data['Q3'];
-                                        $b_q4 = $b_data['Q4'];
-                                        $b_h1 = $b_q1 + $b_q2;
-                                        ?>
-                                            <tr class="recognised-row">
-                                                <td class="text-center"><?= $stt_rec++ ?></td>
-                                                <td class="am-name"><?= htmlspecialchars($am) ?></td>
-                                                <td class="text-right" style="color: #cbd5e1;">-</td>
-                                                <td class="text-right"><?= formatMoney($actual_q1) ?></td>
-                                                <td class="text-center" style="color: #cbd5e1;">-</td>
-                                                <td class="text-right" style="color: #cbd5e1;">-</td>
-                                                <td class="text-right"><?= formatMoney($actual_q2) ?></td>
-                                                <td class="text-center" style="color: #cbd5e1;">-</td>
-                                                <td class="text-right" style="color: #cbd5e1;">-</td>
-                                                <td class="text-right"><?= formatMoney($actual_h1) ?></td>
-                                                <td class="text-center" style="color: #cbd5e1;">-</td>
-                                                <td class="text-right" style="color: #cbd5e1;">-</td>
-                                                <td class="text-right"><?= formatMoney($actual_q3) ?></td>
-                                                <td class="text-center" style="color: #cbd5e1;">-</td>
-                                                <!-- Q4 specific columns from image -->
-                                                <td class="text-right" style="color: #cbd5e1;">-</td>
-                                                <td class="text-right" style="color: #cbd5e1;">-</td>
-                                                <td class="text-right" style="color: #cbd5e1;">-</td>
-                                                <td class="text-right" style="color: #cbd5e1;">-</td>
-                                                <td class="text-right">
-                                                    <?= formatMoney($actual_q1 + $actual_q2 + $actual_q3 + $actual_q4) ?>
-                                                </td>
-                                                <td class="text-center" style="color: #cbd5e1;">-</td>
-                                            </tr>
-                                    <?php endforeach; ?>
+                                        $am_year_total = $c['Q1']['total'] + $c['Q2']['total'] + $c['Q3']['total'] + $c['Q4']['total'];
+                                        $grand_total_year += $am_year_total;
 
-                                    <?php
-                                    $total_rec_q1 = 0;
-                                    $total_rec_q2 = 0;
-                                    $total_rec_q3 = 0;
-                                    $total_rec_q4 = 0;
-                                    foreach ($all_ams as $am) {
-                                        $data = $am_recognised[$am] ?? ['Q1' => 0, 'Q2' => 0, 'Q3' => 0, 'Q4' => 0];
-                                        $total_rec_q1 += $data['Q1'];
-                                        $total_rec_q2 += $data['Q2'];
-                                        $total_rec_q3 += $data['Q3'];
-                                        $total_rec_q4 += $data['Q4'];
-                                    }
-                                    $total_rec_h1 = $total_rec_q1 + $total_rec_q2;
-                                    $total_rec_year = $total_rec_q1 + $total_rec_q2 + $total_rec_q3 + $total_rec_q4;
-                                    ?>
-                                    <tr class="total-row">
-                                        <td></td>
-                                        <td>Total Recognised</td>
-                                        <td class="text-right">-</td>
-                                        <td class="text-right"><?= formatMoney($total_rec_q1) ?></td>
-                                        <td class="text-center">-</td>
-                                        <td class="text-right">-</td>
-                                        <td class="text-right"><?= formatMoney($total_rec_q2) ?></td>
-                                        <td class="text-center">-</td>
-                                        <td class="text-right">-</td>
-                                        <td class="text-right"><?= formatMoney($total_rec_h1) ?></td>
-                                        <td class="text-center">-</td>
-                                        <td class="text-right">-</td>
-                                        <td class="text-right"><?= formatMoney($total_rec_q3) ?></td>
-                                        <td class="text-center">-</td>
-                                        <td class="text-right">-</td>
-                                        <td class="text-right"><?= formatMoney($total_rec_q4) ?></td>
-                                        <td class="text-center">-</td>
-                                        <td class="text-right">-</td>
-                                        <td class="text-right"><?= formatMoney($total_rec_year) ?></td>
-                                        <td class="text-center">-</td>
-                                    </tr>
-
-                                    <!-- INVOICED REVENUE -->
-                                    <tr class="group-header">
-                                        <td colspan="20">Invoiced Revenue</td>
-                                    </tr>
-                                    <?php
-                                    $stt_inv = 1;
-                                    foreach ($all_ams as $am):
-                                        $data = $am_invoiced[$am] ?? ['Q1' => 0, 'Q2' => 0, 'Q3' => 0, 'Q4' => 0];
-                                        $actual_q1 = $data['Q1'];
-                                        $actual_q2 = $data['Q2'];
-                                        $actual_q3 = $data['Q3'];
-                                        $actual_q4 = $data['Q4'];
-                                        $actual_h1 = $actual_q1 + $actual_q2;
-
-                                        $b_data = $am_budgets[$am] ?? ['Q1' => 0, 'Q2' => 0, 'Q3' => 0, 'Q4' => 0];
-                                        $b_q1 = $b_data['Q1'];
-                                        $b_q2 = $b_data['Q2'];
-                                        $b_q3 = $b_data['Q3'];
-                                        $b_q4 = $b_data['Q4'];
-                                        $b_h1 = $b_q1 + $b_q2;
-                                        ?>
-                                            <tr class="invoiced-row">
-                                                <td class="text-center"><?= $stt_inv++ ?></td>
-                                                <td class="am-name"><?= htmlspecialchars($am) ?></td>
-                                                <td class="text-right"><?= formatMoney($b_q1) ?></td>
-                                                <td class="text-right"><?= formatMoney($actual_q1) ?></td>
-                                                <td class="text-center"><?= calcPercent($actual_q1, $b_q1) ?></td>
-                                                <td class="text-right"><?= formatMoney($b_q2) ?></td>
-                                                <td class="text-right"><?= formatMoney($actual_q2) ?></td>
-                                                <td class="text-center"><?= calcPercent($actual_q2, $b_q2) ?></td>
-                                                <td class="text-right"><?= formatMoney($b_h1) ?></td>
-                                                <td class="text-right"><?= formatMoney($actual_h1) ?></td>
-                                                <td class="text-center"><?= calcPercent($actual_h1, $b_h1) ?></td>
-                                                <td class="text-right"><?= formatMoney($b_q3) ?></td>
-                                                <td class="text-right"><?= formatMoney($actual_q3) ?></td>
-                                                <td class="text-center"><?= calcPercent($actual_q3, $b_q3) ?></td>
-                                                <!-- Q4 specific columns from image -->
-                                                <td class="text-right"><?= formatMoney($b_q4) ?></td>
-                                                <td class="text-right"><?= formatMoney($actual_q4) ?></td>
-                                                <td class="text-center"><?= calcPercent($actual_q4, $b_q4) ?></td>
-                                                <td class="text-right"><?= formatMoney($b_q1 + $b_q2 + $b_q3 + $b_q4) ?></td>
-                                                <td class="text-right">
-                                                    <?= formatMoney($actual_q1 + $actual_q2 + $actual_q3 + $actual_q4) ?>
-                                                </td>
-                                                <td class="text-center">
-                                                    <?= calcPercent($actual_q1 + $actual_q2 + $actual_q3 + $actual_q4, $b_q1 + $b_q2 + $b_q3 + $b_q4) ?>
-                                                </td>
-                                            </tr>
-                                    <?php endforeach; ?>
-
-                                    <tr class="total-row">
-                                        <td></td>
-                                        <td>Total Invoiced</td>
-                                        <?php
-                                        $total_b_q1 = 0;
-                                        $total_b_q2 = 0;
-                                        $total_b_q3 = 0;
-                                        $total_b_q4 = 0;
-                                        $total_a_q1 = 0;
-                                        $total_a_q2 = 0;
-                                        $total_a_q3 = 0;
-                                        $total_a_q4 = 0;
-
-                                        foreach ($all_ams as $am) {
-                                            $b_data = $am_budgets[$am] ?? ['Q1' => 0, 'Q2' => 0, 'Q3' => 0, 'Q4' => 0];
-                                            $a_data = $am_invoiced[$am] ?? ['Q1' => 0, 'Q2' => 0, 'Q3' => 0, 'Q4' => 0];
-
-                                            $total_b_q1 += $b_data['Q1'];
-                                            $total_b_q2 += $b_data['Q2'];
-                                            $total_b_q3 += $b_data['Q3'];
-                                            $total_b_q4 += $b_data['Q4'];
-
-                                            $total_a_q1 += $a_data['Q1'];
-                                            $total_a_q2 += $a_data['Q2'];
-                                            $total_a_q3 += $a_data['Q3'];
-                                            $total_a_q4 += $a_data['Q4'];
+                                        for ($i = 1; $i <= 4; $i++) {
+                                            $q_totals[$i]['com1'] += $c["Q$i"]['com1'];
+                                            $q_totals[$i]['com2'] += $c["Q$i"]['com2'];
+                                            $q_totals[$i]['total'] += $c["Q$i"]['total'];
                                         }
-
-                                        $total_b_h1 = $total_b_q1 + $total_b_q2;
-                                        $total_a_h1 = $total_a_q1 + $total_a_q2;
-
-                                        $total_b_year = $total_b_q1 + $total_b_q2 + $total_b_q3 + $total_b_q4;
-                                        $total_a_year = $total_a_q1 + $total_a_q2 + $total_a_q3 + $total_a_q4;
                                         ?>
-                                        <td class="text-right"><?= formatMoney($total_b_q1) ?></td>
-                                        <td class="text-right"><?= formatMoney($total_a_q1) ?></td>
-                                        <td class="text-center"><?= calcPercent($total_a_q1, $total_b_q1) ?></td>
-                                        <td class="text-right"><?= formatMoney($total_b_q2) ?></td>
-                                        <td class="text-right"><?= formatMoney($total_a_q2) ?></td>
-                                        <td class="text-center"><?= calcPercent($total_a_q2, $total_b_q2) ?></td>
-                                        <td class="text-right"><?= formatMoney($total_b_h1) ?></td>
-                                        <td class="text-right"><?= formatMoney($total_a_h1) ?></td>
-                                        <td class="text-center"><?= calcPercent($total_a_h1, $total_b_h1) ?></td>
-                                        <td class="text-right"><?= formatMoney($total_b_q3) ?></td>
-                                        <td class="text-right"><?= formatMoney($total_a_q3) ?></td>
-                                        <td class="text-center"><?= calcPercent($total_a_q3, $total_b_q3) ?></td>
-                                        <td class="text-right"><?= formatMoney($total_b_q4) ?></td>
-                                        <td class="text-right"><?= formatMoney($total_a_q4) ?></td>
-                                        <td class="text-center"><?= calcPercent($total_a_q4, $total_b_q4) ?></td>
-                                        <td class="text-right"><?= formatMoney($total_b_year) ?></td>
-                                        <td class="text-right"><?= formatMoney($total_a_year) ?></td>
-                                        <td class="text-center"><?= calcPercent($total_a_year, $total_b_year) ?></td>
-                                    </tr>
-                                </tbody>
-                            </table>
-                        </div>
-
-                        <!-- Commission Summary Table -->
-                        <div class="card" style="margin-top: 3rem;">
-                            <div class="card-header">
-                                <h2 class="card-title">TỔNG KẾT COMMISSION ĐƯỢC NHẬN (ƯỚC TÍNH)</h2>
-                                <span style="font-size: 12px; color: #64748b; font-weight: 500;">Năm <?= $current_year ?> • Toàn
-                                    bộ
-                                    AM/BD</span>
-                            </div>
-                            <div class="report-table-container">
-                                <table class="report-table">
-                                    <thead>
-                                        <tr>
-                                            <th rowspan="2" class="sticky-col">AM BD</th>
-                                            <th colspan="4"
-                                                style="background: #eff6ff; border-bottom: 3px solid #3b82f6; color: #1d4ed8;">
-                                                QUÝ 1
-                                                (USD)</th>
-                                            <th colspan="4"
-                                                style="background: #f0fdf4; border-bottom: 3px solid #10b981; color: #059669;">
-                                                QUÝ 2
-                                                (USD)</th>
-                                            <th colspan="4"
-                                                style="background: #fffbeb; border-bottom: 3px solid #f59e0b; color: #b45309;">
-                                                QUÝ 3
-                                                (USD)</th>
-                                            <th colspan="4"
-                                                style="background: #fdf2f8; border-bottom: 3px solid #db2777; color: #9d174d;">
-                                                QUÝ 4
-                                                (USD)</th>
-                                            <th rowspan="2" style="background: #1e293b; color: #fff; width: 120px;">TỔNG CẢ NĂM
-                                            </th>
-                                        </tr>
-                                        <tr style="background: #f8fafc;">
-                                            <?php for ($i = 1; $i <= 4; $i++): ?>
-                                                    <th>% KPI</th>
-                                                    <th>Com 1</th>
-                                                    <th>Com 2</th>
-                                                    <th style="border-right: 2px solid #cbd5e1; color: #1e293b; background: #f1f5f9;">
-                                                        Tổng
-                                                    </th>
-                                            <?php endfor; ?>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        <?php
-                                        $grand_total_year = 0;
-                                        $q_totals = [
-                                            1 => ['com1' => 0, 'com2' => 0, 'total' => 0],
-                                            2 => ['com1' => 0, 'com2' => 0, 'total' => 0],
-                                            3 => ['com1' => 0, 'com2' => 0, 'total' => 0],
-                                            4 => ['com1' => 0, 'com2' => 0, 'total' => 0]
-                                        ];
-
-                                        foreach ($all_ams as $am):
-                                            if ($am === 'Unknown' || empty($am))
-                                                continue;
-                                            $c = $am_commissions[$am] ?? null;
-                                            if (!$c)
-                                                continue;
-
-                                            $am_year_total = $c['Q1']['total'] + $c['Q2']['total'] + $c['Q3']['total'] + $c['Q4']['total'];
-                                            $grand_total_year += $am_year_total;
-
-                                            for ($i = 1; $i <= 4; $i++) {
-                                                $q_totals[$i]['com1'] += $c["Q$i"]['com1'];
-                                                $q_totals[$i]['com2'] += $c["Q$i"]['com2'];
-                                                $q_totals[$i]['total'] += $c["Q$i"]['total'];
-                                            }
-                                            ?>
-                                                <tr>
-                                                    <td class="sticky-col">
-                                                        <?= htmlspecialchars($am) ?>
-                                                    </td>
-                                                    <?php for ($i = 1; $i <= 4; $i++):
-                                                        $qi = "Q$i";
-                                                        $kpi = $c[$qi]['kpi_pct'] ?? 0;
-                                                        $badge_class = 'kpi-low';
-                                                        if ($kpi >= 100)
-                                                            $badge_class = 'kpi-high';
-                                                        elseif ($kpi >= 70)
-                                                            $badge_class = 'kpi-mid';
-                                                        ?>
-                                                            <td class="text-center">
-                                                                <span class="kpi-badge <?= $badge_class ?>">
-                                                                    <?= number_format($kpi, 1) ?>%
-                                                                </span>
-                                                            </td>
-                                                            <td class="text-right"><?= formatUSD($c[$qi]['com1'] ?? 0) ?></td>
-                                                            <td class="text-right"><?= formatUSD($c[$qi]['com2'] ?? 0) ?></td>
-                                                            <td class="text-right"
-                                                                style="font-weight: 700; border-right: 2px solid #cbd5e1; background: #f8fafc; color: #0f172a;">
-                                                                <?= formatUSD($c[$qi]['total'] ?? 0) ?>
-                                                            </td>
-                                                    <?php endfor; ?>
-
-                                                    <td class="text-right" style="background: #1e293b; color: #fff; font-weight: 700;">
-                                                        <?= formatUSD($am_year_total) ?>
-                                                    </td>
-                                                </tr>
-                                        <?php endforeach; ?>
-                                    </tbody>
-                                    <tfoot>
-                                        <tr style="background: #f8fafc; font-weight: 800; color: #0f172a;">
-                                            <td class="sticky-col">TỔNG CỘNG</td>
-                                            <?php for ($i = 1; $i <= 4; $i++): ?>
-                                                    <td></td>
-                                                    <td class="text-right"><?= formatUSD($q_totals[$i]['com1']) ?></td>
-                                                    <td class="text-right"><?= formatUSD($q_totals[$i]['com2']) ?></td>
-                                                    <td class="text-right"
-                                                        style="border-right: 2px solid #cbd5e1; background: #f1f5f9; color: #1e293b;">
-                                                        <?= formatUSD($q_totals[$i]['total']) ?>
-                                                    </td>
+                                        <tr style="cursor: pointer;"
+                                            onclick="viewReport(<?= (int) ($c['uid'] ?? 0) ?>, 'Q1_<?= $current_year ?>')">
+                                            <td class="sticky-col">
+                                                <?= htmlspecialchars($am) ?>
+                                            </td>
+                                            <?php for ($i = 1; $i <= 4; $i++):
+                                                $qi = "Q$i";
+                                                $kpi = $c[$qi]['kpi_pct'] ?? 0;
+                                                $badge_class = 'kpi-low';
+                                                if ($kpi >= 100)
+                                                    $badge_class = 'kpi-high';
+                                                elseif ($kpi >= 70)
+                                                    $badge_class = 'kpi-mid';
+                                                ?>
+                                                <td class="text-center" onclick="event.stopPropagation(); viewReport(<?= (int) ($c['uid'] ?? 0) ?>, 'Q<?= $i ?>_<?= $current_year ?>')">
+                                                    <span class="kpi-badge <?= $badge_class ?>">
+                                                        <?= number_format($kpi, 1) ?>%
+                                                    </span>
+                                                </td>
+                                                <td class="text-right" onclick="event.stopPropagation(); viewReport(<?= (int) ($c['uid'] ?? 0) ?>, 'Q<?= $i ?>_<?= $current_year ?>')"><?= formatUSD($c[$qi]['com1'] ?? 0) ?></td>
+                                                <td class="text-right" onclick="event.stopPropagation(); viewReport(<?= (int) ($c['uid'] ?? 0) ?>, 'Q<?= $i ?>_<?= $current_year ?>')"><?= formatUSD($c[$qi]['com2'] ?? 0) ?></td>
+                                                <td class="text-right" onclick="event.stopPropagation(); viewReport(<?= (int) ($c['uid'] ?? 0) ?>, 'Q<?= $i ?>_<?= $current_year ?>')"
+                                                    style="font-weight: 700; border-right: 2px solid #cbd5e1; background: #f8fafc; color: #0f172a;">
+                                                    <?= formatUSD($c[$qi]['total'] ?? 0) ?>
+                                                </td>
                                             <?php endfor; ?>
 
-                                            <td class="text-right"
-                                                style="background: #0f172a; color: #fff; font-size: 14px; border: none;">
-                                                <?= formatUSD($grand_total_year) ?>
+                                            <td class="text-right" style="background: #1e293b; color: #fff; font-weight: 700;">
+                                                <?= formatUSD($am_year_total) ?>
                                             </td>
                                         </tr>
-                                    </tfoot>
-                                </table>
-                            </div>
+                                    <?php endforeach; ?>
+                                </tbody>
+                                <tfoot>
+                                    <tr style="background: #f8fafc; font-weight: 800; color: #0f172a;">
+                                        <td class="sticky-col">TỔNG CỘNG</td>
+                                        <?php for ($i = 1; $i <= 4; $i++): ?>
+                                            <td></td>
+                                            <td class="text-right"><?= formatUSD($q_totals[$i]['com1']) ?></td>
+                                            <td class="text-right"><?= formatUSD($q_totals[$i]['com2']) ?></td>
+                                            <td class="text-right"
+                                                style="border-right: 2px solid #cbd5e1; background: #f1f5f9; color: #1e293b;">
+                                                <?= formatUSD($q_totals[$i]['total']) ?>
+                                            </td>
+                                        <?php endfor; ?>
+
+                                        <td class="text-right"
+                                            style="background: #0f172a; color: #fff; font-size: 14px; border: none;">
+                                            <?= formatUSD($grand_total_year) ?>
+                                        </td>
+                                    </tr>
+                                </tfoot>
+                            </table>
                         </div>
+                    </div>
                 <?php else: ?>
-                        <div class="card"
-                            style="margin: 2rem; padding: 2rem; text-align: center; border: 2px dashed #cbd5e1; border-radius: 12px; color: #64748b;">
-                            <svg xmlns="http://www.w3.org/2000/svg"
-                                style="width: 48px; height: 48px; margin-bottom: 1rem; opacity: 0.5; margin-left: auto; margin-right: auto;"
-                                fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                    d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-                            </svg>
-                            <p style="font-size: 1.125rem; font-weight: 600;">Không tìm thấy dữ liệu AM/BD</p>
-                            <p style="font-size: 0.875rem;">Vui lòng kiểm tra lại cấu hình người dùng (is_am_bd = 1).</p>
-                        </div>
+                    <div class="card"
+                        style="margin: 2rem; padding: 2rem; text-align: center; border: 2px dashed #cbd5e1; border-radius: 12px; color: #64748b;">
+                        <svg xmlns="http://www.w3.org/2000/svg"
+                            style="width: 48px; height: 48px; margin-bottom: 1rem; opacity: 0.5; margin-left: auto; margin-right: auto;"
+                            fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                        </svg>
+                        <p style="font-size: 1.125rem; font-weight: 600;">Không tìm thấy dữ liệu AM/BD</p>
+                        <p style="font-size: 0.875rem;">Vui lòng kiểm tra lại cấu hình người dùng (is_am_bd = 1).</p>
+                    </div>
                 <?php endif; ?>
         </main>
     </div>
+    <script>
+        function viewReport(userId, quarter) {
+            if (!userId) {
+                alert('Không tìm thấy ID người dùng tương ứng.');
+                return;
+            }
+            window.location.href = `/my-reports?user_id=${userId}&quarter=${quarter}`;
+        }
+    </script>
 </body>
 
 </html>
