@@ -111,6 +111,62 @@ while ($row = $res->fetch_assoc()) {
 $all_ams = array_unique(array_merge(array_keys($am_recognised), array_keys($am_invoiced)));
 sort($all_ams);
 
+// Fetch budgets
+$am_budgets = [];
+foreach ($all_ams as $am_name) {
+    if ($am_name === 'Unknown' || empty($am_name)) {
+        $am_budgets[$am_name] = ['Q1' => 0, 'Q2' => 0, 'Q3' => 0, 'Q4' => 0];
+        continue;
+    }
+
+    // find user by full name
+    $stmt_u = $conn->prepare("SELECT id, sale_level_id FROM users WHERE full_name LIKE ? OR username LIKE ? LIMIT 1");
+    $like_name = "%" . $am_name . "%";
+    $stmt_u->bind_param("ss", $like_name, $like_name);
+    $stmt_u->execute();
+    $u_res = $stmt_u->get_result();
+    $u_row = $u_res->fetch_assoc();
+
+    $uid = $u_row ? (int) $u_row['id'] : 0;
+    $fallback_sale_level_id = $u_row ? (int) $u_row['sale_level_id'] : 0;
+
+    $am_budgets[$am_name] = ['Q1' => 0, 'Q2' => 0, 'Q3' => 0, 'Q4' => 0];
+
+    if ($uid > 0) {
+        for ($q = 1; $q <= 4; $q++) {
+            $eff_level_id = null;
+            $stmt_hist = $conn->prepare("
+                SELECT sale_level_id FROM user_sale_level_history 
+                WHERE user_id = ? AND (apply_year < ? OR (apply_year = ? AND apply_quarter <= ?))
+                ORDER BY apply_year DESC, apply_quarter DESC LIMIT 1
+            ");
+            if ($stmt_hist) {
+                $stmt_hist->bind_param("iiii", $uid, $current_year, $current_year, $q);
+                $stmt_hist->execute();
+                $hist_res = $stmt_hist->get_result();
+                if ($row = $hist_res->fetch_assoc()) {
+                    $eff_level_id = $row['sale_level_id'];
+                }
+            }
+            if (!$eff_level_id) {
+                $eff_level_id = $fallback_sale_level_id;
+            }
+
+            if ($eff_level_id) {
+                $stmt_kpi = $conn->prepare("SELECT kpi_quarter_vnd FROM sale_levels WHERE id = ?");
+                if ($stmt_kpi) {
+                    $stmt_kpi->bind_param("i", $eff_level_id);
+                    $stmt_kpi->execute();
+                    $kpi_res = $stmt_kpi->get_result();
+                    if ($kr = $kpi_res->fetch_assoc()) {
+                        $am_budgets[$am_name]["Q$q"] = (float) $kr['kpi_quarter_vnd'];
+                    }
+                }
+            }
+        }
+    }
+}
+
 // Helpers
 function formatMoney($val)
 {
@@ -297,26 +353,33 @@ $budget_placeholder = 0;
                                 $actual_q3 = $data['Q3'];
                                 $actual_q4 = $data['Q4'];
                                 $actual_h1 = $actual_q1 + $actual_q2;
+
+                                $b_data = $am_budgets[$am] ?? ['Q1' => 0, 'Q2' => 0, 'Q3' => 0, 'Q4' => 0];
+                                $b_q1 = $b_data['Q1'];
+                                $b_q2 = $b_data['Q2'];
+                                $b_q3 = $b_data['Q3'];
+                                $b_q4 = $b_data['Q4'];
+                                $b_h1 = $b_q1 + $b_q2;
                                 ?>
                                 <tr>
                                     <td></td>
                                     <td class="am-name"><?= htmlspecialchars($am) ?></td>
-                                    <td class="text-right"><?= formatMoney($budget_placeholder) ?></td>
+                                    <td class="text-right"><?= formatMoney($b_q1) ?></td>
                                     <td class="text-right"><?= formatMoney($actual_q1) ?></td>
-                                    <td class="text-center"><?= calcPercent($actual_q1, $budget_placeholder) ?></td>
-                                    <td class="text-right"><?= formatMoney($budget_placeholder) ?></td>
+                                    <td class="text-center"><?= calcPercent($actual_q1, $b_q1) ?></td>
+                                    <td class="text-right"><?= formatMoney($b_q2) ?></td>
                                     <td class="text-right"><?= formatMoney($actual_q2) ?></td>
-                                    <td class="text-center"><?= calcPercent($actual_q2, $budget_placeholder) ?></td>
-                                    <td class="text-right"><?= formatMoney($budget_placeholder * 2) ?></td>
+                                    <td class="text-center"><?= calcPercent($actual_q2, $b_q2) ?></td>
+                                    <td class="text-right"><?= formatMoney($b_h1) ?></td>
                                     <td class="text-right"><?= formatMoney($actual_h1) ?></td>
-                                    <td class="text-center"><?= calcPercent($actual_h1, $budget_placeholder * 2) ?></td>
-                                    <td class="text-right"><?= formatMoney($budget_placeholder) ?></td>
+                                    <td class="text-center"><?= calcPercent($actual_h1, $b_h1) ?></td>
+                                    <td class="text-right"><?= formatMoney($b_q3) ?></td>
                                     <td class="text-right"><?= formatMoney($actual_q3) ?></td>
-                                    <td class="text-center"><?= calcPercent($actual_q3, $budget_placeholder) ?></td>
+                                    <td class="text-center"><?= calcPercent($actual_q3, $b_q3) ?></td>
                                     <!-- Q4 specific columns from image -->
-                                    <td class="text-right"><?= formatMoney($budget_placeholder) ?></td>
-                                    <td class="text-right"><?= formatMoney($budget_placeholder * 0.8) ?></td>
-                                    <td class="text-right"><?= formatMoney($budget_placeholder * 0.5) ?></td>
+                                    <td class="text-right"><?= formatMoney($b_q4) ?></td>
+                                    <td class="text-right"><?= formatMoney($b_q4 * 0.8) ?></td>
+                                    <td class="text-right"><?= formatMoney($b_q4 * 0.5) ?></td>
                                 </tr>
                             <?php endforeach; ?>
 
@@ -333,26 +396,33 @@ $budget_placeholder = 0;
                                 $actual_q3 = $data['Q3'];
                                 $actual_q4 = $data['Q4'];
                                 $actual_h1 = $actual_q1 + $actual_q2;
+
+                                $b_data = $am_budgets[$am] ?? ['Q1' => 0, 'Q2' => 0, 'Q3' => 0, 'Q4' => 0];
+                                $b_q1 = $b_data['Q1'];
+                                $b_q2 = $b_data['Q2'];
+                                $b_q3 = $b_data['Q3'];
+                                $b_q4 = $b_data['Q4'];
+                                $b_h1 = $b_q1 + $b_q2;
                                 ?>
                                 <tr>
                                     <td></td>
                                     <td class="am-name"><?= htmlspecialchars($am) ?></td>
-                                    <td class="text-right"><?= formatMoney($budget_placeholder) ?></td>
+                                    <td class="text-right"><?= formatMoney($b_q1) ?></td>
                                     <td class="text-right"><?= formatMoney($actual_q1) ?></td>
-                                    <td class="text-center"><?= calcPercent($actual_q1, $budget_placeholder) ?></td>
-                                    <td class="text-right"><?= formatMoney($budget_placeholder) ?></td>
+                                    <td class="text-center"><?= calcPercent($actual_q1, $b_q1) ?></td>
+                                    <td class="text-right"><?= formatMoney($b_q2) ?></td>
                                     <td class="text-right"><?= formatMoney($actual_q2) ?></td>
-                                    <td class="text-center"><?= calcPercent($actual_q2, $budget_placeholder) ?></td>
-                                    <td class="text-right"><?= formatMoney($budget_placeholder * 2) ?></td>
+                                    <td class="text-center"><?= calcPercent($actual_q2, $b_q2) ?></td>
+                                    <td class="text-right"><?= formatMoney($b_h1) ?></td>
                                     <td class="text-right"><?= formatMoney($actual_h1) ?></td>
-                                    <td class="text-center"><?= calcPercent($actual_h1, $budget_placeholder * 2) ?></td>
-                                    <td class="text-right"><?= formatMoney($budget_placeholder) ?></td>
+                                    <td class="text-center"><?= calcPercent($actual_h1, $b_h1) ?></td>
+                                    <td class="text-right"><?= formatMoney($b_q3) ?></td>
                                     <td class="text-right"><?= formatMoney($actual_q3) ?></td>
-                                    <td class="text-center"><?= calcPercent($actual_q3, $budget_placeholder) ?></td>
+                                    <td class="text-center"><?= calcPercent($actual_q3, $b_q3) ?></td>
                                     <!-- Q4 specific columns from image -->
-                                    <td class="text-right"><?= formatMoney($budget_placeholder) ?></td>
-                                    <td class="text-right"><?= formatMoney($budget_placeholder * 0.8) ?></td>
-                                    <td class="text-right"><?= formatMoney($budget_placeholder * 0.5) ?></td>
+                                    <td class="text-right"><?= formatMoney($b_q4) ?></td>
+                                    <td class="text-right"><?= formatMoney($b_q4 * 0.8) ?></td>
+                                    <td class="text-right"><?= formatMoney($b_q4 * 0.5) ?></td>
                                 </tr>
                             <?php endforeach; ?>
                         </tbody>
