@@ -66,7 +66,7 @@ function isMenuItemActive($path, $current_uri)
                 </a>
                 <a href="/sale-reports"
                     class="submenu-item <?php echo ($current_uri === '/sale-reports' || strpos($current_uri, '/sale-reports') !== false) ? 'active' : ''; ?>">
-                    <span>Sale Reports</span>
+                    <span>My Reports</span>
                 </a>
             </div>
         <?php endif; ?>
