@@ -288,30 +288,27 @@ if ($res) {
                 }
             }
 
-            $plClass = ($newPayStat === 'Paid') ? 'Tốt' : 'Xấu';
+
 
             // Check if any of these derived fields changed
             if (
                 $newPayStat !== ($row['payment_status'] ?? '') ||
                 $paymentMonth !== ($row['payment_month'] ?? '') ||
                 $weeklyUpdate !== ($row['weekly_update'] ?? '') ||
-                $invoiceStatusClass !== ($row['invoice_status_class'] ?? '') ||
-                $plClass !== ($row['pl_class'] ?? '')
+                $invoiceStatusClass !== ($row['invoice_status_class'] ?? '')
             ) {
 
-                $upSql[] = "payment_status = ?, payment_month = ?, weekly_update = ?, invoice_status_class = ?, pl_class = ?";
+                $upSql[] = "payment_status = ?, payment_month = ?, weekly_update = ?, invoice_status_class = ?";
                 $upParams[] = $newPayStat;
                 $upParams[] = $paymentMonth;
                 $upParams[] = $weeklyUpdate;
                 $upParams[] = $invoiceStatusClass;
-                $upParams[] = $plClass;
-                $upTypes .= "sssss";
+                $upTypes .= "ssss";
 
                 $row['payment_status'] = $newPayStat;
                 $row['payment_month'] = $paymentMonth;
                 $row['weekly_update'] = $weeklyUpdate;
                 $row['invoice_status_class'] = $invoiceStatusClass;
-                $row['pl_class'] = $plClass;
                 $changed = true;
             }
 
