@@ -1468,7 +1468,7 @@ if ($team_res && $team_res->num_rows > 0) {
                                                 class="project-autocomplete-input" autocomplete="off"
                                                 onclick="event.stopPropagation();"
                                                 onfocus="this.style.borderColor = '#cbd5e1'; this.style.backgroundColor = '#fff';"
-                                                onblur="setTimeout(() => { if (projectSuggestionsBox.style.display === 'none') { this.style.borderColor = 'transparent'; this.style.backgroundColor = 'transparent'; updateInline(<?php echo $d['id']; ?>, 'project_name', this.value, this); } }, 300)"
+                                                onblur="setTimeout(() => { if (window.projectSuggestionsBox && projectSuggestionsBox.style.display === 'none') { this.style.borderColor = 'transparent'; this.style.backgroundColor = 'transparent'; updateInline(<?php echo $d['id']; ?>, 'project_name', this.value, this); } }, 300)"
                                                         style="width: 100%; border: 1px solid transparent; background: transparent; padding: 8px 10px; font-family: inherit; font-size: inherit; outline: none; box-sizing: border-box;">
                                                 </td>
                                                 <td><?php echo formatDate($d['invoice_date']); ?></td>
@@ -2042,7 +2042,7 @@ if ($team_res && $team_res->num_rows > 0) {
         }
 
         // --- Project Autocomplete Logic (Generic for Modal and Inline) ---
-        const projectSuggestionsBox = document.createElement('div');
+        window.projectSuggestionsBox = document.createElement('div');
         projectSuggestionsBox.id = 'project_suggestions_box';
         document.body.appendChild(projectSuggestionsBox);
 
@@ -2147,14 +2147,14 @@ if ($team_res && $team_res->num_rows > 0) {
                                 const oldValue = input.value;
                                 input.value = project.name;
                                 projectSuggestionsBox.style.display = 'none';
-                                
+
                                 // Explicitly trigger update for inline inputs to ensure it saves
                                 if (input.classList.contains('project-autocomplete-input') && typeof updateInline === 'function') {
                                     // Match the row ID from the input's context if possible
                                     // The input in the table has updateInline(id, 'project_name', ...) in its onblur
                                     // We'll trigger a 'change' event or call updateInline directly if we can find the parameters
                                     // For simplicity and safety, we'll just trigger the blur logic manually but skip the timeout issue
-                                    input.blur(); 
+                                    input.blur();
                                 }
                             };
                             projectSuggestionsBox.appendChild(div);
@@ -2272,7 +2272,7 @@ if ($team_res && $team_res->num_rows > 0) {
                 let runningLeft = 0;
 
                 cols.forEach((th, index) => {
-                    const c                                      olIndex = index + 1;
+                    const colIndex = index + 1;
                     const isSticky = colIndex <= 7;
                     let w = widths[colIndex];
 
