@@ -14,7 +14,7 @@ if ($_SESSION['role'] !== 'admin') {
 
 require_once __DIR__ . '/../../libs/OdooAPI.php';
 
-$current_year = isset($_GET['year']) ? (int)$_GET['year'] : (int)date('Y');
+$current_year = isset($_GET['year']) ? (int) $_GET['year'] : (int) date('Y');
 $years = [$current_year + 1, $current_year, $current_year - 1, $current_year - 2];
 
 // Helper: Convert to VND
@@ -45,11 +45,12 @@ try {
 $am_recognised = []; // group by AM name
 foreach ($sale_orders as $so) {
     $date = $so['date_order'];
-    if (!$date) continue;
-    
-    $m = (int)date('n', strtotime($date));
+    if (!$date)
+        continue;
+
+    $m = (int) date('n', strtotime($date));
     $q = ceil($m / 3);
-    
+
     // Determine AM name
     $am_name = 'Unknown';
     if (!empty($so['user_id']) && is_array($so['user_id'])) {
@@ -57,16 +58,16 @@ foreach ($sale_orders as $so) {
     } elseif (!empty($so['team_id']) && is_array($so['team_id'])) {
         $am_name = $so['team_id'][1];
     }
-    
-    $amount = (float)$so['amount_total'];
+
+    $amount = (float) $so['amount_total'];
     $currency_code = is_array($so['currency_id']) ? $so['currency_id'][1] : ($so['currency_id'] ?? 'VND');
-    
+
     if ($currency_code !== 'VND') {
-        $rateSource = $odoo->getRate($currencyCode, $date) ?: 1.0;
+        $rateSource = $odoo->getRate($currency_code, $date) ?: 1.0;
         $rateVnd = $odoo->getRate('VND', $date) ?: 1.0;
         $amount = $amount * ($rateVnd / $rateSource);
     }
-    
+
     if (!isset($am_recognised[$am_name])) {
         $am_recognised[$am_name] = ['Q1' => 0, 'Q2' => 0, 'Q3' => 0, 'Q4' => 0];
     }
@@ -84,21 +85,22 @@ $res = $stmt->get_result();
 $am_invoiced = []; // group by AM name
 while ($row = $res->fetch_assoc()) {
     $date = $row['invoice_date'];
-    if (!$date) continue;
-    
-    $m = (int)date('n', strtotime($date));
+    if (!$date)
+        continue;
+
+    $m = (int) date('n', strtotime($date));
     $q = ceil($m / 3);
-    
+
     $am_name = $row['am'] ? trim($row['am']) : 'Unknown';
-    
-    $amount = (float)$row['amount'];
+
+    $amount = (float) $row['amount'];
     $currency_code = $row['currency'] ?? 'VND';
     if ($currency_code !== 'VND') {
         $rateSource = $odoo->getRate($currency_code, $date) ?: 1.0;
         $rateVnd = $odoo->getRate('VND', $date) ?: 1.0;
         $amount = $amount * ($rateVnd / $rateSource);
     }
-    
+
     if (!isset($am_invoiced[$am_name])) {
         $am_invoiced[$am_name] = ['Q1' => 0, 'Q2' => 0, 'Q3' => 0, 'Q4' => 0];
     }
@@ -110,23 +112,28 @@ $all_ams = array_unique(array_merge(array_keys($am_recognised), array_keys($am_i
 sort($all_ams);
 
 // Helpers
-function formatMoney($val) {
-    if ($val == 0) return '-';
+function formatMoney($val)
+{
+    if ($val == 0)
+        return '-';
     return number_format($val, 0, '.', ',');
 }
 
-function calcPercent($actual, $budget) {
-    if ($budget == 0 || !$budget) return '#DIV/0!';
+function calcPercent($actual, $budget)
+{
+    if ($budget == 0 || !$budget)
+        return '#DIV/0!';
     $pct = ($actual / $budget) * 100;
     return number_format($pct, 2) . '%';
 }
 
 // Budget Placeholder (We will assume 0 budget for now)
-$budget_placeholder = 0; 
+$budget_placeholder = 0;
 
 ?>
 <!DOCTYPE html>
 <html lang="vi">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -134,7 +141,11 @@ $budget_placeholder = 0;
     <link rel="stylesheet" href="/assets/css/dashboard.css">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <style>
-        body { font-family: 'Inter', sans-serif; overflow-x: hidden; }
+        body {
+            font-family: 'Inter', sans-serif;
+            overflow-x: hidden;
+        }
+
         .report-page-container {
             padding: 1rem 2rem;
             max-width: 100%;
@@ -142,6 +153,7 @@ $budget_placeholder = 0;
             overflow-x: auto;
             overflow-y: auto;
         }
+
         .filter-controls {
             display: flex;
             align-items: center;
@@ -150,34 +162,36 @@ $budget_placeholder = 0;
             background: #fff;
             padding: 1rem;
             border-radius: 8px;
-            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
         }
+
         .filter-controls select {
             padding: 0.5rem 1rem;
             border: 1px solid #cbd5e1;
             border-radius: 6px;
             font-size: 14px;
         }
-        
+
         .table-responsive {
             background: #fff;
             border-radius: 8px;
             box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
             overflow: auto;
         }
-        
+
         table.revenue-table {
             width: 100%;
             border-collapse: collapse;
             white-space: nowrap;
             font-size: 13px;
         }
-        
-        table.revenue-table th, table.revenue-table td {
+
+        table.revenue-table th,
+        table.revenue-table td {
             border: 1px solid #e2e8f0;
             padding: 10px 14px;
         }
-        
+
         table.revenue-table thead th {
             background-color: #0f172a;
             color: #fff;
@@ -187,36 +201,40 @@ $budget_placeholder = 0;
             top: 0;
             z-index: 10;
         }
-        
+
         table.revenue-table tbody tr.section-header {
             background-color: #61A667;
             color: white;
             font-weight: bold;
         }
+
         table.revenue-table tbody tr.group-header {
             background-color: #e2e8f0;
             font-weight: 600;
         }
-        
+
         table.revenue-table tbody td.text-right {
             text-align: right;
             font-variant-numeric: tabular-nums;
         }
+
         table.revenue-table tbody td.text-center {
             text-align: center;
         }
+
         table.revenue-table tbody td.am-name {
             padding-left: 24px;
         }
     </style>
 </head>
+
 <body>
     <div class="dashboard-container">
         <?php include __DIR__ . '/../includes/sidebar.php'; ?>
         <main class="main-content">
-            <?php 
-                $page_title = 'Admin Sale Reports';
-                include __DIR__ . '/../includes/topbar.php'; 
+            <?php
+            $page_title = 'Admin Sale Reports';
+            include __DIR__ . '/../includes/topbar.php';
             ?>
             <div class="report-page-container">
                 <div class="filter-controls">
@@ -229,7 +247,7 @@ $budget_placeholder = 0;
                         </select>
                     </form>
                 </div>
-                
+
                 <div class="table-responsive">
                     <table class="revenue-table">
                         <thead>
@@ -243,11 +261,21 @@ $budget_placeholder = 0;
                                 <th colspan="3">Q4</th>
                             </tr>
                             <tr>
-                                <th>Budget/KPI</th><th>Actual</th><th>% Achieved</th>
-                                <th>Budget/KPI</th><th>Actual</th><th>% Achieved</th>
-                                <th>Budget/KPI</th><th>Actual</th><th>% Achieved</th>
-                                <th>Budget/KPI</th><th>Actual</th><th>% Achieved</th>
-                                <th>Budget/KPI - Tốt</th><th>Budget/KPI - Trung Bình</th><th>Budget/KPI - Xấu</th>
+                                <th>Budget/KPI</th>
+                                <th>Actual</th>
+                                <th>% Achieved</th>
+                                <th>Budget/KPI</th>
+                                <th>Actual</th>
+                                <th>% Achieved</th>
+                                <th>Budget/KPI</th>
+                                <th>Actual</th>
+                                <th>% Achieved</th>
+                                <th>Budget/KPI</th>
+                                <th>Actual</th>
+                                <th>% Achieved</th>
+                                <th>Budget/KPI - Tốt</th>
+                                <th>Budget/KPI - Trung Bình</th>
+                                <th>Budget/KPI - Xấu</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -255,77 +283,77 @@ $budget_placeholder = 0;
                                 <td>Revenue</td>
                                 <td colspan="16"></td>
                             </tr>
-                            
+
                             <!-- RECOGNISED REVENUE -->
                             <tr class="group-header">
                                 <td style="background:#fff"></td>
                                 <td>Recognised Revenue</td>
                                 <td colspan="15"></td>
                             </tr>
-                            <?php foreach ($all_ams as $am): 
+                            <?php foreach ($all_ams as $am):
                                 $data = $am_recognised[$am] ?? ['Q1' => 0, 'Q2' => 0, 'Q3' => 0, 'Q4' => 0];
                                 $actual_q1 = $data['Q1'];
                                 $actual_q2 = $data['Q2'];
                                 $actual_q3 = $data['Q3'];
                                 $actual_q4 = $data['Q4'];
                                 $actual_h1 = $actual_q1 + $actual_q2;
-                            ?>
-                            <tr>
-                                <td></td>
-                                <td class="am-name"><?= htmlspecialchars($am) ?></td>
-                                <td class="text-right"><?= formatMoney($budget_placeholder) ?></td>
-                                <td class="text-right"><?= formatMoney($actual_q1) ?></td>
-                                <td class="text-center"><?= calcPercent($actual_q1, $budget_placeholder) ?></td>
-                                <td class="text-right"><?= formatMoney($budget_placeholder) ?></td>
-                                <td class="text-right"><?= formatMoney($actual_q2) ?></td>
-                                <td class="text-center"><?= calcPercent($actual_q2, $budget_placeholder) ?></td>
-                                <td class="text-right"><?= formatMoney($budget_placeholder * 2) ?></td>
-                                <td class="text-right"><?= formatMoney($actual_h1) ?></td>
-                                <td class="text-center"><?= calcPercent($actual_h1, $budget_placeholder * 2) ?></td>
-                                <td class="text-right"><?= formatMoney($budget_placeholder) ?></td>
-                                <td class="text-right"><?= formatMoney($actual_q3) ?></td>
-                                <td class="text-center"><?= calcPercent($actual_q3, $budget_placeholder) ?></td>
-                                <!-- Q4 specific columns from image -->
-                                <td class="text-right"><?= formatMoney($budget_placeholder) ?></td>
-                                <td class="text-right"><?= formatMoney($budget_placeholder * 0.8) ?></td>
-                                <td class="text-right"><?= formatMoney($budget_placeholder * 0.5) ?></td>
-                            </tr>
+                                ?>
+                                <tr>
+                                    <td></td>
+                                    <td class="am-name"><?= htmlspecialchars($am) ?></td>
+                                    <td class="text-right"><?= formatMoney($budget_placeholder) ?></td>
+                                    <td class="text-right"><?= formatMoney($actual_q1) ?></td>
+                                    <td class="text-center"><?= calcPercent($actual_q1, $budget_placeholder) ?></td>
+                                    <td class="text-right"><?= formatMoney($budget_placeholder) ?></td>
+                                    <td class="text-right"><?= formatMoney($actual_q2) ?></td>
+                                    <td class="text-center"><?= calcPercent($actual_q2, $budget_placeholder) ?></td>
+                                    <td class="text-right"><?= formatMoney($budget_placeholder * 2) ?></td>
+                                    <td class="text-right"><?= formatMoney($actual_h1) ?></td>
+                                    <td class="text-center"><?= calcPercent($actual_h1, $budget_placeholder * 2) ?></td>
+                                    <td class="text-right"><?= formatMoney($budget_placeholder) ?></td>
+                                    <td class="text-right"><?= formatMoney($actual_q3) ?></td>
+                                    <td class="text-center"><?= calcPercent($actual_q3, $budget_placeholder) ?></td>
+                                    <!-- Q4 specific columns from image -->
+                                    <td class="text-right"><?= formatMoney($budget_placeholder) ?></td>
+                                    <td class="text-right"><?= formatMoney($budget_placeholder * 0.8) ?></td>
+                                    <td class="text-right"><?= formatMoney($budget_placeholder * 0.5) ?></td>
+                                </tr>
                             <?php endforeach; ?>
-                            
+
                             <!-- INVOICED REVENUE -->
                             <tr class="group-header">
                                 <td style="background:#fff"></td>
                                 <td>Invoiced Revenue</td>
                                 <td colspan="15"></td>
                             </tr>
-                            <?php foreach ($all_ams as $am): 
+                            <?php foreach ($all_ams as $am):
                                 $data = $am_invoiced[$am] ?? ['Q1' => 0, 'Q2' => 0, 'Q3' => 0, 'Q4' => 0];
                                 $actual_q1 = $data['Q1'];
                                 $actual_q2 = $data['Q2'];
                                 $actual_q3 = $data['Q3'];
                                 $actual_q4 = $data['Q4'];
                                 $actual_h1 = $actual_q1 + $actual_q2;
-                            ?>
-                            <tr>
-                                <td></td>
-                                <td class="am-name"><?= htmlspecialchars($am) ?></td>
-                                <td class="text-right"><?= formatMoney($budget_placeholder) ?></td>
-                                <td class="text-right"><?= formatMoney($actual_q1) ?></td>
-                                <td class="text-center"><?= calcPercent($actual_q1, $budget_placeholder) ?></td>
-                                <td class="text-right"><?= formatMoney($budget_placeholder) ?></td>
-                                <td class="text-right"><?= formatMoney($actual_q2) ?></td>
-                                <td class="text-center"><?= calcPercent($actual_q2, $budget_placeholder) ?></td>
-                                <td class="text-right"><?= formatMoney($budget_placeholder * 2) ?></td>
-                                <td class="text-right"><?= formatMoney($actual_h1) ?></td>
-                                <td class="text-center"><?= calcPercent($actual_h1, $budget_placeholder * 2) ?></td>
-                                <td class="text-right"><?= formatMoney($budget_placeholder) ?></td>
-                                <td class="text-right"><?= formatMoney($actual_q3) ?></td>
-                                <td class="text-center"><?= calcPercent($actual_q3, $budget_placeholder) ?></td>
-                                <!-- Q4 specific columns from image -->
-                                <td class="text-right"><?= formatMoney($budget_placeholder) ?></td>
-                                <td class="text-right"><?= formatMoney($budget_placeholder * 0.8) ?></td>
-                                <td class="text-right"><?= formatMoney($budget_placeholder * 0.5) ?></td>
-                            </tr>
+                                ?>
+                                <tr>
+                                    <td></td>
+                                    <td class="am-name"><?= htmlspecialchars($am) ?></td>
+                                    <td class="text-right"><?= formatMoney($budget_placeholder) ?></td>
+                                    <td class="text-right"><?= formatMoney($actual_q1) ?></td>
+                                    <td class="text-center"><?= calcPercent($actual_q1, $budget_placeholder) ?></td>
+                                    <td class="text-right"><?= formatMoney($budget_placeholder) ?></td>
+                                    <td class="text-right"><?= formatMoney($actual_q2) ?></td>
+                                    <td class="text-center"><?= calcPercent($actual_q2, $budget_placeholder) ?></td>
+                                    <td class="text-right"><?= formatMoney($budget_placeholder * 2) ?></td>
+                                    <td class="text-right"><?= formatMoney($actual_h1) ?></td>
+                                    <td class="text-center"><?= calcPercent($actual_h1, $budget_placeholder * 2) ?></td>
+                                    <td class="text-right"><?= formatMoney($budget_placeholder) ?></td>
+                                    <td class="text-right"><?= formatMoney($actual_q3) ?></td>
+                                    <td class="text-center"><?= calcPercent($actual_q3, $budget_placeholder) ?></td>
+                                    <!-- Q4 specific columns from image -->
+                                    <td class="text-right"><?= formatMoney($budget_placeholder) ?></td>
+                                    <td class="text-right"><?= formatMoney($budget_placeholder * 0.8) ?></td>
+                                    <td class="text-right"><?= formatMoney($budget_placeholder * 0.5) ?></td>
+                                </tr>
                             <?php endforeach; ?>
                         </tbody>
                     </table>
@@ -334,4 +362,5 @@ $budget_placeholder = 0;
         </main>
     </div>
 </body>
+
 </html>
