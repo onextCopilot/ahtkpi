@@ -425,10 +425,15 @@ $avatar = $_SESSION['avatar'] ?? '';
                         <h2 style="font-size: 18px; color: #1a73e8; margin: 0;">Thống kê Doanh Thu Key Accounts (Hoàn
                             thành - USD)</h2>
                         <div class="filter-controls">
-                            <!-- Rate Note -->
                             <span style="font-size: 11px; color: #70757a; margin-right: 12px; font-style: italic;">
                                 Tỷ giá tạm tính: 1 USD = 24,000 VND
                             </span>
+                            <select id="usdStatsYearFilter" onchange="renderUsdRevenueStats()" class="filter-select"
+                                style="margin-right: 12px;">
+                                <option value="2026">Năm 2026</option>
+                                <option value="2025">Năm 2025</option>
+                                <option value="2024">Năm 2024</option>
+                            </select>
                             <div class="search-box" style="min-width: 250px;">
                                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
                                     stroke-width="2">
@@ -1157,7 +1162,7 @@ $avatar = $_SESSION['avatar'] ?? '';
         function renderUsdRevenueStats() {
             const container = document.getElementById('usdStatsTableBody');
             const header = document.getElementById('usdStatsTableHeader');
-            const year = document.getElementById('statsYearFilter').value;
+            const year = document.getElementById('usdStatsYearFilter').value;
             const search = document.getElementById('usdSearchInput') ? document.getElementById('usdSearchInput').value.toLowerCase() : '';
             const rate = 24000;
 
