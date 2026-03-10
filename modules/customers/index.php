@@ -463,7 +463,8 @@ $avatar = $_SESSION['avatar'] ?? '';
                         <h2 style="font-size: 18px; color: #1a73e8; margin: 0;">Thống kê Doanh Thu Key Accounts (Hoàn
                             thành - USD)</h2>
                         <div class="filter-controls">
-                            <span id="dynamicExchangeRateNote" style="font-size: 11px; color: #70757a; margin-right: 12px; font-style: italic;">
+                            <span id="dynamicExchangeRateNote"
+                                style="font-size: 11px; color: #70757a; margin-right: 12px; font-style: italic;">
                                 Đang tải tỉ giá...
                             </span>
                             <select id="usdStatsYearFilter" onchange="renderUsdRevenueStats()" class="filter-select"
@@ -1151,7 +1152,9 @@ $avatar = $_SESSION['avatar'] ?? '';
         let globalAmBdList = [];
         let currentStatsData = [];
         let currentTotalVolumeByYear = {};
+        let currentTotalVolumeUsdByYear = {};
         let currentInternalRevenueByYear = {};
+        let currentInternalRevenueUsdByYear = {};
         let currentSortCol = 'order_index';
         let currentSortDir = 'asc';
         let currentUsdRate = 24000; // Default fallback
@@ -1169,7 +1172,9 @@ $avatar = $_SESSION['avatar'] ?? '';
                     if (data.success) {
                         globalAmBdList = data.am_bd_list || [];
                         currentTotalVolumeByYear = data.total_volume_vnd_by_year || {};
+                        currentTotalVolumeUsdByYear = data.total_volume_usd_by_year || {};
                         currentInternalRevenueByYear = data.internal_total_res || {};
+                        currentInternalRevenueUsdByYear = data.internal_total_usd_res || {};
                         currentUsdRate = data.usd_rate || 24000;
                         
                         // Update the rate note in UI
@@ -1231,8 +1236,7 @@ $avatar = $_SESSION['avatar'] ?? '';
 
             const formatUSD = (val) => {
                 if (!val) return '-';
-                const usd = val * rate; // Odoo rate is typically 1 VND = X USD
-                return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(usd);
+                return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(val);
             };
 
             // Generate Header
@@ -1272,7 +1276,7 @@ $avatar = $_SESSION['avatar'] ?? '';
                 let yearlyTotal = 0;
                 for (let m = 1; m <= 12; m++) {
                     const mk = `${year}-${m.toString().padStart(2, '0')}`;
-                    yearlyTotal += (stats.monthly[mk] || 0);
+                    yearlyTotal += (stats.monthly_usd[mk] || 0);
                 }
                 grandTotalYearly += yearlyTotal;
                 row += `<td class="y-col">${formatUSD(yearlyTotal)}</td>`;
@@ -1280,7 +1284,7 @@ $avatar = $_SESSION['avatar'] ?? '';
                 // Quarters
                 for (let q = 1; q <= 4; q++) {
                     const qk = `${year}-Q${q}`;
-                    const val = (stats.quarterly[qk] || 0);
+                    const val = (stats.quarterly_usd[qk] || 0);
                     grandTotalQuarters[q - 1] += val;
                     row += `<td class="q-col">${formatUSD(val)}</td>`;
                 }
@@ -1288,7 +1292,7 @@ $avatar = $_SESSION['avatar'] ?? '';
                 // Months
                 for (let m = 1; m <= 12; m++) {
                     const mk = `${year}-${m.toString().padStart(2, '0')}`;
-                    const val = (stats.monthly[mk] || 0);
+                    const val = (stats.monthly_usd[mk] || 0);
                     grandTotalMonths[m - 1] += val;
                     row += `<td>${formatUSD(val)}</td>`;
                 }
@@ -1315,24 +1319,25 @@ $avatar = $_SESSION['avatar'] ?? '';
             // Render Comparison Box
             const comparisonBox = document.getElementById('usdComparisonBox');
             if (comparisonBox) {
+                const totalColVolumeUsd = currentTotalVolumeUsdByYear[year] || 0;
                 const totalColVolumeVnd = currentTotalVolumeByYear[year] || 0;
-                const totalKeyAccountVnd = grandTotalYearly;
-                const percentage = totalColVolumeVnd > 0 ? (totalKeyAccountVnd / totalColVolumeVnd * 100).toFixed(2) : 0;
+                const totalKeyAccountUsd = grandTotalYearly;
+                const percentage = totalColVolumeUsd > 0 ? (totalKeyAccountUsd / totalColVolumeUsd * 100).toFixed(2) : 0;
 
                 comparisonBox.innerHTML = `
                     <div style="flex: 1; min-width: 250px; background: #fff; border: 1px solid #dadce0; border-radius: 4px; padding: 16px; box-shadow: 0 1px 2px rgba(0,0,0,0.05);">
                         <div style="font-size: 11px; color: #5f6368; text-transform: uppercase; font-weight: 600; margin-bottom: 4px;">Total Volume (Odoo Global - ${year})</div>
-                        <div style="font-size: 18px; font-weight: 700; color: #202124;">${formatUSD(totalColVolumeVnd)}</div>
+                        <div style="font-size: 18px; font-weight: 700; color: #202124;">${formatUSD(totalColVolumeUsd)}</div>
                         <div style="font-size: 12px; color: #94a3b8; margin-top: 4px;">${formatVND(totalColVolumeVnd)}</div>
                     </div>
                     <div style="flex: 1; min-width: 250px; background: #fff; border: 1px solid #dadce0; border-radius: 4px; padding: 16px; box-shadow: 0 1px 2px rgba(0,0,0,0.05);">
                         <div style="font-size: 11px; color: #5f6368; text-transform: uppercase; font-weight: 600; margin-bottom: 4px;">Key Accounts Revenue (${year})</div>
-                        <div style="font-size: 18px; font-weight: 700; color: #1a73e8;">${formatUSD(totalKeyAccountVnd)}</div>
-                        <div style="font-size: 12px; color: #94a3b8; margin-top: 4px;">${formatVND(totalKeyAccountVnd)}</div>
+                        <div style="font-size: 18px; font-weight: 700; color: #1a73e8;">${formatUSD(totalKeyAccountUsd)}</div>
+                        <!-- We dont have VND for total key accounts here easily without sum, but USD is priority -->
                     </div>
                     <div style="flex: 1; min-width: 250px; background: #fff; border: 1px solid #dadce0; border-radius: 4px; padding: 16px; box-shadow: 0 1px 2px rgba(0,0,0,0.05);">
                         <div style="font-size: 11px; color: #5f6368; text-transform: uppercase; font-weight: 600; margin-bottom: 4px;">Total Internal Invoices (${year})</div>
-                        <div style="font-size: 18px; font-weight: 700; color: #f59e0b;">${formatUSD(currentInternalRevenueByYear[year] || 0)}</div>
+                        <div style="font-size: 18px; font-weight: 700; color: #f59e0b;">${formatUSD(currentInternalRevenueUsdByYear[year] || 0)}</div>
                         <div style="font-size: 12px; color: #94a3b8; margin-top: 4px;">${formatVND(currentInternalRevenueByYear[year] || 0)}</div>
                     </div>
                     <div style="flex: 1; min-width: 250px; background: #e8f0fe; border: 1px solid #1a73e8; border-radius: 4px; padding: 16px; box-shadow: 0 1px 2px rgba(0,0,0,0.05);">
@@ -1971,8 +1976,8 @@ $avatar = $_SESSION['avatar'] ?? '';
                         </div>
                     </td>
                 </tr>
-            `;
-        }
+        `;
+ }
 
         function formatDateTime(dateTimeStr) {
             if (!dateTimeStr) return '';

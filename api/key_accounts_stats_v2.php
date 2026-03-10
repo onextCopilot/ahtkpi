@@ -92,11 +92,13 @@ try {
     $invoices_res = $odoo->getInvoices(100000);
     $all_invoices = $invoices_res['invoices'];
 
+    $current_usd_rate = $odoo->getRate('USD', date('Y-m-d'));
+
     foreach ($all_invoices as $inv) {
         $partner_id = isset($inv['partner_id']) && is_array($inv['partner_id']) ? $inv['partner_id'][0] : null;
 
         if ($partner_id && isset($key_accounts_map[$partner_id])) {
-            // Only count posted/paid invoices for revenue
+            // Only count posted invoices for revenue
             if ($inv['state'] !== 'posted')
                 continue;
 
@@ -104,8 +106,17 @@ try {
             if (($inv['x_studio_invoice_type_1'] ?? '') === 'Internal')
                 continue;
 
-            $amount = (float) ($inv['amount_total_signed'] ?? 0);
-            $date_str = $inv['invoice_date'] ?: $inv['date'];
+            $amount_vnd = (float) ($inv['amount_total_signed'] ?? 0);
+
+            // ACCURACY FIX: If invoice is already USD, use amount_total to get precise USD.
+            // Odoo rate at time of invoice might differ from current rate.
+            if (($inv['currency_id'][1] ?? '') === 'USD') {
+                $amount_usd = (float) ($inv['amount_total'] ?? 0);
+            } else {
+                $amount_usd = $amount_vnd * $current_usd_rate;
+            }
+
+            $date_str = $inv['invoice_date'] ?: ($inv['date'] ?? null);
             if (!$date_str)
                 continue;
 
@@ -121,25 +132,47 @@ try {
             if (!isset($key_accounts_map[$partner_id]['stats']['monthly'][$month_key])) {
                 $key_accounts_map[$partner_id]['stats']['monthly'][$month_key] = 0;
             }
-            $key_accounts_map[$partner_id]['stats']['monthly'][$month_key] += $amount;
+            $key_accounts_map[$partner_id]['stats']['monthly'][$month_key] += $amount_vnd;
+
+            // USD Monthly stats
+            if (!isset($key_accounts_map[$partner_id]['stats']['monthly_usd'][$month_key])) {
+                $key_accounts_map[$partner_id]['stats']['monthly_usd'][$month_key] = 0;
+            }
+            $key_accounts_map[$partner_id]['stats']['monthly_usd'][$month_key] += $amount_usd;
 
             // Quarterly stats
             if (!isset($key_accounts_map[$partner_id]['stats']['quarterly'][$quarter_key])) {
                 $key_accounts_map[$partner_id]['stats']['quarterly'][$quarter_key] = 0;
             }
-            $key_accounts_map[$partner_id]['stats']['quarterly'][$quarter_key] += $amount;
+            $key_accounts_map[$partner_id]['stats']['quarterly'][$quarter_key] += $amount_vnd;
+
+            // USD Quarterly stats
+            if (!isset($key_accounts_map[$partner_id]['stats']['quarterly_usd'][$quarter_key])) {
+                $key_accounts_map[$partner_id]['stats']['quarterly_usd'][$quarter_key] = 0;
+            }
+            $key_accounts_map[$partner_id]['stats']['quarterly_usd'][$quarter_key] += $amount_usd;
         }
     }
 
     // 4. Calculate total volume per year from ALL Odoo invoices (Global Revenue)
     $total_volume_vnd_by_year = [];
+    $total_volume_usd_by_year = [];
     $internal_revenue_vnd_by_year = [];
+    $internal_revenue_usd_by_year = [];
+
     foreach ($all_invoices as $inv) {
         // Only count posted customer invoices
         if ($inv['state'] !== 'posted' || ($inv['move_type'] ?? '') !== 'out_invoice')
             continue;
 
         $amount_vnd = abs((float) ($inv['amount_total_signed'] ?? 0));
+
+        if (($inv['currency_id'][1] ?? '') === 'USD') {
+            $amount_usd = (float) ($inv['amount_total'] ?? 0);
+        } else {
+            $amount_usd = $amount_vnd * $current_usd_rate;
+        }
+
         $date_str = $inv['invoice_date'] ?: ($inv['date'] ?? null);
         if (!$date_str)
             continue;
@@ -150,15 +183,19 @@ try {
         if (($inv['x_studio_invoice_type_1'] ?? '') === 'Internal') {
             if (!isset($internal_revenue_vnd_by_year[$inv_year])) {
                 $internal_revenue_vnd_by_year[$inv_year] = 0;
+                $internal_revenue_usd_by_year[$inv_year] = 0;
             }
             $internal_revenue_vnd_by_year[$inv_year] += $amount_vnd;
+            $internal_revenue_usd_by_year[$inv_year] += $amount_usd;
             continue;
         }
 
         if (!isset($total_volume_vnd_by_year[$inv_year])) {
             $total_volume_vnd_by_year[$inv_year] = 0;
+            $total_volume_usd_by_year[$inv_year] = 0;
         }
         $total_volume_vnd_by_year[$inv_year] += $amount_vnd;
+        $total_volume_usd_by_year[$inv_year] += $amount_usd;
     }
 
     $data = array_values($key_accounts_map);
@@ -168,9 +205,11 @@ try {
         'data' => $data,
         'am_bd_list' => $am_bd_list,
         'total_volume_vnd_by_year' => $total_volume_vnd_by_year,
+        'total_volume_usd_by_year' => $total_volume_usd_by_year,
         'internal_total_res' => $internal_revenue_vnd_by_year,
-        'usd_rate' => $odoo->getRate('USD', date('Y-m-d')),
-        'api_version' => '2.3'
+        'internal_total_usd_res' => $internal_revenue_usd_by_year,
+        'usd_rate' => $current_usd_rate,
+        'api_version' => '2.4'
     ]);
 
 } catch (Exception $e) {
