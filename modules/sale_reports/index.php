@@ -34,8 +34,8 @@ if (!$vu_row) {
     die("User not found.");
 }
 
-$full_name = $vu_row['full_name'];
-$avatar = $vu_row['avatar'] ?? null;
+$view_full_name = $vu_row['full_name'];
+$view_avatar = $vu_row['avatar'] ?? null;
 
 // Ensure table exists
 $table_check = $conn->query("SHOW TABLES LIKE 'sale_reports'");
@@ -1260,13 +1260,13 @@ function formatMoney($amount, $currency_code)
                 <div class="report-header-info"
                     style="margin-bottom: 2rem; display: flex; align-items: center; justify-content: space-between; background: #fff; padding: 1.5rem 2rem; border-radius: 16px; border: 1px solid #e2e8f0; box-shadow: 0 4px 24px rgba(0, 0, 0, 0.06);">
                     <div style="display: flex; align-items: center; gap: 1.25rem;">
-                        <?php if ($avatar): ?>
-                            <img src="<?= htmlspecialchars($avatar) ?>" alt="Avatar"
+                        <?php if ($view_avatar): ?>
+                            <img src="<?= htmlspecialchars($view_avatar) ?>" alt="Avatar"
                                 style="width: 56px; height: 56px; border-radius: 50%; object-fit: cover; border: 3px solid #f1f5f9; box-shadow: 0 2px 4px rgba(0,0,0,0.05);">
                         <?php else: ?>
                             <div
                                 style="width: 56px; height: 56px; border-radius: 50%; background: linear-gradient(135deg, #f1f5f9, #e2e8f0); display: flex; align-items: center; justify-content: center; font-weight: 700; color: #475569; border: 3px solid #f8fafc; font-size: 1.25rem; box-shadow: 0 2px 4px rgba(0,0,0,0.05);">
-                                <?= strtoupper(substr($full_name, 0, 1)) ?>
+                                <?= strtoupper(substr($view_full_name, 0, 1)) ?>
                             </div>
                         <?php endif; ?>
                         <div>
@@ -1275,7 +1275,8 @@ function formatMoney($amount, $currency_code)
                                 Account Manager / Business Development</div>
                             <h1
                                 style="margin: 0; font-size: 1.5rem; font-weight: 800; color: #0f172a; letter-spacing: -0.025em;">
-                                <?= htmlspecialchars($full_name) ?></h1>
+                                <?= htmlspecialchars($view_full_name) ?>
+                            </h1>
                         </div>
                     </div>
                     <div style="text-align: right;">
