@@ -512,7 +512,7 @@ $avatar = $_SESSION['avatar'] ?? '';
                             </select>
                         </div>
                     </div>
-                    <div class="data-table-wrapper" style="max-height: 400px;">
+                    <div class="data-table-wrapper" style="max-height: none;">
                         <table class="customer-table" style="min-width: 1000px;">
                             <thead id="statsTableHeader">
                                 <!-- Headers will be generated dynamically -->
@@ -643,10 +643,11 @@ $avatar = $_SESSION['avatar'] ?? '';
 
         .bc-dropdown-content {
             display: none;
-            position: fixed; /* Use fixed to avoid clipping by scrollable table wrappers */
+            position: fixed;
+            /* Use fixed to avoid clipping by scrollable table wrappers */
             background-color: white;
             min-width: 180px;
-            box-shadow: 0px 8px 32px rgba(0,0,0,0.15);
+            box-shadow: 0px 8px 32px rgba(0, 0, 0, 0.15);
             z-index: 99999;
             border: 1px solid #dadce0;
             border-radius: 4px;
@@ -836,7 +837,7 @@ $avatar = $_SESSION['avatar'] ?? '';
             // Generate Headers 
             header.innerHTML = `
                 <tr>
-                    <th style="width: 50px; text-align: center;">Bật/Tắt</th>
+                    <th style="width: 80px; text-align: center;">Bật/Tắt</th>
                     <th style="width: 200px; position: sticky; left: 0; background: #f8f9fa; z-index: 20; text-align: left;">Khách hàng (Key Account)</th>
                     <th style="width: 120px;">Thuộc Cty</th>
                     <th style="width: 130px;">AM/BD</th>
@@ -848,12 +849,12 @@ $avatar = $_SESSION['avatar'] ?? '';
                     <th class="revenue-cell">Q2</th>
                     <th class="revenue-cell">Q3</th>
                     <th class="revenue-cell">Q4</th>
-                    ${Array.from({ length: 12 }, (_, i) => `<th class="revenue-cell">T${i + 1}</th>`).join('')}
+                    <th style="min-width: 250px;">Ghi chú / Lịch sử</th>
                 </tr>
             `;
 
             if (data.length === 0) {
-                body.innerHTML = `<tr><td colspan="25" style="text-align:center; padding: 40px; color: #5f6368;">Chưa có Key Account nào được thiết lập</td></tr>`;
+                body.innerHTML = `<tr><td colspan="15" style="text-align:center; padding: 40px; color: #5f6368;">Chưa có Key Account nào được thiết lập</td></tr>`;
                 return;
             }
 
@@ -887,12 +888,7 @@ $avatar = $_SESSION['avatar'] ?? '';
                     stats.quarterly[`${year}-Q4`] || 0
                 ];
 
-                const ms = Array.from({ length: 12 }, (_, i) => {
-                    const mk = `${year}-${(i + 1).toString().padStart(2, '0')}`;
-                    return stats.monthly[mk] || 0;
-                });
-
-                // Toggle Switch (Column 2 - actually Column 1 in my new layout)
+                // Toggle Switch (Column 1)
                 const toggleSwitch = `
                     <div class="stats-toggle">
                         <label class="switch">
@@ -944,6 +940,12 @@ $avatar = $_SESSION['avatar'] ?? '';
                         onblur="updateKeyAccountMetadata(${customer.id}, 'active_projects', this.value)">${escapeHtml(customer.active_projects || '')}</textarea>
                 `;
 
+                // Note / History Field
+                const noteField = `
+                    <textarea class="inline-edit-note" style="min-height: 40px; font-size: 11px;" placeholder="Lịch sử/Ghi chú..." 
+                        onblur="updateKeyAccountMetadata(${customer.id}, 'account_note', this.value)">${escapeHtml(customer.account_note || '')}</textarea>
+                `;
+
                 return `
                     <tr>
                         <td style="text-align: center;">${toggleSwitch}</td>
@@ -959,7 +961,7 @@ $avatar = $_SESSION['avatar'] ?? '';
                         </td>
                         <td class="revenue-cell revenue-total">${formatVND(yearlyTotal)}</td>
                         ${qs.map(q => `<td class="revenue-cell" style="background: #f8f9fa;">${formatVND(q)}</td>`).join('')}
-                        ${ms.map(m => `<td class="revenue-cell">${formatVND(m)}</td>`).join('')}
+                        <td style="padding: 4px;">${noteField}</td>
                     </tr>
                 `;
             }).join('');
@@ -991,7 +993,7 @@ $avatar = $_SESSION['avatar'] ?? '';
                     content.style.top = rect.bottom + 'px';
                     content.style.bottom = 'auto';
                 }
-                
+
                 // Final check to ensure it doesn't go off left/right
                 const contentRect = content.getBoundingClientRect();
                 if (rect.left + contentRect.width > window.innerWidth) {
