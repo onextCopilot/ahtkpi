@@ -902,8 +902,15 @@ $avatar = $_SESSION['avatar'] ?? '';
             line-height: 1.5;
         }
 
-        .note-preview-text p { margin: 0 0 6px 0; }
-        .note-preview-text ul, .note-preview-text ol { padding-left: 18px; margin: 4px 0; }
+        .note-preview-text p {
+            margin: 0 0 6px 0;
+        }
+
+        .note-preview-text ul,
+        .note-preview-text ol {
+            padding-left: 18px;
+            margin: 4px 0;
+        }
 
         .note-preview-meta {
             font-size: 11px;
@@ -1158,7 +1165,7 @@ $avatar = $_SESSION['avatar'] ?? '';
                             </div>
                             <div class="note-preview-meta">
                                 <span>Người viết: <span class="note-preview-author">${escapeHtml(customer.author_name || 'Hệ thống Odoo')}</span></span>
-                                <span>Thời gian: ${customer.note_time || 'N/A'}</span>
+                                <span>Thời gian: ${formatDateTime(customer.note_time)}</span>
                             </div>
                         ` : '<span style="color: #999; font-style: italic; font-size: 12px; margin-bottom: 8px;">Chưa có ghi chú...</span>'}
                         <button class="take-note-btn" onclick="openNoteModal(${customer.id}, '${escapeHtml(customer.name)}')">
@@ -1275,7 +1282,7 @@ $avatar = $_SESSION['avatar'] ?? '';
                                     <div class="note-content-text">${note.note_content}</div>
                                     <div class="note-meta">
                                         <span class="note-author">Người viết: ${escapeHtml(note.author)}</span>
-                                        <span class="note-time">${note.created_at}</span>
+                                        <span class="note-time">${formatDateTime(note.created_at)}</span>
                                     </div>
                                 </div>
                             `).join('');
@@ -1557,6 +1564,24 @@ $avatar = $_SESSION['avatar'] ?? '';
                     </td>
                 </tr>
             `;
+        }
+
+        function formatDateTime(dateTimeStr) {
+            if (!dateTimeStr) return '';
+            try {
+                const date = new Date(dateTimeStr.replace(' ', 'T'));
+                if (isNaN(date.getTime())) return dateTimeStr;
+
+                const hour = String(date.getHours()).padStart(2, '0');
+                const min = String(date.getMinutes()).padStart(2, '0');
+                const day = String(date.getDate()).padStart(2, '0');
+                const month = String(date.getMonth() + 1).padStart(2, '0');
+                const year = date.getFullYear();
+
+                return `${hour}:${min} ${day}/${month}/${year}`;
+            } catch (e) {
+                return dateTimeStr;
+            }
         }
 
         function escapeHtml(text) {
