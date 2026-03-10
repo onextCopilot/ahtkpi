@@ -613,6 +613,11 @@ $budget_placeholder = 0;
             background-color: #f1f5f9 !important;
         }
 
+        table.report-table tbody tr:hover td.year-total {
+            background-color: #1e293b !important;
+            color: #fff !important;
+        }
+
         table.report-table .sticky-col {
             position: sticky;
             left: 0;
@@ -992,7 +997,8 @@ $budget_placeholder = 0;
                                             style="background: #fdf2f8; border-bottom: 3px solid #db2777; color: #9d174d;">
                                             QUÝ 4
                                             (USD)</th>
-                                        <th rowspan="2" style="background: #1e293b; color: #fff; width: 120px;">TỔNG CẢ NĂM
+                                        <th rowspan="2" class="year-total"
+                                            style="background: #1e293b; color: #fff; width: 120px;">TỔNG CẢ NĂM
                                         </th>
                                     </tr>
                                     <tr style="background: #f8fafc;">
@@ -1085,7 +1091,8 @@ $budget_placeholder = 0;
                                                 </td>
                                             <?php endfor; ?>
 
-                                            <td class="text-right" style="background: #1e293b; color: #fff; font-weight: 700;">
+                                            <td class="text-right year-total"
+                                                style="background: #1e293b; color: #fff; font-weight: 700;">
                                                 <?= formatUSD($am_year_total) ?>
                                             </td>
                                         </tr>
@@ -1104,7 +1111,7 @@ $budget_placeholder = 0;
                                             </td>
                                         <?php endfor; ?>
 
-                                        <td class="text-right"
+                                        <td class="text-right year-total"
                                             style="background: #0f172a; color: #fff; font-size: 14px; border: none;">
                                             <?= formatUSD($grand_total_year) ?>
                                         </td>
