@@ -19,13 +19,57 @@ if ($method === 'GET') {
         exit;
     }
 
+    $page = isset($_GET['page']) ? (int) $_GET['page'] : 1;
+    $limit = isset($_GET['limit']) ? (int) $_GET['limit'] : 5;
+    $offset = ($page - 1) * $limit;
+
+    $year = isset($_GET['year']) ? (int) $_GET['year'] : '';
+    $month = isset($_GET['month']) ? (int) $_GET['month'] : '';
+    $quarter = isset($_GET['quarter']) ? (int) $_GET['quarter'] : '';
+
+    $where = ["n.odoo_id = ?"];
+    $params = [$odoo_id];
+    $types = "i";
+
+    if ($year) {
+        $where[] = "YEAR(n.created_at) = ?";
+        $params[] = $year;
+        $types .= "i";
+    }
+    if ($month) {
+        $where[] = "MONTH(n.created_at) = ?";
+        $params[] = $month;
+        $types .= "i";
+    }
+    if ($quarter) {
+        $where[] = "QUARTER(n.created_at) = ?";
+        $params[] = $quarter;
+        $types .= "i";
+    }
+
+    $where_clause = implode(" AND ", $where);
+
+    // Get total count
+    $countSql = "SELECT COUNT(*) as total FROM customer_notes n WHERE $where_clause";
+    $countStmt = $conn->prepare($countSql);
+    $countStmt->bind_param($types, ...$params);
+    $countStmt->execute();
+    $total = $countStmt->get_result()->fetch_assoc()['total'];
+
+    // Get paginated notes
     $sql = "SELECT n.*, u.full_name as author 
             FROM customer_notes n 
             JOIN users u ON n.user_id = u.id 
-            WHERE n.odoo_id = ? 
-            ORDER BY n.created_at DESC";
+            WHERE $where_clause 
+            ORDER BY n.created_at DESC 
+            LIMIT ? OFFSET ?";
+
+    $params[] = $limit;
+    $params[] = $offset;
+    $types .= "ii";
+
     $stmt = $conn->prepare($sql);
-    $stmt->bind_param("i", $odoo_id);
+    $stmt->bind_param($types, ...$params);
     $stmt->execute();
     $result = $stmt->get_result();
 
@@ -34,7 +78,16 @@ if ($method === 'GET') {
         $notes[] = $row;
     }
 
-    echo json_encode(['success' => true, 'data' => $notes]);
+    echo json_encode([
+        'success' => true,
+        'data' => $notes,
+        'pagination' => [
+            'total' => $total,
+            'page' => $page,
+            'limit' => $limit,
+            'totalPages' => ceil($total / $limit)
+        ]
+    ]);
     exit;
 }
 

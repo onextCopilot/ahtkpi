@@ -536,9 +536,34 @@ $avatar = $_SESSION['avatar'] ?? '';
                 <span class="close" onclick="closeNoteModal()">&times;</span>
             </div>
             <div class="modal-body">
-                <div id="notesHistory"
-                    style="max-height: 350px; overflow-y: auto; margin-bottom: 20px; border-bottom: 1px solid #eee; padding-bottom: 15px;">
+                <!-- Filter Controls for History -->
+                <div class="note-history-filters" style="display: flex; gap: 8px; margin-bottom: 12px; flex-wrap: wrap; background: #f8f9fa; padding: 10px; border-radius: 4px;">
+                    <select id="noteYearFilter" class="filter-select" style="padding: 4px 8px; font-size: 12px; height: auto;" onchange="loadNotesHistory(currentEditingOdooId, 1)">
+                        <option value="">Năm (Tất cả)</option>
+                        <option value="2026">2026</option>
+                        <option value="2025">2025</option>
+                        <option value="2024">2024</option>
+                    </select>
+                    <select id="noteQuarterFilter" class="filter-select" style="padding: 4px 8px; font-size: 12px; height: auto;" onchange="loadNotesHistory(currentEditingOdooId, 1)">
+                        <option value="">Quý (Tất cả)</option>
+                        <option value="1">Quý 1</option>
+                        <option value="2">Quý 2</option>
+                        <option value="3">Quý 3</option>
+                        <option value="4">Quý 4</option>
+                    </select>
+                    <select id="noteMonthFilter" class="filter-select" style="padding: 4px 8px; font-size: 12px; height: auto;" onchange="loadNotesHistory(currentEditingOdooId, 1)">
+                        <option value="">Tháng (Tất cả)</option>
+                        ${Array.from({length: 12}, (_, i) => `<option value="${i+1}">Tháng ${i+1}</option>`).join('')}
+                    </select>
+                    <button class="btn-clear" style="padding: 4px 8px; font-size: 12px;" onclick="clearNoteFilters()">Xóa lọc</button>
+                </div>
+
+                <div id="notesHistory" style="max-height: 300px; overflow-y: auto; margin-bottom: 15px; border-bottom: 1px solid #eee; padding-bottom: 10px;">
                     <!-- History logs here -->
+                </div>
+                
+                <div id="notePagination" style="display: flex; justify-content: center; align-items: center; gap: 10px; margin-bottom: 20px;">
+                    <!-- Pagination buttons here -->
                 </div>
                 <div class="note-input-area">
                     <textarea id="newNoteContent" placeholder="Viết ghi chú mới..."
@@ -1109,8 +1134,14 @@ $avatar = $_SESSION['avatar'] ?? '';
             currentEditingOdooId = odooId;
             document.getElementById('noteModalTitle').textContent = `Lịch sử ghi chú: ${customerName}`;
             document.getElementById('newNoteContent').value = '';
+            
+            // Reset filters when opening
+            document.getElementById('noteYearFilter').value = '';
+            document.getElementById('noteQuarterFilter').value = '';
+            document.getElementById('noteMonthFilter').value = '';
+            
             document.getElementById('noteModal').style.display = 'block';
-            loadNotesHistory(odooId);
+            loadNotesHistory(odooId, 1);
         }
 
         function closeNoteModal() {
@@ -1118,26 +1149,62 @@ $avatar = $_SESSION['avatar'] ?? '';
             currentEditingOdooId = null;
         }
 
-        function loadNotesHistory(odooId) {
-            const historyContainer = document.getElementById('notesHistory');
-            historyContainer.innerHTML = '<p style="text-align:center; padding:10px;">Đang tải lịch sử...</p>';
+        function clearNoteFilters() {
+            document.getElementById('noteYearFilter').value = '';
+            document.getElementById('noteQuarterFilter').value = '';
+            document.getElementById('noteMonthFilter').value = '';
+            loadNotesHistory(currentEditingOdooId, 1);
+        }
 
-            fetch(`/api/customer_notes.php?odoo_id=${odooId}`)
+        function loadNotesHistory(odooId, page = 1) {
+            const historyContainer = document.getElementById('notesHistory');
+            const paginationContainer = document.getElementById('notePagination');
+            
+            const year = document.getElementById('noteYearFilter').value;
+            const quarter = document.getElementById('noteQuarterFilter').value;
+            const month = document.getElementById('noteMonthFilter').value;
+
+            historyContainer.innerHTML = '<p style="text-align:center; padding:10px;">Đang tải lịch sử...</p>';
+            paginationContainer.innerHTML = '';
+
+            const params = new URLSearchParams({
+                odoo_id: odooId,
+                page: page,
+                limit: 5,
+                year: year,
+                quarter: quarter,
+                month: month
+            });
+
+            fetch(`/api/customer_notes.php?${params}`)
                 .then(res => res.json())
                 .then(data => {
                     if (data.success) {
                         if (data.data.length === 0) {
-                            historyContainer.innerHTML = '<p style="text-align:center; color:#999; padding:20px;">Chưa có lịch sử ghi chú.</p>';
+                            historyContainer.innerHTML = '<p style="text-align:center; color:#999; padding:20px;">Không có ghi chú nào được tìm thấy.</p>';
                         } else {
                             historyContainer.innerHTML = data.data.map(note => `
                                 <div class="note-item">
                                     <div class="note-content-text">${escapeHtml(note.note_content)}</div>
                                     <div class="note-meta">
-                                        <span class="note-author">By: ${escapeHtml(note.author)}</span>
+                                        <span class="note-author">Người viết: ${escapeHtml(note.author)}</span>
                                         <span class="note-time">${note.created_at}</span>
                                     </div>
                                 </div>
                             `).join('');
+                            
+                            // Render Simple Pagination
+                            if (data.pagination.totalPages > 1) {
+                                let paginationHtml = '';
+                                if (data.pagination.page > 1) {
+                                    paginationHtml += `<button class="pagination-btn" onclick="loadNotesHistory(${odooId}, ${data.pagination.page - 1})">Quay lại</button>`;
+                                }
+                                paginationHtml += `<span style="font-size: 13px; color: #5f6368;">Trang ${data.pagination.page} / ${data.pagination.totalPages}</span>`;
+                                if (data.pagination.page < data.pagination.totalPages) {
+                                    paginationHtml += `<button class="pagination-btn" onclick="loadNotesHistory(${odooId}, ${data.pagination.page + 1})">Tiếp theo</button>`;
+                                }
+                                paginationContainer.innerHTML = paginationHtml;
+                            }
                         }
                     }
                 });
