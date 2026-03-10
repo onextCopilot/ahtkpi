@@ -46,7 +46,7 @@ try {
                 'name' => $c['name'],
                 'am_bd_id' => $meta['am_bd_id'],
                 'delivery_owners' => $meta['delivery_owners'],
-                'account_note' => $meta['account_note'],
+                'account_note' => !empty($meta['account_note']) ? $meta['account_note'] : ($c['comment'] ?? ''),
                 'company_source' => $meta['company_source'],
                 'active_projects' => $meta['active_projects'],
                 'stats' => [

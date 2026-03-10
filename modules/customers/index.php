@@ -829,10 +829,10 @@ $avatar = $_SESSION['avatar'] ?? '';
             font-size: 11px;
             color: #5f6368;
             max-width: 250px;
-            white-space: normal;
-            display: -webkit-box;
-            -webkit-line-clamp: 3;
-            -webkit-box-orient: vertical;
+            white-space: normal !important;
+            display: -webkit-box !important;
+            -webkit-line-clamp: 3 !important;
+            -webkit-box-orient: vertical !important;
             overflow: hidden;
             line-height: 1.4;
             margin-bottom: 4px;
@@ -982,7 +982,7 @@ $avatar = $_SESSION['avatar'] ?? '';
                     <th class="revenue-cell">Q2</th>
                     <th class="revenue-cell">Q3</th>
                     <th class="revenue-cell">Q4</th>
-                    <th style="min-width: 250px;">Ghi chú / Lịch sử</th>
+                    <th style="min-width: 250px;">Ghi chú</th>
                 </tr>
             `;
 
@@ -1102,7 +1102,7 @@ $avatar = $_SESSION['avatar'] ?? '';
                         </td>
                         <td class="revenue-cell revenue-total">${formatVND(yearlyTotal)}</td>
                         ${qs.map(q => `<td class="revenue-cell" style="background: #f8f9fa;">${formatVND(q)}</td>`).join('')}
-                        <td style="padding: 4px;">${noteBtn}</td>
+                        <td style="padding: 4px; white-space: normal;">${noteBtn}</td>
                     </tr>
                 `;
             }).join('');
@@ -1165,7 +1165,7 @@ $avatar = $_SESSION['avatar'] ?? '';
                     if (data.success) {
                         loadNotesHistory(currentEditingOdooId);
                         document.getElementById('newNoteContent').value = '';
-                        // Optional: Update the "Xem ghi chú" text in the table row
+                        loadKeyAccountStats();
                     } else {
                         alert('Lỗi: ' + data.error);
                     }
