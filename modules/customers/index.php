@@ -1198,7 +1198,12 @@ $avatar = $_SESSION['avatar'] ?? '';
                 return;
             }
 
-            container.innerHTML = filteredData.map(customer => {
+            // Totals accumulators
+            let grandTotalYearly = 0;
+            let grandTotalQuarters = [0, 0, 0, 0];
+            let grandTotalMonths = new Array(12).fill(0);
+
+            let bodyHtml = filteredData.map(customer => {
                 const stats = customer.stats;
                 let row = `<tr><td class="name-col" style="text-align: left;">${escapeHtml(customer.name)}</td>`;
 
@@ -1208,23 +1213,43 @@ $avatar = $_SESSION['avatar'] ?? '';
                     const mk = `${year}-${m.toString().padStart(2, '0')}`;
                     yearlyTotal += (stats.monthly[mk] || 0);
                 }
+                grandTotalYearly += yearlyTotal;
                 row += `<td class="y-col">${formatUSD(yearlyTotal)}</td>`;
 
                 // Quarters
                 for (let q = 1; q <= 4; q++) {
                     const qk = `${year}-Q${q}`;
-                    row += `<td class="q-col">${formatUSD(stats.quarterly[qk] || 0)}</td>`;
+                    const val = (stats.quarterly[qk] || 0);
+                    grandTotalQuarters[q - 1] += val;
+                    row += `<td class="q-col">${formatUSD(val)}</td>`;
                 }
 
                 // Months
                 for (let m = 1; m <= 12; m++) {
                     const mk = `${year}-${m.toString().padStart(2, '0')}`;
-                    row += `<td>${formatUSD(stats.monthly[mk] || 0)}</td>`;
+                    const val = (stats.monthly[mk] || 0);
+                    grandTotalMonths[m - 1] += val;
+                    row += `<td>${formatUSD(val)}</td>`;
                 }
 
                 row += '</tr>';
                 return row;
             }).join('');
+
+            // Add Footer Total Row
+            let footerHtml = `<tr style="background: #f1f3f4; font-weight: bold; border-top: 2px solid #dadce0; position: sticky; bottom: 0; z-index: 15;">
+                <td class="name-col" style="text-align: left; background: #f1f3f4;">TỔNG CỘNG</td>
+                <td class="y-col">${formatUSD(grandTotalYearly)}</td>
+            `;
+            grandTotalQuarters.forEach(val => {
+                footerHtml += `<td class="q-col">${formatUSD(val)}</td>`;
+            });
+            grandTotalMonths.forEach(val => {
+                footerHtml += `<td>${formatUSD(val)}</td>`;
+            });
+            footerHtml += '</tr>';
+
+            container.innerHTML = bodyHtml + footerHtml;
         }
 
         function sortAndRenderStats(col = null) {
