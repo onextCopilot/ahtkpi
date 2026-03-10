@@ -977,17 +977,13 @@ $avatar = $_SESSION['avatar'] ?? '';
                     <th style="width: 150px;">Delivery Owner (BCs)</th>
                     <th style="width: 150px;">Dự án đang chạy</th>
                     <th style="width: 150px; text-align: right;">Doanh Thu TB (6th)</th>
-                    <th class="revenue-cell">Tổng Năm</th>
-                    <th class="revenue-cell">Q1</th>
-                    <th class="revenue-cell">Q2</th>
-                    <th class="revenue-cell">Q3</th>
-                    <th class="revenue-cell">Q4</th>
-                    <th style="min-width: 250px;">Ghi chú</th>
+                    <th class="revenue-cell" style="width: 130px;">Tổng Năm</th>
+                    <th style="min-width: 400px;">Ghi chú</th>
                 </tr>
             `;
 
             if (data.length === 0) {
-                body.innerHTML = `<tr><td colspan="15" style="text-align:center; padding: 40px; color: #5f6368;">Chưa có Key Account nào được thiết lập</td></tr>`;
+                body.innerHTML = `<tr><td colspan="10" style="text-align:center; padding: 40px; color: #5f6368;">Chưa có Key Account nào được thiết lập</td></tr>`;
                 return;
             }
 
@@ -1075,14 +1071,14 @@ $avatar = $_SESSION['avatar'] ?? '';
 
                 // Ghi chú Button with last note preview
                 const noteBtn = `
-                    <div class="note-container" style="display: flex; flex-direction: column; align-items: flex-start;">
-                        ${customer.account_note ? `<div class="note-preview-text" title="${escapeHtml(customer.account_note)}">${escapeHtml(customer.account_note)}</div>` : ''}
+                    <div class="note-container" style="display: flex; flex-direction: column; align-items: flex-start; gap: 8px;">
+                        ${customer.account_note ? `<div class="note-preview-text" style="color: #202124; font-size: 13px; -webkit-line-clamp: 5 !important;" title="${escapeHtml(customer.account_note)}">${escapeHtml(customer.account_note)}</div>` : '<span style="color: #999; font-style: italic; font-size: 12px; margin-bottom: 4px;">Chưa có ghi chú...</span>'}
                         <button class="take-note-btn" onclick="openNoteModal(${customer.id}, '${escapeHtml(customer.name)}')">
                             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                                 <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
                                 <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
                             </svg>
-                            ${customer.account_note ? 'Xem chi tiết' : 'Ghi chú'}
+                            ${customer.account_note ? 'Xem lịch sử' : 'Thêm ghi chú'}
                         </button>
                     </div>
                 `;
@@ -1101,8 +1097,7 @@ $avatar = $_SESSION['avatar'] ?? '';
                              ${formatVND(avgRevenue)} <span class="currency-unit">VND</span>
                         </td>
                         <td class="revenue-cell revenue-total">${formatVND(yearlyTotal)}</td>
-                        ${qs.map(q => `<td class="revenue-cell" style="background: #f8f9fa;">${formatVND(q)}</td>`).join('')}
-                        <td style="padding: 4px; white-space: normal;">${noteBtn}</td>
+                        <td style="padding: 8px; white-space: normal;">${noteBtn}</td>
                     </tr>
                 `;
             }).join('');
