@@ -14,6 +14,22 @@ require_once __DIR__ . '/../config/config.php';
 // Handle Toggle Key Account (POST)
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $data = json_decode(file_get_contents('php://input'), true);
+    if (isset($data['action']) && $data['action'] === 'reorder_key_accounts') {
+        if (!isset($data['order']) || !is_array($data['order'])) {
+            http_response_code(400);
+            echo json_encode(['error' => 'Missing order data']);
+            exit;
+        }
+
+        foreach ($data['order'] as $item) {
+            $oid = (int) $item['odoo_id'];
+            $index = (int) $item['index'];
+            $conn->query("UPDATE customers_metadata SET order_index = $index WHERE odoo_id = $oid");
+        }
+        echo json_encode(['success' => true]);
+        exit;
+    }
+
     if (!isset($data['odoo_id'])) {
         http_response_code(400);
         echo json_encode(['error' => 'Missing Odoo ID']);

@@ -24,7 +24,31 @@ $avatar = $_SESSION['avatar'] ?? '';
     <!-- Quill Rich Text Editor -->
     <link href="https://cdn.quilljs.com/1.3.6/quill.snow.css" rel="stylesheet">
     <script src="https://cdn.quilljs.com/1.3.6/quill.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script>
     <style>
+        /* Drag Handle Style */
+        .drag-handle {
+            cursor: grab;
+            color: #94a3b8;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: color 0.2s;
+        }
+
+        .drag-handle:hover {
+            color: #3b82f6;
+        }
+
+        .drag-handle:active {
+            cursor: grabbing;
+        }
+
+        .sortable-ghost {
+            opacity: 0.4;
+            background-color: #f1f5f9 !important;
+        }
+
         /* Global Reset & Typography */
         body {
             overflow-x: hidden;
@@ -1114,7 +1138,7 @@ $avatar = $_SESSION['avatar'] ?? '';
         let currentStatsData = [];
         let currentTotalVolumeByYear = {};
         let currentInternalRevenueByYear = {};
-        let currentSortCol = 'name';
+        let currentSortCol = 'order_index';
         let currentSortDir = 'asc';
         const BC_LIST = ['BC1', 'BC2', 'BC3', 'BC4', 'BC5', 'BC6', 'BC7', 'BC8', 'BC9', 'BC10'];
 
@@ -1157,7 +1181,8 @@ $avatar = $_SESSION['avatar'] ?? '';
                             return {
                                 ...customer,
                                 yearlyTotal,
-                                avgRevenue
+                                avgRevenue,
+                                order_index: customer.order_index || 0
                             };
                         });
 
@@ -1352,6 +1377,9 @@ $avatar = $_SESSION['avatar'] ?? '';
             // Generate Headers 
             header.innerHTML = `
                 <tr>
+                    <th onclick="sortAndRenderStats('order_index')" style="width: 40px; text-align: center; cursor: pointer;">
+                        # ${getSortIcon('order_index')}
+                    </th>
                     <th style="width: 80px; text-align: center;">Bật/Tắt</th>
                     <th onclick="sortAndRenderStats('name')" style="width: 300px; position: sticky; left: 0; background: #f8f9fa; z-index: 20; text-align: left; cursor: pointer;">
                         Khách hàng ${getSortIcon('name')}
@@ -1463,7 +1491,17 @@ $avatar = $_SESSION['avatar'] ?? '';
                 `;
 
                 return `
-                    <tr>
+                    <tr data-id="${customer.id}" class="sortable-row">
+                        <td class="drag-handle">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <circle cx="9" cy="5" r="1"></circle>
+                                <circle cx="9" cy="12" r="1"></circle>
+                                <circle cx="9" cy="19" r="1"></circle>
+                                <circle cx="15" cy="5" r="1"></circle>
+                                <circle cx="15" cy="12" r="1"></circle>
+                                <circle cx="15" cy="19" r="1"></circle>
+                            </svg>
+                        </td>
                         <td style="text-align: center;">${toggleSwitch}</td>
                         <td style="font-weight: 500; position: sticky; left: 0; background: white; z-index: 10; border-right: 2px solid #dadce0; text-align: left;" title="${escapeHtml(customer.name)}">
                             ${escapeHtml(customer.name)}
@@ -1480,6 +1518,69 @@ $avatar = $_SESSION['avatar'] ?? '';
                     </tr>
                 `;
             }).join('');
+
+            initSortable();
+        }
+
+        function initSortable() {
+            const el = document.getElementById('keyAccountsStatsBody');
+            if (!el) return;
+
+            // Destroy existing instance if any
+            if (window.keyAccountSortable) {
+                window.keyAccountSortable.destroy();
+            }
+
+            window.keyAccountSortable = new Sortable(el, {
+                handle: '.drag-handle',
+                animation: 150,
+                ghostClass: 'sortable-ghost',
+                onEnd: function (evt) {
+                    saveNewOrder();
+                }
+            });
+        }
+
+        function saveNewOrder() {
+            const rows = document.querySelectorAll('#keyAccountsStatsBody tr');
+            const order = [];
+            rows.forEach((row, index) => {
+                const oid = row.getAttribute('data-id');
+                if (oid) {
+                    order.push({
+                        odoo_id: oid,
+                        index: index + 1
+                    });
+                }
+            });
+
+            if (order.length === 0) return;
+
+            fetch('/api/customers.php', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    action: 'reorder_key_accounts',
+                    order: order
+                })
+            })
+                .then(res => res.json())
+                .then(data => {
+                    if (data.success) {
+                        // Update local currentStatsData with new order_index
+                        order.forEach(item => {
+                            const customer = currentStatsData.find(c => c.id == item.odoo_id);
+                            if (customer) {
+                                customer.order_index = item.index;
+                            }
+                        });
+                    } else {
+                        alert('Lỗi khi lưu thứ tự: ' + data.error);
+                    }
+                })
+                .catch(err => {
+                    console.error('Error saving order:', err);
+                });
         }
 
         let currentEditingOdooId = null;
