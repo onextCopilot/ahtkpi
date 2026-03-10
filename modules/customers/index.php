@@ -1190,11 +1190,11 @@ $avatar = $_SESSION['avatar'] ?? '';
                         currentStatsData = data.data.map(customer => {
                             const stats = customer.stats;
 
-                            // Yearly Total
+                            // Yearly Total (in USD)
                             let yearlyTotal = 0;
                             for (let m = 1; m <= 12; m++) {
                                 const mk = `${year}-${m.toString().padStart(2, '0')}`;
-                                yearlyTotal += (stats.monthly[mk] || 0);
+                                yearlyTotal += (stats.monthly_usd && stats.monthly_usd[mk] ? stats.monthly_usd[mk] : 0);
                             }
 
                             // Avg Revenue Last 6 Months (in USD)
@@ -1545,7 +1545,7 @@ $avatar = $_SESSION['avatar'] ?? '';
                         <td class="avg-revenue-cell">
                              ${formatUSD(avgRevenue)} <span class="currency-unit">USD</span>
                         </td>
-                        <td class="revenue-cell revenue-total">${formatVND(yearlyTotal)}</td>
+                        <td class="revenue-cell revenue-total">${formatUSD(yearlyTotal)}</td>
                         <td style="padding: 8px; white-space: normal;">${noteBtn}</td>
                     </tr>
                 `;
