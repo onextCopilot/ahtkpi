@@ -34,8 +34,8 @@ if (!$vu_row) {
     die("User not found.");
 }
 
-$full_name = $vu_row['full_name'];
-$avatar = $vu_row['avatar'] ?? null;
+$view_full_name = $vu_row['full_name'];
+$view_avatar = $vu_row['avatar'] ?? null;
 
 // Ensure table exists
 $table_check = $conn->query("SHOW TABLES LIKE 'sale_reports'");
@@ -1257,6 +1257,38 @@ function formatMoney($amount, $currency_code)
             ?>
 
             <div class="report-wrapper">
+                <div class="report-header-info"
+                    style="margin-bottom: 2rem; display: flex; align-items: center; justify-content: space-between; background: #fff; padding: 1.5rem 2rem; border-radius: 16px; border: 1px solid #e2e8f0; box-shadow: 0 4px 24px rgba(0, 0, 0, 0.06);">
+                    <div style="display: flex; align-items: center; gap: 1.25rem;">
+                        <?php if ($view_avatar): ?>
+                            <img src="<?= htmlspecialchars($view_avatar) ?>" alt="Avatar"
+                                style="width: 56px; height: 56px; border-radius: 50%; object-fit: cover; border: 3px solid #f1f5f9; box-shadow: 0 2px 4px rgba(0,0,0,0.05);">
+                        <?php else: ?>
+                            <div
+                                style="width: 56px; height: 56px; border-radius: 50%; background: linear-gradient(135deg, #f1f5f9, #e2e8f0); display: flex; align-items: center; justify-content: center; font-weight: 700; color: #475569; border: 3px solid #f8fafc; font-size: 1.25rem; box-shadow: 0 2px 4px rgba(0,0,0,0.05);">
+                                <?= strtoupper(substr($view_full_name, 0, 1)) ?>
+                            </div>
+                        <?php endif; ?>
+                        <div>
+                            <div
+                                style="font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em; color: #64748b; font-weight: 700; margin-bottom: 0.25rem;">
+                                Account Manager / Business Development</div>
+                            <h1
+                                style="margin: 0; font-size: 1.5rem; font-weight: 800; color: #0f172a; letter-spacing: -0.025em;">
+                                <?= htmlspecialchars($view_full_name) ?>
+                            </h1>
+                        </div>
+                    </div>
+                    <div style="text-align: right;">
+                        <div
+                            style="font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em; color: #64748b; font-weight: 700; margin-bottom: 0.25rem;">
+                            Báo cáo chi tiết</div>
+                        <div class="kpi-quarter-label"
+                            style="font-size: 1.125rem; padding: 8px 20px; color: #2563eb; background: #eff6ff; border: 1px solid #bfdbfe; font-weight: 700;">
+                            <?= str_replace('_', ' ', $active_tab) ?>
+                        </div>
+                    </div>
+                </div>
 
                 <div class="tabs-container">
                     <?php foreach ($tabs as $tab): ?>
@@ -2300,7 +2332,7 @@ function formatMoney($amount, $currency_code)
         <div id="toast" class="toast">Saved!</div>
 
         <script>
-            le t currentEditing = null;
+            let currentEditing = null;
 
             function makeEditable(cell, invoiceId, fieldName, inputType, options = []) {
                 if (currentEditing === cell) return;

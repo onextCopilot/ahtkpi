@@ -1163,7 +1163,7 @@ $budget_placeholder = 0;
                 alert('Không tìm thấy ID người dùng tương ứng.');
                 return;
             }
-            window.location.href = `/my-reports?user_id=${userId}&quarter=${quarter}`;
+            window.location.href = `/detail-report?user_id=${userId}&quarter=${quarter}`;
         }
     </script>
 </body>
