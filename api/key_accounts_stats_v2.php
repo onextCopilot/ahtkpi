@@ -13,6 +13,9 @@ require_once __DIR__ . '/../config/config.php';
 
 try {
     $odoo = new OdooAPI();
+    if (isset($_GET['force_refresh'])) {
+        $odoo->refreshInvoiceCache();
+    }
 
     // 1. Get Key Account IDs and Metadata from DB (including latest note from history)
     $key_account_metadata = [];
