@@ -219,10 +219,16 @@ foreach ($all_ams_data as $u_row) {
 $am_commissions = [];
 // Fetch KPI confirmation status
 $confirmations = [];
-$res_conf = $conn->query("SELECT user_id, quarter, type FROM sale_report_confirmations WHERE type = 'confirmed' AND quarter LIKE '%_$current_year'");
+// Fetch all confirmation events for the current year, ordered by ID asc
+// so that the LATEST event for each (user, quarter) overwrites previous ones
+$res_conf = $conn->query("SELECT user_id, quarter, type FROM sale_report_confirmations WHERE quarter LIKE '%_$current_year' ORDER BY id ASC");
 if ($res_conf) {
     while ($rc = $res_conf->fetch_assoc()) {
-        $confirmations[$rc['user_id']][$rc['quarter']] = true;
+        $uid = (int) $rc['user_id'];
+        $qkey = $rc['quarter'];
+        // If latest is 'confirmed' or 'commission_confirmed', icon shows. 
+        // If latest is 'reset', it becomes false and hides the icon.
+        $confirmations[$uid][$qkey] = ($rc['type'] === 'confirmed' || $rc['type'] === 'commission_confirmed');
     }
 }
 
