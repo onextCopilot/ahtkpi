@@ -122,7 +122,8 @@ try {
                 }
             } else {
                 $historical_usd_rate = $odoo->getRate('USD', $date_str);
-                $amount_usd = $amount_vnd * $historical_usd_rate;
+                $historical_vnd_rate = $odoo->getRate('VND', $date_str);
+                $amount_usd = $historical_vnd_rate > 0 ? $amount_vnd * ($historical_usd_rate / $historical_vnd_rate) : 0;
             }
 
             $date = new DateTime($date_str);
@@ -180,7 +181,8 @@ try {
             $amount_usd = (float) ($inv['amount_total'] ?? 0);
         } else {
             $historical_usd_rate = $odoo->getRate('USD', $date_str);
-            $amount_usd = $amount_vnd * $historical_usd_rate;
+            $historical_vnd_rate = $odoo->getRate('VND', $date_str);
+            $amount_usd = $historical_vnd_rate > 0 ? $amount_vnd * ($historical_usd_rate / $historical_vnd_rate) : 0;
         }
 
         $inv_year = date('Y', strtotime($date_str));
@@ -206,6 +208,10 @@ try {
 
     $data = array_values($key_accounts_map);
 
+    $current_usd = $odoo->getRate('USD', date('Y-m-d'));
+    $current_vnd = $odoo->getRate('VND', date('Y-m-d'));
+    $display_rate = $current_usd > 0 ? $current_vnd / $current_usd : 25400;
+
     echo json_encode([
         'success' => true,
         'data' => $data,
@@ -214,8 +220,8 @@ try {
         'total_volume_usd_by_year' => $total_volume_usd_by_year,
         'internal_total_res' => $internal_revenue_vnd_by_year,
         'internal_total_usd_res' => $internal_revenue_usd_by_year,
-        'usd_rate' => $current_usd_rate,
-        'api_version' => '2.4'
+        'usd_rate' => $display_rate,
+        'api_version' => '2.5'
     ]);
 
 } catch (Exception $e) {
