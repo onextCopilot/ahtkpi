@@ -540,32 +540,42 @@ $avatar = $_SESSION['avatar'] ?? '';
             </div>
             <div class="modal-body">
                 <!-- Filter Controls for History -->
-                <div class="note-history-filters" style="display: flex; gap: 8px; margin-bottom: 12px; flex-wrap: wrap; background: #f8f9fa; padding: 10px; border-radius: 4px;">
-                    <select id="noteYearFilter" class="filter-select" style="padding-right: 25px; font-size: 12px; height: 32px; min-width: 110px;" onchange="loadNotesHistory(currentEditingOdooId, 1)">
+                <div class="note-history-filters"
+                    style="display: flex; gap: 8px; margin-bottom: 12px; flex-wrap: wrap; background: #f8f9fa; padding: 10px; border-radius: 4px;">
+                    <select id="noteYearFilter" class="filter-select"
+                        style="padding-right: 25px; font-size: 12px; height: 32px; min-width: 110px;"
+                        onchange="loadNotesHistory(currentEditingOdooId, 1)">
                         <option value="">Năm (Tất cả)</option>
                         <option value="2026">2026</option>
                         <option value="2025">2025</option>
                         <option value="2024">2024</option>
                     </select>
-                    <select id="noteQuarterFilter" class="filter-select" style="padding-right: 25px; font-size: 12px; height: 32px; min-width: 110px;" onchange="loadNotesHistory(currentEditingOdooId, 1)">
+                    <select id="noteQuarterFilter" class="filter-select"
+                        style="padding-right: 25px; font-size: 12px; height: 32px; min-width: 110px;"
+                        onchange="loadNotesHistory(currentEditingOdooId, 1)">
                         <option value="">Quý (Tất cả)</option>
                         <option value="1">Quý 1</option>
                         <option value="2">Quý 2</option>
                         <option value="3">Quý 3</option>
                         <option value="4">Quý 4</option>
                     </select>
-                    <select id="noteMonthFilter" class="filter-select" style="padding-right: 25px; font-size: 12px; height: 32px; min-width: 125px;" onchange="loadNotesHistory(currentEditingOdooId, 1)">
+                    <select id="noteMonthFilter" class="filter-select"
+                        style="padding-right: 25px; font-size: 12px; height: 32px; min-width: 125px;"
+                        onchange="loadNotesHistory(currentEditingOdooId, 1)">
                         <option value="">Tháng (Tất cả)</option>
                         ${Array.from({length: 12}, (_, i) => `<option value="${i+1}">Tháng ${i+1}</option>`).join('')}
                     </select>
-                    <button class="btn-clear" style="padding: 0 12px; font-size: 12px; height: 32px;" onclick="clearNoteFilters()">Xóa lọc</button>
+                    <button class="btn-clear" style="padding: 0 12px; font-size: 12px; height: 32px;"
+                        onclick="clearNoteFilters()">Xóa lọc</button>
                 </div>
 
-                <div id="notesHistory" style="max-height: 300px; overflow-y: auto; margin-bottom: 15px; border-bottom: 1px solid #eee; padding-bottom: 10px;">
+                <div id="notesHistory"
+                    style="max-height: 300px; overflow-y: auto; margin-bottom: 15px; border-bottom: 1px solid #eee; padding-bottom: 10px;">
                     <!-- History logs here -->
                 </div>
-                
-                <div id="notePagination" style="display: flex; justify-content: center; align-items: center; gap: 10px; margin-bottom: 20px;">
+
+                <div id="notePagination"
+                    style="display: flex; justify-content: center; align-items: center; gap: 10px; margin-bottom: 20px;">
                     <!-- Pagination buttons here -->
                 </div>
                 <div class="note-input-area" style="margin-top: 10px;">
@@ -819,8 +829,15 @@ $avatar = $_SESSION['avatar'] ?? '';
         }
 
         /* Rich text list formatting in history */
-        .note-content-text p { margin: 0 0 8px 0; }
-        .note-content-text ul, .note-content-text ol { padding-left: 20px; margin: 8px 0; }
+        .note-content-text p {
+            margin: 0 0 8px 0;
+        }
+
+        .note-content-text ul,
+        .note-content-text ol {
+            padding-left: 20px;
+            margin: 8px 0;
+        }
 
         .note-meta {
             margin-top: 8px;
@@ -873,16 +890,33 @@ $avatar = $_SESSION['avatar'] ?? '';
         }
 
         .note-preview-text {
+            font-size: 13px;
+            color: #202124;
+            max-width: 480px;
+            max-height: 120px;
+            overflow-y: auto;
+            border-left: 3px solid #1a73e8;
+            padding-left: 10px;
+            margin-bottom: 6px;
+            background: #fafafa;
+            line-height: 1.5;
+        }
+
+        .note-preview-text p { margin: 0 0 6px 0; }
+        .note-preview-text ul, .note-preview-text ol { padding-left: 18px; margin: 4px 0; }
+
+        .note-preview-meta {
             font-size: 11px;
-            color: #5f6368;
-            max-width: 250px;
-            white-space: normal !important;
-            display: -webkit-box !important;
-            -webkit-line-clamp: 3 !important;
-            -webkit-box-orient: vertical !important;
-            overflow: hidden;
-            line-height: 1.4;
-            margin-bottom: 4px;
+            color: #70757a;
+            display: flex;
+            gap: 12px;
+            margin-bottom: 8px;
+            padding-left: 13px;
+        }
+
+        .note-preview-author {
+            color: #1a73e8;
+            font-weight: 600;
         }
     </style>
 
@@ -1116,10 +1150,17 @@ $avatar = $_SESSION['avatar'] ?? '';
                         onblur="updateKeyAccountMetadata(${customer.id}, 'active_projects', this.value)">${escapeHtml(customer.active_projects || '')}</textarea>
                 `;
 
-                const displayNote = stripHtml(customer.account_note);
                 const noteBtn = `
-                    <div class="note-container" style="display: flex; flex-direction: column; align-items: flex-start; gap: 8px;">
-                        ${customer.account_note ? `<div class="note-preview-text" style="color: #202124; font-size: 13px; -webkit-line-clamp: 5 !important;" title="${escapeHtml(displayNote)}">${escapeHtml(displayNote)}</div>` : '<span style="color: #999; font-style: italic; font-size: 12px; margin-bottom: 4px;">Chưa có ghi chú...</span>'}
+                    <div class="note-container" style="display: flex; flex-direction: column; align-items: flex-start; gap: 4px;">
+                        ${customer.account_note ? `
+                            <div class="note-preview-text">
+                                ${customer.account_note}
+                            </div>
+                            <div class="note-preview-meta">
+                                <span>Người viết: <span class="note-preview-author">${escapeHtml(customer.author_name || 'Hệ thống Odoo')}</span></span>
+                                <span>Thời gian: ${customer.note_time || 'N/A'}</span>
+                            </div>
+                        ` : '<span style="color: #999; font-style: italic; font-size: 12px; margin-bottom: 8px;">Chưa có ghi chú...</span>'}
                         <button class="take-note-btn" onclick="openNoteModal(${customer.id}, '${escapeHtml(customer.name)}')">
                             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                                 <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
@@ -1180,12 +1221,12 @@ $avatar = $_SESSION['avatar'] ?? '';
             currentEditingOdooId = odooId;
             document.getElementById('noteModalTitle').textContent = `Lịch sử ghi chú: ${customerName}`;
             if (quill) quill.setContents([]);
-            
+
             // Reset filters when opening
             document.getElementById('noteYearFilter').value = '';
             document.getElementById('noteQuarterFilter').value = '';
             document.getElementById('noteMonthFilter').value = '';
-            
+
             document.getElementById('noteModal').style.display = 'block';
             loadNotesHistory(odooId, 1);
         }
@@ -1205,7 +1246,7 @@ $avatar = $_SESSION['avatar'] ?? '';
         function loadNotesHistory(odooId, page = 1) {
             const historyContainer = document.getElementById('notesHistory');
             const paginationContainer = document.getElementById('notePagination');
-            
+
             const year = document.getElementById('noteYearFilter').value;
             const quarter = document.getElementById('noteQuarterFilter').value;
             const month = document.getElementById('noteMonthFilter').value;
@@ -1238,7 +1279,7 @@ $avatar = $_SESSION['avatar'] ?? '';
                                     </div>
                                 </div>
                             `).join('');
-                            
+
                             // Render Simple Pagination
                             if (data.pagination.totalPages > 1) {
                                 let paginationHtml = '';

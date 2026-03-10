@@ -17,13 +17,16 @@ try {
     // 1. Get Key Account IDs and Metadata from DB (including latest note from history)
     $key_account_metadata = [];
     $sql = "SELECT cm.odoo_id, cm.am_bd_id, cm.delivery_owners, 
-                   COALESCE(latest_note.note_content, cm.account_note) as account_note, 
+                   COALESCE(latest_note.note_content, cm.account_note) as account_note,
+                   latest_note.author_name,
+                   latest_note.created_at as note_time,
                    cm.company_source, cm.active_projects 
             FROM customers_metadata cm
             LEFT JOIN (
-                SELECT odoo_id, note_content 
+                SELECT cn1.odoo_id, cn1.note_content, cn1.created_at, u.full_name as author_name
                 FROM customer_notes cn1
-                WHERE id = (SELECT MAX(id) FROM customer_notes cn2 WHERE cn2.odoo_id = cn1.odoo_id)
+                JOIN users u ON cn1.user_id = u.id
+                WHERE cn1.id = (SELECT MAX(id) FROM customer_notes cn2 WHERE cn2.odoo_id = cn1.odoo_id)
             ) latest_note ON cm.odoo_id = latest_note.odoo_id
             WHERE cm.is_key_account = 1";
 
@@ -58,6 +61,8 @@ try {
                 'am_bd_id' => $meta['am_bd_id'],
                 'delivery_owners' => $meta['delivery_owners'],
                 'account_note' => !empty($meta['account_note']) ? $meta['account_note'] : ($c['comment'] ?? ''),
+                'author_name' => $meta['author_name'] ?? '',
+                'note_time' => $meta['note_time'] ?? '',
                 'company_source' => $meta['company_source'],
                 'active_projects' => $meta['active_projects'],
                 'stats' => [
