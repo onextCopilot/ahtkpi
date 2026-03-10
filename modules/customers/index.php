@@ -30,14 +30,28 @@ $avatar = $_SESSION['avatar'] ?? '';
         .drag-handle {
             cursor: grab;
             color: #94a3b8;
+            background: #f8f9fa;
             display: flex;
             align-items: center;
             justify-content: center;
-            transition: color 0.2s;
+            transition: all 0.2s;
+            border-right: 1px solid #dadce0;
+            padding: 0 !important;
+            width: 40px;
+            min-height: 50px;
         }
 
         .drag-handle:hover {
-            color: #3b82f6;
+            color: #1a73e8;
+            background-color: #e8f0fe !important;
+        }
+
+        .drag-handle svg {
+            opacity: 0.6;
+        }
+
+        .drag-handle:hover svg {
+            opacity: 1;
         }
 
         .drag-handle:active {
