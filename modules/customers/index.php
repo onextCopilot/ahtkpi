@@ -1176,13 +1176,13 @@ $avatar = $_SESSION['avatar'] ?? '';
                         currentInternalRevenueByYear = data.internal_total_res || {};
                         currentInternalRevenueUsdByYear = data.internal_total_usd_res || {};
                         currentUsdRate = data.usd_rate || 24000;
-                        
+
                         // Update the rate note in UI
                         const rateNote = document.getElementById('dynamicExchangeRateNote');
                         if (rateNote && data.usd_rate) {
                             rateNote.textContent = `Tỉ giá: 1 USD = ${new Intl.NumberFormat('vi-VN').format(1 / data.usd_rate)} VND`;
                         }
-                        
+
                         console.log('API Version:', data.api_version);
                         const now = new Date();
 
@@ -1197,12 +1197,12 @@ $avatar = $_SESSION['avatar'] ?? '';
                                 yearlyTotal += (stats.monthly[mk] || 0);
                             }
 
-                            // Avg Revenue Last 6 Months
+                            // Avg Revenue Last 6 Months (in USD)
                             let last6MonthsTotal = 0;
                             for (let i = 1; i <= 6; i++) {
                                 let d = new Date(now.getFullYear(), now.getMonth() - i, 1);
                                 const mk = `${d.getFullYear()}-${(d.getMonth() + 1).toString().padStart(2, '0')}`;
-                                last6MonthsTotal += (stats.monthly[mk] || 0);
+                                last6MonthsTotal += (stats.monthly_usd && stats.monthly_usd[mk] ? stats.monthly_usd[mk] : 0);
                             }
                             const avgRevenue = last6MonthsTotal / 6;
 
@@ -1539,7 +1539,7 @@ $avatar = $_SESSION['avatar'] ?? '';
                         <td style="padding: 4px;">${bcDropdown}</td>
                         <td style="padding: 4px;">${projectField}</td>
                         <td class="avg-revenue-cell">
-                             ${formatVND(avgRevenue)} <span class="currency-unit">VND</span>
+                             ${formatUSD(avgRevenue)} <span class="currency-unit">USD</span>
                         </td>
                         <td class="revenue-cell revenue-total">${formatVND(yearlyTotal)}</td>
                         <td style="padding: 8px; white-space: normal;">${noteBtn}</td>
@@ -1977,7 +1977,7 @@ $avatar = $_SESSION['avatar'] ?? '';
                     </td>
                 </tr>
         `;
- }
+        }
 
         function formatDateTime(dateTimeStr) {
             if (!dateTimeStr) return '';
