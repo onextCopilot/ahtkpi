@@ -21,6 +21,9 @@ $avatar = $_SESSION['avatar'] ?? '';
     <title>Quản lý Khách hàng</title>
     <link rel="stylesheet" href="/assets/css/dashboard.css">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <!-- Quill Rich Text Editor -->
+    <link href="https://cdn.quilljs.com/1.3.6/quill.snow.css" rel="stylesheet">
+    <script src="https://cdn.quilljs.com/1.3.6/quill.js"></script>
     <style>
         /* Global Reset & Typography */
         body {
@@ -538,24 +541,24 @@ $avatar = $_SESSION['avatar'] ?? '';
             <div class="modal-body">
                 <!-- Filter Controls for History -->
                 <div class="note-history-filters" style="display: flex; gap: 8px; margin-bottom: 12px; flex-wrap: wrap; background: #f8f9fa; padding: 10px; border-radius: 4px;">
-                    <select id="noteYearFilter" class="filter-select" style="padding: 4px 8px; font-size: 12px; height: auto;" onchange="loadNotesHistory(currentEditingOdooId, 1)">
+                    <select id="noteYearFilter" class="filter-select" style="padding-right: 25px; font-size: 12px; height: 32px; min-width: 110px;" onchange="loadNotesHistory(currentEditingOdooId, 1)">
                         <option value="">Năm (Tất cả)</option>
                         <option value="2026">2026</option>
                         <option value="2025">2025</option>
                         <option value="2024">2024</option>
                     </select>
-                    <select id="noteQuarterFilter" class="filter-select" style="padding: 4px 8px; font-size: 12px; height: auto;" onchange="loadNotesHistory(currentEditingOdooId, 1)">
+                    <select id="noteQuarterFilter" class="filter-select" style="padding-right: 25px; font-size: 12px; height: 32px; min-width: 110px;" onchange="loadNotesHistory(currentEditingOdooId, 1)">
                         <option value="">Quý (Tất cả)</option>
                         <option value="1">Quý 1</option>
                         <option value="2">Quý 2</option>
                         <option value="3">Quý 3</option>
                         <option value="4">Quý 4</option>
                     </select>
-                    <select id="noteMonthFilter" class="filter-select" style="padding: 4px 8px; font-size: 12px; height: auto;" onchange="loadNotesHistory(currentEditingOdooId, 1)">
+                    <select id="noteMonthFilter" class="filter-select" style="padding-right: 25px; font-size: 12px; height: 32px; min-width: 125px;" onchange="loadNotesHistory(currentEditingOdooId, 1)">
                         <option value="">Tháng (Tất cả)</option>
                         ${Array.from({length: 12}, (_, i) => `<option value="${i+1}">Tháng ${i+1}</option>`).join('')}
                     </select>
-                    <button class="btn-clear" style="padding: 4px 8px; font-size: 12px;" onclick="clearNoteFilters()">Xóa lọc</button>
+                    <button class="btn-clear" style="padding: 0 12px; font-size: 12px; height: 32px;" onclick="clearNoteFilters()">Xóa lọc</button>
                 </div>
 
                 <div id="notesHistory" style="max-height: 300px; overflow-y: auto; margin-bottom: 15px; border-bottom: 1px solid #eee; padding-bottom: 10px;">
@@ -565,9 +568,8 @@ $avatar = $_SESSION['avatar'] ?? '';
                 <div id="notePagination" style="display: flex; justify-content: center; align-items: center; gap: 10px; margin-bottom: 20px;">
                     <!-- Pagination buttons here -->
                 </div>
-                <div class="note-input-area">
-                    <textarea id="newNoteContent" placeholder="Viết ghi chú mới..."
-                        style="width: 100%; min-height: 80px; padding: 10px; border: 1px solid #dadce0; border-radius: 4px; resize: vertical; margin-bottom: 10px; font-family: inherit; font-size: 14px; box-sizing: border-box;"></textarea>
+                <div class="note-input-area" style="margin-top: 10px;">
+                    <div id="quillEditor" style="height: 120px; background: white; margin-bottom: 10px;"></div>
                     <div style="text-align: right;">
                         <button class="btn btn-primary" onclick="saveNewNote()">Lưu ghi chú</button>
                     </div>
@@ -811,11 +813,14 @@ $avatar = $_SESSION['avatar'] ?? '';
         }
 
         .note-content-text {
-            font-size: 13px;
+            font-size: 14px;
             color: #202124;
-            line-height: 1.5;
-            white-space: pre-wrap;
+            line-height: 1.6;
         }
+
+        /* Rich text list formatting in history */
+        .note-content-text p { margin: 0 0 8px 0; }
+        .note-content-text ul, .note-content-text ol { padding-left: 20px; margin: 8px 0; }
 
         .note-meta {
             margin-top: 8px;
@@ -823,11 +828,28 @@ $avatar = $_SESSION['avatar'] ?? '';
             color: #5f6368;
             display: flex;
             justify-content: space-between;
+            border-top: 1px solid #eee;
+            padding-top: 8px;
         }
 
         .note-author {
             font-weight: 600;
             color: #1a73e8;
+        }
+
+        .pagination-btn {
+            padding: 4px 12px;
+            font-size: 12px;
+            background: #fff;
+            border: 1px solid #dadce0;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .pagination-btn:hover {
+            background: #f1f3f4;
+            border-color: #bdc1c6;
         }
 
         .take-note-btn {
@@ -1094,10 +1116,10 @@ $avatar = $_SESSION['avatar'] ?? '';
                         onblur="updateKeyAccountMetadata(${customer.id}, 'active_projects', this.value)">${escapeHtml(customer.active_projects || '')}</textarea>
                 `;
 
-                // Ghi chú Button with last note preview
+                const displayNote = stripHtml(customer.account_note);
                 const noteBtn = `
                     <div class="note-container" style="display: flex; flex-direction: column; align-items: flex-start; gap: 8px;">
-                        ${customer.account_note ? `<div class="note-preview-text" style="color: #202124; font-size: 13px; -webkit-line-clamp: 5 !important;" title="${escapeHtml(customer.account_note)}">${escapeHtml(customer.account_note)}</div>` : '<span style="color: #999; font-style: italic; font-size: 12px; margin-bottom: 4px;">Chưa có ghi chú...</span>'}
+                        ${customer.account_note ? `<div class="note-preview-text" style="color: #202124; font-size: 13px; -webkit-line-clamp: 5 !important;" title="${escapeHtml(displayNote)}">${escapeHtml(displayNote)}</div>` : '<span style="color: #999; font-style: italic; font-size: 12px; margin-bottom: 4px;">Chưa có ghi chú...</span>'}
                         <button class="take-note-btn" onclick="openNoteModal(${customer.id}, '${escapeHtml(customer.name)}')">
                             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                                 <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
@@ -1129,11 +1151,35 @@ $avatar = $_SESSION['avatar'] ?? '';
         }
 
         let currentEditingOdooId = null;
+        let quill;
+        document.addEventListener('DOMContentLoaded', () => {
+            const editorEl = document.getElementById('quillEditor');
+            if (editorEl) {
+                quill = new Quill('#quillEditor', {
+                    theme: 'snow',
+                    placeholder: 'Viết ghi chú mới...',
+                    modules: {
+                        toolbar: [
+                            ['bold', 'italic', 'underline'],
+                            [{ 'list': 'ordered' }, { 'list': 'bullet' }],
+                            ['clean']
+                        ]
+                    }
+                });
+            }
+        });
+
+        function stripHtml(html) {
+            if (!html) return '';
+            const tmp = document.createElement("DIV");
+            tmp.innerHTML = html;
+            return tmp.textContent || tmp.innerText || "";
+        }
 
         function openNoteModal(odooId, customerName) {
             currentEditingOdooId = odooId;
             document.getElementById('noteModalTitle').textContent = `Lịch sử ghi chú: ${customerName}`;
-            document.getElementById('newNoteContent').value = '';
+            if (quill) quill.setContents([]);
             
             // Reset filters when opening
             document.getElementById('noteYearFilter').value = '';
@@ -1185,7 +1231,7 @@ $avatar = $_SESSION['avatar'] ?? '';
                         } else {
                             historyContainer.innerHTML = data.data.map(note => `
                                 <div class="note-item">
-                                    <div class="note-content-text">${escapeHtml(note.note_content)}</div>
+                                    <div class="note-content-text">${note.note_content}</div>
                                     <div class="note-meta">
                                         <span class="note-author">Người viết: ${escapeHtml(note.author)}</span>
                                         <span class="note-time">${note.created_at}</span>
@@ -1211,8 +1257,9 @@ $avatar = $_SESSION['avatar'] ?? '';
         }
 
         function saveNewNote() {
-            const content = document.getElementById('newNoteContent').value.trim();
-            if (!content) return;
+            const content = quill.root.innerHTML;
+            const text = quill.getText().trim();
+            if (!text) return;
 
             fetch('/api/customer_notes.php', {
                 method: 'POST',
@@ -1225,8 +1272,8 @@ $avatar = $_SESSION['avatar'] ?? '';
                 .then(res => res.json())
                 .then(data => {
                     if (data.success) {
-                        loadNotesHistory(currentEditingOdooId);
-                        document.getElementById('newNoteContent').value = '';
+                        loadNotesHistory(currentEditingOdooId, 1);
+                        quill.setContents([]);
                         loadKeyAccountStats();
                     } else {
                         alert('Lỗi: ' + data.error);
