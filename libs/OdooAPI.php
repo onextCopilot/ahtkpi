@@ -339,6 +339,7 @@ class OdooAPI
                 'invoice_date',
                 'date', // accounting date
                 'partner_id',
+                'commercial_partner_id',
                 'amount_total',
                 'amount_total_signed', // Amount in company currency
                 'amount_tax',          // VAT amount

@@ -95,7 +95,9 @@ try {
     $current_usd_rate = $odoo->getRate('USD', date('Y-m-d'));
 
     foreach ($all_invoices as $inv) {
-        $partner_id = isset($inv['partner_id']) && is_array($inv['partner_id']) ? $inv['partner_id'][0] : null;
+        $commercial_partner_id = isset($inv['commercial_partner_id']) && is_array($inv['commercial_partner_id']) ? $inv['commercial_partner_id'][0] : null;
+        $direct_partner_id = isset($inv['partner_id']) && is_array($inv['partner_id']) ? $inv['partner_id'][0] : null;
+        $partner_id = $commercial_partner_id ?: $direct_partner_id;
 
         if ($partner_id && isset($key_accounts_map[$partner_id])) {
             // Only count posted invoices for revenue
