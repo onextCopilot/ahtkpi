@@ -106,19 +106,24 @@ try {
             if (($inv['x_studio_invoice_type_1'] ?? '') === 'Internal')
                 continue;
 
+            $date_str = $inv['invoice_date'] ?: ($inv['date'] ?? null);
+
             $amount_vnd = (float) ($inv['amount_total_signed'] ?? 0);
 
-            // ACCURACY FIX: If invoice is already USD, use amount_total to get precise USD.
-            // Odoo rate at time of invoice might differ from current rate.
+            // ACCURACY FIX: 
+            // 1. If invoice is already USD, use amount_total for exact decimals.
+            // 2. If NOT USD (VND, EUR, etc.), Odoo converts to VND in amount_total_signed.
+            //    We convert that VND to USD using the Odoo exchange rate on the INVOICE DATE.
             if (($inv['currency_id'][1] ?? '') === 'USD') {
                 $amount_usd = (float) ($inv['amount_total'] ?? 0);
+                // Adjust sign for credit notes if necessary
+                if (($inv['move_type'] ?? '') === 'out_refund') {
+                    $amount_usd = -$amount_usd;
+                }
             } else {
-                $amount_usd = $amount_vnd * $current_usd_rate;
+                $historical_usd_rate = $odoo->getRate('USD', $date_str);
+                $amount_usd = $amount_vnd * $historical_usd_rate;
             }
-
-            $date_str = $inv['invoice_date'] ?: ($inv['date'] ?? null);
-            if (!$date_str)
-                continue;
 
             $date = new DateTime($date_str);
             $year = $date->format('Y');
@@ -165,17 +170,18 @@ try {
         if ($inv['state'] !== 'posted' || ($inv['move_type'] ?? '') !== 'out_invoice')
             continue;
 
+        $date_str = $inv['invoice_date'] ?: ($inv['date'] ?? null);
+        if (!$date_str)
+            continue;
+
         $amount_vnd = abs((float) ($inv['amount_total_signed'] ?? 0));
 
         if (($inv['currency_id'][1] ?? '') === 'USD') {
             $amount_usd = (float) ($inv['amount_total'] ?? 0);
         } else {
-            $amount_usd = $amount_vnd * $current_usd_rate;
+            $historical_usd_rate = $odoo->getRate('USD', $date_str);
+            $amount_usd = $amount_vnd * $historical_usd_rate;
         }
-
-        $date_str = $inv['invoice_date'] ?: ($inv['date'] ?? null);
-        if (!$date_str)
-            continue;
 
         $inv_year = date('Y', strtotime($date_str));
 
