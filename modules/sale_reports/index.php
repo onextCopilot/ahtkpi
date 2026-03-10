@@ -2301,7 +2301,7 @@ function formatMoney($amount, $currency_code)
         <div id="toast" class="toast">Saved!</div>
 
         <script>
-            le t currentEditing = null;
+            let currentEditing = null;
 
             function makeEditable(cell, invoiceId, fieldName, inputType, options = []) {
                 if (currentEditing === cell) return;
