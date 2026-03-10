@@ -1014,12 +1014,14 @@ $avatar = $_SESSION['avatar'] ?? '';
         }
 
         let globalAmBdList = [];
+        let currentStatsData = [];
+        let currentSortCol = 'name';
+        let currentSortDir = 'asc';
         const BC_LIST = ['BC1', 'BC2', 'BC3', 'BC4', 'BC5', 'BC6', 'BC7', 'BC8', 'BC9', 'BC10'];
 
         function loadKeyAccountStats() {
             const year = document.getElementById('statsYearFilter').value;
             const container = document.getElementById('keyAccountsStatsBody');
-            const header = document.getElementById('statsTableHeader');
 
             container.innerHTML = `<tr><td colspan="20" style="text-align:center; padding: 20px;">Đang tính toán thống kê...</td></tr>`;
 
@@ -1028,9 +1030,66 @@ $avatar = $_SESSION['avatar'] ?? '';
                 .then(data => {
                     if (data.success) {
                         globalAmBdList = data.am_bd_list || [];
-                        renderStats(data.data, year);
+                        const now = new Date();
+
+                        // Pre-calculate sortable values
+                        currentStatsData = data.data.map(customer => {
+                            const stats = customer.stats;
+
+                            // Yearly Total
+                            let yearlyTotal = 0;
+                            for (let m = 1; m <= 12; m++) {
+                                const mk = `${year}-${m.toString().padStart(2, '0')}`;
+                                yearlyTotal += (stats.monthly[mk] || 0);
+                            }
+
+                            // Avg Revenue Last 6 Months
+                            let last6MonthsTotal = 0;
+                            for (let i = 1; i <= 6; i++) {
+                                let d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+                                const mk = `${d.getFullYear()}-${(d.getMonth() + 1).toString().padStart(2, '0')}`;
+                                last6MonthsTotal += (stats.monthly[mk] || 0);
+                            }
+                            const avgRevenue = last6MonthsTotal / 6;
+
+                            return {
+                                ...customer,
+                                yearlyTotal,
+                                avgRevenue
+                            };
+                        });
+
+                        sortAndRenderStats();
                     }
                 });
+        }
+
+        function sortAndRenderStats(col = null) {
+            if (col) {
+                if (currentSortCol === col) {
+                    currentSortDir = currentSortDir === 'asc' ? 'desc' : 'asc';
+                } else {
+                    currentSortCol = col;
+                    currentSortDir = 'asc';
+                }
+            }
+
+            const year = document.getElementById('statsYearFilter').value;
+
+            currentStatsData.sort((a, b) => {
+                let valA = a[currentSortCol];
+                let valB = b[currentSortCol];
+
+                if (typeof valA === 'string') {
+                    valA = valA.toLowerCase();
+                    valB = valB.toLowerCase();
+                    return currentSortDir === 'asc' ? valA.localeCompare(valB) : valB.localeCompare(valA);
+                }
+
+                return currentSortDir === 'asc' ? valA - valB : valB - valA;
+            });
+
+            renderStats(currentStatsData, year);
         }
 
         function updateKeyAccountMetadata(odooId, field, value) {
@@ -1054,17 +1113,28 @@ $avatar = $_SESSION['avatar'] ?? '';
             const header = document.getElementById('statsTableHeader');
             const body = document.getElementById('keyAccountsStatsBody');
 
+            const getSortIcon = (col) => {
+                if (currentSortCol !== col) return '↕️';
+                return currentSortDir === 'asc' ? '↑' : '↓';
+            };
+
             // Generate Headers 
             header.innerHTML = `
                 <tr>
                     <th style="width: 80px; text-align: center;">Bật/Tắt</th>
-                    <th style="width: 200px; position: sticky; left: 0; background: #f8f9fa; z-index: 20; text-align: left;">Khách hàng (Key Account)</th>
+                    <th onclick="sortAndRenderStats('name')" style="width: 200px; position: sticky; left: 0; background: #f8f9fa; z-index: 20; text-align: left; cursor: pointer;">
+                        Khách hàng ${getSortIcon('name')}
+                    </th>
                     <th style="width: 120px;">Thuộc Cty</th>
                     <th style="width: 130px;">AM/BD</th>
                     <th style="width: 150px;">Delivery Owner (BCs)</th>
                     <th style="width: 150px;">Dự án đang chạy</th>
-                    <th style="width: 150px; text-align: right;">Doanh Thu TB (6th)</th>
-                    <th class="revenue-cell" style="width: 130px;">Tổng Năm</th>
+                    <th onclick="sortAndRenderStats('avgRevenue')" style="width: 150px; text-align: right; cursor: pointer;">
+                         Doanh Thu TB (6th) ${getSortIcon('avgRevenue')}
+                    </th>
+                    <th onclick="sortAndRenderStats('yearlyTotal')" class="revenue-cell" style="width: 130px; cursor: pointer;">
+                        Tổng Năm ${getSortIcon('yearlyTotal')}
+                    </th>
                     <th style="min-width: 400px;">Ghi chú</th>
                 </tr>
             `;
@@ -1074,28 +1144,12 @@ $avatar = $_SESSION['avatar'] ?? '';
                 return;
             }
 
-            // Get Current Date context for "Last 6 Months Average"
-            const now = new Date();
-
             body.innerHTML = data.map(customer => {
                 const stats = customer.stats;
                 const formatVND = (val) => val ? new Intl.NumberFormat('vi-VN').format(Math.round(Math.abs(val))) : '-';
 
-                // 1. Calculate Yearly Total for the SELECTED year
-                let yearlyTotal = 0;
-                for (let m = 1; m <= 12; m++) {
-                    const mk = `${year}-${m.toString().padStart(2, '0')}`;
-                    yearlyTotal += (stats.monthly[mk] || 0);
-                }
-
-                // 2. Calculate Average Revenue (TB) of the LAST 6 COMPLETED MONTHS
-                let last6MonthsTotal = 0;
-                for (let i = 1; i <= 6; i++) {
-                    let d = new Date(now.getFullYear(), now.getMonth() - i, 1);
-                    const mk = `${d.getFullYear()}-${(d.getMonth() + 1).toString().padStart(2, '0')}`;
-                    last6MonthsTotal += (stats.monthly[mk] || 0);
-                }
-                const avgRevenue = last6MonthsTotal / 6;
+                const avgRevenue = customer.avgRevenue;
+                const yearlyTotal = customer.yearlyTotal;
 
                 const qs = [
                     stats.quarterly[`${year}-Q1`] || 0,
