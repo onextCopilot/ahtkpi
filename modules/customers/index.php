@@ -397,8 +397,7 @@ $avatar = $_SESSION['avatar'] ?? '';
                     style="margin-bottom: 32px; background: white; border: 1px solid #dadce0; border-radius: 4px; padding: 16px;">
                     <div
                         style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
-                        <h2 style="font-size: 18px; color: #1a73e8; margin: 0;">Thống kê Doanh thu Key Accounts (Odoo)
-                        </h2>
+                        <h2 style="font-size: 18px; color: #1a73e8; margin: 0;">Thống kê Key Accounts</h2>
                         <div class="filter-controls">
                             <select id="statsYearFilter" onchange="loadKeyAccountStats()" class="filter-select">
                                 <option value="2026">Năm 2026</option>
