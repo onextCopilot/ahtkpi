@@ -88,6 +88,11 @@ foreach ($all_ams_data as $u) {
 foreach ($all_invoices_year as $inv) {
     if (($inv['state'] ?? '') !== 'posted')
         continue;
+
+    // EXCLUDE internal invoices as requested
+    if (($inv['x_studio_invoice_type_1'] ?? '') === 'Internal')
+        continue;
+
     $odoo_map[$inv['id']] = $inv;
 
     $date = $inv['invoice_date'] ?: ($inv['date'] ?? null);
@@ -1046,10 +1051,14 @@ $budget_placeholder = 0;
                                                         $uid = (int) ($c['uid'] ?? 0);
                                                         $q_key = "Q{$i}_{$current_year}";
                                                         if (!empty($confirmations[$uid][$q_key])): ?>
-                                                            <span title="Đã xác nhận Q<?= $i ?>" style="display: inline-flex; align-items: center;">
-                                                                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="#3b82f6" stroke="#1d4ed8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                                            <span title="Đã xác nhận Q<?= $i ?>"
+                                                                style="display: inline-flex; align-items: center;">
+                                                                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16"
+                                                                    viewBox="0 0 24 24" fill="#3b82f6" stroke="#1d4ed8" stroke-width="2"
+                                                                    stroke-linecap="round" stroke-linejoin="round">
                                                                     <circle cx="12" cy="8" r="7"></circle>
-                                                                    <polyline points="8.21 13.89 7 23 12 20 17 23 15.79 13.88"></polyline>
+                                                                    <polyline points="8.21 13.89 7 23 12 20 17 23 15.79 13.88">
+                                                                    </polyline>
                                                                 </svg>
                                                             </span>
                                                         <?php endif; ?>

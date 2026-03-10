@@ -353,6 +353,11 @@ foreach ($invoices as &$inv) {
         continue;
     }
 
+    // EXCLUDE internal invoices as requested
+    if (($inv['x_studio_invoice_type_1'] ?? '') === 'Internal') {
+        continue;
+    }
+
     $inv_date_str = $inv['invoice_date'] ?: $inv['date'];
 
     // Filter by quarter date
