@@ -1434,6 +1434,10 @@ $avatar = $_SESSION['avatar'] ?? '';
             body.innerHTML = data.map(customer => {
                 const stats = customer.stats;
                 const formatVND = (val) => val ? new Intl.NumberFormat('vi-VN').format(Math.round(Math.abs(val))) : '-';
+                const formatUSD = (val) => {
+                    if (!val) return '-';
+                    return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(val);
+                };
 
                 const avgRevenue = customer.avgRevenue;
                 const yearlyTotal = customer.yearlyTotal;
