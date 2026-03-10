@@ -14,9 +14,20 @@ require_once __DIR__ . '/../config/config.php';
 try {
     $odoo = new OdooAPI();
 
-    // 1. Get Key Account IDs and Metadata from DB
+    // 1. Get Key Account IDs and Metadata from DB (including latest note from history)
     $key_account_metadata = [];
-    $res = $conn->query("SELECT odoo_id, am_bd_id, delivery_owners, account_note, company_source, active_projects FROM customers_metadata WHERE is_key_account = 1");
+    $sql = "SELECT cm.odoo_id, cm.am_bd_id, cm.delivery_owners, 
+                   COALESCE(latest_note.note_content, cm.account_note) as account_note, 
+                   cm.company_source, cm.active_projects 
+            FROM customers_metadata cm
+            LEFT JOIN (
+                SELECT odoo_id, note_content 
+                FROM customer_notes cn1
+                WHERE id = (SELECT MAX(id) FROM customer_notes cn2 WHERE cn2.odoo_id = cn1.odoo_id)
+            ) latest_note ON cm.odoo_id = latest_note.odoo_id
+            WHERE cm.is_key_account = 1";
+
+    $res = $conn->query($sql);
     while ($row = $res->fetch_assoc()) {
         $key_account_metadata[(int) $row['odoo_id']] = $row;
     }
