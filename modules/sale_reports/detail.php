@@ -1292,7 +1292,7 @@ function formatMoney($amount, $currency_code)
 
                 <div class="tabs-container">
                     <?php foreach ($tabs as $tab): ?>
-                        <a href="?quarter=<?= urlencode($tab) ?><?= $search ? '&search=' . urlencode($search) : '' ?>"
+                        <a href="?quarter=<?= urlencode($tab) ?>&user_id=<?= $view_user_id ?><?= $search ? '&search=' . urlencode($search) : '' ?>"
                             class="quarter-tab <?= $active_tab === $tab ? 'active' : '' ?>">
                             <?= str_replace('_', ' ', $tab) ?>
                         </a>
@@ -1302,6 +1302,7 @@ function formatMoney($amount, $currency_code)
                 <div class="header-controls">
                     <form method="GET" style="display: flex; gap: 1rem;">
                         <input type="hidden" name="quarter" value="<?= htmlspecialchars($active_tab) ?>">
+                        <input type="hidden" name="user_id" value="<?= $view_user_id ?>">
                         <input type="text" name="search" placeholder="Search Invoices..."
                             value="<?= htmlspecialchars($search) ?>"
                             style="padding: 0.5rem 1rem; border: 1px solid #cbd5e1; border-radius: 6px; width: 300px;">
