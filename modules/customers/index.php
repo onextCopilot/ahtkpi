@@ -1175,10 +1175,15 @@ $avatar = $_SESSION['avatar'] ?? '';
 
             if (!container || !header) return;
 
+            const formatVND = (val) => {
+                if (!val) return '-';
+                return new Intl.NumberFormat('vi-VN').format(val) + ' ₫';
+            };
+
             const formatUSD = (val) => {
                 if (!val) return '-';
                 const usd = val / rate;
-                return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(usd);
+                return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(usd);
             };
 
             // Generate Header
@@ -1267,20 +1272,23 @@ $avatar = $_SESSION['avatar'] ?? '';
 
                 comparisonBox.innerHTML = `
                     <div style="flex: 1; min-width: 250px; background: #fff; border: 1px solid #dadce0; border-radius: 4px; padding: 16px; box-shadow: 0 1px 2px rgba(0,0,0,0.05);">
-                        <div style="font-size: 12px; color: #5f6368; text-transform: uppercase; font-weight: 600; margin-bottom: 8px;">Total Volume (Odoo Global - ${year})</div>
-                        <div style="font-size: 20px; font-weight: 700; color: #202124;">${formatUSD(totalColVolumeVnd)}</div>
+                        <div style="font-size: 11px; color: #5f6368; text-transform: uppercase; font-weight: 600; margin-bottom: 4px;">Total Volume (Odoo Global - ${year})</div>
+                        <div style="font-size: 18px; font-weight: 700; color: #202124;">${formatUSD(totalColVolumeVnd)}</div>
+                        <div style="font-size: 12px; color: #94a3b8; margin-top: 4px;">${formatVND(totalColVolumeVnd)}</div>
                     </div>
                     <div style="flex: 1; min-width: 250px; background: #fff; border: 1px solid #dadce0; border-radius: 4px; padding: 16px; box-shadow: 0 1px 2px rgba(0,0,0,0.05);">
-                        <div style="font-size: 12px; color: #5f6368; text-transform: uppercase; font-weight: 600; margin-bottom: 8px;">Key Accounts Revenue (${year})</div>
-                        <div style="font-size: 20px; font-weight: 700; color: #1a73e8;">${formatUSD(totalKeyAccountVnd)}</div>
+                        <div style="font-size: 11px; color: #5f6368; text-transform: uppercase; font-weight: 600; margin-bottom: 4px;">Key Accounts Revenue (${year})</div>
+                        <div style="font-size: 18px; font-weight: 700; color: #1a73e8;">${formatUSD(totalKeyAccountVnd)}</div>
+                        <div style="font-size: 12px; color: #94a3b8; margin-top: 4px;">${formatVND(totalKeyAccountVnd)}</div>
                     </div>
                     <div style="flex: 1; min-width: 250px; background: #fff; border: 1px solid #dadce0; border-radius: 4px; padding: 16px; box-shadow: 0 1px 2px rgba(0,0,0,0.05);">
-                        <div style="font-size: 12px; color: #5f6368; text-transform: uppercase; font-weight: 600; margin-bottom: 8px;">Total Internal Invoices (${year})</div>
-                        <div style="font-size: 20px; font-weight: 700; color: #f59e0b;">${formatUSD(currentInternalRevenueByYear[year] || 0)}</div>
+                        <div style="font-size: 11px; color: #5f6368; text-transform: uppercase; font-weight: 600; margin-bottom: 4px;">Total Internal Invoices (${year})</div>
+                        <div style="font-size: 18px; font-weight: 700; color: #f59e0b;">${formatUSD(currentInternalRevenueByYear[year] || 0)}</div>
+                        <div style="font-size: 12px; color: #94a3b8; margin-top: 4px;">${formatVND(currentInternalRevenueByYear[year] || 0)}</div>
                     </div>
                     <div style="flex: 1; min-width: 250px; background: #e8f0fe; border: 1px solid #1a73e8; border-radius: 4px; padding: 16px; box-shadow: 0 1px 2px rgba(0,0,0,0.05);">
-                        <div style="font-size: 12px; color: #1a73e8; text-transform: uppercase; font-weight: 600; margin-bottom: 8px;">Key Accounts Revenue Share</div>
-                        <div style="font-size: 28px; font-weight: 700; color: #1a73e8;">${percentage}%</div>
+                        <div style="font-size: 11px; color: #1a73e8; text-transform: uppercase; font-weight: 600; margin-bottom: 4px;">Key Accounts Revenue Share</div>
+                        <div style="font-size: 24px; font-weight: 700; color: #1a73e8;">${percentage}%</div>
                     </div>
                 `;
             }
