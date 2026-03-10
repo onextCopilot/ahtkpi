@@ -1653,15 +1653,6 @@ function formatMoney($amount, $currency_code)
                             <div style="flex:1;">
                                 <?php if ($is_confirmed): ?>
                                     <!-- STATE: Confirmed / Locked -->
-                                    <div class="locked-banner">
-                                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24"
-                                            fill="none" stroke="currentColor" stroke-width="2">
-                                            <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
-                                            <path d="M7 11V7a5 5 0 0 1 10 0v4" />
-                                        </svg>
-                                        Bảng đang bị khoá — chỉ xem. Nhấn <strong style="margin:0 3px;">Reset to Draft</strong>
-                                        để cho phép chỉnh sửa.
-                                    </div>
                                     <div style="display:flex; align-items:center; gap:1rem; flex-wrap:wrap;">
                                         <div class="confirmed-badge">
                                             <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24"
