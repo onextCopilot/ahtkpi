@@ -527,6 +527,29 @@ $avatar = $_SESSION['avatar'] ?? '';
         </main>
     </div>
 
+    <!-- Note Modal -->
+    <div id="noteModal" class="modal">
+        <div class="modal-content" style="max-width: 600px;">
+            <div class="modal-header">
+                <h3 id="noteModalTitle" style="margin:0; font-size:18px;">Ghi chú khách hàng</h3>
+                <span class="close" onclick="closeNoteModal()">&times;</span>
+            </div>
+            <div class="modal-body">
+                <div id="notesHistory"
+                    style="max-height: 350px; overflow-y: auto; margin-bottom: 20px; border-bottom: 1px solid #eee; padding-bottom: 15px;">
+                    <!-- History logs here -->
+                </div>
+                <div class="note-input-area">
+                    <textarea id="newNoteContent" placeholder="Viết ghi chú mới..."
+                        style="width: 100%; min-height: 80px; padding: 10px; border: 1px solid #dadce0; border-radius: 4px; resize: vertical; margin-bottom: 10px; font-family: inherit; font-size: 14px; box-sizing: border-box;"></textarea>
+                    <div style="text-align: right;">
+                        <button class="btn btn-primary" onclick="saveNewNote()">Lưu ghi chú</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <style>
         /* Switch Toggle Style */
         .switch {
@@ -703,7 +726,54 @@ $avatar = $_SESSION['avatar'] ?? '';
             display: flex;
             align-items: center;
             justify-content: center;
-        }
+
+            .note-item {
+                background: #f8f9fa;
+                border-radius: 8px;
+                padding: 12px;
+                margin-bottom: 12px;
+                border: 1px solid #eee;
+            }
+
+            .note-content-text {
+                font-size: 13px;
+                color: #202124;
+                line-height: 1.5;
+                white-space: pre-wrap;
+            }
+
+            .note-meta {
+                margin-top: 8px;
+                font-size: 11px;
+                color: #5f6368;
+                display: flex;
+                justify-content: space-between;
+            }
+
+            .note-author {
+                font-weight: 600;
+                color: #1a73e8;
+            }
+
+            .take-note-btn {
+                background: none;
+                border: 1px solid #dadce0;
+                border-radius: 4px;
+                padding: 4px 8px;
+                cursor: pointer;
+                color: #5f6368;
+                display: flex;
+                align-items: center;
+                gap: 4px;
+                font-size: 11px;
+                transition: all 0.2s;
+            }
+
+            .take-note-btn:hover {
+                border-color: #1a73e8;
+                color: #1a73e8;
+                background: #f1f8ff;
+            }
     </style>
 
     <script>
@@ -940,10 +1010,15 @@ $avatar = $_SESSION['avatar'] ?? '';
                         onblur="updateKeyAccountMetadata(${customer.id}, 'active_projects', this.value)">${escapeHtml(customer.active_projects || '')}</textarea>
                 `;
 
-                // Note / History Field
-                const noteField = `
-                    <textarea class="inline-edit-note" style="min-height: 40px; font-size: 11px;" placeholder="Lịch sử/Ghi chú..." 
-                        onblur="updateKeyAccountMetadata(${customer.id}, 'account_note', this.value)">${escapeHtml(customer.account_note || '')}</textarea>
+                // Ghi chú Button with last note preview
+                const noteBtn = `
+                    <button class="take-note-btn" onclick="openNoteModal(${customer.id}, '${escapeHtml(customer.name)}')">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+                            <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+                        </svg>
+                        ${customer.account_note ? 'Xem ghi chú' : 'Ghi chú'}
+                    </button>
                 `;
 
                 return `
@@ -961,10 +1036,74 @@ $avatar = $_SESSION['avatar'] ?? '';
                         </td>
                         <td class="revenue-cell revenue-total">${formatVND(yearlyTotal)}</td>
                         ${qs.map(q => `<td class="revenue-cell" style="background: #f8f9fa;">${formatVND(q)}</td>`).join('')}
-                        <td style="padding: 4px;">${noteField}</td>
+                        <td style="padding: 4px;">${noteBtn}</td>
                     </tr>
                 `;
             }).join('');
+        }
+
+        let currentEditingOdooId = null;
+
+        function openNoteModal(odooId, customerName) {
+            currentEditingOdooId = odooId;
+            document.getElementById('noteModalTitle').textContent = `Lịch sử ghi chú: ${customerName}`;
+            document.getElementById('newNoteContent').value = '';
+            document.getElementById('noteModal').style.display = 'block';
+            loadNotesHistory(odooId);
+        }
+
+        function closeNoteModal() {
+            document.getElementById('noteModal').style.display = 'none';
+            currentEditingOdooId = null;
+        }
+
+        function loadNotesHistory(odooId) {
+            const historyContainer = document.getElementById('notesHistory');
+            historyContainer.innerHTML = '<p style="text-align:center; padding:10px;">Đang tải lịch sử...</p>';
+
+            fetch(`/api/customer_notes.php?odoo_id=${odooId}`)
+                .then(res => res.json())
+                .then(data => {
+                    if (data.success) {
+                        if (data.data.length === 0) {
+                            historyContainer.innerHTML = '<p style="text-align:center; color:#999; padding:20px;">Chưa có lịch sử ghi chú.</p>';
+                        } else {
+                            historyContainer.innerHTML = data.data.map(note => `
+                                <div class="note-item">
+                                    <div class="note-content-text">${escapeHtml(note.note_content)}</div>
+                                    <div class="note-meta">
+                                        <span class="note-author">By: ${escapeHtml(note.author)}</span>
+                                        <span class="note-time">${note.created_at}</span>
+                                    </div>
+                                </div>
+                            `).join('');
+                        }
+                    }
+                });
+        }
+
+        function saveNewNote() {
+            const content = document.getElementById('newNoteContent').value.trim();
+            if (!content) return;
+
+            fetch('/api/customer_notes.php', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    odoo_id: currentEditingOdooId,
+                    content: content
+                })
+            })
+                .then(res => res.json())
+                .then(data => {
+                    if (data.success) {
+                        loadNotesHistory(currentEditingOdooId);
+                        document.getElementById('newNoteContent').value = '';
+                        // Optional: Update the "Xem ghi chú" text in the table row
+                    } else {
+                        alert('Lỗi: ' + data.error);
+                    }
+                });
         }
 
         function toggleBCDropdown(event, btn) {

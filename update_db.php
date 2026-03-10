@@ -74,6 +74,14 @@ $base_tables = [
         company_source VARCHAR(50) DEFAULT NULL,
         active_projects TEXT DEFAULT NULL,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+    )",
+    "CREATE TABLE IF NOT EXISTS customer_notes (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        odoo_id INT NOT NULL,
+        user_id INT NOT NULL,
+        note_content TEXT NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        INDEX (odoo_id)
     )"
 ];
 
