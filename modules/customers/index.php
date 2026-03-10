@@ -643,19 +643,16 @@ $avatar = $_SESSION['avatar'] ?? '';
 
         .bc-dropdown-content {
             display: none;
-            position: absolute;
+            position: fixed; /* Use fixed to avoid clipping by scrollable table wrappers */
             background-color: white;
-            min-width: 160px;
-            box-shadow: 0px 8px 16px 0px rgba(0, 0, 0, 0.2);
-            z-index: 9999;
-            /* Ensure it's on top */
+            min-width: 180px;
+            box-shadow: 0px 8px 32px rgba(0,0,0,0.15);
+            z-index: 99999;
             border: 1px solid #dadce0;
             border-radius: 4px;
             padding: 8px;
-            max-height: 200px;
+            max-height: 250px;
             overflow-y: auto;
-            left: 0;
-            top: 100%;
         }
 
         .bc-dropdown-content.show {
@@ -971,11 +968,36 @@ $avatar = $_SESSION['avatar'] ?? '';
         function toggleBCDropdown(event, btn) {
             event.stopPropagation();
             const content = btn.nextElementSibling;
+
             // Close other dropdowns
             document.querySelectorAll('.bc-dropdown-content.show').forEach(el => {
                 if (el !== content) el.classList.remove('show');
             });
-            content.classList.toggle('show');
+
+            const isShowing = content.classList.toggle('show');
+
+            if (isShowing) {
+                const rect = btn.getBoundingClientRect();
+                content.style.left = rect.left + 'px';
+
+                // Check space below
+                const spaceBelow = window.innerHeight - rect.bottom;
+                if (spaceBelow < 250 && rect.top > 250) {
+                    // Show above
+                    content.style.top = 'auto';
+                    content.style.bottom = (window.innerHeight - rect.top) + 'px';
+                } else {
+                    // Show below
+                    content.style.top = rect.bottom + 'px';
+                    content.style.bottom = 'auto';
+                }
+                
+                // Final check to ensure it doesn't go off left/right
+                const contentRect = content.getBoundingClientRect();
+                if (rect.left + contentRect.width > window.innerWidth) {
+                    content.style.left = (window.innerWidth - contentRect.width - 10) + 'px';
+                }
+            }
         }
 
         // Close dropdowns on click outside
