@@ -463,8 +463,8 @@ $avatar = $_SESSION['avatar'] ?? '';
                         <h2 style="font-size: 18px; color: #1a73e8; margin: 0;">Thống kê Doanh Thu Key Accounts (Hoàn
                             thành - USD)</h2>
                         <div class="filter-controls">
-                            <span style="font-size: 11px; color: #70757a; margin-right: 12px; font-style: italic;">
-                                Tỷ giá tạm tính: 1 USD = 24,000 VND
+                            <span id="dynamicExchangeRateNote" style="font-size: 11px; color: #70757a; margin-right: 12px; font-style: italic;">
+                                Đang tải tỉ giá...
                             </span>
                             <select id="usdStatsYearFilter" onchange="renderUsdRevenueStats()" class="filter-select"
                                 style="margin-right: 12px;">
@@ -1154,6 +1154,7 @@ $avatar = $_SESSION['avatar'] ?? '';
         let currentInternalRevenueByYear = {};
         let currentSortCol = 'order_index';
         let currentSortDir = 'asc';
+        let currentUsdRate = 24000; // Default fallback
         const BC_LIST = ['BC1', 'BC2', 'BC3', 'BC4', 'BC5', 'BC6', 'BC7', 'BC8', 'BC9', 'BC10'];
 
         function loadKeyAccountStats() {
@@ -1169,6 +1170,14 @@ $avatar = $_SESSION['avatar'] ?? '';
                         globalAmBdList = data.am_bd_list || [];
                         currentTotalVolumeByYear = data.total_volume_vnd_by_year || {};
                         currentInternalRevenueByYear = data.internal_total_res || {};
+                        currentUsdRate = data.usd_rate || 24000;
+                        
+                        // Update the rate note in UI
+                        const rateNote = document.getElementById('dynamicExchangeRateNote');
+                        if (rateNote && data.usd_rate) {
+                            rateNote.textContent = `Tỉ giá: 1 USD = ${new Intl.NumberFormat('vi-VN').format(1 / data.usd_rate)} VND`;
+                        }
+                        
                         console.log('API Version:', data.api_version);
                         const now = new Date();
 
@@ -1211,7 +1220,7 @@ $avatar = $_SESSION['avatar'] ?? '';
             const header = document.getElementById('usdStatsTableHeader');
             const year = document.getElementById('usdStatsYearFilter').value;
             const search = document.getElementById('usdSearchInput') ? document.getElementById('usdSearchInput').value.toLowerCase() : '';
-            const rate = 24000;
+            const rate = currentUsdRate;
 
             if (!container || !header) return;
 
@@ -1222,7 +1231,7 @@ $avatar = $_SESSION['avatar'] ?? '';
 
             const formatUSD = (val) => {
                 if (!val) return '-';
-                const usd = val / rate;
+                const usd = val * rate; // Odoo rate is typically 1 VND = X USD
                 return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(usd);
             };
 

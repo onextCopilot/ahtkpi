@@ -85,6 +85,10 @@ try {
             if ($inv['state'] !== 'posted')
                 continue;
 
+            // EXCLUDE internal invoices as requested
+            if (($inv['x_studio_invoice_type_1'] ?? '') === 'Internal')
+                continue;
+
             $amount = (float) ($inv['amount_total_signed'] ?? 0);
             $date_str = $inv['invoice_date'] ?: $inv['date'];
             if (!$date_str)
