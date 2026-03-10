@@ -144,6 +144,8 @@ try {
         }
     }
 
+    $data = array_values($key_accounts_map);
+
     echo json_encode([
         'success' => true,
         'data' => $data,
