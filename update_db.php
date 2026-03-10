@@ -64,6 +64,11 @@ $base_tables = [
         odoo_username TEXT NOT NULL,
         odoo_api_key TEXT NOT NULL,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+    )",
+    "CREATE TABLE IF NOT EXISTS customers_metadata (
+        odoo_id INT PRIMARY KEY,
+        is_key_account TINYINT(1) DEFAULT 0,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
     )"
 ];
 

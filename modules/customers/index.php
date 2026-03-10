@@ -411,6 +411,11 @@ $avatar = $_SESSION['avatar'] ?? '';
                             <option value="active">Hoạt động</option>
                             <option value="inactive">Ngừng hoạt động</option>
                         </select>
+                        <select id="keyAccountFilter" onchange="loadCustomers(1)" class="filter-select">
+                            <option value="">Key Account (Tất cả)</option>
+                            <option value="1">Chỉ Key Account</option>
+                            <option value="0">Không phải Key Account</option>
+                        </select>
                         <button class="btn-clear" onclick="clearFilters()">
                             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
                                 stroke-width="2">
@@ -430,20 +435,21 @@ $avatar = $_SESSION['avatar'] ?? '';
                         <thead>
                             <tr>
                                 <th style="width: 40px;">#</th>
+                                <th style="width: 100px;">Key Account</th>
                                 <th>Tên công ty</th>
                                 <th>Email</th>
                                 <th>Điện thoại</th>
-                                <th>Di động</th>
-                                <th>Thành phố</th>
-                                <th>Quốc gia</th>
-                                <th>Ngành nghề</th>
-                                <th>Trạng thái</th>
+                                <th style="width: 100px;">Di động</th>
+                                <th style="width: 100px;">Thành phố</th>
+                                <th style="width: 100px;">Quốc gia</th>
+                                <th style="width: 150px;">Ngành nghề</th>
+                                <th style="width: 120px;">Trạng thái</th>
                                 <th>Ghi chú</th>
                             </tr>
                         </thead>
                         <tbody id="customerTableBody">
                             <tr>
-                                <td colspan="10">
+                                <td colspan="11">
                                     <div class="loading-state">
                                         <div class="loading-spinner"></div>
                                         <p>Đang tải dữ liệu...</p>
@@ -490,9 +496,103 @@ $avatar = $_SESSION['avatar'] ?? '';
                         </button>
                     </div>
                 </div>
+
+                <!-- Key Accounts Section -->
+                <div class="key-accounts-section"
+                    style="margin-top: 32px; background: white; border: 1px solid #dadce0; border-radius: 4px; padding: 16px;">
+                    <div
+                        style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+                        <h2 style="font-size: 18px; color: #1a73e8; margin: 0;">Thống kê Doanh thu Key Accounts (Odoo)
+                        </h2>
+                        <div class="filter-controls">
+                            <select id="statsYearFilter" onchange="loadKeyAccountStats()" class="filter-select">
+                                <option value="2026">Năm 2026</option>
+                                <option value="2025">Năm 2025</option>
+                                <option value="2024">Năm 2024</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="data-table-wrapper" style="max-height: 400px;">
+                        <table class="customer-table" style="min-width: 1000px;">
+                            <thead id="statsTableHeader">
+                                <!-- Headers will be generated dynamically -->
+                            </thead>
+                            <tbody id="keyAccountsStatsBody">
+                                <!-- Stats will be loaded here -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
             </div>
         </main>
     </div>
+
+    <style>
+        /* Switch Toggle Style */
+        .switch {
+            position: relative;
+            display: inline-block;
+            width: 34px;
+            height: 20px;
+        }
+
+        .switch input {
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+
+        .slider {
+            position: absolute;
+            cursor: pointer;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: #ccc;
+            -webkit-transition: .4s;
+            transition: .4s;
+            border-radius: 20px;
+        }
+
+        .slider:before {
+            position: absolute;
+            content: "";
+            height: 14px;
+            width: 14px;
+            left: 3px;
+            bottom: 3px;
+            background-color: white;
+            -webkit-transition: .4s;
+            transition: .4s;
+            border-radius: 50%;
+        }
+
+        input:checked+.slider {
+            background-color: #1a73e8;
+        }
+
+        input:focus+.slider {
+            box-shadow: 0 0 1px #1a73e8;
+        }
+
+        input:checked+.slider:before {
+            -webkit-transform: translateX(14px);
+            -ms-transform: translateX(14px);
+            transform: translateX(14px);
+        }
+
+        .revenue-cell {
+            text-align: right;
+            font-family: 'Roboto Mono', monospace;
+            font-size: 11px;
+        }
+
+        .revenue-total {
+            font-weight: 600;
+            background: #f8f9fa;
+        }
+    </style>
 
     <script>
         const ITEMS_PER_PAGE = 20;
@@ -503,6 +603,7 @@ $avatar = $_SESSION['avatar'] ?? '';
         // Load customers on page load
         document.addEventListener('DOMContentLoaded', function () {
             loadCustomers(1);
+            loadKeyAccountStats();
         });
 
         function debounceSearch() {
@@ -518,6 +619,7 @@ $avatar = $_SESSION['avatar'] ?? '';
             const city = document.getElementById('cityFilter').value;
             const country = document.getElementById('countryFilter').value;
             const status = document.getElementById('statusFilter').value;
+            const is_key_account = document.getElementById('keyAccountFilter').value;
 
             // Build query string
             const params = new URLSearchParams({
@@ -526,13 +628,14 @@ $avatar = $_SESSION['avatar'] ?? '';
                 search: search,
                 city: city,
                 country: country,
-                status: status
+                status: status,
+                is_key_account: is_key_account
             });
 
             // Show loading
             document.getElementById('customerTableBody').innerHTML = `
                 <tr>
-                    <td colspan="10">
+                    <td colspan="11">
                         <div class="loading-state">
                             <div class="loading-spinner"></div>
                             <p>Đang tải dữ liệu...</p>
@@ -556,13 +659,109 @@ $avatar = $_SESSION['avatar'] ?? '';
                 });
         }
 
+        function toggleKeyAccount(odooId, isKeyAccount) {
+            fetch('/api/customers.php', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    odoo_id: odooId,
+                    is_key_account: isKeyAccount ? 1 : 0
+                })
+            })
+                .then(res => res.json())
+                .then(data => {
+                    if (data.success) {
+                        // Reload both sections to reflect changes
+                        loadKeyAccountStats();
+                    } else {
+                        alert('Lỗi: ' + data.error);
+                    }
+                });
+        }
+
+        function loadKeyAccountStats() {
+            const year = document.getElementById('statsYearFilter').value;
+            const container = document.getElementById('keyAccountsStatsBody');
+            const header = document.getElementById('statsTableHeader');
+
+            container.innerHTML = `<tr><td colspan="12" style="text-align:center; padding: 20px;">Đang tính toán thống kê...</td></tr>`;
+
+            fetch(`/api/key_accounts_stats.php`)
+                .then(res => res.json())
+                .then(data => {
+                    if (data.success) {
+                        renderStats(data.data, year);
+                    }
+                });
+        }
+
+        function renderStats(data, year) {
+            const header = document.getElementById('statsTableHeader');
+            const body = document.getElementById('keyAccountsStatsBody');
+
+            // Generate Headers (Company Name, Q1, Q2, Q3, Q4, M1..M12)
+            header.innerHTML = `
+                <tr>
+                    <th style="width: 250px;">Khách hàng (Key Account)</th>
+                    <th class="revenue-cell">Tổng Năm</th>
+                    <th class="revenue-cell">Q1</th>
+                    <th class="revenue-cell">Q2</th>
+                    <th class="revenue-cell">Q3</th>
+                    <th class="revenue-cell">Q4</th>
+                    ${Array.from({ length: 12 }, (_, i) => `<th class="revenue-cell">T${i + 1}</th>`).join('')}
+                </tr>
+            `;
+
+            if (data.length === 0) {
+                body.innerHTML = `<tr><td colspan="17" style="text-align:center; padding: 40px; color: #5f6368;">Chưa có Key Account nào được thiết lập</td></tr>`;
+                return;
+            }
+
+            body.innerHTML = data.map(customer => {
+                const stats = customer.stats;
+                const formatVND = (val) => val ? new Intl.NumberFormat('vi-VN').format(Math.abs(val)) : '-';
+
+                // Yearly Total
+                let yearlyTotal = 0;
+                for (let m = 1; m <= 12; m++) {
+                    const mk = `${year}-${m.toString().padStart(2, '0')}`;
+                    yearlyTotal += (stats.monthly[mk] || 0);
+                }
+
+                // Quarterly Stats
+                const qs = [
+                    stats.quarterly[`${year}-Q1`] || 0,
+                    stats.quarterly[`${year}-Q2`] || 0,
+                    stats.quarterly[`${year}-Q3`] || 0,
+                    stats.quarterly[`${year}-Q4`] || 0
+                ];
+
+                // Monthly Stats (M1..M12)
+                const ms = Array.from({ length: 12 }, (_, i) => {
+                    const mk = `${year}-${(i + 1).toString().padStart(2, '0')}`;
+                    return stats.monthly[mk] || 0;
+                });
+
+                return `
+                    <tr>
+                        <td style="font-weight: 500;">${escapeHtml(customer.name)}</td>
+                        <td class="revenue-cell revenue-total">${formatVND(yearlyTotal)}</td>
+                        ${qs.map(q => `<td class="revenue-cell" style="background: #f1f3f4;">${formatVND(q)}</td>`).join('')}
+                        ${ms.map(m => `<td class="revenue-cell">${formatVND(m)}</td>`).join('')}
+                    </tr>
+                `;
+            }).join('');
+        }
+
         function renderCustomers(customers, pagination) {
             const tbody = document.getElementById('customerTableBody');
 
             if (customers.length === 0) {
                 tbody.innerHTML = `
                     <tr>
-                        <td colspan="10">
+                        <td colspan="11">
                             <div class="empty-state">
                                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                                     <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
@@ -585,6 +784,12 @@ $avatar = $_SESSION['avatar'] ?? '';
             tbody.innerHTML = customers.map((customer, idx) => `
                 <tr>
                     <td>${startIndex + idx + 1}</td>
+                    <td style="text-align: center;">
+                        <label class="switch">
+                            <input type="checkbox" ${customer.is_key_account ? 'checked' : ''} onchange="toggleKeyAccount(${customer.id}, this.checked)">
+                            <span class="slider"></span>
+                        </label>
+                    </td>
                     <td>
                         <a href="https://erp18.merket.io/odoo/web#id=${customer.id}&model=res.partner&view_type=form"
                             target="_blank" class="company-name" style="color: #1a73e8; text-decoration: none;">
@@ -703,6 +908,7 @@ $avatar = $_SESSION['avatar'] ?? '';
             document.getElementById('cityFilter').value = '';
             document.getElementById('countryFilter').value = '';
             document.getElementById('statusFilter').value = '';
+            document.getElementById('keyAccountFilter').value = '';
             loadCustomers(1);
         }
 
@@ -725,7 +931,7 @@ $avatar = $_SESSION['avatar'] ?? '';
 
             document.getElementById('customerTableBody').innerHTML = `
                 <tr>
-                    <td colspan="10">
+                    <td colspan="11">
                         <div class="empty-state">
                             <h3>Không thể tải dữ liệu</h3>
                             <p>Vui lòng kiểm tra cấu hình Odoo API</p>
@@ -736,6 +942,7 @@ $avatar = $_SESSION['avatar'] ?? '';
         }
 
         function escapeHtml(text) {
+            if (!text) return '';
             const div = document.createElement('div');
             div.textContent = text;
             return div.innerHTML;
