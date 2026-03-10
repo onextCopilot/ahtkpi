@@ -1190,7 +1190,7 @@ $avatar = $_SESSION['avatar'] ?? '';
             // Generate Header
             let headerHtml = `
                 <tr>
-                    <th class="name-col" style="text-align: left; width: 250px;">Khách hàng</th>
+                    <th class="name-col" style="text-align: left; width: 350px;">Khách hàng</th>
                     <th class="y-col" style="width: 120px;">Tổng Năm</th>
                     <th class="q-col" style="width: 100px;">Q1</th>
                     <th class="q-col" style="width: 100px;">Q2</th>
@@ -1218,7 +1218,7 @@ $avatar = $_SESSION['avatar'] ?? '';
 
             let bodyHtml = filteredData.map(customer => {
                 const stats = customer.stats;
-                let row = `<tr><td class="name-col" style="text-align: left;">${escapeHtml(customer.name)}</td>`;
+                let row = `<tr><td class="name-col" style="text-align: left;" title="${escapeHtml(customer.name)}">${escapeHtml(customer.name)}</td>`;
 
                 // Yearly Total
                 let yearlyTotal = 0;
@@ -1353,7 +1353,7 @@ $avatar = $_SESSION['avatar'] ?? '';
             header.innerHTML = `
                 <tr>
                     <th style="width: 80px; text-align: center;">Bật/Tắt</th>
-                    <th onclick="sortAndRenderStats('name')" style="width: 200px; position: sticky; left: 0; background: #f8f9fa; z-index: 20; text-align: left; cursor: pointer;">
+                    <th onclick="sortAndRenderStats('name')" style="width: 300px; position: sticky; left: 0; background: #f8f9fa; z-index: 20; text-align: left; cursor: pointer;">
                         Khách hàng ${getSortIcon('name')}
                     </th>
                     <th style="width: 120px;">Thuộc Cty</th>
@@ -1465,7 +1465,7 @@ $avatar = $_SESSION['avatar'] ?? '';
                 return `
                     <tr>
                         <td style="text-align: center;">${toggleSwitch}</td>
-                        <td style="font-weight: 500; position: sticky; left: 0; background: white; z-index: 10; border-right: 2px solid #dadce0; text-align: left;">
+                        <td style="font-weight: 500; position: sticky; left: 0; background: white; z-index: 10; border-right: 2px solid #dadce0; text-align: left;" title="${escapeHtml(customer.name)}">
                             ${escapeHtml(customer.name)}
                         </td>
                         <td>${companySelect}</td>
