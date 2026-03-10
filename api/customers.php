@@ -47,6 +47,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $params[] = $data['account_note'];
         $types .= "s";
     }
+    if (isset($data['company_source'])) {
+        $fields[] = "company_source = ?";
+        $params[] = $data['company_source'];
+        $types .= "s";
+    }
+    if (isset($data['active_projects'])) {
+        $fields[] = "active_projects = ?";
+        $params[] = $data['active_projects']; // comma separated keys
+        $types .= "s";
+    }
 
     if (empty($fields)) {
         echo json_encode(['success' => true]);

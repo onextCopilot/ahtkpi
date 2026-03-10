@@ -71,6 +71,8 @@ $base_tables = [
         am_bd_id INT DEFAULT NULL,
         delivery_owners TEXT DEFAULT NULL,
         account_note TEXT DEFAULT NULL,
+        company_source VARCHAR(50) DEFAULT NULL,
+        active_projects TEXT DEFAULT NULL,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
     )"
 ];
@@ -100,7 +102,9 @@ foreach ($user_columns as $col => $def) {
 $metadata_columns = [
     'am_bd_id' => 'int(11) DEFAULT NULL',
     'delivery_owners' => 'text DEFAULT NULL',
-    'account_note' => 'text DEFAULT NULL'
+    'account_note' => 'text DEFAULT NULL',
+    'company_source' => 'varchar(50) DEFAULT NULL',
+    'active_projects' => 'text DEFAULT NULL'
 ];
 foreach ($metadata_columns as $col => $def) {
     addColumnIfNotExists($conn, 'customers_metadata', $col, $def);

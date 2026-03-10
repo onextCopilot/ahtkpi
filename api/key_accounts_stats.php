@@ -16,7 +16,7 @@ try {
 
     // 1. Get Key Account IDs and Metadata from DB
     $key_account_metadata = [];
-    $res = $conn->query("SELECT odoo_id, am_bd_id, delivery_owners, account_note FROM customers_metadata WHERE is_key_account = 1");
+    $res = $conn->query("SELECT odoo_id, am_bd_id, delivery_owners, account_note, company_source, active_projects FROM customers_metadata WHERE is_key_account = 1");
     while ($row = $res->fetch_assoc()) {
         $key_account_metadata[(int) $row['odoo_id']] = $row;
     }
@@ -47,6 +47,8 @@ try {
                 'am_bd_id' => $meta['am_bd_id'],
                 'delivery_owners' => $meta['delivery_owners'],
                 'account_note' => $meta['account_note'],
+                'company_source' => $meta['company_source'],
+                'active_projects' => $meta['active_projects'],
                 'stats' => [
                     'monthly' => [],
                     'quarterly' => []

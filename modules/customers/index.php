@@ -646,35 +646,65 @@ $avatar = $_SESSION['avatar'] ?? '';
             position: absolute;
             background-color: white;
             min-width: 160px;
-            box-shadow: 0px 8px 16px 0px rgba(0,0,0,0.2);
-            z-index: 100;
+            box-shadow: 0px 8px 16px 0px rgba(0, 0, 0, 0.2);
+            z-index: 9999;
+            /* Ensure it's on top */
             border: 1px solid #dadce0;
             border-radius: 4px;
             padding: 8px;
             max-height: 200px;
             overflow-y: auto;
+            left: 0;
+            top: 100%;
         }
 
         .bc-dropdown-content.show {
             display: block;
         }
 
-        .bc-option {
+        .company-source-select {
+            width: 100%;
+            border: 1px solid #dadce0;
+            border-radius: 4px;
+            padding: 4px;
+            font-size: 11px;
+            background: white;
+            color: #202124;
+        }
+
+        .project-input-wrapper {
+            position: relative;
+            width: 100%;
+        }
+
+        .project-input {
+            width: 100%;
+            border: 1px solid #dadce0;
+            border-radius: 4px;
+            padding: 4px;
+            font-size: 11px;
+            min-height: 40px;
+        }
+
+        .avg-revenue-cell {
+            text-align: right;
+            font-weight: 600;
+            color: #1e8e3e;
+            white-space: nowrap;
+        }
+
+        .currency-unit {
+            font-size: 10px;
+            color: #5f6368;
+            margin-left: 2px;
+            font-weight: normal;
+        }
+
+        /* Stats Table Toggle fix */
+        .stats-toggle {
             display: flex;
             align-items: center;
-            gap: 8px;
-            padding: 4px 8px;
-            cursor: pointer;
-            font-size: 12px;
-            border-radius: 4px;
-        }
-
-        .bc-option:hover {
-            background-color: #f1f3f4;
-        }
-
-        .bc-option input {
-            margin: 0;
+            justify-content: center;
         }
     </style>
 
@@ -809,9 +839,12 @@ $avatar = $_SESSION['avatar'] ?? '';
             // Generate Headers 
             header.innerHTML = `
                 <tr>
-                    <th style="width: 200px; position: sticky; left: 0; background: #f8f9fa; z-index: 20;">Khách hàng (Key Account)</th>
-                    <th style="width: 150px;">AM/BD</th>
-                    <th style="width: 200px;">Delivery Owner (BCs)</th>
+                    <th style="width: 50px; text-align: center;">Bật/Tắt</th>
+                    <th style="width: 200px; position: sticky; left: 0; background: #f8f9fa; z-index: 20; text-align: left;">Khách hàng (Key Account)</th>
+                    <th style="width: 120px;">Thuộc Cty</th>
+                    <th style="width: 130px;">AM/BD</th>
+                    <th style="width: 150px;">Delivery Owner (BCs)</th>
+                    <th style="width: 150px;">Dự án đang chạy</th>
                     <th style="width: 150px; text-align: right;">Doanh Thu TB (6th)</th>
                     <th class="revenue-cell">Tổng Năm</th>
                     <th class="revenue-cell">Q1</th>
@@ -823,14 +856,12 @@ $avatar = $_SESSION['avatar'] ?? '';
             `;
 
             if (data.length === 0) {
-                body.innerHTML = `<tr><td colspan="21" style="text-align:center; padding: 40px; color: #5f6368;">Chưa có Key Account nào được thiết lập</td></tr>`;
+                body.innerHTML = `<tr><td colspan="25" style="text-align:center; padding: 40px; color: #5f6368;">Chưa có Key Account nào được thiết lập</td></tr>`;
                 return;
             }
 
             // Get Current Date context for "Last 6 Months Average"
             const now = new Date();
-            const currentYear = now.getFullYear();
-            const currentMonth = now.getMonth() + 1; // 1-12
 
             body.innerHTML = data.map(customer => {
                 const stats = customer.stats;
@@ -845,12 +876,10 @@ $avatar = $_SESSION['avatar'] ?? '';
 
                 // 2. Calculate Average Revenue (TB) of the LAST 6 COMPLETED MONTHS
                 let last6MonthsTotal = 0;
-                let monthsFound = 0;
                 for (let i = 1; i <= 6; i++) {
                     let d = new Date(now.getFullYear(), now.getMonth() - i, 1);
                     const mk = `${d.getFullYear()}-${(d.getMonth() + 1).toString().padStart(2, '0')}`;
                     last6MonthsTotal += (stats.monthly[mk] || 0);
-                    monthsFound++;
                 }
                 const avgRevenue = last6MonthsTotal / 6;
 
@@ -866,9 +895,28 @@ $avatar = $_SESSION['avatar'] ?? '';
                     return stats.monthly[mk] || 0;
                 });
 
-                // Metadata elements
+                // Toggle Switch (Column 2 - actually Column 1 in my new layout)
+                const toggleSwitch = `
+                    <div class="stats-toggle">
+                        <label class="switch">
+                            <input type="checkbox" checked onchange="toggleKeyAccount(${customer.id}, this.checked)">
+                            <span class="slider round"></span>
+                        </label>
+                    </div>
+                `;
+
+                // Company Source select
+                const companies = ['AHT TECH', 'AC1 VN', 'AC1 MY', 'AHT Japan'];
+                const companySelect = `
+                    <select class="company-source-select" onchange="updateKeyAccountMetadata(${customer.id}, 'company_source', this.value)">
+                        <option value="">-- Chọn --</option>
+                        ${companies.map(c => `<option value="${c}" ${customer.company_source === c ? 'selected' : ''}>${c}</option>`).join('')}
+                    </select>
+                `;
+
+                // AM/BD Select
                 const amSelect = `
-                    <select class="inline-edit-select" onchange="updateKeyAccountMetadata(${customer.id}, 'am_bd_id', this.value)">
+                    <select class="inline-edit-select" style="font-size: 11px;" onchange="updateKeyAccountMetadata(${customer.id}, 'am_bd_id', this.value)">
                         <option value="">-- AM/BD --</option>
                         ${globalAmBdList.map(am => `<option value="${am.id}" ${customer.am_bd_id == am.id ? 'selected' : ''}>${escapeHtml(am.full_name)}</option>`).join('')}
                     </select>
@@ -883,24 +931,35 @@ $avatar = $_SESSION['avatar'] ?? '';
                         </button>
                         <div class="bc-dropdown-content">
                             ${BC_LIST.map(bc => `
-                                <label class="bc-option">
+                                <label class="bc-option" style="display:flex; align-items:center; gap:8px; padding:4px 8px; cursor:pointer;">
                                     <input type="checkbox" value="${bc}" ${currentBCs.includes(bc) ? 'checked' : ''} 
                                         onchange="handleBCChange(${customer.id}, this)">
-                                    <span>${bc}</span>
+                                    <span style="font-size:12px;">${bc}</span>
                                 </label>
                             `).join('')}
                         </div>
                     </div>
                 `;
 
+                // Project Field (Jira or manual)
+                const projectField = `
+                    <textarea class="project-input" placeholder="Dự án..." 
+                        onblur="updateKeyAccountMetadata(${customer.id}, 'active_projects', this.value)">${escapeHtml(customer.active_projects || '')}</textarea>
+                `;
+
                 return `
                     <tr>
-                        <td style="font-weight: 500; position: sticky; left: 0; background: white; z-index: 10; border-right: 2px solid #dadce0;">
+                        <td style="text-align: center;">${toggleSwitch}</td>
+                        <td style="font-weight: 500; position: sticky; left: 0; background: white; z-index: 10; border-right: 2px solid #dadce0; text-align: left;">
                             ${escapeHtml(customer.name)}
                         </td>
+                        <td>${companySelect}</td>
                         <td>${amSelect}</td>
                         <td style="padding: 4px;">${bcDropdown}</td>
-                        <td style="text-align: right; font-weight: 600; color: #1e8e3e;">${formatVND(avgRevenue)}</td>
+                        <td style="padding: 4px;">${projectField}</td>
+                        <td class="avg-revenue-cell">
+                             ${formatVND(avgRevenue)} <span class="currency-unit">VND</span>
+                        </td>
                         <td class="revenue-cell revenue-total">${formatVND(yearlyTotal)}</td>
                         ${qs.map(q => `<td class="revenue-cell" style="background: #f8f9fa;">${formatVND(q)}</td>`).join('')}
                         ${ms.map(m => `<td class="revenue-cell">${formatVND(m)}</td>`).join('')}
