@@ -1265,7 +1265,7 @@ $avatar = $_SESSION['avatar'] ?? '';
 
                 comparisonBox.innerHTML = `
                     <div style="flex: 1; min-width: 250px; background: #fff; border: 1px solid #dadce0; border-radius: 4px; padding: 16px; box-shadow: 0 1px 2px rgba(0,0,0,0.05);">
-                        <div style="font-size: 12px; color: #5f6368; text-transform: uppercase; font-weight: 600; margin-bottom: 8px;">Total Volume (All Debts - ${year})</div>
+                        <div style="font-size: 12px; color: #5f6368; text-transform: uppercase; font-weight: 600; margin-bottom: 8px;">Total Volume (Odoo Global - ${year})</div>
                         <div style="font-size: 20px; font-weight: 700; color: #202124;">${formatUSD(totalColVolumeVnd)}</div>
                     </div>
                     <div style="flex: 1; min-width: 250px; background: #fff; border: 1px solid #dadce0; border-radius: 4px; padding: 16px; box-shadow: 0 1px 2px rgba(0,0,0,0.05);">
