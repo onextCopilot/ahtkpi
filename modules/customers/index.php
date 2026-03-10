@@ -389,6 +389,33 @@ $avatar = $_SESSION['avatar'] ?? '';
             <div class="customer-container">
                 <div id="errorContainer"></div>
 
+                <!-- Key Accounts Section -->
+                <div class="key-accounts-section"
+                    style="margin-bottom: 32px; background: white; border: 1px solid #dadce0; border-radius: 4px; padding: 16px;">
+                    <div
+                        style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+                        <h2 style="font-size: 18px; color: #1a73e8; margin: 0;">Thống kê Doanh thu Key Accounts (Odoo)
+                        </h2>
+                        <div class="filter-controls">
+                            <select id="statsYearFilter" onchange="loadKeyAccountStats()" class="filter-select">
+                                <option value="2026">Năm 2026</option>
+                                <option value="2025">Năm 2025</option>
+                                <option value="2024">Năm 2024</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="data-table-wrapper" style="max-height: none;">
+                        <table class="customer-table" style="min-width: 1000px;">
+                            <thead id="statsTableHeader">
+                                <!-- Headers will be generated dynamically -->
+                            </thead>
+                            <tbody id="keyAccountsStatsBody">
+                                <!-- Stats will be loaded here -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
                 <div class="page-controls">
                     <div class="search-box">
                         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
@@ -497,32 +524,6 @@ $avatar = $_SESSION['avatar'] ?? '';
                     </div>
                 </div>
 
-                <!-- Key Accounts Section -->
-                <div class="key-accounts-section"
-                    style="margin-top: 32px; background: white; border: 1px solid #dadce0; border-radius: 4px; padding: 16px;">
-                    <div
-                        style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
-                        <h2 style="font-size: 18px; color: #1a73e8; margin: 0;">Thống kê Doanh thu Key Accounts (Odoo)
-                        </h2>
-                        <div class="filter-controls">
-                            <select id="statsYearFilter" onchange="loadKeyAccountStats()" class="filter-select">
-                                <option value="2026">Năm 2026</option>
-                                <option value="2025">Năm 2025</option>
-                                <option value="2024">Năm 2024</option>
-                            </select>
-                        </div>
-                    </div>
-                    <div class="data-table-wrapper" style="max-height: none;">
-                        <table class="customer-table" style="min-width: 1000px;">
-                            <thead id="statsTableHeader">
-                                <!-- Headers will be generated dynamically -->
-                            </thead>
-                            <tbody id="keyAccountsStatsBody">
-                                <!-- Stats will be loaded here -->
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
             </div>
         </main>
     </div>
@@ -823,6 +824,19 @@ $avatar = $_SESSION['avatar'] ?? '';
             color: #1a73e8;
             background: #f1f8ff;
         }
+
+        .note-preview-text {
+            font-size: 11px;
+            color: #5f6368;
+            max-width: 250px;
+            white-space: normal;
+            display: -webkit-box;
+            -webkit-line-clamp: 3;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
+            line-height: 1.4;
+            margin-bottom: 4px;
+        }
     </style>
 
     <script>
@@ -1061,13 +1075,16 @@ $avatar = $_SESSION['avatar'] ?? '';
 
                 // Ghi chú Button with last note preview
                 const noteBtn = `
-                    <button class="take-note-btn" onclick="openNoteModal(${customer.id}, '${escapeHtml(customer.name)}')">
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
-                            <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
-                        </svg>
-                        ${customer.account_note ? 'Xem ghi chú' : 'Ghi chú'}
-                    </button>
+                    <div class="note-container" style="display: flex; flex-direction: column; align-items: flex-start;">
+                        ${customer.account_note ? `<div class="note-preview-text" title="${escapeHtml(customer.account_note)}">${escapeHtml(customer.account_note)}</div>` : ''}
+                        <button class="take-note-btn" onclick="openNoteModal(${customer.id}, '${escapeHtml(customer.name)}')">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+                                <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+                            </svg>
+                            ${customer.account_note ? 'Xem chi tiết' : 'Ghi chú'}
+                        </button>
+                    </div>
                 `;
 
                 return `

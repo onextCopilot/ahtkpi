@@ -53,6 +53,11 @@ if ($method === 'POST') {
     $stmt->bind_param("iis", $odoo_id, $user_id, $content);
 
     if ($stmt->execute()) {
+        // Also update the account_note "cache" in customers_metadata
+        $updateStmt = $conn->prepare("UPDATE customers_metadata SET account_note = ? WHERE odoo_id = ?");
+        $updateStmt->bind_param("si", $content, $odoo_id);
+        $updateStmt->execute();
+
         echo json_encode(['success' => true]);
     } else {
         echo json_encode(['success' => false, 'error' => $conn->error]);
