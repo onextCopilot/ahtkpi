@@ -1124,7 +1124,7 @@ $avatar = $_SESSION['avatar'] ?? '';
 
             container.innerHTML = `<tr><td colspan="20" style="text-align:center; padding: 20px;">Đang tính toán thống kê...</td></tr>`;
 
-            fetch(`/api/key_accounts_stats.php`)
+            fetch(`/api/key_accounts_stats_v2.php?v=${Date.now()}`)
                 .then(res => res.json())
                 .then(data => {
                     if (data.success) {
