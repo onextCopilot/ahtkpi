@@ -1673,36 +1673,6 @@ function formatMoney($amount, $currency_code)
                                             ?>
                                             Đã xác nhận KPI — <?= $kpi_date ?>
                                         </div>
-                                        <?php if (!$comm_is_confirmed): ?>
-                                            <button class="confirm-btn" onclick="confirmKpi()"
-                                                style="background:#64748b;box-shadow:none;font-size:12px;padding:7px 16px;">
-                                                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24"
-                                                    fill="none" stroke="currentColor" stroke-width="2">
-                                                    <polyline points="23 4 23 11 16 11" />
-                                                    <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 11" />
-                                                </svg>
-                                                Xác nhận lại KPI
-                                            </button>
-                                        <?php else: ?>
-                                            <div class="confirmed-badge"
-                                                style="background:#dcfce7; color:#166534; border-color:#86efac;">
-                                                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24"
-                                                    fill="none" stroke="currentColor" stroke-width="2.5">
-                                                    <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" />
-                                                </svg>
-                                                ĐÃ CHỐT COMMISSION —
-                                                <?= date('H:i d/m/Y', strtotime($latest_comm_event['confirmed_at'])) ?>
-                                            </div>
-                                        <?php endif; ?>
-                                        <button class="draft-btn" onclick="resetToDraft()">
-                                            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24"
-                                                fill="none" stroke="currentColor" stroke-width="2">
-                                                <path d="M18.36 6.64A9 9 0 1 1 5.64 5.64" />
-                                                <polyline points="15 2 21 2 21 8" />
-                                                <line x1="21" y1="2" x2="14" y2="9" />
-                                            </svg>
-                                            Reset to Draft
-                                        </button>
                                     </div>
 
                                 <?php elseif ($latest_type === 'reset'): ?>
