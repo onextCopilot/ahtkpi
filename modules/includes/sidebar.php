@@ -40,8 +40,7 @@ function isMenuItemActive($path, $current_uri)
             $is_debt_open = strpos($current_uri, '/debt') !== false ||
                 strpos($current_uri, '/my-debt') !== false ||
                 strpos($current_uri, '/debt-warning') !== false ||
-                (strpos($current_uri, '/my-reports') !== false && strpos($current_uri, '/sale-reports-admin') === false) ||
-                strpos($current_uri, '/detail-report') !== false;
+                (strpos($current_uri, '/my-reports') !== false && strpos($current_uri, '/sale-reports-admin') === false);
             echo $is_debt_open ? 'open' : ''; ?>" onclick="toggleSubmenu(this)">
                 <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
                     stroke-linecap="round" stroke-linejoin="round">
@@ -69,7 +68,7 @@ function isMenuItemActive($path, $current_uri)
                     <span>Debts Warning</span>
                 </a>
                 <a href="/my-reports"
-                    class="submenu-item <?php echo ($current_uri === '/my-reports' || strpos($current_uri, '/detail-report') !== false || (strpos($current_uri, '/my-reports') !== false && strpos($current_uri, '/sale-reports-admin') === false)) ? 'active' : ''; ?>">
+                    class="submenu-item <?php echo (strpos($current_uri, '/my-reports') !== false && strpos($current_uri, '/sale-reports-admin') === false) ? 'active' : ''; ?>">
                     <span>My Reports</span>
                 </a>
             </div>
@@ -132,7 +131,7 @@ function isMenuItemActive($path, $current_uri)
 
         <?php if ($_SESSION['role'] === 'admin'): ?>
             <a href="/sale-reports-admin"
-                class="nav-item <?php echo (strpos($current_uri, '/sale-reports-admin') !== false) ? 'active' : ''; ?>">
+                class="nav-item <?php echo (strpos($current_uri, '/sale-reports-admin') !== false || strpos($current_uri, '/detail-report') !== false) ? 'active' : ''; ?>">
                 <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
                     stroke-linecap="round" stroke-linejoin="round">
                     <line x1="12" y1="20" x2="12" y2="10"></line>

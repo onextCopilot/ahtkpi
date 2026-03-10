@@ -1686,25 +1686,8 @@ function formatMoney($amount, $currency_code)
                                         Đang ở trạng thái <strong style="margin:0 3px;">Draft</strong> — bảng đã được mở khoá.
                                         Xác nhận lại khi hoàn tất.
                                     </div>
-                                    <button class="confirm-btn" onclick="confirmKpi()" id="confirmKpiBtn">
-                                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24"
-                                            fill="none" stroke="currentColor" stroke-width="2.5">
-                                            <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
-                                            <polyline points="22 4 12 14.01 9 11.01" />
-                                        </svg>
-                                        Xác nhận KPI Quý
-                                    </button>
-
                                 <?php else: ?>
                                     <!-- STATE: No history yet -->
-                                    <button class="confirm-btn" onclick="confirmKpi()" id="confirmKpiBtn">
-                                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24"
-                                            fill="none" stroke="currentColor" stroke-width="2.5">
-                                            <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
-                                            <polyline points="22 4 12 14.01 9 11.01" />
-                                        </svg>
-                                        Xác nhận KPI Quý
-                                    </button>
                                 <?php endif; ?>
                             </div>
                             <div id="confirmErrorBox" style="display:none; flex:1; min-width:250px;"></div>
