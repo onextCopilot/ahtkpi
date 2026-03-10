@@ -11,6 +11,12 @@ if (!isset($_SESSION['user_id']) || empty($_SESSION['can_view_invoice'])) {
 require_once __DIR__ . '/../libs/OdooAPI.php';
 require_once __DIR__ . '/../config/config.php';
 
+// Auto-migrate if column is missing
+$check_order_index = $conn->query("SHOW COLUMNS FROM customers_metadata LIKE 'order_index'");
+if ($check_order_index && $check_order_index->num_rows == 0) {
+    $conn->query("ALTER TABLE customers_metadata ADD COLUMN order_index INT DEFAULT 0");
+}
+
 // Handle Toggle Key Account (POST)
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $data = json_decode(file_get_contents('php://input'), true);

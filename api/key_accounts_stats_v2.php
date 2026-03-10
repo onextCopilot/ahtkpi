@@ -17,6 +17,12 @@ try {
         $odoo->refreshInvoiceCache();
     }
 
+    // Auto-migrate if column is missing (handles live DB update)
+    $check_order_index = $conn->query("SHOW COLUMNS FROM customers_metadata LIKE 'order_index'");
+    if ($check_order_index && $check_order_index->num_rows == 0) {
+        $conn->query("ALTER TABLE customers_metadata ADD COLUMN order_index INT DEFAULT 0");
+    }
+
     // 1. Get Key Account IDs and Metadata from DB (including latest note from history)
     $key_account_metadata = [];
     $sql = "SELECT cm.odoo_id, cm.am_bd_id, cm.delivery_owners, 
@@ -35,6 +41,10 @@ try {
             ORDER BY cm.order_index ASC";
 
     $res = $conn->query($sql);
+    if (!$res) {
+        throw new Exception($conn->error);
+    }
+
     while ($row = $res->fetch_assoc()) {
         $key_account_metadata[(int) $row['odoo_id']] = $row;
     }
@@ -69,6 +79,7 @@ try {
                 'note_time' => $meta['note_time'] ?? '',
                 'company_source' => $meta['company_source'],
                 'active_projects' => $meta['active_projects'],
+                'order_index' => $meta['order_index'],
                 'stats' => [
                     'monthly' => [],
                     'quarterly' => []
@@ -158,7 +169,7 @@ try {
         'am_bd_list' => $am_bd_list,
         'total_volume_vnd_by_year' => $total_volume_vnd_by_year,
         'internal_total_res' => $internal_revenue_vnd_by_year,
-        'api_version' => '2.1'
+        'api_version' => '2.2'
     ]);
 
 } catch (Exception $e) {
