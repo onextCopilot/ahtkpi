@@ -112,13 +112,43 @@ try {
         }
     }
 
-    // Convert keys to array and sort if needed
-    $data = array_values($key_accounts_map);
+    // 4. Calculate total volume per year from 'debts' table (The "All Debts" module source)
+    $total_volume_vnd_by_year = [];
+    $debt_res = $conn->query("SELECT amount, currency, invoice_date, odoo_invoice_id FROM debts");
+    if ($debt_res) {
+        $odoo_map = $odoo->getInvoiceMap();
+        while ($d_row = $debt_res->fetch_assoc()) {
+            $amount = (float) $d_row['amount'];
+            $curr = $d_row['currency'] ?: 'USD';
+            $date_str = $d_row['invoice_date'];
+            $year = $date_str ? date('Y', strtotime($date_str)) : 'Unknown';
+            $oid = $d_row['odoo_invoice_id'];
+
+            $vnd_value = 0;
+            if (!empty($oid) && isset($odoo_map[$oid])) {
+                $odoo_inv = $odoo_map[$oid];
+                $odoo_total = (float) $odoo_inv['amount_total'];
+                $odoo_signed = abs((float) $odoo_inv['amount_total_signed']);
+                if ($odoo_total > 0) {
+                    $vnd_value = $amount * ($odoo_signed / $odoo_total);
+                }
+            }
+            if ($vnd_value <= 0) {
+                $rate = $odoo->getRate($curr, $date_str ?: date('Y-m-d'));
+                $vnd_value = ($rate > 0) ? ($amount / $rate) : $amount;
+            }
+
+            if (!isset($total_volume_vnd_by_year[$year]))
+                $total_volume_vnd_by_year[$year] = 0;
+            $total_volume_vnd_by_year[$year] += $vnd_value;
+        }
+    }
 
     echo json_encode([
         'success' => true,
         'data' => $data,
-        'am_bd_list' => $am_bd_list
+        'am_bd_list' => $am_bd_list,
+        'total_volume_vnd_by_year' => $total_volume_vnd_by_year
     ]);
 
 } catch (Exception $e) {
