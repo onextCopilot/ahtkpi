@@ -68,6 +68,9 @@ $base_tables = [
     "CREATE TABLE IF NOT EXISTS customers_metadata (
         odoo_id INT PRIMARY KEY,
         is_key_account TINYINT(1) DEFAULT 0,
+        am_bd_id INT DEFAULT NULL,
+        delivery_owners TEXT DEFAULT NULL,
+        account_note TEXT DEFAULT NULL,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
     )"
 ];
@@ -92,6 +95,15 @@ $user_columns = [
 ];
 foreach ($user_columns as $col => $def) {
     addColumnIfNotExists($conn, 'users', $col, $def);
+}
+
+$metadata_columns = [
+    'am_bd_id' => 'int(11) DEFAULT NULL',
+    'delivery_owners' => 'text DEFAULT NULL',
+    'account_note' => 'text DEFAULT NULL'
+];
+foreach ($metadata_columns as $col => $def) {
+    addColumnIfNotExists($conn, 'customers_metadata', $col, $def);
 }
 
 $dept_columns = [

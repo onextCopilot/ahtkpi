@@ -21,10 +21,49 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 
     $odoo_id = (int) $data['odoo_id'];
-    $is_key_account = isset($data['is_key_account']) ? (int) $data['is_key_account'] : 0;
 
-    $stmt = $conn->prepare("INSERT INTO customers_metadata (odoo_id, is_key_account) VALUES (?, ?) ON DUPLICATE KEY UPDATE is_key_account = ?");
-    $stmt->bind_param("iii", $odoo_id, $is_key_account, $is_key_account);
+    // Build update dynamic
+    $fields = [];
+    $params = [];
+    $types = "";
+
+    if (isset($data['is_key_account'])) {
+        $fields[] = "is_key_account = ?";
+        $params[] = (int) $data['is_key_account'];
+        $types .= "i";
+    }
+    if (isset($data['am_bd_id'])) {
+        $fields[] = "am_bd_id = ?";
+        $params[] = $data['am_bd_id'] ? (int) $data['am_bd_id'] : null;
+        $types .= "i";
+    }
+    if (isset($data['delivery_owners'])) {
+        $fields[] = "delivery_owners = ?";
+        $params[] = $data['delivery_owners']; // comma separated string or single code
+        $types .= "s";
+    }
+    if (isset($data['account_note'])) {
+        $fields[] = "account_note = ?";
+        $params[] = $data['account_note'];
+        $types .= "s";
+    }
+
+    if (empty($fields)) {
+        echo json_encode(['success' => true]);
+        exit;
+    }
+
+    $sql = "INSERT INTO customers_metadata (odoo_id, " . implode(", ", array_map(fn($f) => explode(" = ", $f)[0], $fields)) . ") 
+            VALUES (?, " . implode(", ", array_fill(0, count($fields), "?")) . ") 
+            ON DUPLICATE KEY UPDATE " . implode(", ", $fields);
+
+    $stmt = $conn->prepare($sql);
+
+    // Merge parameters for INSERT AND UPDATE
+    $full_params = array_merge([$odoo_id], $params, $params);
+    $full_types = "i" . $types . $types;
+
+    $stmt->bind_param($full_types, ...$full_params);
 
     if ($stmt->execute()) {
         echo json_encode(['success' => true]);
@@ -79,7 +118,8 @@ try {
 
     if ($is_key_account_filter === '1') {
         $customers = array_values(array_filter($customers, function ($c) {
-            return $c['is_key_account']; }));
+            return $c['is_key_account'];
+        }));
         $totalCount = count($customers);
     }
 

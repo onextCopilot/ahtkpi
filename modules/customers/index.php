@@ -592,6 +592,55 @@ $avatar = $_SESSION['avatar'] ?? '';
             font-weight: 600;
             background: #f8f9fa;
         }
+
+        .inline-edit-select {
+            width: 100%;
+            border: 1px solid #dadce0;
+            border-radius: 4px;
+            padding: 4px;
+            font-size: 12px;
+            background: white;
+        }
+
+        .inline-edit-note {
+            width: 100%;
+            height: 40px;
+            border: 1px solid #dadce0;
+            border-radius: 4px;
+            padding: 4px;
+            font-size: 11px;
+            resize: vertical;
+            font-family: inherit;
+        }
+
+        .bc-selector {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 4px;
+            max-width: 200px;
+        }
+
+        .bc-chip {
+            display: flex;
+            align-items: center;
+            gap: 2px;
+            background: #f1f3f4;
+            padding: 2px 4px;
+            border-radius: 4px;
+            font-size: 10px;
+            cursor: pointer;
+            border: 1px solid #dadce0;
+        }
+
+        .bc-chip:hover {
+            background: #e8eaed;
+        }
+
+        .bc-chip input {
+            margin: 0;
+            width: 12px;
+            height: 12px;
+        }
     </style>
 
     <script>
@@ -681,19 +730,40 @@ $avatar = $_SESSION['avatar'] ?? '';
                 });
         }
 
+        let globalAmBdList = [];
+        const BC_LIST = ['BC1', 'BC2', 'BC3', 'BC4', 'BC5', 'BC6', 'BC7', 'BC8', 'BC9', 'BC10'];
+
         function loadKeyAccountStats() {
             const year = document.getElementById('statsYearFilter').value;
             const container = document.getElementById('keyAccountsStatsBody');
             const header = document.getElementById('statsTableHeader');
 
-            container.innerHTML = `<tr><td colspan="12" style="text-align:center; padding: 20px;">Đang tính toán thống kê...</td></tr>`;
+            container.innerHTML = `<tr><td colspan="20" style="text-align:center; padding: 20px;">Đang tính toán thống kê...</td></tr>`;
 
             fetch(`/api/key_accounts_stats.php`)
                 .then(res => res.json())
                 .then(data => {
                     if (data.success) {
+                        globalAmBdList = data.am_bd_list || [];
                         renderStats(data.data, year);
                     }
+                });
+        }
+
+        function updateKeyAccountMetadata(odooId, field, value) {
+            const payload = {
+                odoo_id: odooId,
+                [field]: value
+            };
+
+            fetch('/api/customers.php', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            })
+                .then(res => res.json())
+                .then(data => {
+                    if (!data.success) alert('Lỗi: ' + data.error);
                 });
         }
 
@@ -701,10 +771,13 @@ $avatar = $_SESSION['avatar'] ?? '';
             const header = document.getElementById('statsTableHeader');
             const body = document.getElementById('keyAccountsStatsBody');
 
-            // Generate Headers (Company Name, Q1, Q2, Q3, Q4, M1..M12)
+            // Generate Headers 
             header.innerHTML = `
                 <tr>
-                    <th style="width: 250px;">Khách hàng (Key Account)</th>
+                    <th style="width: 200px; position: sticky; left: 0; background: #f8f9fa; z-index: 20;">Khách hàng (Key Account)</th>
+                    <th style="width: 150px;">AM/BD</th>
+                    <th style="width: 200px;">Delivery Owner (BCs)</th>
+                    <th style="width: 200px;">Note</th>
                     <th class="revenue-cell">Tổng Năm</th>
                     <th class="revenue-cell">Q1</th>
                     <th class="revenue-cell">Q2</th>
@@ -715,7 +788,7 @@ $avatar = $_SESSION['avatar'] ?? '';
             `;
 
             if (data.length === 0) {
-                body.innerHTML = `<tr><td colspan="17" style="text-align:center; padding: 40px; color: #5f6368;">Chưa có Key Account nào được thiết lập</td></tr>`;
+                body.innerHTML = `<tr><td colspan="20" style="text-align:center; padding: 40px; color: #5f6368;">Chưa có Key Account nào được thiết lập</td></tr>`;
                 return;
             }
 
@@ -730,7 +803,6 @@ $avatar = $_SESSION['avatar'] ?? '';
                     yearlyTotal += (stats.monthly[mk] || 0);
                 }
 
-                // Quarterly Stats
                 const qs = [
                     stats.quarterly[`${year}-Q1`] || 0,
                     stats.quarterly[`${year}-Q2`] || 0,
@@ -738,21 +810,58 @@ $avatar = $_SESSION['avatar'] ?? '';
                     stats.quarterly[`${year}-Q4`] || 0
                 ];
 
-                // Monthly Stats (M1..M12)
                 const ms = Array.from({ length: 12 }, (_, i) => {
                     const mk = `${year}-${(i + 1).toString().padStart(2, '0')}`;
                     return stats.monthly[mk] || 0;
                 });
 
+                // Metadata elements
+                const amSelect = `
+                    <select class="inline-edit-select" onchange="updateKeyAccountMetadata(${customer.id}, 'am_bd_id', this.value)">
+                        <option value="">-- AM/BD --</option>
+                        ${globalAmBdList.map(am => `<option value="${am.id}" ${customer.am_bd_id == am.id ? 'selected' : ''}>${escapeHtml(am.full_name)}</option>`).join('')}
+                    </select>
+                `;
+
+                // Multi-select for BCs (using a comma-separated string representation)
+                const currentBCs = (customer.delivery_owners || '').split(',').filter(b => b.trim() !== '');
+                const bcCheckboxes = `
+                    <div class="bc-selector">
+                        ${BC_LIST.map(bc => `
+                            <label class="bc-chip">
+                                <input type="checkbox" value="${bc}" ${currentBCs.includes(bc) ? 'checked' : ''} 
+                                    onchange="handleBCChange(${customer.id}, this)">
+                                <span>${bc}</span>
+                            </label>
+                        `).join('')}
+                    </div>
+                `;
+
+                const noteField = `
+                    <textarea class="inline-edit-note" placeholder="Account info..." 
+                        onblur="updateKeyAccountMetadata(${customer.id}, 'account_note', this.value)">${escapeHtml(customer.account_note || '')}</textarea>
+                `;
+
                 return `
                     <tr>
-                        <td style="font-weight: 500;">${escapeHtml(customer.name)}</td>
+                        <td style="font-weight: 500; position: sticky; left: 0; background: white; z-index: 10; border-right: 2px solid #dadce0;">
+                            ${escapeHtml(customer.name)}
+                        </td>
+                        <td>${amSelect}</td>
+                        <td>${bcCheckboxes}</td>
+                        <td style="padding: 4px;">${noteField}</td>
                         <td class="revenue-cell revenue-total">${formatVND(yearlyTotal)}</td>
-                        ${qs.map(q => `<td class="revenue-cell" style="background: #f1f3f4;">${formatVND(q)}</td>`).join('')}
+                        ${qs.map(q => `<td class="revenue-cell" style="background: #f8f9fa;">${formatVND(q)}</td>`).join('')}
                         ${ms.map(m => `<td class="revenue-cell">${formatVND(m)}</td>`).join('')}
                     </tr>
                 `;
             }).join('');
+        }
+
+        function handleBCChange(odooId, checkbox) {
+            const container = checkbox.closest('.bc-selector');
+            const checked = Array.from(container.querySelectorAll('input:checked')).map(i => i.value);
+            updateKeyAccountMetadata(odooId, 'delivery_owners', checked.join(','));
         }
 
         function renderCustomers(customers, pagination) {

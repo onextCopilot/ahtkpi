@@ -14,27 +14,39 @@ require_once __DIR__ . '/../config/config.php';
 try {
     $odoo = new OdooAPI();
 
-    // 1. Get Key Account IDs from DB
-    $key_account_ids = [];
-    $res = $conn->query("SELECT odoo_id FROM customers_metadata WHERE is_key_account = 1");
+    // 1. Get Key Account IDs and Metadata from DB
+    $key_account_metadata = [];
+    $res = $conn->query("SELECT odoo_id, am_bd_id, delivery_owners, account_note FROM customers_metadata WHERE is_key_account = 1");
     while ($row = $res->fetch_assoc()) {
-        $key_account_ids[] = (int) $row['odoo_id'];
+        $key_account_metadata[(int) $row['odoo_id']] = $row;
+    }
+    $key_account_ids = array_keys($key_account_metadata);
+
+    // 2. Get AM/BD list
+    $am_bd_list = [];
+    $am_res = $conn->query("SELECT id, full_name FROM users WHERE is_am_bd = 1 OR role = 'admin' ORDER BY full_name ASC");
+    while ($row = $am_res->fetch_assoc()) {
+        $am_bd_list[] = $row;
     }
 
     if (empty($key_account_ids)) {
-        echo json_encode(['success' => true, 'data' => []]);
+        echo json_encode(['success' => true, 'data' => [], 'am_bd_list' => $am_bd_list]);
         exit;
     }
 
-    // 2. Get Customer Details from Cache
+    // 3. Get Customer Details from Cache
     $customers_res = $odoo->getCustomers(100000);
     $all_customers = $customers_res['customers'];
     $key_accounts_map = [];
     foreach ($all_customers as $c) {
-        if (in_array((int) $c['id'], $key_account_ids)) {
+        if (isset($key_account_metadata[(int) $c['id']])) {
+            $meta = $key_account_metadata[(int) $c['id']];
             $key_accounts_map[$c['id']] = [
                 'id' => $c['id'],
                 'name' => $c['name'],
+                'am_bd_id' => $meta['am_bd_id'],
+                'delivery_owners' => $meta['delivery_owners'],
+                'account_note' => $meta['account_note'],
                 'stats' => [
                     'monthly' => [],
                     'quarterly' => []
@@ -87,7 +99,8 @@ try {
 
     echo json_encode([
         'success' => true,
-        'data' => $data
+        'data' => $data,
+        'am_bd_list' => $am_bd_list
     ]);
 
 } catch (Exception $e) {
