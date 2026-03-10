@@ -49,6 +49,9 @@ $routes = [
     '/api/sale_orders' => 'api/sale_orders.php',
     '/my-reports' => 'modules/sale_reports/index.php',
     '/detail-report' => 'modules/sale_reports/detail.php',
+    '/detail_report' => 'modules/sale_reports/detail.php',
+    '/sale-reports' => 'modules/sale_reports/index.php',
+    '/sale_reports' => 'modules/sale_reports/index.php',
     '/sale-reports-admin' => 'modules/sale_reports_admin/index.php',
 ];
 

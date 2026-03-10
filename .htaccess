@@ -54,7 +54,9 @@ RewriteRule ^kpi/?$ modules/kpi/index.php [L]
 RewriteRule ^sale-orders/?$ modules/sale_orders/index.php [L]
 RewriteRule ^my-reports/?$ modules/sale_reports/index.php [L]
 RewriteRule ^detail-report/?$ modules/sale_reports/detail.php [L]
+RewriteRule ^detail_report/?$ modules/sale_reports/detail.php [L]
 RewriteRule ^sale-reports/?$ modules/sale_reports/index.php [L]
+RewriteRule ^sale_reports/?$ modules/sale_reports/index.php [L]
 RewriteRule ^sale-reports-admin/?$ modules/sale_reports_admin/index.php [L]
 
 # APIs
