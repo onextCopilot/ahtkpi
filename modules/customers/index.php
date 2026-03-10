@@ -1130,7 +1130,8 @@ $avatar = $_SESSION['avatar'] ?? '';
                     if (data.success) {
                         globalAmBdList = data.am_bd_list || [];
                         currentTotalVolumeByYear = data.total_volume_vnd_by_year || {};
-                        currentInternalRevenueByYear = data.internal_revenue_vnd_by_year || {};
+                        currentInternalRevenueByYear = data.internal_total_res || {};
+                        console.log('API Version:', data.api_version);
                         const now = new Date();
 
                         // Pre-calculate sortable values

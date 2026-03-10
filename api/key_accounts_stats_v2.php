@@ -153,7 +153,8 @@ try {
         'data' => $data,
         'am_bd_list' => $am_bd_list,
         'total_volume_vnd_by_year' => $total_volume_vnd_by_year,
-        'internal_revenue_vnd_by_year' => $internal_revenue_vnd_by_year
+        'internal_total_res' => $internal_revenue_vnd_by_year,
+        'api_version' => '2.1'
     ]);
 
 } catch (Exception $e) {
