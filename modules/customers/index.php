@@ -613,33 +613,68 @@ $avatar = $_SESSION['avatar'] ?? '';
             font-family: inherit;
         }
 
-        .bc-selector {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 4px;
-            max-width: 200px;
+        .bc-dropdown-container {
+            position: relative;
+            width: 100%;
         }
 
-        .bc-chip {
+        .bc-dropdown-btn {
+            width: 100%;
+            padding: 6px 12px;
+            background: white;
+            border: 1px solid #dadce0;
+            border-radius: 4px;
+            font-size: 12px;
+            text-align: left;
+            cursor: pointer;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            display: block;
+        }
+
+        .bc-dropdown-btn:after {
+            content: '▼';
+            font-size: 8px;
+            float: right;
+            margin-top: 3px;
+            color: #5f6368;
+        }
+
+        .bc-dropdown-content {
+            display: none;
+            position: absolute;
+            background-color: white;
+            min-width: 160px;
+            box-shadow: 0px 8px 16px 0px rgba(0,0,0,0.2);
+            z-index: 100;
+            border: 1px solid #dadce0;
+            border-radius: 4px;
+            padding: 8px;
+            max-height: 200px;
+            overflow-y: auto;
+        }
+
+        .bc-dropdown-content.show {
+            display: block;
+        }
+
+        .bc-option {
             display: flex;
             align-items: center;
-            gap: 2px;
-            background: #f1f3f4;
-            padding: 2px 4px;
-            border-radius: 4px;
-            font-size: 10px;
+            gap: 8px;
+            padding: 4px 8px;
             cursor: pointer;
-            border: 1px solid #dadce0;
+            font-size: 12px;
+            border-radius: 4px;
         }
 
-        .bc-chip:hover {
-            background: #e8eaed;
+        .bc-option:hover {
+            background-color: #f1f3f4;
         }
 
-        .bc-chip input {
+        .bc-option input {
             margin: 0;
-            width: 12px;
-            height: 12px;
         }
     </style>
 
@@ -777,7 +812,7 @@ $avatar = $_SESSION['avatar'] ?? '';
                     <th style="width: 200px; position: sticky; left: 0; background: #f8f9fa; z-index: 20;">Khách hàng (Key Account)</th>
                     <th style="width: 150px;">AM/BD</th>
                     <th style="width: 200px;">Delivery Owner (BCs)</th>
-                    <th style="width: 200px;">Note</th>
+                    <th style="width: 150px; text-align: right;">Doanh Thu TB (6th)</th>
                     <th class="revenue-cell">Tổng Năm</th>
                     <th class="revenue-cell">Q1</th>
                     <th class="revenue-cell">Q2</th>
@@ -788,20 +823,36 @@ $avatar = $_SESSION['avatar'] ?? '';
             `;
 
             if (data.length === 0) {
-                body.innerHTML = `<tr><td colspan="20" style="text-align:center; padding: 40px; color: #5f6368;">Chưa có Key Account nào được thiết lập</td></tr>`;
+                body.innerHTML = `<tr><td colspan="21" style="text-align:center; padding: 40px; color: #5f6368;">Chưa có Key Account nào được thiết lập</td></tr>`;
                 return;
             }
 
+            // Get Current Date context for "Last 6 Months Average"
+            const now = new Date();
+            const currentYear = now.getFullYear();
+            const currentMonth = now.getMonth() + 1; // 1-12
+
             body.innerHTML = data.map(customer => {
                 const stats = customer.stats;
-                const formatVND = (val) => val ? new Intl.NumberFormat('vi-VN').format(Math.abs(val)) : '-';
+                const formatVND = (val) => val ? new Intl.NumberFormat('vi-VN').format(Math.round(Math.abs(val))) : '-';
 
-                // Yearly Total
+                // 1. Calculate Yearly Total for the SELECTED year
                 let yearlyTotal = 0;
                 for (let m = 1; m <= 12; m++) {
                     const mk = `${year}-${m.toString().padStart(2, '0')}`;
                     yearlyTotal += (stats.monthly[mk] || 0);
                 }
+
+                // 2. Calculate Average Revenue (TB) of the LAST 6 COMPLETED MONTHS
+                let last6MonthsTotal = 0;
+                let monthsFound = 0;
+                for (let i = 1; i <= 6; i++) {
+                    let d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+                    const mk = `${d.getFullYear()}-${(d.getMonth() + 1).toString().padStart(2, '0')}`;
+                    last6MonthsTotal += (stats.monthly[mk] || 0);
+                    monthsFound++;
+                }
+                const avgRevenue = last6MonthsTotal / 6;
 
                 const qs = [
                     stats.quarterly[`${year}-Q1`] || 0,
@@ -823,23 +874,23 @@ $avatar = $_SESSION['avatar'] ?? '';
                     </select>
                 `;
 
-                // Multi-select for BCs (using a comma-separated string representation)
+                // BC Multi-select Dropdown
                 const currentBCs = (customer.delivery_owners || '').split(',').filter(b => b.trim() !== '');
-                const bcCheckboxes = `
-                    <div class="bc-selector">
-                        ${BC_LIST.map(bc => `
-                            <label class="bc-chip">
-                                <input type="checkbox" value="${bc}" ${currentBCs.includes(bc) ? 'checked' : ''} 
-                                    onchange="handleBCChange(${customer.id}, this)">
-                                <span>${bc}</span>
-                            </label>
-                        `).join('')}
+                const bcDropdown = `
+                    <div class="bc-dropdown-container">
+                        <button class="bc-dropdown-btn" onclick="toggleBCDropdown(event, this)">
+                            ${currentBCs.length > 0 ? currentBCs.join(', ') : 'Chọn BCs...'}
+                        </button>
+                        <div class="bc-dropdown-content">
+                            ${BC_LIST.map(bc => `
+                                <label class="bc-option">
+                                    <input type="checkbox" value="${bc}" ${currentBCs.includes(bc) ? 'checked' : ''} 
+                                        onchange="handleBCChange(${customer.id}, this)">
+                                    <span>${bc}</span>
+                                </label>
+                            `).join('')}
+                        </div>
                     </div>
-                `;
-
-                const noteField = `
-                    <textarea class="inline-edit-note" placeholder="Account info..." 
-                        onblur="updateKeyAccountMetadata(${customer.id}, 'account_note', this.value)">${escapeHtml(customer.account_note || '')}</textarea>
                 `;
 
                 return `
@@ -848,8 +899,8 @@ $avatar = $_SESSION['avatar'] ?? '';
                             ${escapeHtml(customer.name)}
                         </td>
                         <td>${amSelect}</td>
-                        <td>${bcCheckboxes}</td>
-                        <td style="padding: 4px;">${noteField}</td>
+                        <td style="padding: 4px;">${bcDropdown}</td>
+                        <td style="text-align: right; font-weight: 600; color: #1e8e3e;">${formatVND(avgRevenue)}</td>
                         <td class="revenue-cell revenue-total">${formatVND(yearlyTotal)}</td>
                         ${qs.map(q => `<td class="revenue-cell" style="background: #f8f9fa;">${formatVND(q)}</td>`).join('')}
                         ${ms.map(m => `<td class="revenue-cell">${formatVND(m)}</td>`).join('')}
@@ -858,9 +909,29 @@ $avatar = $_SESSION['avatar'] ?? '';
             }).join('');
         }
 
+        function toggleBCDropdown(event, btn) {
+            event.stopPropagation();
+            const content = btn.nextElementSibling;
+            // Close other dropdowns
+            document.querySelectorAll('.bc-dropdown-content.show').forEach(el => {
+                if (el !== content) el.classList.remove('show');
+            });
+            content.classList.toggle('show');
+        }
+
+        // Close dropdowns on click outside
+        window.onclick = function (event) {
+            if (!event.target.closest('.bc-dropdown-container')) {
+                document.querySelectorAll('.bc-dropdown-content').forEach(el => el.classList.remove('show'));
+            }
+        };
+
         function handleBCChange(odooId, checkbox) {
-            const container = checkbox.closest('.bc-selector');
+            const container = checkbox.closest('.bc-dropdown-content');
+            const btn = container.previousElementSibling;
             const checked = Array.from(container.querySelectorAll('input:checked')).map(i => i.value);
+
+            btn.textContent = checked.length > 0 ? checked.join(', ') : 'Chọn BCs...';
             updateKeyAccountMetadata(odooId, 'delivery_owners', checked.join(','));
         }
 
