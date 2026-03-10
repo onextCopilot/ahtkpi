@@ -114,13 +114,10 @@ try {
 
     // 4. Calculate total volume per year from ALL Odoo invoices (Global Revenue)
     $total_volume_vnd_by_year = [];
+    $internal_revenue_vnd_by_year = [];
     foreach ($all_invoices as $inv) {
         // Only count posted customer invoices
         if ($inv['state'] !== 'posted' || ($inv['move_type'] ?? '') !== 'out_invoice')
-            continue;
-
-        // EXCLUDE internal invoices as requested
-        if (($inv['x_studio_invoice_type_1'] ?? '') === 'Internal')
             continue;
 
         $amount_vnd = abs((float) ($inv['amount_total_signed'] ?? 0));
@@ -129,6 +126,15 @@ try {
             continue;
 
         $inv_year = date('Y', strtotime($date_str));
+
+        // EXCLUDE internal invoices as requested for Total Volume
+        if (($inv['x_studio_invoice_type_1'] ?? '') === 'Internal') {
+            if (!isset($internal_revenue_vnd_by_year[$inv_year])) {
+                $internal_revenue_vnd_by_year[$inv_year] = 0;
+            }
+            $internal_revenue_vnd_by_year[$inv_year] += $amount_vnd;
+            continue;
+        }
 
         if (!isset($total_volume_vnd_by_year[$inv_year])) {
             $total_volume_vnd_by_year[$inv_year] = 0;
@@ -142,7 +148,8 @@ try {
         'success' => true,
         'data' => $data,
         'am_bd_list' => $am_bd_list,
-        'total_volume_vnd_by_year' => $total_volume_vnd_by_year
+        'total_volume_vnd_by_year' => $total_volume_vnd_by_year,
+        'internal_revenue_vnd_by_year' => $internal_revenue_vnd_by_year
     ]);
 
 } catch (Exception $e) {

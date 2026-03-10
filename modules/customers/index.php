@@ -1113,6 +1113,7 @@ $avatar = $_SESSION['avatar'] ?? '';
         let globalAmBdList = [];
         let currentStatsData = [];
         let currentTotalVolumeByYear = {};
+        let currentInternalRevenueByYear = {};
         let currentSortCol = 'name';
         let currentSortDir = 'asc';
         const BC_LIST = ['BC1', 'BC2', 'BC3', 'BC4', 'BC5', 'BC6', 'BC7', 'BC8', 'BC9', 'BC10'];
@@ -1129,6 +1130,7 @@ $avatar = $_SESSION['avatar'] ?? '';
                     if (data.success) {
                         globalAmBdList = data.am_bd_list || [];
                         currentTotalVolumeByYear = data.total_volume_vnd_by_year || {};
+                        currentInternalRevenueByYear = data.internal_revenue_vnd_by_year || {};
                         const now = new Date();
 
                         // Pre-calculate sortable values
@@ -1271,6 +1273,10 @@ $avatar = $_SESSION['avatar'] ?? '';
                     <div style="flex: 1; min-width: 250px; background: #fff; border: 1px solid #dadce0; border-radius: 4px; padding: 16px; box-shadow: 0 1px 2px rgba(0,0,0,0.05);">
                         <div style="font-size: 12px; color: #5f6368; text-transform: uppercase; font-weight: 600; margin-bottom: 8px;">Key Accounts Revenue (${year})</div>
                         <div style="font-size: 20px; font-weight: 700; color: #1a73e8;">${formatUSD(totalKeyAccountVnd)}</div>
+                    </div>
+                    <div style="flex: 1; min-width: 250px; background: #fff; border: 1px solid #dadce0; border-radius: 4px; padding: 16px; box-shadow: 0 1px 2px rgba(0,0,0,0.05);">
+                        <div style="font-size: 12px; color: #5f6368; text-transform: uppercase; font-weight: 600; margin-bottom: 8px;">Total Internal Invoices (${year})</div>
+                        <div style="font-size: 20px; font-weight: 700; color: #f59e0b;">${formatUSD(currentInternalRevenueByYear[year] || 0)}</div>
                     </div>
                     <div style="flex: 1; min-width: 250px; background: #e8f0fe; border: 1px solid #1a73e8; border-radius: 4px; padding: 16px; box-shadow: 0 1px 2px rgba(0,0,0,0.05);">
                         <div style="font-size: 12px; color: #1a73e8; text-transform: uppercase; font-weight: 600; margin-bottom: 8px;">Key Accounts Revenue Share</div>
