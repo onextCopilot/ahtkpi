@@ -418,6 +418,95 @@ $avatar = $_SESSION['avatar'] ?? '';
                     </div>
                 </div>
 
+                <div class="key-accounts-section"
+                    style="margin-bottom: 32px; background: white; border: 1px solid #dadce0; border-radius: 4px; padding: 16px;">
+                    <div
+                        style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+                        <h2 style="font-size: 18px; color: #1a73e8; margin: 0;">Thống kê Doanh Thu Key Accounts (Hoàn
+                            thành - USD)</h2>
+                        <div class="filter-controls">
+                            <!-- Rate Note -->
+                            <span style="font-size: 11px; color: #70757a; margin-right: 12px; font-style: italic;">
+                                Tỷ giá tạm tính: 1 USD = 24,000 VND
+                            </span>
+                            <div class="search-box" style="min-width: 250px;">
+                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                    stroke-width="2">
+                                    <circle cx="11" cy="11" r="8"></circle>
+                                    <path d="m21 21-4.35-4.35"></path>
+                                </svg>
+                                <input type="text" id="usdSearchInput" placeholder="Tìm kiếm tên khách hàng..."
+                                    onkeyup="renderUsdRevenueStats()">
+                            </div>
+                        </div>
+                    </div>
+                    <div class="data-table-wrapper" style="max-height: 500px; overflow-y: auto;">
+                        <style>
+                            .usd-table {
+                                min-width: 1600px;
+                                border-collapse: separate;
+                                border-spacing: 0;
+                            }
+
+                            .usd-table th {
+                                position: sticky;
+                                top: 0;
+                                z-index: 10;
+                                background: #f8f9fa;
+                                border-bottom: 2px solid #dadce0;
+                                padding: 10px 8px;
+                                font-size: 12px;
+                                text-transform: uppercase;
+                                color: #5f6368;
+                            }
+
+                            .usd-table th.name-col {
+                                position: sticky;
+                                left: 0;
+                                z-index: 20;
+                                border-right: 2px solid #dadce0;
+                            }
+
+                            .usd-table td.name-col {
+                                position: sticky;
+                                left: 0;
+                                z-index: 5;
+                                background: #fff;
+                                border-right: 2px solid #dadce0;
+                                font-weight: 500;
+                            }
+
+                            .usd-table td {
+                                padding: 8px;
+                                border-bottom: 1px solid #eee;
+                                font-size: 13px;
+                                text-align: right;
+                            }
+
+                            .usd-table .q-col {
+                                background: #f1f8ff;
+                                font-weight: 600;
+                                color: #004b75;
+                                border-right: 1px solid #d1e3f8;
+                            }
+
+                            .usd-table .y-col {
+                                background: #e6f4ea;
+                                font-weight: 700;
+                                color: #137333;
+                            }
+                        </style>
+                        <table class="customer-table usd-table">
+                            <thead id="usdStatsTableHeader">
+                                <!-- Headers will be generated dynamically -->
+                            </thead>
+                            <tbody id="usdStatsTableBody">
+                                <!-- Data will load here -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
                 <div class="page-controls">
                     <div class="search-box">
                         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
@@ -1060,8 +1149,77 @@ $avatar = $_SESSION['avatar'] ?? '';
                         });
 
                         sortAndRenderStats();
+                        renderUsdRevenueStats();
                     }
                 });
+        }
+
+        function renderUsdRevenueStats() {
+            const container = document.getElementById('usdStatsTableBody');
+            const header = document.getElementById('usdStatsTableHeader');
+            const year = document.getElementById('statsYearFilter').value;
+            const search = document.getElementById('usdSearchInput') ? document.getElementById('usdSearchInput').value.toLowerCase() : '';
+            const rate = 24000;
+
+            if (!container || !header) return;
+
+            const formatUSD = (val) => {
+                if (!val) return '-';
+                const usd = val / rate;
+                return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(usd);
+            };
+
+            // Generate Header
+            let headerHtml = `
+                <tr>
+                    <th class="name-col" style="text-align: left; width: 250px;">Khách hàng</th>
+                    <th class="y-col" style="width: 120px;">Tổng Năm</th>
+                    <th class="q-col" style="width: 100px;">Q1</th>
+                    <th class="q-col" style="width: 100px;">Q2</th>
+                    <th class="q-col" style="width: 100px;">Q3</th>
+                    <th class="q-col" style="width: 100px;">Q4</th>
+            `;
+            for (let i = 1; i <= 12; i++) {
+                headerHtml += `<th style="width: 90px;">T${i}</th>`;
+            }
+            headerHtml += '</tr>';
+            header.innerHTML = headerHtml;
+
+            // Filter data based on search
+            const filteredData = currentStatsData.filter(c => c.name.toLowerCase().includes(search));
+
+            if (filteredData.length === 0) {
+                container.innerHTML = `<tr><td colspan="20" style="text-align:center; padding: 40px; color: #5f6368;">Không tìm thấy khách hàng nào khớp với tìm kiếm</td></tr>`;
+                return;
+            }
+
+            container.innerHTML = filteredData.map(customer => {
+                const stats = customer.stats;
+                let row = `<tr><td class="name-col" style="text-align: left;">${escapeHtml(customer.name)}</td>`;
+
+                // Yearly Total
+                let yearlyTotal = 0;
+                for (let m = 1; m <= 12; m++) {
+                    const mk = `${year}-${m.toString().padStart(2, '0')}`;
+                    yearlyTotal += (stats.monthly[mk] || 0);
+                }
+                row += `<td class="y-col">${formatUSD(yearlyTotal)}</td>`;
+
+                // Quarters
+                for (let q = 1; q <= 4; q++) {
+                    const qk = `${year}-Q${q}`;
+                    row += `<td class="q-col">${formatUSD(stats.quarterly[qk] || 0)}</td>`;
+                }
+
+                // Months
+                for (let m = 1; m <= 12; m++) {
+                    const mk = `${year}-${m.toString().padStart(2, '0')}`;
+                    row += `<td>${formatUSD(stats.monthly[mk] || 0)}</td>`;
+                }
+
+                row += '</tr>';
+                return row;
+            }).join('');
         }
 
         function sortAndRenderStats(col = null) {
