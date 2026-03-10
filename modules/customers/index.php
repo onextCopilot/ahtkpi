@@ -37,7 +37,7 @@ $avatar = $_SESSION['avatar'] ?? '';
         .customer-container {
             padding: 16px;
             width: 100%;
-            height: calc(100vh - 60px);
+            min-height: 100vh;
             display: flex;
             flex-direction: column;
             box-sizing: border-box;
@@ -430,7 +430,7 @@ $avatar = $_SESSION['avatar'] ?? '';
                     </div>
                 </div>
 
-                <div class="data-table-wrapper">
+                <div class="data-table-wrapper" style="flex: none;">
                     <table class="customer-table">
                         <thead>
                             <tr>
@@ -726,54 +726,103 @@ $avatar = $_SESSION['avatar'] ?? '';
             display: flex;
             align-items: center;
             justify-content: center;
+        }
 
-            .note-item {
-                background: #f8f9fa;
-                border-radius: 8px;
-                padding: 12px;
-                margin-bottom: 12px;
-                border: 1px solid #eee;
-            }
+        /* Modal Styles */
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 100000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            overflow: auto;
+            background-color: rgba(0, 0, 0, 0.4);
+        }
 
-            .note-content-text {
-                font-size: 13px;
-                color: #202124;
-                line-height: 1.5;
-                white-space: pre-wrap;
-            }
+        .modal-content {
+            background-color: #fefefe;
+            margin: 10% auto;
+            padding: 0;
+            border: 1px solid #888;
+            width: 80%;
+            border-radius: 8px;
+            box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
+            overflow: hidden;
+        }
 
-            .note-meta {
-                margin-top: 8px;
-                font-size: 11px;
-                color: #5f6368;
-                display: flex;
-                justify-content: space-between;
-            }
+        .modal-header {
+            padding: 16px;
+            background: #f8f9fa;
+            border-bottom: 1px solid #dadce0;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
 
-            .note-author {
-                font-weight: 600;
-                color: #1a73e8;
-            }
+        .modal-body {
+            padding: 20px;
+        }
 
-            .take-note-btn {
-                background: none;
-                border: 1px solid #dadce0;
-                border-radius: 4px;
-                padding: 4px 8px;
-                cursor: pointer;
-                color: #5f6368;
-                display: flex;
-                align-items: center;
-                gap: 4px;
-                font-size: 11px;
-                transition: all 0.2s;
-            }
+        .close {
+            color: #5f6368;
+            font-size: 24px;
+            font-weight: bold;
+            cursor: pointer;
+        }
 
-            .take-note-btn:hover {
-                border-color: #1a73e8;
-                color: #1a73e8;
-                background: #f1f8ff;
-            }
+        .close:hover {
+            color: #202124;
+        }
+
+        .note-item {
+            background: #f8f9fa;
+            border-radius: 8px;
+            padding: 12px;
+            margin-bottom: 12px;
+            border: 1px solid #eee;
+        }
+
+        .note-content-text {
+            font-size: 13px;
+            color: #202124;
+            line-height: 1.5;
+            white-space: pre-wrap;
+        }
+
+        .note-meta {
+            margin-top: 8px;
+            font-size: 11px;
+            color: #5f6368;
+            display: flex;
+            justify-content: space-between;
+        }
+
+        .note-author {
+            font-weight: 600;
+            color: #1a73e8;
+        }
+
+        .take-note-btn {
+            background: none;
+            border: 1px solid #dadce0;
+            border-radius: 4px;
+            padding: 4px 8px;
+            cursor: pointer;
+            color: #5f6368;
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            font-size: 11px;
+            transition: all 0.2s;
+        }
+
+        .take-note-btn:hover {
+            border-color: #1a73e8;
+            color: #1a73e8;
+            background: #f1f8ff;
+        }
     </style>
 
     <script>
