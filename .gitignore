@@ -60,3 +60,16 @@ Desktop.ini
 # SSH Keys
 aht_Kpi
 aht_Kpi.pub
+
+# Tmp and testing files
+tmp/
+test_*.php
+check_*.php
+debug_*.php
+tmp_*.php
+v2_test.php
+force_*.php
+describe.php
+desc.php
+desc_*.php
+*.db
