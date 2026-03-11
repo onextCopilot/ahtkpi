@@ -236,7 +236,7 @@ if ($d_res) {
         $depts[] = $r;
     }
 }
-$levels = ['Intern', 'Fresher', 'Junior', 'Middle', 'Senior', 'Lead', 'Principal', 'Manager', 'Director', 'CTO'];
+$levels = ['Member', 'Leader', 'Manager', 'Director' , 'C-Level'];
 
 // Fetch Sale Teams
 $sale_teams = [];
