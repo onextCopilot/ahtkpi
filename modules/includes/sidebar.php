@@ -75,7 +75,7 @@ function isMenuItemActive($path, $current_uri)
         <?php endif; ?>
 
         <!-- Customers -->
-        <?php if (!empty($_SESSION['can_view_invoice'])): ?>
+        <?php if (!empty($_SESSION['can_view_invoice']) || !empty($_SESSION['is_am_bd']) || $_SESSION['role'] === 'admin'): ?>
             <a href="/customers" class="nav-item <?php echo ($current_uri === '/customers') ? 'active' : ''; ?>">
                 <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
                     stroke-linecap="round" stroke-linejoin="round">

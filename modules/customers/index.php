@@ -4,7 +4,7 @@ if (!isset($_SESSION['user_id'])) {
     header('Location: /login.php');
     exit;
 }
-if (empty($_SESSION['can_view_invoice'])) {
+if (empty($_SESSION['can_view_invoice']) && empty($_SESSION['is_am_bd']) && $_SESSION['role'] !== 'admin') {
     header('Location: /dashboard');
     exit;
 }
