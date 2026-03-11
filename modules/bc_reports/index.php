@@ -318,6 +318,7 @@ $page_title = 'BC Reports';
                                     <th>Invoice</th>
                                     <th>Customer</th>
                                     <th>Date</th>
+                                    <th>Type</th>
                                     <th>State</th>
                                     <th style="text-align: right;">Amount (VND)</th>
                                 </tr>
@@ -326,12 +327,14 @@ $page_title = 'BC Reports';
 
                 group.invoices.forEach((inv, idx) => {
                     const badgeClass = inv.state === 'posted' ? 'badge-posted' : 'badge-draft';
+                    const typeBadge = inv.type.toLowerCase().includes('internal') ? `<span class="badge" style="background:#fef08a; color:#854d0e;">${inv.type}</span>` : `<span style="color:#64748b;">${inv.type}</span>`;
                     html += `
                         <tr>
                             <td>${idx + 1}</td>
                             <td style="font-weight: 500;">${inv.name || 'Draft'}</td>
                             <td>${inv.customer}</td>
                             <td>${inv.date}</td>
+                            <td>${typeBadge}</td>
                             <td><span class="badge ${badgeClass}">${inv.state}</span></td>
                             <td style="text-align: right; font-weight: 500;">${formatMoney(inv.amount_total_signed)}</td>
                         </tr>

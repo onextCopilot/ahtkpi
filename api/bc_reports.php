@@ -81,7 +81,8 @@ try {
         }
         $inv = $allInvoices[$move_id];
 
-        // Exclude internal invoices like in sale_reports_admin? Yes, usually.
+        // We will include internal invoices as well, as requested.
+        /*
         $isInternal = false;
         if (!empty($inv['x_studio_invoice_type_1'])) {
             $typeStr = is_array($inv['x_studio_invoice_type_1']) ? $inv['x_studio_invoice_type_1'][1] : $inv['x_studio_invoice_type_1'];
@@ -91,6 +92,7 @@ try {
         }
         if ($isInternal)
             continue;
+        */
 
         $state = $inv['state'] ?? '';
         if ($state === 'cancel')
@@ -140,6 +142,7 @@ try {
             $grouped_data[$b]['invoices'][] = [
                 'id' => $inv['id'],
                 'name' => $inv['name'],
+                'type' => is_array($inv['x_studio_invoice_type_1']) ? $inv['x_studio_invoice_type_1'][1] : ($inv['x_studio_invoice_type_1'] ?? ''),
                 'date' => $inv_date_str,
                 'customer' => is_array($inv['partner_id']) ? $inv['partner_id'][1] : '',
                 'state' => $state,
