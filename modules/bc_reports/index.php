@@ -199,6 +199,14 @@ $page_title = 'BC Reports';
                 transform: rotate(360deg);
             }
         }
+        /* Tab Styles */
+        .tabs-container { margin-bottom: 2rem; border-bottom: 1px solid #e2e8f0; display: flex; flex-wrap: wrap; gap: 0.5rem; padding-bottom: 0.5rem; }
+        .tab-button { padding: 0.5rem 1rem; border-radius: 0.375rem; border: 1px solid #cbd5e1; background: white; color: #475569; font-weight: 500; cursor: pointer; transition: 0.2s; white-space: nowrap; }
+        .tab-button:hover { background: #f8fafc; color: #0f172a; }
+        .tab-button.active { background: #3b82f6; color: white; border-color: #3b82f6; }
+        
+        .tab-content { display: none; }
+        .tab-content.active { display: block; }
     </style>
 </head>
 
@@ -293,6 +301,14 @@ $page_title = 'BC Reports';
                 console.error(error);
             }
         }
+        
+        function switchTab(idx) {
+            document.querySelectorAll('.tab-button').forEach(btn => btn.classList.remove('active'));
+            document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
+            
+            document.getElementById(`tab-btn-${idx}`).classList.add('active');
+            document.getElementById(`tab-content-${idx}`).classList.add('active');
+        }
 
         function renderData(data) {
             const container = document.getElementById('results-container');
@@ -301,37 +317,47 @@ $page_title = 'BC Reports';
                 return;
             }
 
-            let html = '';
+            let html = '<div class="tabs-container">';
+            
+            // Render Tab Buttons
+            data.forEach((group, idx) => {
+                const activeClass = idx === 0 ? 'active' : '';
+                html += `<button id="tab-btn-${idx}" class="tab-button ${activeClass}" onclick="switchTab(${idx})">${group.branch}</button>`;
+            });
+            html += '</div>';
 
-            data.forEach(group => {
+            // Render Tab Contents
+            data.forEach((group, idx) => {
+                const activeClass = idx === 0 ? 'active' : '';
                 html += `
-                <div class="bc-group">
-                    <div class="bc-header">
-                        <div class="bc-title">${group.branch}</div>
-                        <div class="bc-total">Total: ${formatMoney(group.totalVnd)}</div>
-                    </div>
-                    <div class="table-wrap">
-                        <table>
-                            <thead>
-                                <tr>
-                                    <th>#</th>
-                                    <th>Invoice</th>
-                                    <th>Customer</th>
-                                    <th>Date</th>
-                                    <th>Type</th>
-                                    <th>State</th>
-                                    <th style="text-align: right;">Amount (VND)</th>
-                                </tr>
-                            </thead>
-                            <tbody>`;
+                <div id="tab-content-${idx}" class="tab-content ${activeClass}">
+                    <div class="bc-group">
+                        <div class="bc-header">
+                            <div class="bc-title">${group.branch}</div>
+                            <div class="bc-total">Total: ${formatMoney(group.totalVnd)}</div>
+                        </div>
+                        <div class="table-wrap">
+                            <table>
+                                <thead>
+                                    <tr>
+                                        <th>#</th>
+                                        <th>Invoice</th>
+                                        <th>Customer</th>
+                                        <th>Date</th>
+                                        <th>Type</th>
+                                        <th>State</th>
+                                        <th style="text-align: right;">Amount (VND)</th>
+                                    </tr>
+                                </thead>
+                                <tbody>`;
 
-                group.invoices.forEach((inv, idx) => {
+                group.invoices.forEach((inv, i) => {
                     const badgeClass = inv.state === 'posted' ? 'badge-posted' : 'badge-draft';
                     const invType = inv.type ? String(inv.type) : '';
                     const typeBadge = invType.toLowerCase().includes('internal') ? `<span class="badge" style="background:#fef08a; color:#854d0e;">${invType}</span>` : `<span style="color:#64748b;">${invType}</span>`;
                     html += `
                         <tr>
-                            <td>${idx + 1}</td>
+                            <td>${i + 1}</td>
                             <td style="font-weight: 500;">${inv.name || 'Draft'}</td>
                             <td>${inv.customer}</td>
                             <td>${inv.date}</td>
@@ -343,8 +369,9 @@ $page_title = 'BC Reports';
                 });
 
                 html += `
-                            </tbody>
-                        </table>
+                                </tbody>
+                            </table>
+                        </div>
                     </div>
                 </div>`;
             });
