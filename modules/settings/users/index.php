@@ -45,7 +45,7 @@ $success_message = '';
 // Add essential columns for IT/Tech Company Staff Management
 $alter_queries = [
     "ADD COLUMN IF NOT EXISTS job_title VARCHAR(100) DEFAULT NULL",
-    "ADD COLUMN IF NOT EXISTS level VARCHAR(50) DEFAULT 'Junior'", // Intern, Fresher, Junior, Middle, Senior, Lead, Principal, CTO
+    "ADD COLUMN IF NOT EXISTS level VARCHAR(50) DEFAULT 'Member'", // Intern, Fresher, Junior, Middle, Senior, Lead, Principal, CTO
     "ADD COLUMN IF NOT EXISTS department_id INT DEFAULT NULL",
     "ADD COLUMN IF NOT EXISTS employee_code VARCHAR(20) DEFAULT NULL UNIQUE",
     "ADD COLUMN IF NOT EXISTS skills TEXT DEFAULT NULL", // Comma separated tags
@@ -66,7 +66,7 @@ function addColumnIfNotExists($conn, $table, $column, $definition)
 }
 
 addColumnIfNotExists($conn, 'users', 'job_title', "VARCHAR(100) DEFAULT NULL");
-addColumnIfNotExists($conn, 'users', 'level', "VARCHAR(50) DEFAULT 'Junior'");
+addColumnIfNotExists($conn, 'users', 'level', "VARCHAR(50) DEFAULT 'Member'");
 addColumnIfNotExists($conn, 'users', 'department_id', "INT DEFAULT NULL");
 addColumnIfNotExists($conn, 'users', 'employee_code', "VARCHAR(20) DEFAULT NULL");
 addColumnIfNotExists($conn, 'users', 'skills', "TEXT DEFAULT NULL");
