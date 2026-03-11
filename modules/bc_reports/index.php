@@ -310,8 +310,9 @@ $page_title = 'BC Reports';
                     <div>
                         <button class="btn-filter" onclick="fetchData()">Filter / Fetch Data</button>
                         <?php if ($_SESSION['role'] === 'admin'): ?>
-                            <button class="btn-filter" style="background: #10b981; margin-left: 0.5rem;"
-                                onclick="openSettings()">Access Settings</button>
+                            <button class="btn-filter"
+                                style="background: #ef4444; color: white; font-weight: bold; margin-left: 0.5rem; border: 2px solid #b91c1c; padding: 0.5rem 1rem;"
+                                onclick="openSettings()">⚙️ SETTINGS CHỌN TAB</button>
                         <?php endif; ?>
                     </div>
                 </div>
@@ -488,7 +489,7 @@ $page_title = 'BC Reports';
             try {
                 const response = await fetch('/api/bc_settings.php?action=get_settings');
                 const result = await response.json();
-                if(result.success) {
+                if (result.success) {
                     allUsers = result.users;
                     allBcs = result.bcs;
                     allPerms = result.permissions;
@@ -500,7 +501,7 @@ $page_title = 'BC Reports';
                     alert('Error: ' + result.error);
                     closeSettings();
                 }
-            } catch(e) {
+            } catch (e) {
                 console.error(e);
                 alert('Network error accessing settings.');
                 closeSettings();
@@ -548,13 +549,13 @@ $page_title = 'BC Reports';
                     body: JSON.stringify({ permissions: newPerms })
                 });
                 const result = await response.json();
-                if(result.success) {
+                if (result.success) {
                     alert('Settings saved successfully!');
                     closeSettings();
                 } else {
                     alert('Error: ' + result.error);
                 }
-            } catch(e) {
+            } catch (e) {
                 console.error(e);
                 alert('Network error saving settings.');
             }
