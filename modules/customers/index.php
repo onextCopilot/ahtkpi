@@ -1,7 +1,7 @@
 <?php
 session_start();
 if (!isset($_SESSION['user_id'])) {
-    header('Location: /login.php');
+    header('Location: /login');
     exit;
 }
 if (empty($_SESSION['can_view_invoice']) && empty($_SESSION['is_am_bd']) && $_SESSION['role'] !== 'admin') {
