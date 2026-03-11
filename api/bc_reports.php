@@ -3,10 +3,35 @@ session_start();
 header('Content-Type: application/json');
 require_once __DIR__ . '/../libs/OdooAPI.php';
 
-if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'admin') {
+if (!isset($_SESSION['user_id'])) {
     http_response_code(403);
     echo json_encode(['error' => 'Unauthorized']);
     exit();
+}
+
+$is_admin = ($_SESSION['role'] === 'admin');
+
+// Ensure db config is included for manual permission check
+require_once __DIR__ . '/../config/config.php';
+
+$allowed_bcs = [];
+if (!$is_admin) {
+    $bc_chk_stmt = $conn->prepare("SELECT bc_name FROM bc_permissions WHERE user_id = ?");
+    if ($bc_chk_stmt) {
+        $bc_chk_stmt->bind_param("i", $_SESSION['user_id']);
+        $bc_chk_stmt->execute();
+        $bc_res = $bc_chk_stmt->get_result();
+        while ($bc_row = $bc_res->fetch_assoc()) {
+            $allowed_bcs[] = $bc_row['bc_name'];
+        }
+        $bc_chk_stmt->close();
+    }
+
+    if (empty($allowed_bcs)) {
+        http_response_code(403);
+        echo json_encode(['error' => 'You do not have access to any BCs.']);
+        exit();
+    }
 }
 
 $year = isset($_GET['year']) ? (int) $_GET['year'] : date('Y');
@@ -138,6 +163,11 @@ try {
         foreach ($branches as $b) {
             // Check specific BC filter if any
             if ($bc_filter && stripos($b, $bc_filter) === false) {
+                continue;
+            }
+
+            // Check permissions for non-admin
+            if (!$is_admin && !in_array($b, $allowed_bcs)) {
                 continue;
             }
 

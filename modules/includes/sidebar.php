@@ -140,7 +140,27 @@ function isMenuItemActive($path, $current_uri)
                 </svg>
                 <span>Sale Reports</span>
             </a>
+        <?php endif; ?>
 
+        <?php
+        $has_bc_access = false;
+        if ($_SESSION['role'] === 'admin') {
+            $has_bc_access = true;
+        } else {
+            // Check bc accesses manually
+            $bc_chk_stmt = $conn->prepare("SELECT COUNT(*) as count FROM bc_permissions WHERE user_id = ?");
+            if ($bc_chk_stmt) {
+                $bc_chk_stmt->bind_param("i", $_SESSION['user_id']);
+                $bc_chk_stmt->execute();
+                $bc_res = $bc_chk_stmt->get_result();
+                if ($bc_row = $bc_res->fetch_assoc()) {
+                    $has_bc_access = $bc_row['count'] > 0;
+                }
+                $bc_chk_stmt->close();
+            }
+        }
+
+        if ($has_bc_access): ?>
             <a href="/bc-reports"
                 class="nav-item <?php echo (strpos($current_uri, '/bc-reports') !== false) ? 'active' : ''; ?>">
                 <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"

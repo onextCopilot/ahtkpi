@@ -7,10 +7,24 @@ if (!isset($_SESSION['user_id'])) {
 
 require_once __DIR__ . '/../../config/config.php';
 
-// Check role if it should be restricted to admin?
+// Check role and permissions
 if ($_SESSION['role'] !== 'admin') {
-    header('Location: /dashboard');
-    exit;
+    $has_bc_access = false;
+    $bc_chk_stmt = $conn->prepare("SELECT COUNT(*) as count FROM bc_permissions WHERE user_id = ?");
+    if ($bc_chk_stmt) {
+        $bc_chk_stmt->bind_param("i", $_SESSION['user_id']);
+        $bc_chk_stmt->execute();
+        $bc_res = $bc_chk_stmt->get_result();
+        if ($bc_row = $bc_res->fetch_assoc()) {
+            $has_bc_access = $bc_row['count'] > 0;
+        }
+        $bc_chk_stmt->close();
+    }
+
+    if (!$has_bc_access) {
+        header('Location: /dashboard');
+        exit;
+    }
 }
 
 $page_title = 'BC Reports';
@@ -199,14 +213,47 @@ $page_title = 'BC Reports';
                 transform: rotate(360deg);
             }
         }
+
         /* Tab Styles */
-        .tabs-container { margin-bottom: 2rem; border-bottom: 1px solid #e2e8f0; display: flex; flex-wrap: wrap; gap: 0.5rem; padding-bottom: 0.5rem; }
-        .tab-button { padding: 0.5rem 1rem; border-radius: 0.375rem; border: 1px solid #cbd5e1; background: white; color: #475569; font-weight: 500; cursor: pointer; transition: 0.2s; white-space: nowrap; }
-        .tab-button:hover { background: #f8fafc; color: #0f172a; }
-        .tab-button.active { background: #3b82f6; color: white; border-color: #3b82f6; }
-        
-        .tab-content { display: none; }
-        .tab-content.active { display: block; }
+        .tabs-container {
+            margin-bottom: 2rem;
+            border-bottom: 1px solid #e2e8f0;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.5rem;
+            padding-bottom: 0.5rem;
+        }
+
+        .tab-button {
+            padding: 0.5rem 1rem;
+            border-radius: 0.375rem;
+            border: 1px solid #cbd5e1;
+            background: white;
+            color: #475569;
+            font-weight: 500;
+            cursor: pointer;
+            transition: 0.2s;
+            white-space: nowrap;
+        }
+
+        .tab-button:hover {
+            background: #f8fafc;
+            color: #0f172a;
+        }
+
+        .tab-button.active {
+            background: #3b82f6;
+            color: white;
+            border-color: #3b82f6;
+        }
+
+        .tab-content {
+            display: none;
+        }
+
+        .tab-content.active {
+            display: block;
+        }
     </style>
 </head>
 
@@ -262,6 +309,10 @@ $page_title = 'BC Reports';
                     </div>
                     <div>
                         <button class="btn-filter" onclick="fetchData()">Filter / Fetch Data</button>
+                        <?php if ($_SESSION['role'] === 'admin'): ?>
+                            <button class="btn-filter" style="background: #10b981; margin-left: 0.5rem;"
+                                onclick="openSettings()">Access Settings</button>
+                        <?php endif; ?>
                     </div>
                 </div>
 
@@ -276,6 +327,38 @@ $page_title = 'BC Reports';
             </div>
         </main>
     </div>
+
+    <!-- Settings Modal (Admin Only) -->
+    <?php if ($_SESSION['role'] === 'admin'): ?>
+        <div id="settingsModal"
+            style="display:none; position:fixed; top:0; left:0; right:0; bottom:0; background:rgba(0,0,0,0.5); z-index:100; justify-content:center; align-items:center;">
+            <div
+                style="background:white; padding:2rem; border-radius:8px; width:90%; max-width:600px; max-height:80vh; overflow-y:auto; position:relative;">
+                <button onclick="closeSettings()"
+                    style="position:absolute; top:10px; right:15px; background:none; border:none; font-size:1.5rem; cursor:pointer;">&times;</button>
+                <h2 style="font-size:1.5rem; font-weight:700; margin-bottom:1rem;">BC Access Settings</h2>
+                <div id="settings-loading" style="text-align:center; padding:2rem;">
+                    <div class="spinner"></div>
+                    <p>Loading Users & BCs...</p>
+                </div>
+                <div id="settings-content" style="display:none;">
+                    <table style="width:100%; border-collapse:collapse;">
+                        <thead>
+                            <tr style="background:#f1f5f9;">
+                                <th style="padding:0.5rem; border:1px solid #e2e8f0;">User</th>
+                                <th style="padding:0.5rem; border:1px solid #e2e8f0;">Allowed BCs</th>
+                            </tr>
+                        </thead>
+                        <tbody id="settings-tbody">
+                        </tbody>
+                    </table>
+                    <div style="margin-top:1.5rem; text-align:right;">
+                        <button class="btn-filter" onclick="saveSettings()">Save Settings</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    <?php endif; ?>
 
     <script>
         function formatMoney(amount) {
@@ -310,11 +393,11 @@ $page_title = 'BC Reports';
                 console.error(error);
             }
         }
-        
+
         function switchTab(idx) {
             document.querySelectorAll('.tab-button').forEach(btn => btn.classList.remove('active'));
             document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
-            
+
             document.getElementById(`tab-btn-${idx}`).classList.add('active');
             document.getElementById(`tab-content-${idx}`).classList.add('active');
         }
@@ -327,7 +410,7 @@ $page_title = 'BC Reports';
             }
 
             let html = '<div class="tabs-container">';
-            
+
             // Render Tab Buttons
             data.forEach((group, idx) => {
                 const activeClass = idx === 0 ? 'active' : '';
@@ -390,6 +473,91 @@ $page_title = 'BC Reports';
             });
 
             container.innerHTML = html;
+        }
+
+        let allUsers = [];
+        let allBcs = [];
+        let allPerms = [];
+
+        async function openSettings() {
+            document.getElementById('settingsModal').style.display = 'flex';
+            document.getElementById('settings-loading').style.display = 'block';
+            document.getElementById('settings-content').style.display = 'none';
+            document.getElementById('settings-tbody').innerHTML = '';
+
+            try {
+                const response = await fetch('/api/bc_settings.php?action=get_settings');
+                const result = await response.json();
+                if(result.success) {
+                    allUsers = result.users;
+                    allBcs = result.bcs;
+                    allPerms = result.permissions;
+
+                    renderSettings();
+                    document.getElementById('settings-loading').style.display = 'none';
+                    document.getElementById('settings-content').style.display = 'block';
+                } else {
+                    alert('Error: ' + result.error);
+                    closeSettings();
+                }
+            } catch(e) {
+                console.error(e);
+                alert('Network error accessing settings.');
+                closeSettings();
+            }
+        }
+
+        function closeSettings() {
+            document.getElementById('settingsModal').style.display = 'none';
+        }
+
+        function renderSettings() {
+            const tbody = document.getElementById('settings-tbody');
+            let html = '';
+
+            allUsers.forEach(user => {
+                let optionsHtml = '';
+                allBcs.forEach(bc => {
+                    const hasPerm = allPerms.some(p => p.user_id == user.id && p.bc_name === bc);
+                    optionsHtml += `<label style="display:inline-block; margin-right:10px; font-size:12px; white-space:nowrap; background:#f8fafc; padding:3px 6px; border-radius:4px; border:1px solid #e2e8f0;"><input type="checkbox" class="perm-chk" data-userid="${user.id}" value="${bc}" ${hasPerm ? 'checked' : ''}> ${bc}</label>`;
+                });
+
+                html += `
+                <tr style="border-bottom:1px solid #e2e8f0;">
+                    <td style="padding:0.75rem; vertical-align:top; font-weight:600;">${user.full_name}<br><small style="color:#64748b; font-weight:400;">(${user.username})</small></td>
+                    <td style="padding:0.75rem;">${optionsHtml}</td>
+                </tr>`;
+            });
+            tbody.innerHTML = html;
+        }
+
+        async function saveSettings() {
+            const checkboxes = document.querySelectorAll('.perm-chk:checked');
+            let newPerms = [];
+            checkboxes.forEach(chk => {
+                newPerms.push({
+                    user_id: chk.getAttribute('data-userid'),
+                    bc_name: chk.value
+                });
+            });
+
+            try {
+                const response = await fetch('/api/bc_settings.php?action=save_settings', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ permissions: newPerms })
+                });
+                const result = await response.json();
+                if(result.success) {
+                    alert('Settings saved successfully!');
+                    closeSettings();
+                } else {
+                    alert('Error: ' + result.error);
+                }
+            } catch(e) {
+                console.error(e);
+                alert('Network error saving settings.');
+            }
         }
 
         // Fetch on initial load
