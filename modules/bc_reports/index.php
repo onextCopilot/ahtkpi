@@ -327,7 +327,8 @@ $page_title = 'BC Reports';
 
                 group.invoices.forEach((inv, idx) => {
                     const badgeClass = inv.state === 'posted' ? 'badge-posted' : 'badge-draft';
-                    const typeBadge = inv.type.toLowerCase().includes('internal') ? `<span class="badge" style="background:#fef08a; color:#854d0e;">${inv.type}</span>` : `<span style="color:#64748b;">${inv.type}</span>`;
+                    const invType = inv.type ? String(inv.type) : '';
+                    const typeBadge = invType.toLowerCase().includes('internal') ? `<span class="badge" style="background:#fef08a; color:#854d0e;">${invType}</span>` : `<span style="color:#64748b;">${invType}</span>`;
                     html += `
                         <tr>
                             <td>${idx + 1}</td>
