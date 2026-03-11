@@ -9,6 +9,8 @@ if (empty($_SESSION['can_view_invoice']) && empty($_SESSION['is_am_bd']) && $_SE
     exit;
 }
 
+require_once __DIR__ . '/../../config/config.php';
+
 $full_name = $_SESSION['full_name'] ?? 'User';
 $avatar = $_SESSION['avatar'] ?? '';
 ?>
