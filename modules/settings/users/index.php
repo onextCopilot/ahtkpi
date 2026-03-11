@@ -357,7 +357,7 @@ if ($result) {
 }
 
 // Levels Constant
-$levels = ['Intern', 'Fresher', 'Junior', 'Middle', 'Senior', 'Lead', 'Principal', 'Manager', 'Director', 'CTO'];
+$levels = ['Member', 'Leader', 'Manager', 'Director' , 'C-Level';
 
 // Fetch Sale Teams for Dropdown
 $sale_teams = [];
