@@ -249,6 +249,14 @@ $page_title = 'BC Reports';
                         </select>
                     </div>
                     <div class="filter-group">
+                        <label>Payment State</label>
+                        <select id="filter-payment">
+                            <option value="all">All</option>
+                            <option value="paid">Paid</option>
+                            <option value="not_paid">Not Paid</option>
+                        </select>
+                    </div>
+                    <div class="filter-group">
                         <label>BC Filter</label>
                         <input type="text" id="filter-bc" placeholder="E.g. BC1, BC ITO">
                     </div>
@@ -281,10 +289,11 @@ $page_title = 'BC Reports';
             const year = document.getElementById('filter-year').value;
             const quarter = document.getElementById('filter-quarter').value;
             const month = document.getElementById('filter-month').value;
+            const payment = document.getElementById('filter-payment').value;
             const bc = document.getElementById('filter-bc').value;
 
             try {
-                const url = `/api/bc_reports.php?year=${year}&quarter=${quarter}&month=${month}&bc=${encodeURIComponent(bc)}`;
+                const url = `/api/bc_reports.php?year=${year}&quarter=${quarter}&month=${month}&payment_state=${payment}&bc=${encodeURIComponent(bc)}`;
                 const response = await fetch(url);
                 const result = await response.json();
 
@@ -345,7 +354,8 @@ $page_title = 'BC Reports';
                                         <th>Customer</th>
                                         <th>Date</th>
                                         <th>Type</th>
-                                        <th>State</th>
+                                        <th>Status</th>
+                                        <th>Payment</th>
                                         <th style="text-align: right;">Amount (VND)</th>
                                     </tr>
                                 </thead>
@@ -353,6 +363,8 @@ $page_title = 'BC Reports';
 
                 group.invoices.forEach((inv, i) => {
                     const badgeClass = inv.state === 'posted' ? 'badge-posted' : 'badge-draft';
+                    const paymentClass = (inv.payment_state === 'paid' || inv.payment_state === 'in_payment') ? 'badge-posted' : 'badge-draft';
+                    const paymentText = (inv.payment_state === 'paid' || inv.payment_state === 'in_payment') ? 'Paid' : 'Not Paid';
                     const invType = inv.type ? String(inv.type) : '';
                     const typeBadge = invType.toLowerCase().includes('internal') ? `<span class="badge" style="background:#fef08a; color:#854d0e;">${invType}</span>` : `<span style="color:#64748b;">${invType}</span>`;
                     html += `
@@ -363,6 +375,7 @@ $page_title = 'BC Reports';
                             <td>${inv.date}</td>
                             <td>${typeBadge}</td>
                             <td><span class="badge ${badgeClass}">${inv.state}</span></td>
+                            <td><span class="badge ${paymentClass}">${paymentText}</span></td>
                             <td style="text-align: right; font-weight: 500;">${formatMoney(inv.amount_total_signed)}</td>
                         </tr>
                     `;

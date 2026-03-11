@@ -115,6 +115,16 @@ try {
         if ($quarter && $inv_quarter !== $quarter)
             continue;
 
+        $payment_filter = isset($_GET['payment_state']) ? $_GET['payment_state'] : '';
+        if ($payment_filter && $payment_filter !== 'all') {
+            $current_payment_state = $inv['payment_state'] ?? '';
+            if ($payment_filter === 'paid' && !in_array($current_payment_state, ['paid', 'in_payment'])) {
+                continue;
+            } elseif ($payment_filter === 'not_paid' && in_array($current_payment_state, ['paid', 'in_payment'])) {
+                continue;
+            }
+        }
+
         // Calculate VND amount
         $currencyName = is_array($inv['currency_id']) ? $inv['currency_id'][1] : 'VND';
         $rateSource = $ratesData[$currencyName]['rate'] ?? 1;
