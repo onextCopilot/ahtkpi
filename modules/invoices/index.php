@@ -553,7 +553,7 @@ function formatDate($date)
                                                         style="color: #666; font-size: 11px;">(<?php echo htmlspecialchars($inv['ref']); ?>)</span>
                                                   
                                                 <?php endif; ?>
-                                    <?php echo $inv['id']; ?>
+                                    (<?php echo $inv['id']; ?>)
                                             </td>
                                             <td style="text-align: center;">
                                                 <?php
