@@ -439,7 +439,7 @@ function formatDate($date)
                                 $existingInvoiceIds = [];
                                 try {
                                     if (isset($conn)) {
-                                        $checkDebtSql = "SELECT vat_invoice, odoo_invoice_id FROM debts WHERE (vat_invoice IS NOT NULL AND vat_invoice != '') OR odoo_invoice_id IS NOT NULL";
+                                        $checkDebtSql = "SELECT vat_invoice, odoo_invoice_id FROM debts WHERE  odoo_invoice_id IS NOT NULL";
                                         $debtRes = $conn->query($checkDebtSql);
                                         if ($debtRes) {
                                             while ($row = $debtRes->fetch_assoc()) {
