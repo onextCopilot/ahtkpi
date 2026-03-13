@@ -16,6 +16,18 @@ $full_name = $_SESSION['full_name'];
 $role = $_SESSION['role'];
 $avatar = $_SESSION['avatar'] ?? null;
 
+// Fetch current user email if not in session
+if (!isset($_SESSION['email'])) {
+    $stmt_e = $conn->prepare("SELECT email FROM users WHERE id = ?");
+    $stmt_e->bind_param("i", $current_user_id);
+    $stmt_e->execute();
+    $res_e = $stmt_e->get_result();
+    if ($row_e = $res_e->fetch_assoc()) {
+        $_SESSION['email'] = $row_e['email'];
+    }
+}
+$current_user_email = $_SESSION['email'] ?? '';
+
 // Prevent caching
 header("Cache-Control: no-store, no-cache, must-revalidate, max-age=0");
 header("Cache-Control: post-check=0, pre-check=0", false);
@@ -57,6 +69,11 @@ if ($table_check->num_rows == 0) {
     $check_col = $conn->query("SHOW COLUMNS FROM debts LIKE 'sale_team_id'");
     if ($check_col->num_rows == 0) {
         $conn->query("ALTER TABLE debts ADD COLUMN sale_team_id INT DEFAULT NULL AFTER am");
+    }
+    // Check and add am_email if not exists
+    $check_email = $conn->query("SHOW COLUMNS FROM debts LIKE 'am_email'");
+    if ($check_email->num_rows == 0) {
+        $conn->query("ALTER TABLE debts ADD COLUMN am_email VARCHAR(255) DEFAULT NULL AFTER am");
     }
 }
 
@@ -116,10 +133,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 }
 
 // --- FILTERING & FETCH DATA ---
-$where_clauses = [];
-// Force filter by current user's first name
-$user_first = explode(' ', trim($_SESSION['full_name']))[0];
-$where_clauses[] = "d.am LIKE '%" . $conn->real_escape_string($user_first) . "%'";
+// Filter by current user's email (identical to My Reports logic)
+if (!empty($current_user_email)) {
+    // Fallback logic: check am_email OR match by first name for old records
+    $user_first = explode(' ', trim($_SESSION['full_name']))[0];
+    $where_clauses[] = "(d.am_email = '" . $conn->real_escape_string($current_user_email) . "' OR (d.am_email IS NULL AND d.am LIKE '%" . $conn->real_escape_string($user_first) . "%'))";
+} else {
+    // If no email, fallback to old name-based logic
+    $user_first = explode(' ', trim($_SESSION['full_name']))[0];
+    $where_clauses[] = "d.am LIKE '%" . $conn->real_escape_string($user_first) . "%'";
+}
 
 if (!empty($_GET['invoice_status_class'])) {
     $inv_class_filter = $conn->real_escape_string($_GET['invoice_status_class']);
@@ -190,6 +213,15 @@ foreach ($odoo_map as $inv) {
 }
 
 if ($res) {
+    // Pre-fetch AM names to emails for one-time auto-population
+    $am_name_map = [];
+    $users_res = $conn->query("SELECT full_name, email FROM users WHERE is_am_bd = 1");
+    if ($users_res) {
+        while ($u = $users_res->fetch_assoc()) {
+            $am_name_map[trim($u['full_name'])] = $u['email'];
+        }
+    }
+
     while ($row = $res->fetch_assoc()) {
         $amount = (float) $row['amount'];
         $curr = $row['currency'] ?: 'USD';
@@ -331,6 +363,31 @@ if ($res) {
                 $row['invoice_date'] = $newInvDateVal;
                 $date = $newInvDateVal; // update local
                 $changed = true;
+            }
+
+            // Auto-populate am_email if missing using local name map
+            if (empty($row['am_email'])) {
+                $am_name = trim($row['am']);
+                // Check direct match
+                if (isset($am_name_map[$am_name])) {
+                    $upSql[] = "am_email = ?";
+                    $upParams[] = $am_name_map[$am_name];
+                    $upTypes .= "s";
+                    $row['am_email'] = $am_name_map[$am_name];
+                    $changed = true;
+                } else {
+                    // Try partial match (Salesperson from Odoo often has full name)
+                    foreach ($am_name_map as $fn => $em) {
+                        if (stripos($fn, $am_name) !== false || stripos($am_name, $fn) !== false) {
+                            $upSql[] = "am_email = ?";
+                            $upParams[] = $am_name_map[$fn];
+                            $upTypes .= "s";
+                            $row['am_email'] = $em;
+                            $changed = true;
+                            break;
+                        }
+                    }
+                }
             }
 
             if ($changed) {
