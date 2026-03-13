@@ -1182,7 +1182,6 @@ $avatar = $_SESSION['avatar'] ?? '';
                         // Update the rate note in UI
                         const rateNote = document.getElementById('dynamicExchangeRateNote');
                         if (rateNote && data.usd_rate) {
-                            //rateNote.textContent = `Tỉ giá: 1 USD = ${new Intl.NumberFormat('vi-VN').format(1 / data.usd_rate)} VND`;
                             rateNote.textContent = `Tỉ giá: 1 USD = ${new Intl.NumberFormat('vi-VN').format(data.usd_rate)} VND`;
                         }
 
@@ -1191,19 +1190,14 @@ $avatar = $_SESSION['avatar'] ?? '';
 
                         // Pre-calculate sortable values
                         currentStatsData = data.data.map(customer => {
-                            //const stats = customer.stats;
                             const stats = customer.stats || {};
                             const m_usd = stats.monthly_usd || {};
 
-                            
                             // Yearly Total (in USD)
                             let yearlyTotal = 0;
                             for (let m = 1; m <= 12; m++) {
                                 const mk = `${year}-${m.toString().padStart(2, '0')}`;
-                                //yearlyTotal += (stats.monthly_usd && stats.monthly_usd[mk] ? stats.monthly_usd[mk] : 0);
-                                const val = (stats.monthly_usd && stats.monthly_usd[mk]) ? stats.monthly_usd[mk] : 0;
-                                //yearlyTotal += val;
-                                 yearlyTotal += (m_usd[mk] || 0);
+                                yearlyTotal += (m_usd[mk] || 0);
                             }
 
                             // Avg Revenue Last 6 Months (in USD)
@@ -1211,10 +1205,7 @@ $avatar = $_SESSION['avatar'] ?? '';
                             for (let i = 1; i <= 6; i++) {
                                 let d = new Date(now.getFullYear(), now.getMonth() - i, 1);
                                 const mk = `${d.getFullYear()}-${(d.getMonth() + 1).toString().padStart(2, '0')}`;
-                               // last6MonthsTotal += (stats.monthly_usd && stats.monthly_usd[mk] ? stats.monthly_usd[mk] : 0);
-                               //  const val = (stats.monthly_usd && stats.monthly_usd[mk]) ? stats.monthly_usd[mk] : 0;
-                                 last6MonthsTotal += (m_usd[mk] || 0);
-                               // last6MonthsTotal += val;
+                                last6MonthsTotal += (m_usd[mk] || 0);
                             }
                             const avgRevenue = last6MonthsTotal / 6;
 
@@ -1281,25 +1272,17 @@ $avatar = $_SESSION['avatar'] ?? '';
             let grandTotalMonths = new Array(12).fill(0);
 
             let bodyHtml = filteredData.map(customer => {
-                
-                //const stats = customer.stats;
-                
                 const stats = customer.stats || {};
                 const m_usd = stats.monthly_usd || {};
                 const q_usd = stats.quarterly_usd || {};
 
-                
                 let row = `<tr><td class="name-col" style="text-align: left;" title="${escapeHtml(customer.name)}">${escapeHtml(customer.name)}</td>`;
 
                 // Yearly Total
                 let yearlyTotal = 0;
-                
-                if (stats.monthly_usd) {
-                    for (let m = 1; m <= 12; m++) {
-                        const mk = `${year}-${m.toString().padStart(2, '0')}`;
-                       // yearlyTotal += (stats.monthly_usd[mk] || 0);
-                         yearlyTotal += (m_usd[mk] || 0);
-                    }
+                for (let m = 1; m <= 12; m++) {
+                    const mk = `${year}-${m.toString().padStart(2, '0')}`;
+                    yearlyTotal += (m_usd[mk] || 0);
                 }
                 grandTotalYearly += yearlyTotal;
                 row += `<td class="y-col">${formatUSD(yearlyTotal)}</td>`;
@@ -1307,7 +1290,6 @@ $avatar = $_SESSION['avatar'] ?? '';
                 // Quarters
                 for (let q = 1; q <= 4; q++) {
                     const qk = `${year}-Q${q}`;
-                  //  const val = (stats.quarterly_usd[qk] || 0);
                     const val = q_usd[qk] || 0;
                     grandTotalQuarters[q - 1] += val;
                     row += `<td class="q-col">${formatUSD(val)}</td>`;
@@ -1316,7 +1298,6 @@ $avatar = $_SESSION['avatar'] ?? '';
                 // Months
                 for (let m = 1; m <= 12; m++) {
                     const mk = `${year}-${m.toString().padStart(2, '0')}`;
-                    //const val = (stats.monthly_usd[mk] || 0);
                     const val = m_usd[mk] || 0;
                     grandTotalMonths[m - 1] += val;
                     row += `<td>${formatUSD(val)}</td>`;
@@ -1467,12 +1448,9 @@ $avatar = $_SESSION['avatar'] ?? '';
                 const avgRevenue = customer.avgRevenue;
                 const yearlyTotal = customer.yearlyTotal;
 
+                const q_vnd = stats.quarterly || {};
                 const qs = [
-                  //  stats.quarterly[`${year}-Q1`] || 0,
-                 //   stats.quarterly[`${year}-Q2`] || 0,
-                  //  stats.quarterly[`${year}-Q3`] || 0,
-                  //  stats.quarterly[`${year}-Q4`] || 0
-                     q_vnd[`${year}-Q1`] || 0,
+                    q_vnd[`${year}-Q1`] || 0,
                     q_vnd[`${year}-Q2`] || 0,
                     q_vnd[`${year}-Q3`] || 0,
                     q_vnd[`${year}-Q4`] || 0
