@@ -135,7 +135,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 // --- FILTERING & FETCH DATA ---
 // Filter by current user's email (identical to My Reports logic)
 
-echo $current_user_email; 
 if (!empty($current_user_email)) {
     // Fallback logic: check am_email OR match by first name for old records
     $user_first = explode(' ', trim($_SESSION['full_name']))[0];
@@ -201,7 +200,7 @@ $groupedDebts = [];
 $monthTotals = [];
 $total_amount_usd = 0;
 $total_amount_vnd = 0;
-
+echo $where_sql;
 $res = $conn->query("SELECT d.*, st.name as team_name FROM debts d LEFT JOIN sale_teams st ON d.sale_team_id = st.id $where_sql ORDER BY d.invoice_date DESC, d.id DESC");
 
 // Trigger cache refresh if needed (OdooAPI::getInvoices handles the 1-hour check internally)
