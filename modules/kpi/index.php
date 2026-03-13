@@ -244,6 +244,7 @@ $status_map = ['draft' => ['#F1F5F9', '#64748B'], 'active' => ['#DBEAFE', '#1D4E
             flex-direction: column;
             gap: .5rem;
             overflow: hidden;
+            padding-bottom:50px!important;
         }
 
         /* Tab bar */
