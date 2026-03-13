@@ -223,8 +223,9 @@ try {
         'internal_total_res' => $internal_revenue_vnd_by_year,
         'internal_total_usd_res' => $internal_revenue_usd_by_year,
         'usd_rate' => $display_rate,
-        'api_version' => '2.5'
-    ]);
+        'api_version' => '2.6'
+        ], JSON_FORCE_OBJECT);
+   // ]);
 
 } catch (Exception $e) {
     http_response_code(500);
