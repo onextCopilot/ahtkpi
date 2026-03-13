@@ -1677,14 +1677,15 @@ $avatar = $_SESSION['avatar'] ?? '';
         }
 
         function loadNotesHistory(odooId, page = 1) {
+            currentEditingOdooId = odooId;
             const historyContainer = document.getElementById('notesHistory');
             const paginationContainer = document.getElementById('notePagination');
-
             const year = document.getElementById('noteYearFilter').value;
             const quarter = document.getElementById('noteQuarterFilter').value;
             const month = document.getElementById('noteMonthFilter').value;
 
-            historyContainer.innerHTML = '<p style="text-align:center; padding:10px;">Đang tải lịch sử...</p>';
+            if (!historyContainer) return;
+            historyContainer.innerHTML = '<div style="text-align:center; padding:20px;"><div class="loading-spinner"></div><p>Đang tải lịch sử...</p></div>';
             paginationContainer.innerHTML = '';
 
             const params = new URLSearchParams({
@@ -1699,34 +1700,33 @@ $avatar = $_SESSION['avatar'] ?? '';
             fetch(`/api/customer_notes.php?${params}`)
                 .then(res => res.json())
                 .then(data => {
-                        if (data.success) {
-                            if (!data.data || (Array.isArray(data.data) && data.data.length === 0)) {
-                                historyContainer.innerHTML = '<p style="text-align:center; color:#999; padding:20px;">Không có ghi chú nào được tìm thấy.</p>';
-                            } else {
-                                const notesList = Array.isArray(data.data) ? data.data : Object.values(data.data);
-                                historyContainer.innerHTML = notesList.map(note => `
-                                    <div class="note-item">
-                                        <div class="note-content-text">${note.note_content}</div>
-                                        <div class="note-meta">
-                                            <span class="note-author">Người viết: ${escapeHtml(note.author)}</span>
-                                            <span class="note-time">${formatDateTime(note.created_at)}</span>
-                                        </div>
+                    if (data.success) {
+                        if (!data.data || (Array.isArray(data.data) && data.data.length === 0)) {
+                            historyContainer.innerHTML = '<p style="text-align:center; color:#999; padding:20px;">Không có ghi chú nào được tìm thấy.</p>';
+                        } else {
+                            const notesList = Array.isArray(data.data) ? data.data : Object.values(data.data);
+                            historyContainer.innerHTML = notesList.map(note => `
+                                <div class="note-item">
+                                    <div class="note-content-text">${note.note_content}</div>
+                                    <div class="note-meta">
+                                        <span class="note-author">Người viết: ${escapeHtml(note.author)}</span>
+                                        <span class="note-time">${formatDateTime(note.created_at)}</span>
                                     </div>
-                                `).join('');
+                                </div>
+                            `).join('');
+                        }
 
+                        // Render Simple Pagination
+                        if (data.pagination && data.pagination.totalPages > 1) {
+                            let paginationHtml = '';
+                            if (data.pagination.page > 1) {
+                                paginationHtml += `<button class="pagination-btn" onclick="loadNotesHistory(${odooId}, ${data.pagination.page - 1})">Quay lại</button>`;
                             }
-                            // Render Simple Pagination
-                            if (data.pagination.totalPages > 1) {
-                                let paginationHtml = '';
-                                if (data.pagination.page > 1) {
-                                    paginationHtml += `<button class="pagination-btn" onclick="loadNotesHistory(${odooId}, ${data.pagination.page - 1})">Quay lại</button>`;
-                                }
-                                paginationHtml += `<span style="font-size: 13px; color: #5f6368;">Trang ${data.pagination.page} / ${data.pagination.totalPages}</span>`;
-                                if (data.pagination.page < data.pagination.totalPages) {
-                                    paginationHtml += `<button class="pagination-btn" onclick="loadNotesHistory(${odooId}, ${data.pagination.page + 1})">Tiếp theo</button>`;
-                                }
-                                paginationContainer.innerHTML = paginationHtml;
+                            paginationHtml += `<span style="font-size: 13px; color: #5f6368;">Trang ${data.pagination.page} / ${data.pagination.totalPages}</span>`;
+                            if (data.pagination.page < data.pagination.totalPages) {
+                                paginationHtml += `<button class="pagination-btn" onclick="loadNotesHistory(${odooId}, ${data.pagination.page + 1})">Tiếp theo</button>`;
                             }
+                            paginationContainer.innerHTML = paginationHtml;
                         }
                     }
                 });
