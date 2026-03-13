@@ -551,8 +551,9 @@ function formatDate($date)
                                                 <?php if ($inv['ref']): ?>
                                                     <span
                                                         style="color: #666; font-size: 11px;">(<?php echo htmlspecialchars($inv['ref']); ?>)</span>
-                                                    (<?php echo $inv['id']; ?>)
+                                                  
                                                 <?php endif; ?>
+                                    <?php echo $inv['id']; ?>
                                             </td>
                                             <td style="text-align: center;">
                                                 <?php
