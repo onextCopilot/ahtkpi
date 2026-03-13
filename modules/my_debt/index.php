@@ -200,7 +200,7 @@ $groupedDebts = [];
 $monthTotals = [];
 $total_amount_usd = 0;
 $total_amount_vnd = 0;
-echo $where_sql;
+//echo $where_sql;
 $res = $conn->query("SELECT d.*, st.name as team_name FROM debts d LEFT JOIN sale_teams st ON d.sale_team_id = st.id $where_sql ORDER BY d.invoice_date DESC, d.id DESC");
 
 // Trigger cache refresh if needed (OdooAPI::getInvoices handles the 1-hour check internally)
