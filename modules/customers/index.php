@@ -1275,15 +1275,24 @@ $avatar = $_SESSION['avatar'] ?? '';
             let grandTotalMonths = new Array(12).fill(0);
 
             let bodyHtml = filteredData.map(customer => {
-                const stats = customer.stats;
+                
+                //const stats = customer.stats;
+                
+                const stats = customer.stats || {};
+                const m_usd = stats.monthly_usd || {};
+                const q_usd = stats.quarterly_usd || {};
+
+                
                 let row = `<tr><td class="name-col" style="text-align: left;" title="${escapeHtml(customer.name)}">${escapeHtml(customer.name)}</td>`;
 
                 // Yearly Total
                 let yearlyTotal = 0;
+                
                 if (stats.monthly_usd) {
                     for (let m = 1; m <= 12; m++) {
                         const mk = `${year}-${m.toString().padStart(2, '0')}`;
-                        yearlyTotal += (stats.monthly_usd[mk] || 0);
+                       // yearlyTotal += (stats.monthly_usd[mk] || 0);
+                         yearlyTotal += (m_usd[mk] || 0);
                     }
                 }
                 grandTotalYearly += yearlyTotal;
@@ -1292,7 +1301,8 @@ $avatar = $_SESSION['avatar'] ?? '';
                 // Quarters
                 for (let q = 1; q <= 4; q++) {
                     const qk = `${year}-Q${q}`;
-                    const val = (stats.quarterly_usd[qk] || 0);
+                  //  const val = (stats.quarterly_usd[qk] || 0);
+                    const val = q_usd[qk] || 0;
                     grandTotalQuarters[q - 1] += val;
                     row += `<td class="q-col">${formatUSD(val)}</td>`;
                 }
@@ -1300,7 +1310,8 @@ $avatar = $_SESSION['avatar'] ?? '';
                 // Months
                 for (let m = 1; m <= 12; m++) {
                     const mk = `${year}-${m.toString().padStart(2, '0')}`;
-                    const val = (stats.monthly_usd[mk] || 0);
+                    //const val = (stats.monthly_usd[mk] || 0);
+                    const val = m_usd[mk] || 0;
                     grandTotalMonths[m - 1] += val;
                     row += `<td>${formatUSD(val)}</td>`;
                 }
@@ -1451,10 +1462,14 @@ $avatar = $_SESSION['avatar'] ?? '';
                 const yearlyTotal = customer.yearlyTotal;
 
                 const qs = [
-                    stats.quarterly[`${year}-Q1`] || 0,
-                    stats.quarterly[`${year}-Q2`] || 0,
-                    stats.quarterly[`${year}-Q3`] || 0,
-                    stats.quarterly[`${year}-Q4`] || 0
+                  //  stats.quarterly[`${year}-Q1`] || 0,
+                 //   stats.quarterly[`${year}-Q2`] || 0,
+                  //  stats.quarterly[`${year}-Q3`] || 0,
+                  //  stats.quarterly[`${year}-Q4`] || 0
+                     q_vnd[`${year}-Q1`] || 0,
+                    q_vnd[`${year}-Q2`] || 0,
+                    q_vnd[`${year}-Q3`] || 0,
+                    q_vnd[`${year}-Q4`] || 0
                 ];
 
                 // Toggle Switch (Column 1)
