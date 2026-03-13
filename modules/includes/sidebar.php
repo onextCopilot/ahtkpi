@@ -35,7 +35,7 @@ function isMenuItemActive($path, $current_uri)
         </a>
 
         <!-- Debts Management Dropdown -->
-        <?php if (!empty($_SESSION['is_am_bd']) || $_SESSION['role'] === 'admin'): ?>
+        <?php if (!empty($_SESSION['can_view_invoice']) || !empty($_SESSION['is_am_bd']) || $_SESSION['role'] === 'admin'): ?>
             <div class="nav-item nav-item-parent <?php
             $is_debt_open = strpos($current_uri, '/debt') !== false ||
                 strpos($current_uri, '/my-debt') !== false ||
