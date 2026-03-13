@@ -45,7 +45,8 @@ try {
         'x_studio_project_code',
         'invoice_date',
         'date',
-        'currency_id'
+        'currency_id',
+        'invoice_user_id'
     ];
 
     // We don't use cache here, we want fresh data, 
@@ -64,6 +65,24 @@ try {
     $amount = $inv['amount_total'];
     $invoiceDateVal = $inv['invoice_date'] ?: $inv['date'];
     $currency = is_array($inv['currency_id']) ? $inv['currency_id'][1] : 'VND';
+
+    // Fetch AM Email and Name from Odoo Salesperson
+    $amName = '';
+    $amEmail = '';
+    if (!empty($inv['invoice_user_id']) && is_array($inv['invoice_user_id'])) {
+        $odooUserId = $inv['invoice_user_id'][0];
+        $amName = $inv['invoice_user_id'][1];
+        
+        // Fetch salesperson email (login field) from res.users
+        try {
+            $userData = $odoo->searchRead('res.users', [['id', '=', $odooUserId]], ['login'], 1);
+            if (!empty($userData) && isset($userData[0]['login'])) {
+                $amEmail = $userData[0]['login'];
+            }
+        } catch (Exception $e) {
+            // Fallback to name-based logic if user search fails
+        }
+    }
 
     // Calculate Payment Date/Month
     $paymentDate = $writeDate;
@@ -143,7 +162,7 @@ try {
     $plClass = ($paymentStatus === 'Paid') ? 'Tốt' : 'Xấu';
 
     // 3. Update Debt Record
-    // We update: payment_status, payment_month, invoice_status_class, amount, pl_class, project_name
+    // We update: payment_status, payment_month, invoice_status_class, amount, pl_class, project_name, am, am_email
 
     $sql = "UPDATE debts SET 
         payment_status = ?, 
@@ -154,10 +173,12 @@ try {
         weekly_update = ?,
         invoice_date = ?,
         currency = ?,
+        am = ?,
+        am_email = ?,
         updated_at = NOW()";
 
-    $params = [$paymentStatus, $paymentMonth, $invoiceStatusClass, $amount, $plClass, $weeklyUpdate, $invoiceDateVal, $currency];
-    $types = "ssssdsss";
+    $params = [$paymentStatus, $paymentMonth, $invoiceStatusClass, $amount, $plClass, $weeklyUpdate, $invoiceDateVal, $currency, $amName, $amEmail];
+    $types = "ssssdsssss";
 
     if (!empty($projectName)) {
         $sql .= ", project_name = ?";
