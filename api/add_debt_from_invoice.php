@@ -121,11 +121,25 @@ if ($paymentState === 'paid' || $paymentState === 'in_payment') {
 }
 
 $amName = $_SESSION['full_name'];
+$amEmail = $_SESSION['email'] ?? null;
+
+// Fetch email from DB if not in session
+if (!$amEmail && isset($_SESSION['user_id'])) {
+    $uStmt = $conn->prepare("SELECT email FROM users WHERE id = ?");
+    $uStmt->bind_param("i", $_SESSION['user_id']);
+    $uStmt->execute();
+    $uRes = $uStmt->get_result();
+    if ($uRow = $uRes->fetch_assoc()) {
+        $amEmail = $uRow['email'];
+        $_SESSION['email'] = $amEmail;
+    }
+}
+
 
 try {
     $stmt = $conn->prepare("INSERT INTO debts 
-        (company, am, sale_team_id, client_name, project_name, amount, original_amount, currency, original_currency, vat_invoice, invoice_date, payment_status, am_notes, pl_class, invoice_status_class, payment_month, weekly_update, odoo_invoice_id, created_at) 
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())");
+              (company, am, am_email, sale_team_id, client_name, project_name, amount, original_amount, currency, original_currency, vat_invoice, invoice_date, payment_status, am_notes, pl_class, invoice_status_class, payment_month, weekly_update, odoo_invoice_id, created_at) 
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())");
 
     if (!$stmt) {
         throw new Exception("Prepare failed: " . $conn->error);
@@ -141,7 +155,7 @@ try {
     $notes = "Added from Invoice: " . $invoiceName . " (" . $currency . ")";
 
     $stmt->bind_param(
-        "ssissddssssssssssi",
+        "sssissddssssssssssi",
         $defaultCompany,
         $amName,
         $teamId,
