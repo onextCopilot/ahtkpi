@@ -571,7 +571,7 @@ function formatDate($date)
                                                 }
                                                 ?>
                                                 <?php
-                                                $isAlreadyAdded = in_array($inv['id'], $existingInvoiceIds) || (!empty($inv['name']) && $inv['name'] !== '/' && in_array($inv['name'], $existingInvoiceNames));
+                                                $isAlreadyAdded = in_array($inv['id'], $existingInvoiceIds);
                                                 if ($isAlreadyAdded):
                                                     ?>
                                                     <button class="btn-icon" title="Already added to My Debts" disabled
