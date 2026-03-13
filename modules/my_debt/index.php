@@ -138,7 +138,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 if (!empty($current_user_email)) {
     // Fallback logic: check am_email OR match by first name for old records
     $user_first = explode(' ', trim($_SESSION['full_name']))[0];
-    $where_clauses[] = "(d.am_email = '" . $conn->real_escape_string($current_user_email) . "' OR (d.am_email IS NULL AND d.am LIKE '%" . $conn->real_escape_string($user_first) . "%'))";
+    $where_clauses[] = "(d.am_email = '" . $conn->real_escape_string($current_user_email) . "')";
 } else {
     // If no email, fallback to old name-based logic
     $user_first = explode(' ', trim($_SESSION['full_name']))[0];
