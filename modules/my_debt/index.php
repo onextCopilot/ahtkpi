@@ -134,6 +134,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
 // --- FILTERING & FETCH DATA ---
 // Filter by current user's email (identical to My Reports logic)
+
+echo $current_user_email; 
 if (!empty($current_user_email)) {
     // Fallback logic: check am_email OR match by first name for old records
     $user_first = explode(' ', trim($_SESSION['full_name']))[0];
