@@ -1183,7 +1183,7 @@ $avatar = $_SESSION['avatar'] ?? '';
                         const rateNote = document.getElementById('dynamicExchangeRateNote');
                         if (rateNote && data.usd_rate) {
                             //rateNote.textContent = `Tỉ giá: 1 USD = ${new Intl.NumberFormat('vi-VN').format(1 / data.usd_rate)} VND`;
-                            ateNote.textContent = `Tỉ giá: 1 USD = ${new Intl.NumberFormat('vi-VN').format(data.usd_rate)} VND`;
+                            rateNote.textContent = `Tỉ giá: 1 USD = ${new Intl.NumberFormat('vi-VN').format(data.usd_rate)} VND`;
                         }
 
                         console.log('API Version:', data.api_version);
