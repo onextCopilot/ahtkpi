@@ -1280,9 +1280,11 @@ $avatar = $_SESSION['avatar'] ?? '';
 
                 // Yearly Total
                 let yearlyTotal = 0;
-                for (let m = 1; m <= 12; m++) {
-                    const mk = `${year}-${m.toString().padStart(2, '0')}`;
-                    yearlyTotal += (stats.monthly_usd[mk] || 0);
+                if (stats.monthly_usd) {
+                    for (let m = 1; m <= 12; m++) {
+                        const mk = `${year}-${m.toString().padStart(2, '0')}`;
+                        yearlyTotal += (stats.monthly_usd[mk] || 0);
+                    }
                 }
                 grandTotalYearly += yearlyTotal;
                 row += `<td class="y-col">${formatUSD(yearlyTotal)}</td>`;
