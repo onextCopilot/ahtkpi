@@ -1196,7 +1196,9 @@ $avatar = $_SESSION['avatar'] ?? '';
                             let yearlyTotal = 0;
                             for (let m = 1; m <= 12; m++) {
                                 const mk = `${year}-${m.toString().padStart(2, '0')}`;
-                                yearlyTotal += (stats.monthly_usd && stats.monthly_usd[mk] ? stats.monthly_usd[mk] : 0);
+                                //yearlyTotal += (stats.monthly_usd && stats.monthly_usd[mk] ? stats.monthly_usd[mk] : 0);
+                                const val = (stats.monthly_usd && stats.monthly_usd[mk]) ? stats.monthly_usd[mk] : 0;
+                                yearlyTotal += val;
                             }
 
                             // Avg Revenue Last 6 Months (in USD)
@@ -1204,7 +1206,9 @@ $avatar = $_SESSION['avatar'] ?? '';
                             for (let i = 1; i <= 6; i++) {
                                 let d = new Date(now.getFullYear(), now.getMonth() - i, 1);
                                 const mk = `${d.getFullYear()}-${(d.getMonth() + 1).toString().padStart(2, '0')}`;
-                                last6MonthsTotal += (stats.monthly_usd && stats.monthly_usd[mk] ? stats.monthly_usd[mk] : 0);
+                               // last6MonthsTotal += (stats.monthly_usd && stats.monthly_usd[mk] ? stats.monthly_usd[mk] : 0);
+                                 const val = (stats.monthly_usd && stats.monthly_usd[mk]) ? stats.monthly_usd[mk] : 0;
+                                last6MonthsTotal += val;
                             }
                             const avgRevenue = last6MonthsTotal / 6;
 
