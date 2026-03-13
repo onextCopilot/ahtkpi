@@ -380,7 +380,7 @@ $COLS = 14; // STT+Nhóm+Tên+TargetNăm+CảNăm+Tỷtrọng+Q1+Q2+Q3+Q4+Owner+
                     ?>
                     <td
                         style="text-align:right;background:<?= $qc['bg'] ?>;font-weight:700;color:<?= $qc['head'] ?>;padding:4px 8px">
-                        <?php if ($qFtHas && !$qFtMixed): ?>         <?= number_format($qFtSum, 0, ',', '.') ?>     <?php else: ?><span
+                        <?php if ($qFtHas && !$qFtMixed): ?>          <?php else: ?><span
                                 style="color:#9CA3AF;font-weight:400">—</span><?php endif; ?>
                     </td>
                 <?php endforeach; ?>
