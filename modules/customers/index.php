@@ -1189,7 +1189,9 @@ $avatar = $_SESSION['avatar'] ?? '';
                         const now = new Date();
 
                         // Pre-calculate sortable values
-                        currentStatsData = data.data.map(customer => {
+                        // Ensure data.data is an array (to handle objects from PHP JSON_FORCE_OBJECT if still present)
+                        const rawData = Array.isArray(data.data) ? data.data : Object.values(data.data || {});
+                        currentStatsData = rawData.map(customer => {
                             const stats = customer.stats || {};
                             const m_usd = stats.monthly_usd || {};
 
@@ -1697,20 +1699,22 @@ $avatar = $_SESSION['avatar'] ?? '';
             fetch(`/api/customer_notes.php?${params}`)
                 .then(res => res.json())
                 .then(data => {
-                    if (data.success) {
-                        if (data.data.length === 0) {
-                            historyContainer.innerHTML = '<p style="text-align:center; color:#999; padding:20px;">Không có ghi chú nào được tìm thấy.</p>';
-                        } else {
-                            historyContainer.innerHTML = data.data.map(note => `
-                                <div class="note-item">
-                                    <div class="note-content-text">${note.note_content}</div>
-                                    <div class="note-meta">
-                                        <span class="note-author">Người viết: ${escapeHtml(note.author)}</span>
-                                        <span class="note-time">${formatDateTime(note.created_at)}</span>
+                        if (data.success) {
+                            if (!data.data || (Array.isArray(data.data) && data.data.length === 0)) {
+                                historyContainer.innerHTML = '<p style="text-align:center; color:#999; padding:20px;">Không có ghi chú nào được tìm thấy.</p>';
+                            } else {
+                                const notesList = Array.isArray(data.data) ? data.data : Object.values(data.data);
+                                historyContainer.innerHTML = notesList.map(note => `
+                                    <div class="note-item">
+                                        <div class="note-content-text">${note.note_content}</div>
+                                        <div class="note-meta">
+                                            <span class="note-author">Người viết: ${escapeHtml(note.author)}</span>
+                                            <span class="note-time">${formatDateTime(note.created_at)}</span>
+                                        </div>
                                     </div>
-                                </div>
-                            `).join('');
+                                `).join('');
 
+                            }
                             // Render Simple Pagination
                             if (data.pagination.totalPages > 1) {
                                 let paginationHtml = '';
@@ -1798,7 +1802,8 @@ $avatar = $_SESSION['avatar'] ?? '';
         function handleBCChange(odooId, checkbox) {
             const container = checkbox.closest('.bc-dropdown-content');
             const btn = container.previousElementSibling;
-            const checked = Array.from(container.querySelectorAll('input:checked')).map(i => i.value);
+            const checkedInputs = Array.from(container.querySelectorAll('input:checked'));
+            const checked = checkedInputs.map(i => i.value);
 
             btn.textContent = checked.length > 0 ? checked.join(', ') : 'Chọn BCs...';
             updateKeyAccountMetadata(odooId, 'delivery_owners', checked.join(','));
@@ -1830,7 +1835,8 @@ $avatar = $_SESSION['avatar'] ?? '';
 
             // Render rows
             const startIndex = (pagination.page - 1) * pagination.limit;
-            tbody.innerHTML = customers.map((customer, idx) => `
+            const customersList = Array.isArray(customers) ? customers : Object.values(customers || {});
+            tbody.innerHTML = customersList.map((customer, idx) => `
                 <tr>
                     <td>${startIndex + idx + 1}</td>
                     <td style="text-align: center;">
