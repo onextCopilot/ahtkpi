@@ -158,6 +158,7 @@ try {
         "sssissddssssssssssi",
         $defaultCompany,
         $amName,
+        $amEmail,
         $teamId,
         $clientName,
         $projectName,
