@@ -263,7 +263,7 @@ $COLS = 14; // STT+Nhóm+Tên+TargetNăm+CảNăm+Tỷtrọng+Q1+Q2+Q3+Q4+Owner+
                                         <?= $yrTot['fmt'] ?></div>
                                     <?php if ($baseNum): ?>
                                         <div style="font-size:9px;color:#6B7280;margin-top:2px">/
-                                            <?= number_format($baseNum, 0, ',', '.') ?></div>
+                                            <?= number_format($baseNum, 0, ',', '.') ?><?= htmlspecialchars($d['unit']) ?></div>
                                     <?php endif; ?>
                                 </div>
                             </div>
