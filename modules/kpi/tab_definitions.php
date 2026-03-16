@@ -79,11 +79,11 @@ foreach ($defs as $d) {
 
         // For annual: average/sum across months that have data.
         // If calc_method is avg and it's the current year, only count up to the current month as requested.
-        $maxMonth = 12;
-        if ($method === 'avg' && $year == (int)date('Y')) {
-            $maxMonth = (int)date('n');
-        }
-        $allMonths = range(1, $maxMonth);
+      //  $maxMonth = 12;
+        //if ($method === 'avg' && $year == (int)date('Y')) {
+         //   $maxMonth = (int)date('n');
+     //   }
+      //  $allMonths = range(1, $maxMonth);
 
         // ket thuc doan sua moi
 
