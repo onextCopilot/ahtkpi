@@ -304,7 +304,7 @@ $COLS = 14; // STT+Nhóm+Tên+TargetNăm+CảNăm+Tỷtrọng+Q1+Q2+Q3+Q4+Owner+
                                 <div style="font-size:12px;font-weight:700;color:<?= $qc['head'] ?>;margin-bottom:3px">
                                     <?= $tot['fmt'] ?>
                                     <?php if ($tot['count'] < 3): ?><span style="font-size:9px;font-weight:400;color:#9CA3AF">
-                                            (<?= $tot['count'] ?>/3T)</span><?php endif; ?>
+                                            (<?= $tot['count'] ?>/3T)</span><?php endif; ?> <?= htmlspecialchars($d['unit']) ?>
                                 </div>
                                 <div style="height:5px;background:#E5E7EB;border-radius:3px;overflow:hidden;margin-bottom:2px">
                                     <div
