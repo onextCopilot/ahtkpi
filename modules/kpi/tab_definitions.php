@@ -277,7 +277,10 @@ $COLS = 14; // STT+Nhóm+Tên+TargetNăm+CảNăm+Tỷtrọng+Q1+Q2+Q3+Q4+Owner+
                                 $qPlan = (float) $s;
                         }
                         if ($qPlan === null && $baseNum)
-                            $qPlan = $baseNum / 4;
+                          $qPlan = $baseNum / 4;
+                          $qPlan = ($d['calc_method'] === 'avg') ? $baseNum : $baseNum / 4;
+
+                        
                         $qProg = ($tot && !$tot['mixed'] && $qPlan) ? calcProgress($tot['sum'], $qPlan) : null;
                         ?>
                         <td style="padding:2px 4px;background:<?= $qc['bg'] ?>;vertical-align:top">
