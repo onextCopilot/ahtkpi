@@ -313,7 +313,7 @@ $COLS = 14; // STT+Nhóm+Tên+TargetNăm+CảNăm+Tỷtrọng+Q1+Q2+Q3+Q4+Owner+
                                 </div>
                                 <?php if ($qProg): ?>
                                     <div style="display:flex;justify-content:space-between">
-                                        <span style="font-size:9px;color:#9CA3AF">KH: <?= number_format($qPlan, 0, ',', '.') ?></span>
+                                        <span style="font-size:9px;color:#9CA3AF">KH: <?= number_format($qPlan, 0, ',', '.') ?><?= htmlspecialchars($d['unit']) ?></span>
                                         <span
                                             style="font-size:11px;font-weight:800;color:<?= $qProg['txt'] ?>"><?= $qProg['pct'] ?>%</span>
                                     </div>
