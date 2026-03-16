@@ -76,6 +76,18 @@ foreach ($defs as $d) {
     if ($yrCount > 0 || $yrMixed) {
         // For annual: if avg method, average across all 12 months that have data
         $allMonths = [1,2,3,4,5,6,7,8,9,10,11,12];
+
+        // For annual: average/sum across months that have data.
+        // If calc_method is avg and it's the current year, only count up to the current month as requested.
+        $maxMonth = 12;
+        if ($method === 'avg' && $year == (int)date('Y')) {
+            $maxMonth = (int)date('n');
+        }
+        $allMonths = range(1, $maxMonth);
+
+        // ket thuc doan sua moi
+
+        
         $allSum = 0; $allMonthCount = 0; $allMixed = false;
         foreach ($allMonths as $m) {
             $val = $monthly_map[$d['id']][$m]['actual_value'] ?? null;
@@ -86,6 +98,10 @@ foreach ($defs as $d) {
         }
         $yrDisplay = ($method === 'avg' && !$allMixed && $allMonthCount > 0) ? $allSum / $allMonthCount : $allSum;
         $def_yr_totals[$d['id']] = ['sum' => $yrDisplay, 'fmt' => number_format($yrDisplay, 0, ',', '.'), 'count' => $allMonthCount, 'mixed' => $yrMixed];
+       
+        $def_yr_totals[$d['id']] = ['sum' => $yrDisplay, 'fmt' => number_format($yrDisplay, 0, ',', '.'), 'count' => $allMonthCount, 'mixed' => $allMixed];
+
+        
     } else {
         $def_yr_totals[$d['id']] = null;
     }
