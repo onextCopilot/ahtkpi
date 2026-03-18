@@ -410,7 +410,9 @@ if ($res) {
             $odoo_signed = abs((float) $odoo_inv['amount_total_signed']);
 
             $vnd_multiplier = $odoo->getRate('VND', $date);
-            if ($odoo_total > 0) {
+            if ($curr === 'VND') {
+                $vnd_value = $amount;
+            } else if ($odoo_total > 0) {
                 $ratio = abs($odoo_signed / $odoo_total);
                 if ($ratio > 100) {
                     // Ratio is high, likely already in VND (e.g. 25000 for USD)

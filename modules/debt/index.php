@@ -271,7 +271,9 @@ if ($res) {
         // Convert to VND using Odoo exchange rate ratio if available
         $vnd_value = 0;
         $vnd_multiplier = $odoo->getRate('VND', $date);
-        if (!empty($oid) && isset($odoo_map[$oid])) {
+        if ($curr === 'VND') {
+            $vnd_value = $amount;
+        } else if (!empty($oid) && isset($odoo_map[$oid])) {
             $odoo_inv = $odoo_map[$oid];
             $odoo_total = (float) $odoo_inv['amount_total'];
             $odoo_signed = abs((float) $odoo_inv['amount_total_signed']);
