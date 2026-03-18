@@ -29,23 +29,18 @@ $user_teams = [];
 $where_clauses = [];
 
 if (!$can_view_all_debts) {
-    if (isset($_SESSION['is_am_bd']) && $_SESSION['is_am_bd'] == 1) {
-        $am_name_esc = $conn->real_escape_string($_SESSION['full_name']);
-        $where_clauses[] = "d.am = '$am_name_esc'";
+    $ut_res = $conn->prepare("SELECT team_id FROM user_sale_teams WHERE user_id = ?");
+    $ut_res->bind_param("i", $user_id);
+    $ut_res->execute();
+    $ut_result = $ut_res->get_result();
+    while ($r = $ut_result->fetch_assoc()) {
+        $user_teams[] = $r['team_id'];
+    }
+    if (count($user_teams) > 0) {
+        $in_teams = implode(',', $user_teams);
+        $where_clauses[] = "d.sale_team_id IN ($in_teams)";
     } else {
-        $ut_res = $conn->prepare("SELECT team_id FROM user_sale_teams WHERE user_id = ?");
-        $ut_res->bind_param("i", $user_id);
-        $ut_res->execute();
-        $ut_result = $ut_res->get_result();
-        while ($r = $ut_result->fetch_assoc()) {
-            $user_teams[] = $r['team_id'];
-        }
-        if (count($user_teams) > 0) {
-            $in_teams = implode(',', $user_teams);
-            $where_clauses[] = "d.sale_team_id IN ($in_teams)";
-        } else {
-            $where_clauses[] = "1=0";
-        }
+        $where_clauses[] = "1=0";
     }
 }
 
@@ -87,22 +82,31 @@ if ($res) {
 
         // Convert to VND using Odoo ratio if available
         $vnd_value = 0;
-        if (!empty($oid) && isset($odoo_map[$oid])) {
+        $vnd_multiplier = $odoo->getRate('VND', $date);
+        
+        if ($curr === 'VND') {
+            $vnd_value = $amount;
+        } else if (!empty($oid) && isset($odoo_map[$oid])) {
             $odoo_inv = $odoo_map[$oid];
             $odoo_total = (float) $odoo_inv['amount_total'];
             $odoo_signed = abs((float) $odoo_inv['amount_total_signed']);
 
             if ($odoo_total > 0) {
-                // Apply the exact conversion ratio from Odoo to the debt amount
-                $vnd_value = $amount * ($odoo_signed / $odoo_total);
+                $ratio = abs($odoo_signed / $odoo_total);
+                if ($ratio > 100) {
+                    // Ratio is high, likely already in VND (e.g. 25000 for USD)
+                    $vnd_value = $amount * $ratio;
+                } else {
+                    // Ratio is low, likely in intermediate currency (e.g. 1.0 for MYR, 4.7 for USD to MYR base)
+                    $vnd_value = $amount * $ratio * $vnd_multiplier;
+                }
             }
         }
 
         // Fallback to manual rate calculation using robust ratio method
         if ($vnd_value <= 0) {
             $rateSource = $odoo->getRate($curr, $date) ?: 1.0;
-            $rateVnd = $odoo->getRate('VND', $date) ?: $rateVndDefault;
-            $vnd_value = $amount * ($rateVnd / $rateSource);
+            $vnd_value = ($rateSource > 0) ? (($amount / $rateSource) * $vnd_multiplier) : $amount;
         }
 
         $total_debts++; // Count every record in the filtered result

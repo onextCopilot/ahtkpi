@@ -274,20 +274,31 @@ if ($res) {
 
         // Convert to VND using Odoo ratio if available
         $vnd_value = 0;
-        if (!empty($oid) && isset($odoo_map[$oid])) {
+        $vnd_multiplier = $odoo->getRate('VND', $date);
+
+        if ($curr === 'VND') {
+            $vnd_value = $amount;
+        } else if (!empty($oid) && isset($odoo_map[$oid])) {
             $odoo_inv = $odoo_map[$oid];
             $odoo_total = (float) $odoo_inv['amount_total'];
             $odoo_signed = abs((float) $odoo_inv['amount_total_signed']);
 
             if ($odoo_total > 0) {
-                $vnd_value = $amount * ($odoo_signed / $odoo_total);
+                $ratio = abs($odoo_signed / $odoo_total);
+                if ($ratio > 100) {
+                    // Ratio is high, likely already in VND (e.g. 25000 for USD)
+                    $vnd_value = $amount * $ratio;
+                } else {
+                    // Ratio is low, likely in intermediate currency (e.g. 1.0 for MYR, 4.7 for USD to MYR base)
+                    $vnd_value = $amount * $ratio * $vnd_multiplier;
+                }
             }
         }
 
         // Fallback to manual rate calculation
         if ($vnd_value <= 0) {
             $rate = $odoo->getRate($curr, $date);
-            $vnd_value = ($rate > 0) ? ($amount / $rate) : $amount;
+            $vnd_value = ($rate > 0) ? (($amount / $rate) * $vnd_multiplier) : $amount;
         }
 
         $row['amount_original'] = $amount;
