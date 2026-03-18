@@ -409,21 +409,44 @@ if ($res) {
             $odoo_total = (float) $odoo_inv['amount_total'];
             $odoo_signed = abs((float) $odoo_inv['amount_total_signed']);
 
+            $vnd_multiplier = $odoo->getRate('VND', $date);
             if ($odoo_total > 0) {
-                // Apply ratio from Odoo to the debt amount
-                $vnd_value = $amount * ($odoo_signed / $odoo_total);
+                $ratio = abs($odoo_signed / $odoo_total);
+                if ($ratio > 100) {
+                    // Ratio is high, likely already in VND (e.g. 25000 for USD)
+                    $vnd_value = $amount * $ratio;
+                    error_log("[DEBT ODOO RATIO-VND] Inv: $oid, Curr: $curr, Amt: $amount, Ratio: $ratio, Res: $vnd_value");
+                } else {
+                    // Ratio is low, likely in a different company currency (e.g. 1.0 for MYR, 0.25 for USD)
+                    // Needs conversion to VND using the VND multiplier relative to the base.
+                    $vnd_value = $amount * $ratio * $vnd_multiplier;
+                    error_log("[DEBT ODOO RATIO-BASE] Inv: $oid, Curr: $curr, Amt: $amount, Ratio: $ratio, Mult: $vnd_multiplier, Res: $vnd_value");
+                }
+            } else if ($odoo_total > 0 && $curr === 'VND') {
+                 $vnd_value = $amount;
             }
         }
 
         // Fallback to manual rate calculation if needed
         if ($vnd_value <= 0) {
             $rate = $odoo->getRate($curr, $date);
-            $vnd_value = ($rate > 0) ? ($amount / $rate) : $amount;
+            $vnd_multiplier = $odoo->getRate('VND', $date);
+            // (Amount / Rate) = Amount in Company Currency. Then multiply by getRate('VND') to get VND.
+            $vnd_value = ($rate > 0) ? (($amount / $rate) * $vnd_multiplier) : $amount;
+            
+            if ($curr !== 'VND') {
+                 error_log("[DEBT] Curr: $curr, Amount: $amount, Rate: $rate, VND Mult: $vnd_multiplier, Result: $vnd_value");
+            }
         }
 
         $total_amount_vnd += $vnd_value;
+        
+        // Track total in USD for generic reference
         if ($curr === 'USD') {
             $total_amount_usd += $amount;
+        } else if ($vnd_value > 0) {
+            // Use 24000 as a generic VND/USD fallback for the USD summary if no direct USD rate
+            $total_amount_usd += ($vnd_value / 24000); 
         }
 
         // Grouping
@@ -431,6 +454,7 @@ if ($res) {
         $row['currency_original'] = $curr;
         $row['amount'] = $vnd_value;
         $row['currency'] = 'VND';
+        $row['formatted_original'] = formatCurrency($amount, $curr);
 
         $mKey = !empty($row['invoice_date']) ? date('m/Y', strtotime($row['invoice_date'])) : 'No Date';
         $groupedDebts[$mKey][] = $row;
@@ -449,9 +473,51 @@ foreach ($groupedDebts as $m => $items) {
 function formatCurrency($amount, $curr = 'USD')
 {
     if ($curr === 'VND') {
-        return number_format($amount, 0, ',', '.') . ' ₫';
+        return number_format($amount, 0, ',', '.') . ' đ';
     }
-    return '$' . number_format($amount, 2);
+    if ($curr === 'MYR' || $curr === 'RM') {
+        return number_format($amount, 2, ',', '.') . ' RM';
+    }
+    if ($curr === 'SGD') {
+        return 'S$' . number_format($amount, 2, ',', '.');
+    }
+    if ($curr === 'EUR') {
+        return '€' . number_format($amount, 2, ',', '.');
+    }
+    if ($curr === 'JPY') {
+        return '¥' . number_format($amount, 0, ',', '.');
+    }
+    if ($curr === 'KRW') {
+        return '₩' . number_format($amount, 0, ',', '.');
+    }
+    if ($curr === 'GBP') {
+        return '£' . number_format($amount, 2, ',', '.');
+    }
+    if ($curr === 'AUD') {
+        return 'A$' . number_format($amount, 2, ',', '.');
+    }
+    if ($curr === 'CAD') {
+        return 'C$' . number_format($amount, 2, ',', '.');
+    }
+    if ($curr === 'HKD') {
+        return 'HK$' . number_format($amount, 2, ',', '.');
+    }
+    if ($curr === 'TWD') {
+        return 'NT$' . number_format($amount, 2, ',', '.');
+    }
+    if ($curr === 'THB') {
+        return number_format($amount, 2, ',', '.') . ' ฿';
+    }
+    if ($curr === 'INR') {
+        return '₹' . number_format($amount, 2, ',', '.');
+    }
+    if ($curr === 'CNY') {
+        return 'CN¥' . number_format($amount, 2, ',', '.');
+    }
+    if ($curr === 'CHF') {
+        return 'CHF ' . number_format($amount, 2, ',', '.');
+    }
+    return '$' . number_format($amount, 2, ',', '.');
 }
 
 function formatVND($amount)
@@ -1596,10 +1662,10 @@ if ($team_res && $team_res->num_rows > 0) {
                                                     ?>
                                                 </td>
                                                 <td class="cell-amount" style="color: #64748b;">
-                                                    <?php echo !empty($d['original_amount']) ? formatCurrency($d['original_amount'], $d['original_currency'] ?? $d['currency'] ?? 'USD') : '-'; ?>
+                                                    <?php echo !empty($d['formatted_original']) ? $d['formatted_original'] : ( !empty($d['original_amount']) ? formatCurrency($d['original_amount'], $d['original_currency'] ?? 'USD') : '-'); ?>
                                                 </td>
                                                 <td class="cell-amount">
-                                                    <?php echo formatCurrency($d['amount'] ?? 0, $d['currency'] ?? 'USD'); ?>
+                                                    <?php echo formatCurrency($d['amount'] ?? 0, 'VND'); ?>
                                                 </td>
                                                 <td style="position: relative; text-align: center;">
                                                     <?php
@@ -1760,10 +1826,22 @@ if ($team_res && $team_res->num_rows > 0) {
                         <div class="form-group">
                             <label>Currency</label>
                             <select name="currency" id="currency">
-                                <option value="USD">USD</option>
-                                <option value="VND">VND</option>
-                                <option value="EUR">EUR</option>
-                                <option value="JPY">JPY</option>
+                                <option value="USD">USD - US Dollar</option>
+                                <option value="VND" selected>VND - Vietnam Dong</option>
+                                <option value="EUR">EUR - Euro</option>
+                                <option value="JPY">JPY - Japanese Yen</option>
+                                <option value="GBP">GBP - British Pound</option>
+                                <option value="SGD">SGD - Singapore Dollar</option>
+                                <option value="MYR">MYR - Malaysian Ringgit</option>
+                                <option value="AUD">AUD - Australian Dollar</option>
+                                <option value="CAD">CAD - Canadian Dollar</option>
+                                <option value="HKD">HKD - Hong Kong Dollar</option>
+                                <option value="CNY">CNY - Chinese Yuan</option>
+                                <option value="KRW">KRW - South Korean Won</option>
+                                <option value="TWD">TWD - Taiwan Dollar</option>
+                                <option value="THB">THB - Thai Baht</option>
+                                <option value="INR">INR - Indian Rupee</option>
+                                <option value="CHF">CHF - Swiss Franc</option>
                             </select>
                         </div>
                         <div class="form-group">

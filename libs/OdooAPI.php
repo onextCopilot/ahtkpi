@@ -524,7 +524,6 @@ class OdooAPI
 
     public function getRate($currencyName, $date)
     {
-
         // Load cache
         static $ratesCache = null;
         if ($ratesCache === null) {
@@ -532,26 +531,38 @@ class OdooAPI
                 $content = file_get_contents($this->ratesCacheFile);
                 $json = str_replace('<?php exit; ?>', '', $content);
                 $ratesCache = json_decode($json, true);
-            } else {
-                return 1.0; // No cache, return 1? Or try to fetch?
-                // For performance, avoid auto-fetch here inside loop.
+            }
+
+            // If empty or significantly old, refresh from Odoo
+            if ($ratesCache === null || !file_exists($this->ratesCacheFile) || (time() - filemtime($this->ratesCacheFile) > 86400)) {
+                try {
+                    $this->refreshCurrencyRates();
+                    $content = file_get_contents($this->ratesCacheFile);
+                    $json = str_replace('<?php exit; ?>', '', $content);
+                    $ratesCache = json_decode($json, true);
+                } catch (Exception $e) {
+                    error_log("Failed to auto-refresh rates: " . $e->getMessage());
+                }
             }
         }
 
-        if (!isset($ratesCache[$currencyName]))
-            return 1.0; // Currency not found
+
+        if ($ratesCache === null || !isset($ratesCache[$currencyName])) {
+            error_log("Currency rate for {$currencyName} not found in cache and Odoo sync failed/unavailable.");
+            return 1.0; // Return 1.0 as a safe numeric fallback if everything fails, but log error
+        }
 
         // Find applicable rate (first one where rate_date <= date)
         // Cache is sorted DESC.
         foreach ($ratesCache[$currencyName] as $entry) {
             if ($entry['date'] <= $date) {
-                return $entry['rate'];
+                return (float)$entry['rate'];
             }
         }
 
         // If data is older than all rates, use the oldest (last)
         $last = end($ratesCache[$currencyName]);
-        return $last['rate'];
+        return (float)$last['rate'];
     }
 
     private function filterInvoicesInMemory($invoices, $filters)
