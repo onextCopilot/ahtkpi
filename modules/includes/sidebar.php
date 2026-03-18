@@ -118,7 +118,7 @@ function isMenuItemActive($path, $current_uri)
         <?php endif; ?>
 
         <!-- KPI Management -->
-        <a href="/kpi" class="nav-item <?php echo (strpos($current_uri, '/kpi') !== false) ? 'active' : ''; ?>">
+        <a href="/kpi" class="nav-item <?php echo ($current_uri === '/kpi') ? 'active' : ''; ?>">
             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
                 stroke-linecap="round" stroke-linejoin="round">
                 <line x1="18" y1="20" x2="18" y2="10"></line>
@@ -128,6 +128,30 @@ function isMenuItemActive($path, $current_uri)
             </svg>
             <span>General KPI Management</span>
         </a>
+
+        <!-- Core/Key Management Dropdown -->
+        <div class="nav-item nav-item-parent <?php
+        $is_core_open = strpos($current_uri, '/core-kpi') !== false || strpos($current_uri, '/guides') !== false;
+        echo $is_core_open ? 'active open' : ''; ?>" onclick="toggleSubmenu(this)">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="7.5" cy="15.5" r="5.5"></circle>
+                <path d="m21 2-9.6 9.6"></path>
+                <path d="m15.5 7.5 3 3"></path>
+            </svg>
+            <span>Core/Key Management</span>
+            <svg class="chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polyline points="6 9 12 15 18 9"></polyline>
+            </svg>
+        </div>
+        <div class="submenu <?php echo $is_core_open ? 'open' : ''; ?>">
+            <a href="/core-kpi" class="submenu-item <?php echo ($current_uri === '/core-kpi') ? 'active' : ''; ?>">
+                <span>KPI Management</span>
+            </a>
+            <a href="/guides" class="submenu-item <?php echo ($current_uri === '/guides') ? 'active' : ''; ?>">
+                <span>Guides</span>
+            </a>
+        </div>
 
         <?php if ($_SESSION['role'] === 'admin'): ?>
             <a href="/sale-reports-admin"
@@ -219,10 +243,23 @@ function isMenuItemActive($path, $current_uri)
 
 <script>
     function toggleSubmenu(element) {
-        // Toggle the parent item
-        element.classList.toggle('open');
+        const isOpening = !element.classList.contains('open');
 
-        // Toggle the submenu (next sibling)
+        if (isOpening) {
+            // Close all other open submenus
+            document.querySelectorAll('.nav-item-parent.open').forEach(el => {
+                if (el !== element) {
+                    el.classList.remove('open');
+                    const sub = el.nextElementSibling;
+                    if (sub && sub.classList.contains('submenu')) {
+                        sub.classList.remove('open');
+                    }
+                }
+            });
+        }
+
+        // Toggle the clicked menu
+        element.classList.toggle('open');
         const submenu = element.nextElementSibling;
         if (submenu && submenu.classList.contains('submenu')) {
             submenu.classList.toggle('open');

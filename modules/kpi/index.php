@@ -209,16 +209,22 @@ $quarterly_map = []; // [def_id][quarter] => row
 if ($tab === 'quarterly') {
     $r = $conn->query("SELECT * FROM kpi_quarterly WHERE year=$year");
     if ($r)
-        while ($row = $r->fetch_assoc())
-            $quarterly_map[$row['kpi_def_id']][$row['quarter']] = $row;
+        while ($row = $r->fetch_assoc()) {
+            $def_id = (string)($row['kpi_def_id'] ?? '');
+            $q = (string)($row['quarter'] ?? '');
+            $quarterly_map[$def_id][$q] = $row;
+        }
 }
 
 // Fetch monthly actuals for monthly + quarterly + definitions tabs
 $monthly_map = []; // [def_id][month] => row
 $r = $conn->query("SELECT * FROM kpi_monthly WHERE year=$year");
 if ($r)
-    while ($row = $r->fetch_assoc())
-        $monthly_map[$row['kpi_def_id']][$row['month']] = $row;
+    while ($row = $r->fetch_assoc()) {
+        $def_id = (string)($row['kpi_def_id'] ?? '');
+        $m = (string)($row['month'] ?? '');
+        $monthly_map[$def_id][$m] = $row;
+    }
 
 $total_weight = array_sum(array_column($defs, 'weight'));
 $months_vi = ['', 'Tháng 1', 'Tháng 2', 'Tháng 3', 'Tháng 4', 'Tháng 5', 'Tháng 6', 'Tháng 7', 'Tháng 8', 'Tháng 9', 'Tháng 10', 'Tháng 11', 'Tháng 12'];
@@ -921,7 +927,8 @@ $status_map = ['draft' => ['#F1F5F9', '#64748B'], 'active' => ['#DBEAFE', '#1D4E
             $all_year_total = 0;
             if ($dept_counts_q)
                 while ($dr = $dept_counts_q->fetch_assoc()) {
-                    $dept_kpi_count[$dr['department_id']] = $dr['cnt'];
+                    $d_id = (string)($dr['department_id'] ?? '');
+                    $dept_kpi_count[$d_id] = $dr['cnt'];
                     $all_year_total += $dr['cnt'];
                 }
             ?>
@@ -945,7 +952,8 @@ $status_map = ['draft' => ['#F1F5F9', '#64748B'], 'active' => ['#DBEAFE', '#1D4E
                 <div class="sf-strip" id="sfStrip">
                     <div class="sf-tabs" id="sfTabs">
                         <?php foreach ($departments as $dpt):
-                            $cnt = $dept_kpi_count[$dpt['id']] ?? 0;
+                            $d_id = (string)($dpt['id'] ?? '');
+                            $cnt = $dept_kpi_count[$d_id] ?? 0;
                             ?>
                             <a href="?tab=<?= $tab ?>&year=<?= $year ?>&dept=<?= $dpt['id'] ?>"
                                 class="sheet-tab <?= $filter_dept == $dpt['id'] ? 'active' : '' ?>"
