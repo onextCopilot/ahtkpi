@@ -427,7 +427,8 @@ class OdooAPI
 
         try {
             // Search res.users by login (email)
-            $domain = [['login', '=', $email]];
+           // $domain = [['login', '=', $email]];
+            $domain = ['|', ['login', '=', $email], ['email', '=', $email]];
             $users = $this->searchRead('res.users', $domain, ['id'], 1);
 
             if (!empty($users) && isset($users[0]['id'])) {
@@ -594,7 +595,15 @@ class OdooAPI
             }
 
             // Owner Filter (Exact Odoo User ID Match)
-            if ($ownerId !== null) {
+           // if ($ownerId !== null) {
+
+            if (!empty($filters['owner_email'])) {
+                if ($ownerId === null) {
+                    // if email was requested but not found in Odoo, return no invoices for them
+                    return false;
+                }
+
+                    
                 // invoice_user_id is [id, "Name"]
                 $invoiceUserId = isset($invoice['invoice_user_id']) && is_array($invoice['invoice_user_id']) ? $invoice['invoice_user_id'][0] : null;
 
