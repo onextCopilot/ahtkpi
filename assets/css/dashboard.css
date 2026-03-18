@@ -82,6 +82,7 @@ body {
     padding: 2rem 1.5rem;
     border-bottom: 1px solid #334155;
     background: #1e293b;
+    flex-shrink: 0;
 }
 
 .logo {
@@ -126,11 +127,12 @@ body {
 
 .sidebar-nav {
     flex: 1;
-    padding: 1.5rem 1rem;
+    padding: 1.5rem 1rem 2rem 1rem;
     display: flex;
     flex-direction: column;
-    gap: 0.5rem;
+    gap: 0.75rem;
     overflow-y: auto;
+    min-height: 0;
 }
 
 .nav-item {
@@ -197,12 +199,6 @@ body {
     color: #ffffff;
 }
 
-.sidebar-footer {
-    padding: 1rem;
-
-    /* Darker footer */
-}
-
 .nav-item.logout {
     color: #f87171;
     /* Lighter red */
@@ -246,6 +242,7 @@ body {
     margin-bottom: 0.25rem;
     background: var(--gradient-primary);
     -webkit-background-clip: text;
+    background-clip: text;
     -webkit-text-fill-color: transparent;
 }
 
@@ -431,6 +428,7 @@ body {
     margin-bottom: 0.5rem;
     background: var(--gradient-primary);
     -webkit-background-clip: text;
+    background-clip: text;
     -webkit-text-fill-color: transparent;
     transition: all 0.3s ease;
 }
@@ -857,14 +855,15 @@ body {
 }
 
 .submenu.open {
-    max-height: 300px;
+    max-height: 2000px;
+    overflow: visible;
 }
 
 .submenu-item {
     display: flex;
     align-items: center;
     gap: 0.75rem;
-    padding: 0.75rem 1rem;
+    padding: 0.875rem 1rem;
     padding-left: 2.5rem;
     color: #94a3b8;
     text-decoration: none;
