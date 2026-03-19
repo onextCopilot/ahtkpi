@@ -224,23 +224,11 @@ if (!empty($_GET['week'])) {
     $where_clauses[] = "(d.weekly_update LIKE '%Tuần $week_number%' OR d.weekly_update LIKE '%tuần $week_number%' OR d.weekly_update = '$week_number' OR d.weekly_update LIKE '%W$week_number%' OR d.weekly_update LIKE '%w$week_number%')";
 }
 
-$selected_team = $_GET['team'] ?? '';
-
-if (empty($selected_team)) {
-    if (!$can_view_all_debts && count($user_teams) > 0) {
-        $selected_team = (string)$user_teams[0];
-    } else {
-        $selected_team = 'dashboard';
-    }
-}
+$selected_team = $_GET['team'] ?? 'dashboard'; // Default to dashboard as requested
 
 if (!$can_view_all_debts && !in_array($selected_team, ['dashboard', 'analytics'])) {
     if (!in_array($selected_team, $user_teams)) {
-        if (count($user_teams) > 0) {
-            $selected_team = (string)$user_teams[0];
-        } else {
-            $selected_team = 'dashboard';
-        }
+        $selected_team = 'dashboard';
     }
 }
 
@@ -1291,34 +1279,20 @@ if ($res_am && $res_am->num_rows > 0) {
                     $tabs_data = [];
 
                     // 1. Dashboard
-                    if ($can_view_all_debts) {
-                        $tabs_data['dashboard'] = [
-                            'id' => 'dashboard',
-                            'label' => 'Dashboard',
-                            'url' => getTabUrl('dashboard'),
-                            'count' => null
-                        ];
-                    }
-
-                    // 1.5 All (Admin only)
-                    if ($can_view_all_debts) {
-                        $tabs_data['all'] = [
-                            'id' => 'all',
-                            'label' => 'All Teams (Table)',
-                            'url' => getTabUrl('all'),
-                            'count' => array_sum($counts)
-                        ];
-                    }
+                    $tabs_data['dashboard'] = [
+                        'id' => 'dashboard',
+                        'label' => 'Dashboard',
+                        'url' => getTabUrl('dashboard'),
+                        'count' => null
+                    ];
 
                     // 2. Analytics
-                    if ($can_view_all_debts) {
-                        $tabs_data['analytics'] = [
-                            'id' => 'analytics',
-                            'label' => 'Analytics',
-                            'url' => getTabUrl('analytics'),
-                            'count' => null
-                        ];
-                    }
+                    $tabs_data['analytics'] = [
+                        'id' => 'analytics',
+                        'label' => 'Analytics',
+                        'url' => getTabUrl('analytics'),
+                        'count' => null
+                    ];
 
                     // 3. Teams
                     foreach ($all_teams as $t) {
