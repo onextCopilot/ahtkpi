@@ -277,14 +277,27 @@ $reviewed_count = count(array_filter($dash_stats, fn($d)=>!empty($d['review'])))
 <?php /* ═══════════════════════════════ TAB: CYCLES ═══════════════════════════════ */ elseif($tab==='cycles'): ?>
 <div class="panel">
   <div class="panel-hd">
-    <h3>📅 Chu kỳ đánh giá</h3>
+    <div style="display:flex;align-items:center;gap:15px;">
+      <h3>📅 Chu kỳ đánh giá</h3>
+      <form method="GET" style="margin:0;">
+        <input type="hidden" name="tab" value="cycles">
+        <select name="year" onchange="this.form.submit()" style="padding:3px 8px;border:1px solid #D1D5DB;border-radius:6px;font-size:12px;background:#fff;">
+          <?php for($y=date('Y')+1;$y>=2021;$y--): ?>
+          <option value="<?=$y?>" <?=$sel_year==$y?'selected':''?>>Năm <?=$y?></option>
+          <?php endfor; ?>
+        </select>
+      </form>
+    </div>
     <?php if($is_admin): ?><button class="btn btn-primary btn-sm" onclick="document.getElementById('m-cycle').classList.add('show')">+ Thêm chu kỳ</button><?php endif; ?>
   </div>
   <div class="tbl-wrap">
   <table class="tbl">
     <thead><tr><th>Tên</th><th>Năm</th><th>Quý</th><th>Từ ngày</th><th>Đến ngày</th><th>Trạng thái</th><?php if($is_admin): ?><th></th><?php endif; ?></tr></thead>
     <tbody>
-    <?php foreach($cycles as $c): $sb=$status_badge[$c['status']]??['#eee','#333','?']; ?>
+    <?php foreach($cycles as $c): 
+      if($c['year'] != $sel_year) continue;
+      $sb=$status_badge[$c['status']]??['#eee','#333','?']; 
+    ?>
     <tr>
       <td><strong><?=htmlspecialchars($c['name'])?></strong></td>
       <td><?=$c['year']?></td><td><?=$c['quarter']?'Q'.$c['quarter']:'Cả năm'?></td>
