@@ -29,6 +29,24 @@ if ($uri === '' || $uri === false) {
     $uri = '/';
 }
 
+// ── Serve static files under /public/ directly ───────────────────────────
+if (strpos($uri, '/public/') === 0) {
+    $file_path = __DIR__ . $uri;
+    if (file_exists($file_path) && is_file($file_path)) {
+        $ext = strtolower(pathinfo($file_path, PATHINFO_EXTENSION));
+        $mime_map = [
+            'jpg' => 'image/jpeg', 'jpeg' => 'image/jpeg',
+            'png' => 'image/png',  'gif' => 'image/gif',
+            'webp'=> 'image/webp', 'svg' => 'image/svg+xml',
+            'css' => 'text/css',   'js'  => 'application/javascript',
+            'pdf' => 'application/pdf',
+        ];
+        header('Content-Type: ' . ($mime_map[$ext] ?? 'application/octet-stream'));
+        readfile($file_path);
+        exit();
+    }
+}
+
 // If root, redirect to login or dashboard based on session
 if ($uri === '/') {
     session_start();
