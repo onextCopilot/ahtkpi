@@ -78,7 +78,7 @@ $routes = [
     '/sale-reports-admin' => 'modules/sale_reports_admin/index.php',
     '/bc-reports' => 'modules/bc_reports/index.php',
     '/guides' => 'modules/guides/index.php',
-    '/core-kpi' => 'modules/core_kpi/index.php',
+    '/core-key-kpi' => 'modules/core_kpi/index.php',
 ];
 
 // Check if route exists in our mapping

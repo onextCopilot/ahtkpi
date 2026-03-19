@@ -131,7 +131,7 @@ function isMenuItemActive($path, $current_uri)
 
         <!-- Core/Key Management Dropdown -->
         <div class="nav-item nav-item-parent <?php
-        $is_core_open = strpos($current_uri, '/core-kpi') !== false || strpos($current_uri, '/guides') !== false;
+        $is_core_open = strpos($current_uri, '/core-key-kpi') !== false || strpos($current_uri, '/guides') !== false;
         echo $is_core_open ? 'active open' : ''; ?>" onclick="toggleSubmenu(this)">
             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
                 stroke-linecap="round" stroke-linejoin="round">
@@ -145,7 +145,7 @@ function isMenuItemActive($path, $current_uri)
             </svg>
         </div>
         <div class="submenu <?php echo $is_core_open ? 'open' : ''; ?>">
-            <a href="/core-kpi" class="submenu-item <?php echo ($current_uri === '/core-kpi') ? 'active' : ''; ?>">
+            <a href="/core-key-kpi" class="submenu-item <?php echo ($current_uri === '/core-key-kpi') ? 'active' : ''; ?>">
                 <span>KPI Management</span>
             </a>
             <a href="/guides" class="submenu-item <?php echo ($current_uri === '/guides') ? 'active' : ''; ?>">
