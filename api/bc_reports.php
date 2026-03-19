@@ -131,7 +131,7 @@ try {
         $inv_time = strtotime($inv_date_str);
         $inv_year = (int) date('Y', $inv_time);
         $inv_month = (int) date('m', $inv_time);
-        $inv_quarter = ceil($inv_month / 3);
+        $inv_quarter = (int) ceil($inv_month / 3);
 
         if ($year && $inv_year !== $year)
             continue;
