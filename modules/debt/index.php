@@ -106,7 +106,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $currency_val = $_POST['currency'] ?? 'USD';
         $sale_team_id = !empty($_POST['sale_team_id']) ? intval($_POST['sale_team_id']) : NULL;
 
-         $am_email = $_SESSION['email'] ?? null;
+        $am_email = $_SESSION['email'] ?? null;
         if (!$am_email && isset($_SESSION['user_id'])) {
             $uStmt = $conn->prepare("SELECT email FROM users WHERE id = ?");
             $uStmt->bind_param("i", $_SESSION['user_id']);
@@ -118,7 +118,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
         }
 
-        
+
 
         if ($_POST['action'] === 'add') {
             $stmt = $conn->prepare("INSERT INTO debts (company, am, am_email,  sale_team_id, client_name, project_name, payment_milestone, expected_prod_date, expected_payment_date, invoice_status_class, amount, currency, invoice_status, vat_invoice, invoice_date, payment_status, payment_month, weekly_update, am_notes, delivery_notes, production_status, pl_class) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
@@ -288,7 +288,7 @@ if ($res) {
                     $vnd_value = $amount * $ratio * $vnd_multiplier;
                 }
             } else if ($odoo_total > 0 && $curr === 'VND') {
-                 $vnd_value = $amount;
+                $vnd_value = $amount;
             }
         }
 
@@ -306,7 +306,7 @@ if ($res) {
             // Use 24000 as a generic VND/USD fallback for the summary if no direct USD rate
             $total_amount_usd += ($vnd_value / 24000);
         }
-        
+
         $row['amount_original'] = $amount;
         $row['currency_original'] = $curr;
         $row['formatted_original'] = formatCurrency($amount, $curr);
@@ -1189,7 +1189,7 @@ if ($res_am && $res_am->num_rows > 0) {
                         <select name="invoice_status_class" class="filter-select" onchange="this.form.submit()">
                             <option value="">Phân loại HĐ: All</option>
                             <option value="Trắng" <?php echo (isset($_GET['invoice_status_class']) && $_GET['invoice_status_class'] == 'Trắng') ? 'selected' : ''; ?>>Trắng</option>
-                            <option value="Xanh" <?php echo (isset($_GET['invoice_status_class']) && $_GET['invoice_status_class'] == 'Xanh') ? 'selected' : ''; ?>>Xanh (Tốt)</option>
+                            <option value="Xanh" <?php echo (isset($_GET['invoice_status_class']) && $_GET['invoice_status_class'] == 'Xanh') ? 'selected' : ''; ?>>Xanh</option>
                             <option value="Tím" <?php echo (isset($_GET['invoice_status_class']) && $_GET['invoice_status_class'] == 'Tím') ? 'selected' : ''; ?>>Tím</option>
                             <option value="Đỏ" <?php echo (isset($_GET['invoice_status_class']) && $_GET['invoice_status_class'] == 'Đỏ') ? 'selected' : ''; ?>>Đỏ</option>
                             <option value="PP" <?php echo (isset($_GET['invoice_status_class']) && $_GET['invoice_status_class'] == 'PP') ? 'selected' : ''; ?>>PP</option>
@@ -2066,7 +2066,7 @@ if ($res_am && $res_am->num_rows > 0) {
                                                 ?>
                                             </td>
                                             <td class="cell-amount" style="color: #64748b;">
-                                                <?php echo !empty($d['formatted_original']) ? $d['formatted_original'] : ( !empty($d['amount_original']) ? formatCurrency($d['amount_original'], $d['currency_original'] ?? 'USD') : '-'); ?>
+                                                <?php echo !empty($d['formatted_original']) ? $d['formatted_original'] : (!empty($d['amount_original']) ? formatCurrency($d['amount_original'], $d['currency_original'] ?? 'USD') : '-'); ?>
                                             </td>
                                             <td class="cell-amount">
                                                 <?php echo formatCurrency($d['amount'] ?? 0, 'VND'); ?>
