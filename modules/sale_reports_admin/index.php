@@ -109,15 +109,30 @@ foreach ($all_invoices_year as $inv) {
         $am_name = $oname;
     }
 
-    // Use absolute match with my-reports logic (total_vnd)
-    $amount_vnd = isset($inv['amount_total_signed']) ? (float) $inv['amount_total_signed'] : 0;
+    // Properly detect base currency and convert to VND, respecting accountant's manual rates on invoice
+    $currencyCode = is_array($inv['currency_id'] ?? null) ? $inv['currency_id'][1] : 'VND';
+    $odoo_total = (float) ($inv['amount_total'] ?? 0);
+    $odoo_signed = abs((float) ($inv['amount_total_signed'] ?? 0));
+    $vnd_multiplier = $odoo->getRate('VND', $date) ?: 1.0;
 
-    // Fallback if missing (same as sale_reports/index.php)
-    if ($amount_vnd == 0 && ($inv['amount_total'] ?? 0) > 0) {
-        $currencyCode = is_array($inv['currency_id'] ?? null) ? $inv['currency_id'][1] : 'VND';
+    $amount_vnd = 0;
+    if ($currencyCode === 'VND') {
+        $amount_vnd = $odoo_total;
+    } else if ($odoo_total > 0 && $odoo_signed > 0) {
+        $ratio = $odoo_signed / $odoo_total;
+        if ($ratio > 100) {
+            // Odoo Base currency is already VND
+            $amount_vnd = $odoo_total * $ratio;
+        } else {
+            // Odoo Base currency is likely MYR or another intermediate currency
+            $amount_vnd = $odoo_total * $ratio * $vnd_multiplier;
+        }
+    }
+
+    // Fallback
+    if ($amount_vnd == 0 && $odoo_total > 0) {
         $rateSource = $odoo->getRate($currencyCode, $date) ?: 1.0;
-        $rateVnd = $odoo->getRate('VND', $date) ?: 1.0;
-        $amount_vnd = $inv['amount_total'] * ($rateVnd / $rateSource);
+        $amount_vnd = ($rateSource > 0) ? (($odoo_total / $rateSource) * $vnd_multiplier) : $odoo_total;
     }
 
     // Check exclusion (using local map)
@@ -149,11 +164,18 @@ foreach ($all_orders_year as $order) {
         $am_name = trim($order['user_id'][1]);
     }
 
-    // Convert SO amount to VND
+    // Convert SO amount to VND intelligently based on original currency
     $currencyCode = is_array($order['currency_id'] ?? null) ? $order['currency_id'][1] : 'VND';
-    $rateSource = $odoo->getRate($currencyCode, $date) ?: 1.0;
-    $rateVnd = $odoo->getRate('VND', $date) ?: 1.0;
-    $amount_vnd = $order['amount_total'] * ($rateVnd / $rateSource);
+    $odoo_total = (float) ($order['amount_total'] ?? 0);
+    
+    $amount_vnd = $odoo_total;
+    if ($currencyCode !== 'VND' && $odoo_total > 0) {
+        $rateSource = $odoo->getRate($currencyCode, $date) ?: 1.0;
+        $rateVnd = $odoo->getRate('VND', $date) ?: 1.0;
+        if ($rateSource > 0) {
+            $amount_vnd = ($odoo_total / $rateSource) * $rateVnd;
+        }
+    }
 
     if (!isset($am_recognised[$am_name])) {
         $am_recognised[$am_name] = ['Q1' => 0, 'Q2' => 0, 'Q3' => 0, 'Q4' => 0];

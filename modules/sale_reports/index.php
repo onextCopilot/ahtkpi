@@ -383,12 +383,27 @@ foreach ($invoices as &$inv) {
                     }
                 }
                 if ($paid_in_this_quarter) {
-                    $amountVnd = isset($inv['amount_total_signed']) ? (float) $inv['amount_total_signed'] : 0;
-                    if ($amountVnd == 0 && $inv['amount_total'] > 0) {
-                        $currencyCode = is_array($inv['currency_id']) ? $inv['currency_id'][1] : 'VND';
-                        $rateSource = $odoo->getRate($currencyCode, $inv_date_str) ?: 1.0;
-                        $rateVnd = $odoo->getRate('VND', $inv_date_str) ?: 1.0;
-                        $amountVnd = $inv['amount_total'] * ($rateVnd / $rateSource);
+                    // Properly detect base currency and convert to VND, respecting accountant's manual rates on invoice
+                    $currencyCode = is_array($inv['currency_id'] ?? null) ? $inv['currency_id'][1] : 'VND';
+                    $odoo_total = (float) ($inv['amount_total'] ?? 0);
+                    $odoo_signed = abs((float) ($inv['amount_total_signed'] ?? 0));
+                    $vnd_multiplier = $odoo->getRate('VND', $inv_date_str) ?: 1.0;
+
+                    $amountVnd = $odoo_total;
+                    if ($currencyCode !== 'VND') {
+                        $amountVnd = 0;
+                        if ($odoo_total > 0 && $odoo_signed > 0) {
+                            $ratio = $odoo_signed / $odoo_total;
+                            if ($ratio > 100) {
+                                $amountVnd = $odoo_total * $ratio;
+                            } else {
+                                $amountVnd = $odoo_total * $ratio * $vnd_multiplier;
+                            }
+                        }
+                        if ($amountVnd == 0 && $odoo_total > 0) {
+                            $rateSource = $odoo->getRate($currencyCode, $inv_date_str) ?: 1.0;
+                            $amountVnd = ($rateSource > 0) ? (($odoo_total / $rateSource) * $vnd_multiplier) : $odoo_total;
+                        }
                     }
                     $inv['calc_amount_vnd'] = $amountVnd;
                     $inv['is_excluded'] = (int) ($local_data[$inv['id']]['is_excluded'] ?? 0);
@@ -400,15 +415,29 @@ foreach ($invoices as &$inv) {
         continue;
     }
 
-    // Use amount_total_signed for 100% accuracy from Odoo
-    $amountVnd = isset($inv['amount_total_signed']) ? (float) $inv['amount_total_signed'] : 0;
+    // Properly detect base currency and convert to VND, respecting accountant's manual rates on invoice
+    $currencyCode = is_array($inv['currency_id'] ?? null) ? $inv['currency_id'][1] : 'VND';
+    $odoo_total = (float) ($inv['amount_total'] ?? 0);
+    $odoo_signed = abs((float) ($inv['amount_total_signed'] ?? 0));
+    $vnd_multiplier = $odoo->getRate('VND', $inv_date_str) ?: 1.0;
 
-    // Fallback if missing
-    if ($amountVnd == 0 && $inv['amount_total'] > 0) {
-        $currencyCode = is_array($inv['currency_id']) ? $inv['currency_id'][1] : 'VND';
-        $rateSource = $odoo->getRate($currencyCode, $inv_date_str) ?: 1.0;
-        $rateVnd = $odoo->getRate('VND', $inv_date_str) ?: 1.0;
-        $amountVnd = $inv['amount_total'] * ($rateVnd / $rateSource);
+    $amountVnd = $odoo_total;
+    if ($currencyCode !== 'VND') {
+        $amountVnd = 0;
+        if ($odoo_total > 0 && $odoo_signed > 0) {
+            $ratio = $odoo_signed / $odoo_total;
+            if ($ratio > 100) {
+                // Odoo Base currency is already VND
+                $amountVnd = $odoo_total * $ratio;
+            } else {
+                // Odoo Base currency is likely MYR or another intermediate currency
+                $amountVnd = $odoo_total * $ratio * $vnd_multiplier;
+            }
+        }
+        if ($amountVnd == 0 && $odoo_total > 0) {
+            $rateSource = $odoo->getRate($currencyCode, $inv_date_str) ?: 1.0;
+            $amountVnd = ($rateSource > 0) ? (($odoo_total / $rateSource) * $vnd_multiplier) : $odoo_total;
+        }
     }
 
     $inv['calc_amount_vnd'] = $amountVnd;
