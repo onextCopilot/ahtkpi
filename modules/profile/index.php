@@ -102,31 +102,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['upload_avatar'])) {
 // --- HANDLE INFO UPDATE ---
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_profile'])) {
     $full_name = trim($_POST['full_name']);
-    $email = trim($_POST['email']);
     $phone = trim($_POST['phone']);
 
-    if (empty($full_name) || empty($email)) {
-        $error_message = 'Full name and email are required';
-    } elseif (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
-        $error_message = 'Invalid email format';
+    if (empty($full_name)) {
+        $error_message = 'Full name is required';
     } else {
-        $stmt = $conn->prepare("SELECT id FROM users WHERE email = ? AND id != ?");
-        $stmt->bind_param("si", $email, $user_id);
-        $stmt->execute();
-        if ($stmt->get_result()->num_rows > 0) {
-            $error_message = 'Email already exists';
+        $stmt = $conn->prepare("UPDATE users SET full_name = ?, phone = ? WHERE id = ?");
+        $stmt->bind_param("ssi", $full_name, $phone, $user_id);
+        if ($stmt->execute()) {
+            $_SESSION['full_name'] = $full_name;
+            $success_message = 'Profile info updated successfully!';
+            $user['full_name'] = $full_name;
+            $user['phone'] = $phone;
         } else {
-            $stmt = $conn->prepare("UPDATE users SET full_name = ?, email = ?, phone = ? WHERE id = ?");
-            $stmt->bind_param("sssi", $full_name, $email, $phone, $user_id);
-            if ($stmt->execute()) {
-                $_SESSION['full_name'] = $full_name;
-                $success_message = 'Profile info updated successfully!';
-                $user['full_name'] = $full_name;
-                $user['email'] = $email;
-                $user['phone'] = $phone;
-            } else {
-                $error_message = 'Failed to update profile info';
-            }
+            $error_message = 'Failed to update profile info';
         }
     }
 }
@@ -569,8 +558,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['change_password'])) {
                                     <div class="form-group">
                                         <label for="email">Email Address</label>
                                         <div class="input-wrapper">
-                                            <input type="email" id="email" name="email"
-                                                value="<?php echo htmlspecialchars($user['email']); ?>" required>
+                                            <input type="email" id="email"
+                                                value="<?php echo htmlspecialchars($user['email']); ?>" disabled>
                                             <svg class="input-icon" width="20" height="20" viewBox="0 0 24 24"
                                                 fill="none" stroke="currentColor" stroke-width="2"
                                                 stroke-linecap="round" stroke-linejoin="round">
