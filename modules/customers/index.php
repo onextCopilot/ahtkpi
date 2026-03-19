@@ -439,6 +439,15 @@ $avatar = $_SESSION['avatar'] ?? '';
                         style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
                         <h2 style="font-size: 18px; color: #1a73e8; margin: 0;">Thống kê Key Accounts</h2>
                         <div class="filter-controls">
+                            <select id="statsAmFilter" onchange="sortAndRenderStats()" class="filter-select">
+                                <option value="">Tất cả AM/BD</option>
+                            </select>
+                            <select id="statsBcFilter" onchange="sortAndRenderStats()" class="filter-select">
+                                <option value="">Tất cả BC</option>
+                                <?php for($i=1; $i<=10; $i++): ?>
+                                    <option value="BC<?php echo $i; ?>">BC<?php echo $i; ?></option>
+                                <?php endfor; ?>
+                            </select>
                             <select id="statsYearFilter" onchange="loadKeyAccountStats()" class="filter-select">
                                 <option value="2026">Năm 2026</option>
                                 <option value="2025">Năm 2025</option>
@@ -1173,6 +1182,12 @@ $avatar = $_SESSION['avatar'] ?? '';
                 .then(data => {
                     if (data.success) {
                         globalAmBdList = data.am_bd_list || [];
+                        const amFilter = document.getElementById('statsAmFilter');
+                        if (amFilter && globalAmBdList.length > 0) {
+                            const curVal = amFilter.value;
+                            amFilter.innerHTML = '<option value="">Tất cả AM/BD</option>' + 
+                                globalAmBdList.map(am => `<option value="${am.id}" ${curVal == am.id ? 'selected' : ''}>${am.full_name}</option>`).join('');
+                        }
                         currentTotalVolumeByYear = data.total_volume_vnd_by_year || {};
                         currentTotalVolumeUsdByYear = data.total_volume_usd_by_year || {};
                         currentInternalRevenueByYear = data.internal_total_res || {};
@@ -1260,8 +1275,13 @@ $avatar = $_SESSION['avatar'] ?? '';
             headerHtml += '</tr>';
             header.innerHTML = headerHtml;
 
-            // Filter data based on search
-            const filteredData = currentStatsData.filter(c => c.name.toLowerCase().includes(search));
+            const amId = document.getElementById('statsAmFilter') ? document.getElementById('statsAmFilter').value : '';
+            const bc = document.getElementById('statsBcFilter') ? document.getElementById('statsBcFilter').value : '';
+
+            // Filter data based on search and AM/BC
+            let filteredData = currentStatsData.filter(c => c.name.toLowerCase().includes(search));
+            if (amId) filteredData = filteredData.filter(c => c.am_bd_id == amId);
+            if (bc) filteredData = filteredData.filter(c => (c.delivery_owners || '').split(',').map(s => s.trim()).includes(bc));
 
             if (filteredData.length === 0) {
                 container.innerHTML = `<tr><td colspan="20" style="text-align:center; padding: 40px; color: #5f6368;">Không tìm thấy khách hàng nào khớp với tìm kiếm</td></tr>`;
@@ -1367,8 +1387,14 @@ $avatar = $_SESSION['avatar'] ?? '';
             }
 
             const year = document.getElementById('statsYearFilter').value;
+            const amId = document.getElementById('statsAmFilter').value;
+            const bc = document.getElementById('statsBcFilter').value;
 
-            currentStatsData.sort((a, b) => {
+            let filtered = [...currentStatsData];
+            if (amId) filtered = filtered.filter(c => c.am_bd_id == amId);
+            if (bc) filtered = filtered.filter(c => (c.delivery_owners || '').split(',').map(s => s.trim()).includes(bc));
+
+            filtered.sort((a, b) => {
                 let valA = a[currentSortCol];
                 let valB = b[currentSortCol];
 
@@ -1381,7 +1407,8 @@ $avatar = $_SESSION['avatar'] ?? '';
                 return currentSortDir === 'asc' ? valA - valB : valB - valA;
             });
 
-            renderStats(currentStatsData, year);
+            renderStats(filtered, year);
+            renderUsdRevenueStats();
         }
 
         function updateKeyAccountMetadata(odooId, field, value) {

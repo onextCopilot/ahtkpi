@@ -1,5 +1,6 @@
 <?php
-session_start();
+require_once __DIR__ . '/../config/config.php';
+require_once __DIR__ . '/../libs/OdooAPI.php';
 header('Content-Type: application/json');
 
 if (!isset($_SESSION['user_id']) || (empty($_SESSION['can_view_invoice']) && empty($_SESSION['is_am_bd']) && $_SESSION['role'] !== 'admin')) {
@@ -7,9 +8,6 @@ if (!isset($_SESSION['user_id']) || (empty($_SESSION['can_view_invoice']) && emp
     echo json_encode(['error' => 'Unauthorized']);
     exit;
 }
-
-require_once __DIR__ . '/../libs/OdooAPI.php';
-require_once __DIR__ . '/../config/config.php';
 
 try {
     $odoo = new OdooAPI();
