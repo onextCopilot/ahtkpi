@@ -1674,111 +1674,114 @@ if ($res_am && $res_am->num_rows > 0) {
                         </div>
 
                         <!-- Team Cards Grid (Ant Design Enhanced) -->
-                        <div class="dashboard-grid"
-                            style="display: grid; grid-template-columns: repeat(auto-fill, minmax(550px, 1fr)); gap: 24px;">
-                            <?php
-                            $teams_to_show = array_map(function ($t) {
-                                return ['id' => $t['id'], 'name' => $t['name']];
-                            }, $all_teams);
-                            $teams_to_show[] = ['id' => 'undefined', 'name' => 'UNDEFINED TEAM'];
-                            foreach ($teams_to_show as $teamInfo):
-                                $tid = $teamInfo['id'];
-                                $data = $dashboardData[$tid] ?? [];
-                                ?>
-                                <div style="background: #fff; border: 1px solid #e8e8e8; border-radius: 8px; transition: all 0.3s ease; display:flex; flex-direction:column;"
-                                    onmouseover="this.style.borderColor='#40a9ff'; this.style.boxShadow='0 4px 12px rgba(24, 144, 255, 0.15)'"
-                                    onmouseout="this.style.borderColor='#e8e8e8'; this.style.boxShadow='none'">
-                                    <div
-                                        style="padding: 16px 20px; border-bottom: 1px solid #bae7ff; display: flex; justify-content: space-between; align-items: center; background: #e6f7ff; border-radius: 8px 8px 0 0;">
-                                        <span
-                                            style="font-weight: 700; color: #003a8c; font-size: 16px;"><?php echo htmlspecialchars($teamInfo['name']); ?></span>
-                                        <span
-                                            style="background: #fff; color: #0050b3; border: 1px solid #91d5ff; font-size: 11px; padding: 2px 10px; border-radius: 10px; font-weight: 600;">TEAM</span>
-                                    </div>
-                                    <div style="flex:1;">
-                                        <table style="width: 100%; border-collapse: collapse; font-size: 13px;">
-                                            <thead>
-                                                <tr style="border-bottom: 1px solid #f0f0f0; background: #f0f5ff;">
-                                                    <th
-                                                        style="text-align: left; padding: 12px 20px; color: #096dd9; font-weight: 600; font-size: 12px; text-transform: uppercase;">
-                                                        Status</th>
-                                                    <th
-                                                        style="text-align: right; padding: 12px 20px; color: #096dd9; font-weight: 600; font-size: 12px; text-transform: uppercase;">
-                                                        Pending <span style="text-transform:none;">(VND)</span></th>
-                                                    <th
-                                                        style="text-align: right; padding: 12px 20px; color: #096dd9; font-weight: 600; font-size: 12px; text-transform: uppercase;">
-                                                        Paid <span style="text-transform:none;">(VND)</span></th>
-                                                    <th
-                                                        style="text-align: right; padding: 12px 20px; color: #096dd9; font-weight: 600; font-size: 12px; text-transform: uppercase;">
-                                                        Total <span style="text-transform:none;">(VND)</span></th>
-                                                </tr>
-                                            </thead>
-                                            <tbody>
-                                                <?php
-                                                $t_not_paid = 0;
-                                                $t_paid = 0;
-                                                foreach ($status_order as $st):
-                                                    $np = $data[$st]['Not paid'] ?? 0;
-                                                    $p = $data[$st]['Paid'] ?? 0;
-                                                    $row_t = $np + $p;
-                                                    $t_not_paid += $np;
-                                                    $t_paid += $p;
+                        <?php if ($_SESSION['role'] === 'admin'): ?>
+                            <div class="dashboard-grid"
+                                style="display: grid; grid-template-columns: repeat(auto-fill, minmax(550px, 1fr)); gap: 24px;">
+                                <?php
+                                $teams_to_show = array_map(function ($t) {
+                                    return ['id' => $t['id'], 'name' => $t['name']];
+                                }, $all_teams);
+                                $teams_to_show[] = ['id' => 'undefined', 'name' => 'UNDEFINED TEAM'];
+                                foreach ($teams_to_show as $teamInfo):
+                                    $tid = $teamInfo['id'];
+                                    $data = $dashboardData[$tid] ?? [];
+                                    ?>
+                                    <div style="background: #fff; border: 1px solid #e8e8e8; border-radius: 8px; transition: all 0.3s ease; display:flex; flex-direction:column;"
+                                        onmouseover="this.style.borderColor='#40a9ff'; this.style.boxShadow='0 4px 12px rgba(24, 144, 255, 0.15)'"
+                                        onmouseout="this.style.borderColor='#e8e8e8'; this.style.boxShadow='none'">
+                                        <div
+                                            style="padding: 16px 20px; border-bottom: 1px solid #bae7ff; display: flex; justify-content: space-between; align-items: center; background: #e6f7ff; border-radius: 8px 8px 0 0;">
+                                            <span
+                                                style="font-weight: 700; color: #003a8c; font-size: 16px;"><?php echo htmlspecialchars($teamInfo['name']); ?></span>
+                                            <span
+                                                style="background: #fff; color: #0050b3; border: 1px solid #91d5ff; font-size: 11px; padding: 2px 10px; border-radius: 10px; font-weight: 600;">TEAM</span>
+                                        </div>
+                                        <div style="flex:1;">
+                                            <table style="width: 100%; border-collapse: collapse; font-size: 13px;">
+                                                <thead>
+                                                    <tr style="border-bottom: 1px solid #f0f0f0; background: #f0f5ff;">
+                                                        <th
+                                                            style="text-align: left; padding: 12px 20px; color: #096dd9; font-weight: 600; font-size: 12px; text-transform: uppercase;">
+                                                            Status</th>
+                                                        <th
+                                                            style="text-align: right; padding: 12px 20px; color: #096dd9; font-weight: 600; font-size: 12px; text-transform: uppercase;">
+                                                            Pending <span style="text-transform:none;">(VND)</span></th>
+                                                        <th
+                                                            style="text-align: right; padding: 12px 20px; color: #096dd9; font-weight: 600; font-size: 12px; text-transform: uppercase;">
+                                                            Paid <span style="text-transform:none;">(VND)</span></th>
+                                                        <th
+                                                            style="text-align: right; padding: 12px 20px; color: #096dd9; font-weight: 600; font-size: 12px; text-transform: uppercase;">
+                                                            Total <span style="text-transform:none;">(VND)</span></th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody>
+                                                    <?php
+                                                    $t_not_paid = 0;
+                                                    $t_paid = 0;
+                                                    foreach ($status_order as $st):
+                                                        $np = $data[$st]['Not paid'] ?? 0;
+                                                        $p = $data[$st]['Paid'] ?? 0;
+                                                        $row_t = $np + $p;
+                                                        $t_not_paid += $np;
+                                                        $t_paid += $p;
 
-                                                    $dColor = '#d9d9d9';
-                                                    if ($st === 'Done')
-                                                        $dColor = '#52c41a';
-                                                    elseif ($st === 'Đỏ')
-                                                        $dColor = '#ff4d4f';
-                                                    elseif ($st === 'Tím')
-                                                        $dColor = '#722ed1';
-                                                    elseif ($st === 'Xanh')
-                                                        $dColor = '#1890ff';
-                                                    elseif ($st === 'PP')
-                                                        $dColor = '#faad14';
-                                                    ?>
-                                                    <tr style="border-bottom: 1px solid #f9f9f9;">
-                                                        <td style="padding: 10px 20px; color: #262626;">
-                                                            <span
-                                                                style="width:6px; height:6px; background:<?php echo $dColor; ?>; display:inline-block; border-radius:50%; margin-right:8px;"></span>
-                                                            <?php echo $st; ?>
+                                                        $dColor = '#d9d9d9';
+                                                        if ($st === 'Done')
+                                                            $dColor = '#52c41a';
+                                                        elseif ($st === 'Đỏ')
+                                                            $dColor = '#ff4d4f';
+                                                        elseif ($st === 'Tím')
+                                                            $dColor = '#722ed1';
+                                                        elseif ($st === 'Xanh')
+                                                            $dColor = '#1890ff';
+                                                        elseif ($st === 'PP')
+                                                            $dColor = '#faad14';
+                                                        ?>
+                                                        <tr style="border-bottom: 1px solid #f9f9f9;">
+                                                            <td style="padding: 10px 20px; color: #262626;">
+                                                                <span
+                                                                    style="width:6px; height:6px; background:<?php echo $dColor; ?>; display:inline-block; border-radius:50%; margin-right:8px;"></span>
+                                                                <?php echo $st; ?>
+                                                            </td>
+                                                            <td
+                                                                style="padding: 10px 20px; text-align: right; color: <?php echo $np > 0 ? '#cf1322' : '#bfbfbf'; ?>; font-weight:<?php echo $np > 0 ? '600' : '400'; ?>;">
+                                                                <?php echo $np > 0 ? number_format($np, 0, ',', '.') : '-'; ?>
+                                                            </td>
+                                                            <td
+                                                                style="padding: 10px 20px; text-align: right; color: <?php echo $p > 0 ? '#389e0d' : '#bfbfbf'; ?>;">
+                                                                <?php echo $p > 0 ? number_format($p, 0, ',', '.') : '-'; ?>
+                                                            </td>
+                                                            <td
+                                                                style="padding: 10px 20px; text-align: right; color: #262626; font-weight: 600;">
+                                                                <?php echo $row_t > 0 ? number_format($row_t, 0, ',', '.') : '-'; ?>
+                                                            </td>
+                                                        </tr>
+                                                    <?php endforeach; ?>
+                                                    <tr style="background: #fafafa;">
+                                                        <td
+                                                            style="padding: 12px 20px; font-weight: 600; color: #595959; font-size: 12px; text-transform: uppercase;">
+                                                            Total</td>
+                                                        <td
+                                                            style="padding: 12px 20px; text-align: right; color: #cf1322; font-weight: 700;">
+                                                            <?php echo number_format($t_not_paid, 0, ',', '.'); ?>
                                                         </td>
                                                         <td
-                                                            style="padding: 10px 20px; text-align: right; color: <?php echo $np > 0 ? '#cf1322' : '#bfbfbf'; ?>; font-weight:<?php echo $np > 0 ? '600' : '400'; ?>;">
-                                                            <?php echo $np > 0 ? number_format($np, 0, ',', '.') : '-'; ?>
+                                                            style="padding: 12px 20px; text-align: right; color: #389e0d; font-weight: 700;">
+                                                            <?php echo number_format($t_paid, 0, ',', '.'); ?>
                                                         </td>
                                                         <td
-                                                            style="padding: 10px 20px; text-align: right; color: <?php echo $p > 0 ? '#389e0d' : '#bfbfbf'; ?>;">
-                                                            <?php echo $p > 0 ? number_format($p, 0, ',', '.') : '-'; ?>
-                                                        </td>
-                                                        <td
-                                                            style="padding: 10px 20px; text-align: right; color: #262626; font-weight: 600;">
-                                                            <?php echo $row_t > 0 ? number_format($row_t, 0, ',', '.') : '-'; ?>
+                                                            style="padding: 12px 20px; text-align: right; font-weight: 700; color: #1f1f1f;">
+                                                            <?php echo number_format($t_not_paid + $t_paid, 0, ',', '.'); ?>
                                                         </td>
                                                     </tr>
-                                                <?php endforeach; ?>
-                                                <tr style="background: #fafafa;">
-                                                    <td
-                                                        style="padding: 12px 20px; font-weight: 600; color: #595959; font-size: 12px; text-transform: uppercase;">
-                                                        Total</td>
-                                                    <td
-                                                        style="padding: 12px 20px; text-align: right; color: #cf1322; font-weight: 700;">
-                                                        <?php echo number_format($t_not_paid, 0, ',', '.'); ?>
-                                                    </td>
-                                                    <td
-                                                        style="padding: 12px 20px; text-align: right; color: #389e0d; font-weight: 700;">
-                                                        <?php echo number_format($t_paid, 0, ',', '.'); ?>
-                                                    </td>
-                                                    <td
-                                                        style="padding: 12px 20px; text-align: right; font-weight: 700; color: #1f1f1f;">
-                                                        <?php echo number_format($t_not_paid + $t_paid, 0, ',', '.'); ?>
-                                                    </td>
-                                                </tr>
-                                            </tbody>
-                                        </table>
+                                                </tbody>
+                                            </table>
+                                        </div>
                                     </div>
-                                </div>
-                            <?php endforeach; ?>
-                        </div>
+                                <?php endforeach; ?>
+                            </div>
+                        <?php endif; ?>
+
                     <?php elseif ($selected_team === 'analytics'): ?>
                         <?php
                         // Aggregating Data for Charts
