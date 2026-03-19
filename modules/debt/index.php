@@ -1152,6 +1152,24 @@ if ($res_am && $res_am->num_rows > 0) {
         .data-table-wrapper::-webkit-scrollbar-thumb:hover {
             background: #94a3b8;
         }
+
+        .btn-delete-row {
+            background: none;
+            border: none;
+            color: #ef4444;
+            cursor: pointer;
+            padding: 6px;
+            border-radius: 4px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.2s;
+        }
+
+        .btn-delete-row:hover {
+            background-color: #fee2e2;
+            color: #b91c1c;
+        }
     </style>
 </head>
 
@@ -1980,13 +1998,14 @@ if ($res_am && $res_am->num_rows > 0) {
                                     <th>Ghi chú AM</th>
                                     <th>Ghi chú Delivery</th>
                                     <th>Trạng thái SX</th>
+                                    <th style="width: 50px; text-align: center;">Action</th>
                                 </tr>
                             </thead>
                             <tbody>
                                 <?php $globalIdx = 1; ?>
                                 <?php foreach ($groupedDebts as $monthName => $ams): ?>
                                     <tr class="group-header">
-                                        <td colspan="22">
+                                        <td colspan="23">
                                             Tháng <?php echo $monthName; ?>
                                             <span class="group-total">(Total:
                                                 <?php echo formatVND($monthTotals[$monthName]); ?>)</span>
@@ -1994,7 +2013,7 @@ if ($res_am && $res_am->num_rows > 0) {
                                     </tr>
                                     <?php foreach ($ams as $amName => $monthItems): ?>
                                         <tr class="group-header-am">
-                                            <td colspan="22">
+                                            <td colspan="23">
                                                 AM: <?php echo htmlspecialchars($amName); ?>
                                                 <span class="group-total"
                                                     style="font-size: 0.8rem; font-weight: normal; opacity: 0.8;">(Subtotal:
@@ -2002,104 +2021,112 @@ if ($res_am && $res_am->num_rows > 0) {
                                             </td>
                                         </tr>
                                         <?php foreach ($monthItems as $d): ?>
-                                            <td style="text-align: center;"><?php echo $globalIdx++; ?></td>
-                                            <td class="cell-company"><?php echo htmlspecialchars($d['company']); ?></td>
-                                            <td>
-                                                <?php
-                                                // Format AM Badge
-                                                $am_val = $d['am'] ?? '';
-                                                $am_class = 'am-default';
-                                                if (stripos($am_val, 'Emily') !== false)
-                                                    $am_class = 'am-emily';
-                                                if (stripos($am_val, 'Hyun') !== false)
-                                                    $am_class = 'am-hyun';
-                                                if (stripos($am_val, 'Ryan') !== false)
-                                                    $am_class = 'am-ryan';
-                                                ?>
-                                                <span
-                                                    class="badge am-badge <?php echo $am_class; ?>"><?php echo htmlspecialchars($am_val); ?></span>
-                                            </td>
-                                            <td>
-                                                <?php if (!empty($d['team_name'])): ?>
-                                                    <span class="badge"
-                                                        style="background: #f1f5f9; color: #475569; border: 1px solid #e2e8f0; font-size: 11px;">
-                                                        <?php echo htmlspecialchars($d['team_name']); ?>
-                                                    </span>
-                                                <?php endif; ?>
-                                            </td>
-                                            <td class="cell-company client-tooltip-trigger"
-                                                data-client-name="<?php echo htmlspecialchars($d['client_name'] ?? ''); ?>"
-                                                style="cursor: pointer; position: relative;">
-                                                <?php echo htmlspecialchars($d['client_name'] ?? ''); ?>
-                                            </td>
-                                            <td class="project-tooltip-trigger"
-                                                data-project-name="<?php echo htmlspecialchars($d['project_name'] ?? ''); ?>"
-                                                style="position: relative; cursor: pointer;">
-                                                <?php echo htmlspecialchars($d['project_name'] ?? ''); ?>
-                                            </td>
-                                            <td><?php echo formatDate($d['invoice_date']); ?></td>
-                                            <td><?php echo htmlspecialchars($d['payment_milestone'] ?? ''); ?></td>
-                                            <td><?php echo $d['expected_prod_date']; ?></td>
-                                            <td><?php echo $d['expected_payment_date']; ?></td>
-                                            <td style="position: relative; text-align: center;">
-                                                <?php
-                                                $st = $d['invoice_status_class'] ?? '';
-                                                $bgClass = 'status-chuaxacdinh'; // Default
-                                                if ($st === 'Done')
-                                                    $bgClass = 'status-done';
-                                                elseif ($st === 'Tím')
-                                                    $bgClass = 'status-tim';
-                                                elseif ($st === 'Xanh')
-                                                    $bgClass = 'status-xanh';
-                                                elseif ($st === 'Trắng')
-                                                    $bgClass = 'status-trang';
-                                                elseif ($st === 'PP')
-                                                    $bgClass = 'status-pp';
-                                                elseif ($st === 'Draft')
-                                                    $bgClass = 'status-draft';
-                                                elseif ($st === 'Chưa xác định')
-                                                    $bgClass = 'status-chuaxacdinh';
-                                                elseif ($st === 'Đỏ')
-                                                    $bgClass = 'status-do';
+                                            <tr onclick="openModal('edit', <?php echo $d['id']; ?>)">
+                                                <td style="text-align: center;"><?php echo $globalIdx++; ?></td>
+                                                <td class="cell-company"><?php echo htmlspecialchars($d['company']); ?></td>
+                                                <td>
+                                                    <?php
+                                                    // Format AM Badge
+                                                    $am_val = $d['am'] ?? '';
+                                                    $am_class = 'am-default';
+                                                    if (stripos($am_val, 'Emily') !== false)
+                                                        $am_class = 'am-emily';
+                                                    if (stripos($am_val, 'Hyun') !== false)
+                                                        $am_class = 'am-hyun';
+                                                    if (stripos($am_val, 'Ryan') !== false)
+                                                        $am_class = 'am-ryan';
+                                                    ?>
+                                                    <span
+                                                        class="badge am-badge <?php echo $am_class; ?>"><?php echo htmlspecialchars($am_val); ?></span>
+                                                </td>
+                                                <td>
+                                                    <?php if (!empty($d['team_name'])): ?>
+                                                        <span class="badge"
+                                                            style="background: #f1f5f9; color: #475569; border: 1px solid #e2e8f0; font-size: 11px;">
+                                                            <?php echo htmlspecialchars($d['team_name']); ?>
+                                                        </span>
+                                                    <?php endif; ?>
+                                                </td>
+                                                <td class="cell-company client-tooltip-trigger"
+                                                    data-client-name="<?php echo htmlspecialchars($d['client_name'] ?? ''); ?>"
+                                                    style="cursor: pointer; position: relative;">
+                                                    <?php echo htmlspecialchars($d['client_name'] ?? ''); ?>
+                                                </td>
+                                                <td class="project-tooltip-trigger"
+                                                    data-project-name="<?php echo htmlspecialchars($d['project_name'] ?? ''); ?>"
+                                                    style="position: relative; cursor: pointer;">
+                                                    <?php echo htmlspecialchars($d['project_name'] ?? ''); ?>
+                                                </td>
+                                                <td><?php echo formatDate($d['invoice_date']); ?></td>
+                                                <td><?php echo htmlspecialchars($d['payment_milestone'] ?? ''); ?></td>
+                                                <td><?php echo $d['expected_prod_date']; ?></td>
+                                                <td><?php echo $d['expected_payment_date']; ?></td>
+                                                <td style="position: relative; text-align: center;">
+                                                    <?php
+                                                    $st = $d['invoice_status_class'] ?? '';
+                                                    $bgClass = 'status-chuaxacdinh'; // Default
+                                                    if ($st === 'Done')
+                                                        $bgClass = 'status-done';
+                                                    elseif ($st === 'Tím')
+                                                        $bgClass = 'status-tim';
+                                                    elseif ($st === 'Xanh')
+                                                        $bgClass = 'status-xanh';
+                                                    elseif ($st === 'Trắng')
+                                                        $bgClass = 'status-trang';
+                                                    elseif ($st === 'PP')
+                                                        $bgClass = 'status-pp';
+                                                    elseif ($st === 'Draft')
+                                                        $bgClass = 'status-draft';
+                                                    elseif ($st === 'Chưa xác định')
+                                                        $bgClass = 'status-chuaxacdinh';
+                                                    elseif ($st === 'Đỏ')
+                                                        $bgClass = 'status-do';
 
-                                                echo "<span class='$bgClass'>" . htmlspecialchars($st) . "</span>";
-                                                ?>
-                                            </td>
-                                            <td class="cell-amount" style="color: #64748b;">
-                                                <?php echo !empty($d['formatted_original']) ? $d['formatted_original'] : (!empty($d['amount_original']) ? formatCurrency($d['amount_original'], $d['currency_original'] ?? 'USD') : '-'); ?>
-                                            </td>
-                                            <td class="cell-amount">
-                                                <?php echo formatCurrency($d['amount'] ?? 0, 'VND'); ?>
-                                            </td>
-                                            <td>
-                                                <span
-                                                    class="badge <?php echo (stripos($d['pl_class'] ?? '', 'Xấu') !== false ? 'pl-xau' : ((stripos($d['pl_class'] ?? '', 'TB') !== false) ? 'pl-tb' : 'pl-tot')); ?>">
-                                                    <?php echo htmlspecialchars($d['pl_class'] ?? ''); ?>
-                                                </span>
-                                            </td>
-                                            <td><?php echo htmlspecialchars($d['invoice_status'] ?? ''); ?></td>
-                                            <td><?php echo htmlspecialchars($d['vat_invoice'] ?? ''); ?></td>
-                                            <td>
-                                                <span
-                                                    class="badge <?php echo (stripos($d['payment_status'] ?? '', 'Not') !== false ? 'pay-not-paid' : 'pay-paid'); ?>">
-                                                    <?php echo htmlspecialchars($d['payment_status'] ?? ''); ?>
-                                                </span>
-                                            </td>
-                                            <td><?php echo htmlspecialchars($d['payment_month'] ?? ''); ?></td>
-                                            <td><?php echo htmlspecialchars($d['weekly_update'] ?? ''); ?></td>
-                                            <td><?php echo htmlspecialchars($d['am_notes'] ?? ''); ?></td>
-                                            <td><?php echo htmlspecialchars($d['delivery_notes'] ?? ''); ?></td>
-                                            <td style="position: relative; text-align: center;">
-                                                <?php
-                                                $ps = $d['production_status'] ?? '';
-                                                $prodClass = 'prod-dc2';
-                                                if (stripos($ps, 'Overdue') !== false || stripos($ps, 'DC5') !== false)
-                                                    $prodClass = 'prod-dc5';
-                                                elseif (stripos($ps, 'DC1') !== false)
-                                                    $prodClass = 'prod-dc1';
-                                                ?>
-                                                <?php echo htmlspecialchars($d['production_status'] ?? ''); ?>
-                                            </td>
+                                                    echo "<span class='$bgClass'>" . htmlspecialchars($st) . "</span>";
+                                                    ?>
+                                                </td>
+                                                <td class="cell-amount" style="color: #64748b;">
+                                                    <?php echo !empty($d['formatted_original']) ? $d['formatted_original'] : (!empty($d['amount_original']) ? formatCurrency($d['amount_original'], $d['currency_original'] ?? 'USD') : '-'); ?>
+                                                </td>
+                                                <td class="cell-amount">
+                                                    <?php echo formatCurrency($d['amount'] ?? 0, 'VND'); ?>
+                                                </td>
+                                                <td>
+                                                    <span
+                                                        class="badge <?php echo (stripos($d['pl_class'] ?? '', 'Xấu') !== false ? 'pl-xau' : ((stripos($d['pl_class'] ?? '', 'TB') !== false) ? 'pl-tb' : 'pl-tot')); ?>">
+                                                        <?php echo htmlspecialchars($d['pl_class'] ?? ''); ?>
+                                                    </span>
+                                                </td>
+                                                <td><?php echo htmlspecialchars($d['invoice_status'] ?? ''); ?></td>
+                                                <td><?php echo htmlspecialchars($d['vat_invoice'] ?? ''); ?></td>
+                                                <td>
+                                                    <span
+                                                        class="badge <?php echo (stripos($d['payment_status'] ?? '', 'Not') !== false ? 'pay-not-paid' : 'pay-paid'); ?>">
+                                                        <?php echo htmlspecialchars($d['payment_status'] ?? ''); ?>
+                                                    </span>
+                                                </td>
+                                                <td><?php echo htmlspecialchars($d['payment_month'] ?? ''); ?></td>
+                                                <td><?php echo htmlspecialchars($d['weekly_update'] ?? ''); ?></td>
+                                                <td><?php echo htmlspecialchars($d['am_notes'] ?? ''); ?></td>
+                                                <td><?php echo htmlspecialchars($d['delivery_notes'] ?? ''); ?></td>
+                                                <td style="position: relative; text-align: center;">
+                                                    <?php
+                                                    $ps = $d['production_status'] ?? '';
+                                                    $prodClass = 'prod-dc2';
+                                                    if (stripos($ps, 'Overdue') !== false || stripos($ps, 'DC5') !== false)
+                                                        $prodClass = 'prod-dc5';
+                                                    elseif (stripos($ps, 'DC1') !== false)
+                                                        $prodClass = 'prod-dc1';
+                                                    ?>
+                                                    <?php echo htmlspecialchars($d['production_status'] ?? ''); ?>
+                                                </td>
+                                                <td style="text-align: center;">
+                                                    <?php if ($d['am'] === $full_name || $role === 'admin'): ?>
+                                                        <button onclick="event.stopPropagation(); deleteRow(<?php echo $d['id']; ?>);" class="btn-delete-row" title="Delete record">
+                                                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>
+                                                        </button>
+                                                    <?php endif; ?>
+                                                </td>
                                             </tr>
                                         <?php endforeach; ?>
                                     <?php endforeach; ?>
@@ -2306,7 +2333,9 @@ if ($res_am && $res_am->num_rows > 0) {
                 document.getElementById('modalTitle').innerText = "Edit Record";
                 document.getElementById('formAction').value = "edit";
                 document.getElementById('editId').value = data.id;
-                document.getElementById('btnDelete').style.display = "block";
+                const isOwner = (data.am === "<?php echo addslashes($full_name); ?>");
+                const isAdmin = ("<?php echo $role; ?>" === "admin");
+                document.getElementById('btnDelete').style.display = (isOwner || isAdmin) ? "block" : "none";
 
                 document.getElementById('company').value = data.company || 'AHT TECH';
                 document.getElementById('am').value = data.am;
@@ -2341,6 +2370,13 @@ if ($res_am && $res_am->num_rows > 0) {
         function deleteItem() {
             if (confirm("Are you sure you want to delete this record forever?")) {
                 document.getElementById('deleteId').value = document.getElementById('editId').value;
+                document.getElementById('deleteForm').submit();
+            }
+        }
+
+        function deleteRow(id) {
+            if (confirm("Are you sure you want to delete this record forever?")) {
+                document.getElementById('deleteId').value = id;
                 document.getElementById('deleteForm').submit();
             }
         }
