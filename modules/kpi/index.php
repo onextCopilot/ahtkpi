@@ -236,7 +236,7 @@ $status_map = ['draft' => ['#F1F5F9', '#64748B'], 'active' => ['#DBEAFE', '#1D4E
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width,initial-scale=1.0">
-    <title>Quản lý KPI</title>
+    <title>Quản lý KPI Phòng Ban/ Bộ Phận / Công ty</title>
     <link rel="stylesheet" href="/assets/css/dashboard.css">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Roboto:wght@400;500&display=swap"
         rel="stylesheet">
@@ -845,7 +845,7 @@ $status_map = ['draft' => ['#F1F5F9', '#64748B'], 'active' => ['#DBEAFE', '#1D4E
     <div class="dashboard-container">
         <?php include __DIR__ . '/../includes/sidebar.php'; ?>
         <main class="main-content">
-            <?php $page_title = 'Quản lý KPI';
+            <?php $page_title = 'Quản lý KPI Phòng Ban/ Bộ Phận / Công ty';
             $page_subtitle = 'Năm ' . $year;
             include __DIR__ . '/../../modules/includes/topbar.php'; ?>
 
