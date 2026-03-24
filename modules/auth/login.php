@@ -28,19 +28,18 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             if ($result->num_rows == 1) {
                 $user = $result->fetch_assoc();
 
-            if (password_verify($password, $user['password'])) {
-                // Login successful
-                $_SESSION['user_id'] = $user['id'];
-                $_SESSION['username'] = $user['username'];
-                $_SESSION['full_name'] = $user['full_name'];
-                $_SESSION['role'] = $user['role'];
-                $_SESSION['can_view_invoice'] = $user['can_view_invoice'];
-                $_SESSION['can_view_all_debts'] = $user['can_view_all_debts'];
-                $_SESSION['is_am_bd'] = $user['is_am_bd'];
+                if (password_verify($password, $user['password'])) {
+                    // Login successful
+                    $_SESSION['user_id'] = $user['id'];
+                    $_SESSION['username'] = $user['username'];
+                    $_SESSION['full_name'] = $user['full_name'];
+                    $_SESSION['role'] = $user['role'];
+                    $_SESSION['can_view_invoice'] = $user['can_view_invoice'];
+                    $_SESSION['can_view_all_debts'] = $user['can_view_all_debts'];
+                    $_SESSION['is_am_bd'] = $user['is_am_bd'];
 
-                        header("Location: /dashboard");
-                        exit();
-                    }
+                    header("Location: /dashboard");
+                    exit();
                 } else {
                     $error = 'Incorrect username or password';
                 }
