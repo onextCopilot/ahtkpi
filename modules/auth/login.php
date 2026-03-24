@@ -28,20 +28,15 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             if ($result->num_rows == 1) {
                 $user = $result->fetch_assoc();
 
-                if (password_verify($password, $user['password'])) {
-                    // Check session directory writability to catch macOS cleanup issues
-                    $session_path = session_save_path() ?: sys_get_temp_dir();
-                    if (!is_writable($session_path)) {
-                        $error = "Lỗi hệ thống: Thư mục lưu session bị khóa trên macOS (Path: $session_path). Vui lòng tắt Web Server (Ctrl+C) và bật lại.";
-                    } else {
-                        // Login successful
-                        $_SESSION['user_id'] = $user['id'];
-                        $_SESSION['username'] = $user['username'];
-                        $_SESSION['full_name'] = $user['full_name'];
-                        $_SESSION['role'] = $user['role'];
-                        $_SESSION['can_view_invoice'] = $user['can_view_invoice'];
-                        $_SESSION['can_view_all_debts'] = $user['can_view_all_debts'];
-                        $_SESSION['is_am_bd'] = $user['is_am_bd'];
+            if (password_verify($password, $user['password'])) {
+                // Login successful
+                $_SESSION['user_id'] = $user['id'];
+                $_SESSION['username'] = $user['username'];
+                $_SESSION['full_name'] = $user['full_name'];
+                $_SESSION['role'] = $user['role'];
+                $_SESSION['can_view_invoice'] = $user['can_view_invoice'];
+                $_SESSION['can_view_all_debts'] = $user['can_view_all_debts'];
+                $_SESSION['is_am_bd'] = $user['is_am_bd'];
 
                         header("Location: /dashboard");
                         exit();
