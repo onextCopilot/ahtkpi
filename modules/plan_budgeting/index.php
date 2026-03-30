@@ -10,6 +10,12 @@ if (!isset($_SESSION['user_id'])) {
     exit();
 }
 
+// RESTRICT TO ADMIN ONLY
+if ($_SESSION['role'] !== 'admin') {
+    header("Location: /dashboard");
+    exit();
+}
+
 $current_year = intval($_GET['year'] ?? date('Y'));
 $current_quarter = intval($_GET['quarter'] ?? ceil(date('n') / 3));
 
