@@ -97,6 +97,8 @@ $routes = [
     '/bc-reports' => 'modules/bc_reports/index.php',
     '/guides' => 'modules/guides/index.php',
     '/core-key-kpi' => 'modules/core_kpi/index.php',
+    '/plan-budgeting' => 'modules/plan_budgeting/index.php',
+    '/plan-budgeting/report' => 'modules/plan_budgeting/report.php',
 ];
 
 // Check if route exists in our mapping

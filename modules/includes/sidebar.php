@@ -20,6 +20,7 @@ function isMenuItemActive($path, $current_uri)
     </div>
 
     <nav class="sidebar-nav">
+        <!-- 1. Dashboard -->
         <a href="/dashboard" class="nav-item <?php echo isMenuItemActive('/dashboard', $current_uri); ?>">
             <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                 <rect x="3" y="3" width="7" height="7" stroke="currentColor" stroke-width="2" stroke-linecap="round"
@@ -34,7 +35,18 @@ function isMenuItemActive($path, $current_uri)
             <span>Dashboard</span>
         </a>
 
-        <!-- Debts Management Dropdown -->
+        <!-- 2. Planning & Budgeting -->
+        <a href="/plan-budgeting"
+            class="nav-item <?php echo (strpos($current_uri, '/plan-budgeting') !== false) ? 'active' : ''; ?>">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                stroke-linecap="round" stroke-linejoin="round">
+                <path d="M12 2v20"></path>
+                <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path>
+            </svg>
+            <span>Planning & Budgeting</span>
+        </a>
+
+        <!-- 3. Debts Management Dropdown -->
         <?php if (!empty($_SESSION['can_view_invoice']) || !empty($_SESSION['is_am_bd']) || $_SESSION['role'] === 'admin'): ?>
             <div class="nav-item nav-item-parent <?php
             $is_debt_open = strpos($current_uri, '/debt') !== false ||
@@ -74,101 +86,47 @@ function isMenuItemActive($path, $current_uri)
             </div>
         <?php endif; ?>
 
-        <!-- Customers -->
-        <?php if (!empty($_SESSION['can_view_invoice']) || !empty($_SESSION['is_am_bd']) || $_SESSION['role'] === 'admin'): ?>
-            <a href="/customers" class="nav-item <?php echo ($current_uri === '/customers') ? 'active' : ''; ?>">
-                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-                    stroke-linecap="round" stroke-linejoin="round">
-                    <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
-                    <circle cx="9" cy="7" r="4"></circle>
-                    <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
-                    <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
-                </svg>
-                <span>Customer Management</span>
-            </a>
-        <?php endif; ?>
-
-        <!-- Invoices -->
-        <?php if (!empty($_SESSION['can_view_invoice'])): ?>
-            <a href="/invoices" class="nav-item <?php echo ($current_uri === '/invoices') ? 'active' : ''; ?>">
-                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-                    stroke-linecap="round" stroke-linejoin="round">
-                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
-                    <polyline points="14 2 14 8 20 8"></polyline>
-                    <line x1="16" y1="13" x2="8" y2="13"></line>
-                    <line x1="16" y1="17" x2="8" y2="17"></line>
-                    <polyline points="10 9 9 9 8 9"></polyline>
-                </svg>
-                <span>Invoices Management</span>
-            </a>
-        <?php endif; ?>
-
-        <!-- Sale Order Management -->
+        <!-- 4. Accounting Dropdown -->
         <?php if (!empty($_SESSION['can_view_invoice']) || $_SESSION['role'] === 'admin'): ?>
-            <a href="/sale-orders"
-                class="nav-item <?php echo (strpos($current_uri, '/sale-orders') !== false) ? 'active' : ''; ?>">
+            <div class="nav-item nav-item-parent <?php
+            $is_acc_open = strpos($current_uri, '/customers') !== false ||
+                strpos($current_uri, '/invoices') !== false ||
+                strpos($current_uri, '/sale-orders') !== false ||
+                strpos($current_uri, '/sale-reports-admin') !== false;
+            echo $is_acc_open ? 'active open' : ''; ?>" onclick="toggleSubmenu(this)">
                 <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
                     stroke-linecap="round" stroke-linejoin="round">
-                    <path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"></path>
-                    <line x1="3" y1="6" x2="21" y2="6"></line>
-                    <path d="M16 10a4 4 0 0 1-8 0"></path>
+                    <path d="M12 1v22m10-17L12 1 2 6l10 5 10-5Z"></path>
+                    <path d="m2 18 10 5 10-5"></path>
+                    <path d="m2 12 10 5 10-5"></path>
                 </svg>
-                <span>Sale Order Management</span>
-            </a>
+                <span>Accounting</span>
+                <svg class="chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <polyline points="6 9 12 15 18 9"></polyline>
+                </svg>
+            </div>
+            <div class="submenu <?php echo $is_acc_open ? 'open' : ''; ?>">
+                <a href="/customers" class="submenu-item <?php echo ($current_uri === '/customers') ? 'active' : ''; ?>">
+                    <span>Customers</span>
+                </a>
+                <a href="/invoices" class="submenu-item <?php echo ($current_uri === '/invoices') ? 'active' : ''; ?>">
+                    <span>Invoices</span>
+                </a>
+                <a href="/sale-orders"
+                    class="submenu-item <?php echo (strpos($current_uri, '/sale-orders') !== false) ? 'active' : ''; ?>">
+                    <span>Sale Orders</span>
+                </a>
+                <a href="/sale-reports-admin"
+                    class="submenu-item <?php echo (strpos($current_uri, '/sale-reports-admin') !== false) ? 'active' : ''; ?>">
+                    <span>Sale Reports</span>
+                </a>
+            </div>
         <?php endif; ?>
 
-        <!-- KPI Management -->
-        <a href="/kpi" class="nav-item <?php echo ($current_uri === '/kpi') ? 'active' : ''; ?>">
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-                stroke-linecap="round" stroke-linejoin="round">
-                <line x1="18" y1="20" x2="18" y2="10"></line>
-                <line x1="12" y1="20" x2="12" y2="4"></line>
-                <line x1="6" y1="20" x2="6" y2="14"></line>
-                <rect x="3" y="2" width="18" height="20" rx="2" ry="2" stroke="none" fill="none"></rect>
-            </svg>
-            <span>General KPI Management</span>
-        </a>
-
-        <!-- Core/Key Management Dropdown -->
-        <div class="nav-item nav-item-parent <?php
-        $is_core_open = strpos($current_uri, '/core-key-kpi') !== false || strpos($current_uri, '/guides') !== false;
-        echo $is_core_open ? 'active open' : ''; ?>" onclick="toggleSubmenu(this)">
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-                stroke-linecap="round" stroke-linejoin="round">
-                <circle cx="7.5" cy="15.5" r="5.5"></circle>
-                <path d="m21 2-9.6 9.6"></path>
-                <path d="m15.5 7.5 3 3"></path>
-            </svg>
-            <span>Core/Key Management</span>
-            <svg class="chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <polyline points="6 9 12 15 18 9"></polyline>
-            </svg>
-        </div>
-        <div class="submenu <?php echo $is_core_open ? 'open' : ''; ?>">
-            <a href="/core-key-kpi" class="submenu-item <?php echo ($current_uri === '/core-key-kpi') ? 'active' : ''; ?>">
-                <span>KPI Management</span>
-            </a>
-            <a href="/guides" class="submenu-item <?php echo ($current_uri === '/guides') ? 'active' : ''; ?>">
-                <span>Guides</span>
-            </a>
-        </div>
-
-        <?php if ($_SESSION['role'] === 'admin'): ?>
-            <a href="/sale-reports-admin"
-                class="nav-item <?php echo (strpos($current_uri, '/sale-reports-admin') !== false || strpos($current_uri, '/detail-report') !== false) ? 'active' : ''; ?>">
-                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-                    stroke-linecap="round" stroke-linejoin="round">
-                    <line x1="12" y1="20" x2="12" y2="10"></line>
-                    <line x1="18" y1="20" x2="18" y2="4"></line>
-                    <line x1="6" y1="20" x2="6" y2="16"></line>
-                </svg>
-                <span>Sale Reports</span>
-            </a>
-        <?php endif; ?>
-
+        <!-- 5. Business centers (BC) Dropdown -->
         <?php
         $has_bc_access = false;
-        if ($_SESSION['role'] === 'admin') {
+        if (isset($_SESSION['role']) && $_SESSION['role'] === 'admin') {
             $has_bc_access = true;
         } else {
             // Check bc accesses manually
@@ -183,23 +141,58 @@ function isMenuItemActive($path, $current_uri)
                 $bc_chk_stmt->close();
             }
         }
-
         if ($has_bc_access): ?>
-            <a href="/bc-reports"
-                class="nav-item <?php echo (strpos($current_uri, '/bc-reports') !== false) ? 'active' : ''; ?>">
+            <div class="nav-item nav-item-parent <?php
+            $is_bc_open = strpos($current_uri, '/bc-reports') !== false;
+            echo $is_bc_open ? 'active open' : ''; ?>" onclick="toggleSubmenu(this)">
                 <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
                     stroke-linecap="round" stroke-linejoin="round">
-                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
-                    <polyline points="14 2 14 8 20 8"></polyline>
-                    <line x1="16" y1="13" x2="8" y2="13"></line>
-                    <line x1="16" y1="17" x2="8" y2="17"></line>
-                    <polyline points="10 9 9 9 8 9"></polyline>
+                    <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+                    <line x1="9" y1="3" x2="9" y2="21"></line>
                 </svg>
-                <span>BC Reports</span>
-            </a>
+                <span>Business centers (BC)</span>
+                <svg class="chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <polyline points="6 9 12 15 18 9"></polyline>
+                </svg>
+            </div>
+            <div class="submenu <?php echo $is_bc_open ? 'open' : ''; ?>">
+                <a href="/bc-reports"
+                    class="submenu-item <?php echo (strpos($current_uri, '/bc-reports') !== false) ? 'active' : ''; ?>">
+                    <span>BC Reports</span>
+                </a>
+            </div>
         <?php endif; ?>
 
-        <a href="/profile" class="nav-item <?php echo isMenuItemActive('/profile', $current_uri); ?>">
+        <!-- 6. KPI Management Dropdown -->
+        <div class="nav-item nav-item-parent <?php
+        $is_kpi_open = ($current_uri === '/kpi') || strpos($current_uri, '/core-key-kpi') !== false || strpos($current_uri, '/guides') !== false;
+        echo $is_kpi_open ? 'active open' : ''; ?>" onclick="toggleSubmenu(this)">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                stroke-linecap="round" stroke-linejoin="round">
+                <line x1="18" y1="20" x2="18" y2="10"></line>
+                <line x1="12" y1="20" x2="12" y2="4"></line>
+                <line x1="6" y1="20" x2="6" y2="14"></line>
+            </svg>
+            <span>KPI Management</span>
+            <svg class="chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polyline points="6 9 12 15 18 9"></polyline>
+            </svg>
+        </div>
+        <div class="submenu <?php echo $is_kpi_open ? 'open' : ''; ?>">
+            <a href="/kpi" class="submenu-item <?php echo ($current_uri === '/kpi') ? 'active' : ''; ?>">
+                <span>General KPI Management</span>
+            </a>
+            <a href="/core-key-kpi"
+                class="submenu-item <?php echo ($current_uri === '/core-key-kpi') ? 'active' : ''; ?>">
+                <span>Core & Key KPI</span>
+            </a>
+            <a href="/guides" class="submenu-item <?php echo ($current_uri === '/guides') ? 'active' : ''; ?>">
+                <span>Guides</span>
+            </a>
+        </div>
+
+        <a href="/profile" class="nav-item <?php echo isMenuItemActive('/profile', $current_uri); ?>"
+            style="margin-top: 2rem;">
             <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                 <path
                     d="M20 21V19C20 17.9391 19.5786 16.9217 18.8284 16.1716C18.0783 15.4214 17.0609 15 16 15H8C6.93913 15 5.92172 15.4214 5.17157 16.1716C4.42143 16.9217 4 17.9391 4 19V21"
@@ -210,8 +203,6 @@ function isMenuItemActive($path, $current_uri)
             </svg>
             <span>My Profile</span>
         </a>
-
-
 
         <?php if ($_SESSION['role'] === 'admin'): ?>
             <a href="/settings" class="nav-item <?php echo isMenuItemActive('/settings', $current_uri); ?>">
@@ -226,7 +217,8 @@ function isMenuItemActive($path, $current_uri)
             </a>
         <?php endif; ?>
 
-        <a href="/logout" class="nav-item logout" style="margin-top: auto; border-top: 1px solid #334155; padding-top: 1.5rem; border-radius: 0;">
+        <a href="/logout" class="nav-item logout"
+            style="margin-top: auto; border-top: 1px solid #334155; padding-top: 1.5rem; border-radius: 0;">
             <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                 <path
                     d="M9 21H5C4.46957 21 3.96086 20.7893 3.58579 20.4142C3.21071 20.0391 3 19.5304 3 19V5C3 4.46957 3.21071 3.96086 3.58579 3.58579C3.96086 3.21071 4.46957 3 5 3H9"
