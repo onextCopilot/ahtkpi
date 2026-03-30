@@ -11,6 +11,15 @@ $current_quarter = intval($_GET['quarter'] ?? ceil(date('n') / 3));
 $months_map = [1=>[1,2,3], 2=>[4,5,6], 3=>[7,8,9], 4=>[10,11,12]];
 $curr_months = $months_map[$current_quarter];
 
+$is_admin = ($_SESSION['role'] === 'admin');
+$current_full_name = $_SESSION['full_name'];
+
+// ACCESSIBILITY FILTER
+$owner_filter = "";
+if (!$is_admin) {
+    $owner_filter = " AND s.owner = '" . $conn->real_escape_string($current_full_name) . "'";
+}
+
 function format_vnd($val) {
     if (!$val) return '0 đ';
     return number_format($val, 0, ',', '.') . ' đ';
@@ -21,12 +30,16 @@ $monthly_data = [];
 $months_full = [1,2,3,4,5,6,7,8,9,10,11,12];
 foreach($months_full as $m) $monthly_data[$m] = ['planned' => 0, 'actual' => 0];
 
-// Get planned totals per quarter
-$res_pq = $conn->query("SELECT quarter, SUM(amount) as total FROM budget_values WHERE year = $current_year AND value_type='planned' GROUP BY quarter");
+// Get planned totals per quarter (Filtered)
+$res_pq = $conn->query("SELECT v.quarter, SUM(v.amount) as total 
+                        FROM budget_values v 
+                        JOIN budget_structure s ON v.item_id = s.id
+                        WHERE v.year = $current_year AND v.value_type='planned' $owner_filter
+                        GROUP BY v.quarter");
 $planned_q = [1=>0, 2=>0, 3=>0, 4=>0];
 while($r = $res_pq->fetch_assoc()) $planned_q[$r['quarter']] = $r['total'];
 
-// Get actuals and top over-budget items
+// Get actuals and top over-budget items (Filtered)
 $over_budget_items = [];
 $sql = "SELECT * FROM (
             SELECT s.id, s.item_name, s.division, 
@@ -34,7 +47,7 @@ $sql = "SELECT * FROM (
                    SUM(CASE WHEN v.value_type != 'planned' THEN v.amount ELSE 0 END) as actual_val
             FROM budget_structure s
             LEFT JOIN budget_values v ON s.id = v.item_id AND v.year = $current_year AND v.quarter = $current_quarter
-            WHERE s.type = 'item'
+            WHERE s.type = 'item' $owner_filter
             GROUP BY s.id
         ) as sub
         WHERE actual_val > planned_val AND planned_val > 0
@@ -42,8 +55,12 @@ $sql = "SELECT * FROM (
 $res_over = $conn->query($sql);
 while($r = $res_over->fetch_assoc()) $over_budget_items[] = $r;
 
-// Monthly Trend
-$res_v = $conn->query("SELECT month, SUM(amount) as total FROM budget_values WHERE year = $current_year AND value_type != 'planned' GROUP BY month");
+// Monthly Trend (Filtered)
+$res_v = $conn->query("SELECT v.month, SUM(v.amount) as total 
+                       FROM budget_values v 
+                       JOIN budget_structure s ON v.item_id = s.id
+                       WHERE v.year = $current_year AND v.value_type != 'planned' $owner_filter
+                       GROUP BY v.month");
 while($r = $res_v->fetch_assoc()) $monthly_data[$r['month']]['actual'] = $r['total'];
 
 // Quarter Actuals for Summary Table
@@ -58,7 +75,7 @@ $division_data = [];
 $sql_div = "SELECT s.division, SUM(v.amount) as total 
             FROM budget_values v 
             JOIN budget_structure s ON v.item_id = s.id 
-            WHERE v.year = $current_year AND v.quarter = $current_quarter AND v.value_type != 'planned'
+            WHERE v.year = $current_year AND v.quarter = $current_quarter AND v.value_type != 'planned' $owner_filter
             GROUP BY s.division";
 $res_div = $conn->query($sql_div);
 while ($row = $res_div->fetch_assoc()) if($row['division']) $division_data[] = ['label' => $row['division'], 'value' => $row['total']];

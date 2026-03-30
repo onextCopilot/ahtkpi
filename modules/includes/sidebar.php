@@ -36,17 +36,15 @@ function isMenuItemActive($path, $current_uri)
         </a>
 
         <!-- 2. Planning & Budgeting -->
-        <?php if (isset($_SESSION['role']) && $_SESSION['role'] === 'admin'): ?>
-            <a href="/plan-budgeting"
-                class="nav-item <?php echo (strpos($current_uri, '/plan-budgeting') !== false) ? 'active' : ''; ?>">
-                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-                    stroke-linecap="round" stroke-linejoin="round">
-                    <path d="M12 2v20"></path>
-                    <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path>
-                </svg>
-                <span>Planning & Budgeting</span>
-            </a>
-        <?php endif; ?>
+        <a href="/plan-budgeting"
+            class="nav-item <?php echo (strpos($current_uri, '/plan-budgeting') !== false) ? 'active' : ''; ?>">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                stroke-linecap="round" stroke-linejoin="round">
+                <path d="M12 2v20"></path>
+                <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path>
+            </svg>
+            <span>Planning & Budgeting</span>
+        </a>
 
         <!-- 3. Debts Management Dropdown -->
         <?php if (!empty($_SESSION['can_view_invoice']) || !empty($_SESSION['is_am_bd']) || $_SESSION['role'] === 'admin'): ?>
