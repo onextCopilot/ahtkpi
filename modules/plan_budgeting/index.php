@@ -11,7 +11,7 @@ if (!isset($_SESSION['user_id'])) {
 }
 
 $is_admin = ($_SESSION['role'] === 'admin');
-$current_full_name = $_SESSION['full_name'];
+$current_full_name = $_SESSION['full_name'] ?? 'System / Anonymous';
 
 // ACCESSIBILITY CHECK: Admin or Owner of at least one item
 if (!$is_admin) {
@@ -38,6 +38,8 @@ $conn->query("CREATE TABLE IF NOT EXISTS budget_history (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;");
 
 function logBudgetAction($conn, $user_id, $user_name, $type, $item_id, $item_name, $details) {
+    if (!$user_name) $user_name = 'Unknown User';
+    if (!$item_name) $item_name = 'N/A';
     $stmt = $conn->prepare("INSERT INTO budget_history (user_id, user_name, action_type, item_id, item_name, details) VALUES (?, ?, ?, ?, ?, ?)");
     $stmt->bind_param("ississ", $user_id, $user_name, $type, $item_id, $item_name, $details);
     $stmt->execute();
@@ -60,18 +62,51 @@ $months = $months_map[$current_quarter];
 
 // --- HANDLE POST ACTIONS ---
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
-    ob_clean(); // Clear any previous output (warnings etc)
+    if (ob_get_level()) ob_clean(); // Clear any previous output (warnings etc) safely
     header('Content-Type: application/json');
     
     $action = $_POST['action'] ?? '';
+
+    if ($action === 'save_rev_settings') {
+        if (!$is_admin) { echo json_encode(['success' => false, 'error' => 'Permission denied']); exit(); }
+        $red = floatval($_POST['red'] ?? 0);
+        $yellow = floatval($_POST['yellow'] ?? 0);
+        $green = floatval($_POST['green'] ?? 0);
+        
+        $stmt = $conn->prepare("INSERT INTO system_settings (setting_key, setting_value) VALUES (?, ?) ON DUPLICATE KEY UPDATE setting_value = ?");
+        
+        $keys = ['budget_rev_red' => $red, 'budget_rev_yellow' => $yellow, 'budget_rev_green' => $green];
+        foreach ($keys as $k => $v) {
+            $v_str = (string)$v;
+            $stmt->bind_param("sss", $k, $v_str, $v_str);
+            if (!$stmt->execute()) {
+                echo json_encode(['success' => false, 'error' => $stmt->error]);
+                exit();
+            }
+        }
+        echo json_encode(['success' => true]);
+        exit();
+    }
 
     if ($action === 'update_value') {
         $item_id = intval($_POST['item_id']);
         $month = intval($_POST['month']);
         $type = $_POST['type']; 
-        $amount = floatval($_POST['amount']);
+        $amount = floatval($_POST['amount'] ?? 0);
         $year = $current_year;
         $quarter = $current_quarter;
+
+        // Support for Revenue Fields in budget_structure
+        $rev_fields = ['rec_rev_good', 'rec_rev_avg', 'rec_rev_bad', 'inv_rev_good', 'inv_rev_avg', 'inv_rev_bad'];
+        if (in_array($type, $rev_fields)) {
+            $stmt = $conn->prepare("UPDATE budget_structure SET $type = ? WHERE id = ?");
+            $stmt->bind_param("di", $amount, $item_id);
+            if ($stmt->execute()) {
+                 logBudgetAction($conn, $_SESSION['user_id'], $current_full_name, 'UPDATE_REVENUE', $item_id, '', "Updated $type to " . number_format($amount, 0, ',', '.') . " đ");
+                 echo json_encode(['success' => true]);
+            } else echo json_encode(['success' => false, 'error' => $stmt->error]);
+            exit();
+        }
 
         $stmt = $conn->prepare("INSERT INTO budget_values (item_id, year, quarter, month, value_type, amount) 
                                 VALUES (?, ?, ?, ?, ?, ?) 
@@ -102,18 +137,31 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
         $category = $_POST['category'] ?? '';
         $item_name = $_POST['item_name'] ?? '';
         $owner = $_POST['owner'] ?? '';
+        $acct_abbreviation = $_POST['acct_abbreviation'] ?? '';
         $type = $_POST['type'] ?? 'item';
         
         $res = $conn->query("SELECT MAX(order_num) as m FROM budget_structure WHERE year = $current_year AND quarter = $current_quarter");
         $order_num = ($res->fetch_assoc()['m'] ?? 0) + 1;
 
-        $stmt = $conn->prepare("INSERT INTO budget_structure (year, quarter, division, category, item_name, owner, type, order_num) VALUES (?, ?, ?, ?, ?, ?, ?, ?)");
-        $stmt->bind_param("iisssssi", $current_year, $current_quarter, $division, $category, $item_name, $owner, $type, $order_num);
+        $stmt = $conn->prepare("INSERT INTO budget_structure (year, quarter, division, category, item_name, owner, acct_abbreviation, type, order_num) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)");
+        $stmt->bind_param("iissssssi", $current_year, $current_quarter, $division, $category, $item_name, $owner, $acct_abbreviation, $type, $order_num);
         if ($stmt->execute()) {
             $last_id = $conn->insert_id;
-            logBudgetAction($conn, $_SESSION['user_id'], $current_full_name, 'ADD_ITEM', $last_id, $item_name, "Added new $type in $division / $category");
+            logBudgetAction($conn, $_SESSION['user_id'], $current_full_name, 'ADD_ITEM', $last_id, $item_name, "Added new $type in $division / $category ($acct_abbreviation)");
             echo json_encode(['success' => true]);
         }
+        else echo json_encode(['success' => false, 'error' => $stmt->error]);
+        exit();
+    }
+
+    if ($action === 'update_revenue_status') {
+        $section = $_POST['section']; // 'rec' or 'inv'
+        $status = intval($_POST['status']); // 1, 2, 3
+        $col = ($section === 'rec' ? 'rec_status' : 'inv_status');
+        
+        $stmt = $conn->prepare("INSERT INTO budget_quarterly_status (year, quarter, $col) VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE $col = VALUES($col)");
+        $stmt->bind_param("iii", $current_year, $current_quarter, $status);
+        if ($stmt->execute()) echo json_encode(['success' => true]);
         else echo json_encode(['success' => false, 'error' => $stmt->error]);
         exit();
     }
@@ -138,9 +186,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
         }
 
         while ($row = $res->fetch_assoc()) {
-            $stmt = $conn->prepare("INSERT INTO budget_structure (year, quarter, division, category, item_name, owner, type, order_num) 
-                                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)");
-            $stmt->bind_param("iisssssi", $current_year, $current_quarter, $row['division'], $row['category'], $row['item_name'], $row['owner'], $row['type'], $row['order_num']);
+            $stmt = $conn->prepare("INSERT INTO budget_structure (year, quarter, division, category, item_name, owner, acct_abbreviation, type, order_num) 
+                                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)");
+            $stmt->bind_param("iissssssi", $current_year, $current_quarter, $row['division'], $row['category'], $row['item_name'], $row['owner'], $row['acct_abbreviation'], $row['type'], $row['order_num']);
             $stmt->execute();
         }
         logBudgetAction($conn, $_SESSION['user_id'], $current_full_name, 'CLONE', null, "Quarterly Structure", "Cloned structure from Q$prev_q/$prev_y to Q$current_quarter/$current_year");
@@ -150,14 +198,38 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
 
     if ($action === 'edit_item_structure') {
         $id = intval($_POST['id']);
+        
+        $res = $conn->query("SELECT * FROM budget_structure WHERE id = $id");
+        $old_row = $res->fetch_assoc();
+
         $division = $_POST['division'] ?? '';
         $category = $_POST['category'] ?? '';
         $item_name = $_POST['item_name'] ?? '';
         $owner = $_POST['owner'] ?? '';
+        $acct_abbreviation = $_POST['acct_abbreviation'] ?? '';
+        $type = $_POST['type'] ?? 'item';
         $order_num = intval($_POST['order_num'] ?? 0);
-        $stmt = $conn->prepare("UPDATE budget_structure SET division=?, category=?, item_name=?, owner=?, type=?, order_num=? WHERE id=?");
-        $stmt->bind_param("sssssii", $division, $category, $item_name, $owner, $type, $order_num, $id);
+        $stmt = $conn->prepare("UPDATE budget_structure SET division=?, category=?, item_name=?, owner=?, acct_abbreviation=?, type=?, order_num=? WHERE id=?");
+        $stmt->bind_param("ssssssii", $division, $category, $item_name, $owner, $acct_abbreviation, $type, $order_num, $id);
         if ($stmt->execute()) {
+             if ($old_row) {
+                 if ($old_row['type'] === 'division' && $old_row['item_name'] !== $item_name) {
+                     $stmt_casc = $conn->prepare("UPDATE budget_structure SET division = ? WHERE division = ?");
+                     $stmt_casc->bind_param("ss", $item_name, $old_row['item_name']);
+                     $stmt_casc->execute();
+                 }
+                 if ($old_row['type'] === 'category' && $old_row['item_name'] !== $item_name) {
+                     $stmt_casc = $conn->prepare("UPDATE budget_structure SET category = ? WHERE category = ? AND division = ?");
+                     $stmt_casc->bind_param("sss", $item_name, $old_row['item_name'], $old_row['division']);
+                     $stmt_casc->execute();
+                 }
+                 if ($old_row['type'] === 'category' && $old_row['division'] !== $division) {
+                     $stmt_casc = $conn->prepare("UPDATE budget_structure SET division = ? WHERE category = ? AND division = ?");
+                     $stmt_casc->bind_param("sss", $division, $old_row['item_name'], $old_row['division']);
+                     $stmt_casc->execute();
+                 }
+             }
+
              logBudgetAction($conn, $_SESSION['user_id'], $current_full_name, 'EDIT_STRUCTURE', $id, $item_name, "Updated structure info for $item_name (Type: $type)");
              echo json_encode(['success' => true]);
         }
@@ -202,6 +274,28 @@ $conn->query("SET @sql = IF(@col_exists = 0, 'ALTER TABLE budget_structure ADD C
 $conn->query("PREPARE stmt FROM @sql;");
 $conn->query("EXECUTE stmt;");
 
+$conn->query("SET @col_exists = (SELECT COUNT(*) FROM information_schema.columns WHERE table_name = 'budget_structure' AND table_schema = DATABASE() AND column_name = 'acct_abbreviation');");
+$conn->query("SET @sql = IF(@col_exists = 0, 'ALTER TABLE budget_structure ADD COLUMN acct_abbreviation VARCHAR(100) AFTER owner', 'SELECT 1');");
+$conn->query("PREPARE stmt FROM @sql;");
+$conn->query("EXECUTE stmt;");
+
+$conn->query("SET @col_exists = (SELECT COUNT(*) FROM information_schema.columns WHERE table_name = 'budget_structure' AND table_schema = DATABASE() AND column_name = 'rec_rev_good');");
+$conn->query("SET @sql = IF(@col_exists = 0, 'ALTER TABLE budget_structure ADD COLUMN rec_rev_good DECIMAL(19,2) DEFAULT 0 AFTER acct_abbreviation, ADD COLUMN rec_rev_avg DECIMAL(19,2) DEFAULT 0 AFTER rec_rev_good, ADD COLUMN rec_rev_bad DECIMAL(19,2) DEFAULT 0 AFTER rec_rev_avg, ADD COLUMN inv_rev_good DECIMAL(19,2) DEFAULT 0 AFTER rec_rev_bad, ADD COLUMN inv_rev_avg DECIMAL(19,2) DEFAULT 0 AFTER inv_rev_good, ADD COLUMN inv_rev_bad DECIMAL(19,2) DEFAULT 0 AFTER inv_rev_avg, ADD COLUMN rec_rev_status INT DEFAULT 0 AFTER rec_rev_bad, ADD COLUMN inv_rev_status INT DEFAULT 0 AFTER inv_rev_bad', 'SELECT 1');");
+$conn->query("PREPARE stmt FROM @sql;");
+$conn->query("EXECUTE stmt;");
+
+// Quarterly Status table (Global scenario selection)
+$conn->query("CREATE TABLE IF NOT EXISTS budget_quarterly_status (year INT, quarter INT, rec_status INT DEFAULT 0, inv_status INT DEFAULT 0, PRIMARY KEY(year, quarter))");
+
+$q_status_res = $conn->query("SELECT * FROM budget_quarterly_status WHERE year = $current_year AND quarter = $current_quarter");
+$q_status = $q_status_res->fetch_assoc() ?: ['rec_status' => 0, 'inv_status' => 0];
+
+// Ensure V7 schema update (Status columns) if V6 was already run without them
+$conn->query("SET @col_exists = (SELECT COUNT(*) FROM information_schema.columns WHERE table_name = 'budget_structure' AND table_schema = DATABASE() AND column_name = 'rec_rev_status');");
+$conn->query("SET @sql = IF(@col_exists = 0, 'ALTER TABLE budget_structure ADD COLUMN rec_rev_status INT DEFAULT 0 AFTER rec_rev_bad, ADD COLUMN inv_rev_status INT DEFAULT 0 AFTER inv_rev_bad', 'SELECT 1');");
+$conn->query("PREPARE stmt FROM @sql;");
+$conn->query("EXECUTE stmt;");
+
 // Fetch Users
 $users = [];
 $u_res = $conn->query("SELECT * FROM users ORDER BY full_name ASC");
@@ -226,6 +320,8 @@ while ($r = $res->fetch_assoc()) {
     }
     $raw[] = $r;
 }
+// Initial truly empty check (will be updated after structure build)
+$is_truly_empty = (count($raw) === 0);
 
 // Second filter: Remove division/categories that have NO items left after first filter (for non-admins)
 if (!$is_admin) {
@@ -254,29 +350,39 @@ if (!$is_admin) {
     $raw = $filtered_raw;
 }
 
+// 1. Pass: Build Division dictionary
 $div_nodes = [];
-// dictionary for cat -> div mapping
-// 1. Pass: Build Division and Category dictionary
 foreach ($raw as $row) {
-    $clean_name = clean_key($row['item_name']);
     if ($row['type'] === 'division') {
+        $clean_name = clean_key($row['item_name']);
         $div_nodes[$clean_name] = ['data' => $row, 'children' => ['_root_' => ['items' => []]]];
     }
 }
 
-// 1.5. Pass: Build Category dictionary (must be under a division)
+// 1.5. Pass: Build Category dictionary
 $current_div_key = '';
+$cat_to_div_map = []; // Maps Category -> Division
+$div_cat_map_for_js = []; // For the frontend dynamic dropdown
+$all_cats_for_js = [];
 foreach ($raw as $row) {
-    $clean_name = clean_key($row['item_name']);
     if ($row['type'] === 'division') {
-        $current_div_key = $clean_name;
+        $current_div_key = clean_key($row['item_name']);
     } elseif ($row['type'] === 'category') {
-        $d_key = clean_key($row['division'] ?: $current_div_key);
+        $clean_name = clean_key($row['item_name']);
+        $d_key = clean_key($row['division']) ?: $current_div_key;
         if ($d_key && isset($div_nodes[$d_key])) {
             $div_nodes[$d_key]['children'][$clean_name] = ['data' => $row, 'items' => []];
+            $cat_to_div_map[$clean_name] = $d_key;
         }
+        $raw_div_name = trim($row['division'] ?: $div_nodes[$d_key]['data']['item_name'] ?? '');
+        $raw_cat_name = trim($row['item_name']);
+        if ($raw_div_name) $div_cat_map_for_js[$raw_div_name][] = $raw_cat_name;
+        $all_cats_for_js[] = $raw_cat_name;
     }
 }
+
+foreach ($div_cat_map_for_js as $k => $v) $div_cat_map_for_js[$k] = array_values(array_unique($v));
+$all_cats_for_js = array_values(array_unique($all_cats_for_js));
 
 // 2. Pass: Place Items
 $homeless = [];
@@ -288,9 +394,14 @@ foreach ($raw as $row) {
     if ($row['type'] === 'item') {
         $raw_d = clean_key($row['division']);
         $raw_c = clean_key($row['category']);
-        $d_key = $raw_d ?: $current_div_key;
         $c_key = $raw_c ?: $current_cat_key;
+        $d_key = $raw_d ?: $current_div_key;
         
+        // Smart Resolution: if item has a valid category, we lookup which division the category ACTUALLY belongs to
+        if ($c_key && isset($cat_to_div_map[$c_key])) {
+            $d_key = $cat_to_div_map[$c_key]; // Override with correct parent division
+        }
+
         if ($d_key && isset($div_nodes[$d_key])) {
             if ($c_key && isset($div_nodes[$d_key]['children'][$c_key])) {
                 $div_nodes[$d_key]['children'][$c_key]['items'][] = $row;
@@ -318,6 +429,15 @@ foreach ($div_nodes as $d_key => $d_node) {
 }
 $structure = array_merge($structure, $homeless);
 
+// RECALCULATE: Consider it empty if no items at all or no items of type 'item' (Level 3)
+$is_truly_empty = empty($structure);
+$has_actual_items = false;
+foreach ($structure as $s) { if ($s['type'] === 'item') { $has_actual_items = true; break; } }
+
+// If we have some structure but NO items, we might still want to show the duplicate button
+// But for now, let's strictly follow the user: "nếu chưa có bản ghi nào"
+// Use $is_truly_empty for the big card, but also consider showing the button if count of items is 0.
+
 // Fetch values for current year/quarter
 $values = [];
 $res_v = $conn->query("SELECT * FROM budget_values WHERE year = $current_year AND quarter = $current_quarter");
@@ -341,6 +461,7 @@ $cat_totals = [];
 // --- AGGREGATES CALCULATION ---
 $div_totals = [];
 $cat_totals = [];
+$grand_totals = []; // Reset and rebuild with revenue
 
 foreach ($structure as $row) {
     if ($row['type'] !== 'item') continue;
@@ -350,6 +471,19 @@ foreach ($structure as $row) {
     $cid = $did . ' > ' . $cat_name;
     
     $iid = $row['id'];
+    
+    // Revenue Fields
+    $rev_keys = ['rec_rev_good', 'rec_rev_avg', 'rec_rev_bad', 'inv_rev_good', 'inv_rev_avg', 'inv_rev_bad'];
+    foreach ($rev_keys as $rk) {
+        $val = floatval($row[$rk] ?? 0);
+        if ($val == 0) continue;
+        if ($did !== '') {
+            $div_totals[$did]['_rev_'][$rk] = ($div_totals[$did]['_rev_'][$rk] ?? 0) + $val;
+            $grand_totals['_rev_'][$rk] = ($grand_totals['_rev_'][$rk] ?? 0) + $val;
+        }
+        if ($cat_name !== '') $cat_totals[$cid]['_rev_'][$rk] = ($cat_totals[$cid]['_rev_'][$rk] ?? 0) + $val;
+    }
+
     $keys = ['planned', 'actual_salary', 'actual_other'];
     $item_ms = [0, $months[0], $months[1], $months[2]];
     
@@ -361,6 +495,7 @@ foreach ($structure as $row) {
             if ($did !== '') {
                 if (!isset($div_totals[$did][$m][$k])) $div_totals[$did][$m][$k] = 0;
                 $div_totals[$did][$m][$k] += $val;
+                $grand_totals[$m][$k] = ($grand_totals[$m][$k] ?? 0) + $val;
             }
             if ($cat_name !== '') {
                 if (!isset($cat_totals[$cid][$m][$k])) $cat_totals[$cid][$m][$k] = 0;
@@ -368,6 +503,21 @@ foreach ($structure as $row) {
             }
         }
     }
+}
+
+function get_rev_val($row, $div_totals, $cat_totals, $type) {
+    if ($row['type'] === 'item') return floatval($row[$type] ?? 0);
+    $did = trim($row['division'] ?? '');
+    if ($row['type'] === 'division') {
+        $d_name = trim($row['item_name'] ?? '');
+        return $div_totals[$d_name]['_rev_'][$type] ?? 0;
+    }
+    if ($row['type'] === 'category') {
+        $c_name = trim($row['item_name'] ?? '');
+        $cid = $did . ' > ' . $c_name;
+        return $cat_totals[$cid]['_rev_'][$type] ?? 0;
+    }
+    return 0;
 }
 
 function get_display_val($row, $values, $div_totals, $cat_totals, $month, $type) {
@@ -387,6 +537,27 @@ function get_display_val($row, $values, $div_totals, $cat_totals, $month, $type)
     }
     return 0;
 }
+
+// --- LOAD REVENUE THRESHOLDS ---
+$settings_map = [];
+$res_set = $conn->query("SELECT setting_key, setting_value FROM system_settings WHERE setting_key LIKE 'budget_rev_%'");
+if ($res_set) {
+    while ($r = $res_set->fetch_assoc()) {
+        $settings_map[$r['setting_key']] = floatval($r['setting_value']);
+    }
+}
+$rev_red = $settings_map['budget_rev_red'] ?? 50;
+$rev_yellow = $settings_map['budget_rev_yellow'] ?? 80;
+$rev_green = $settings_map['budget_rev_green'] ?? 100;
+
+function get_rev_bg_color($val, $planned, $red, $yellow, $green) {
+    if ($val == 0 || $planned == 0) return '';
+    $pct = ($val / $planned) * 100;
+    if ($pct > $green) return 'background-color: #f3e8ff !important; color: #6b21a8 !important; font-weight: bold; border: 1px dashed #d8b4fe !important; outline: 1px solid #d8b4fe;'; // Purple
+    if ($pct > $yellow) return 'background-color: #dcfce7 !important; color: #166534 !important; font-weight: bold; border: 1px dashed #bbf7d0 !important; outline: 1px solid #bbf7d0;'; // Green
+    if ($pct > $red) return 'background-color: #fef08a !important; color: #854d0e !important; font-weight: bold; border: 1px dashed #fde047 !important; outline: 1px solid #fde047;'; // Yellow
+    return 'background-color: #fee2e2 !important; color: #991b1b !important; font-weight: bold; border: 1px dashed #fecaca !important; outline: 1px solid #fecaca;'; // Red
+}
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -398,48 +569,129 @@ function get_display_val($row, $values, $div_totals, $cat_totals, $month, $type)
     <style>
         .budget-container { padding: 1.5rem; background: #f8fafc; min-height: calc(100vh - 80px); }
         .card { background: white; border-radius: 12px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); overflow: hidden; margin-bottom: 2rem; }
-        .table-wrapper { overflow-x: auto; border: 1px solid #e2e8f0; }
+        .table-wrapper { overflow-x: auto; overflow-y: auto; max-height: calc(100vh - 250px); border: 1px solid #e2e8f0; }
         table.budget-table { width: 100%; border-collapse: separate !important; border-spacing: 0 !important; font-size: 13px; white-space: nowrap; border-top: 1px solid #cbd5e1; border-left: 1px solid #cbd5e1; }
         
+        /* Uniform blue background for all headers as requested */
         table.budget-table thead th { 
             background: #1e3a8a !important; 
             color: white !important; 
             font-weight: 700; 
-            padding: 12px 8px; 
-            border: none;
-            border-right: 1px dashed rgba(255,255,255,0.4) !important; 
-            border-bottom: 1px dashed rgba(255,255,255,0.4) !important; 
-            position: sticky; 
+            padding: 8px 4px; /* Reduced padding for more compact header */
+            border: none !important;
+            border-right: 1px dashed #ffffff !important; 
+            border-bottom: 1px dashed #ffffff !important; /* Restored horizontal separation border */
+            position: sticky !important; 
             top: 0; 
-            z-index: 10; 
+            z-index: 20 !important; /* Minimal priority for header */
             box-sizing: border-box;
+            border-top: none !important;
+            height: 40px; /* Explicit height to sync with sticky offsets */
         }
-        /* Top border for the very first header row only */
-        table.budget-table thead tr:first-child th { border-top: 1px dashed rgba(255,255,255,0.4) !important; }
-        /* Left border for the very first column cells */
-        table.budget-table th:first-child, table.budget-table td:first-child { border-left: 1px dashed rgba(255,255,255,0.4) !important; }
 
-        table.budget-table tbody td { padding: 8px; border: none; border-right: 1px solid #cbd5e1; border-bottom: 1px solid #cbd5e1; }
+        /* Group column classes now use the same uniform blue theme */
+        table.budget-table thead .col-rec, 
+        table.budget-table thead .col-inv, 
+        table.budget-table thead .col-month { 
+            background-color: #1e3a8a !important; 
+            color: white !important; 
+        }
+
+        /* Only bottom-most header cells get a bottom border */
+        table.budget-table thead tr:last-child th,
+        table.budget-table thead th[rowspan="2"] {
+             border-bottom: 1px dashed #ffffff !important;
+        }
+
+        /* Second row of header alignment (STT, etc) */
+        table.budget-table thead tr:nth-child(2) th {
+            top: 40px !important; /* Must override the general top: 0 policy */
+        }
+        
+        /* Third row of header alignment (Radio buttons, M1/M2) */
+        table.budget-table thead tr:nth-child(3) th {
+            top: 80px !important; /* Offset for Super Header + Row 2 */
+            padding: 4px 4px; /* Even tighter for the radio button row */
+        }
+
+        /* Reset all other sides to prevent solid look from overlap */
+        table.budget-table th, table.budget-table td { 
+            border-left: none !important; 
+            border-top: none !important; 
+        }
+
+        table.budget-table tbody td { 
+            padding: 8px; 
+            border-right: 1px dashed #94a3b8 !important; 
+            border-bottom: 1px dashed #94a3b8 !important; 
+            font-size: 11px; /* Data row font size as requested */
+        }
         
         table.budget-table .row-total td { 
             background: #1e3a8a !important; 
             color: white !important; 
-            border: none;
-            border-right: 1px dashed rgba(255,255,255,0.4) !important; 
-            border-bottom: 1px dashed rgba(255,255,255,0.4) !important; 
+            border: none !important;
+            border-right: 1px dashed #ffffff !important; 
+            border-bottom: 1px dashed #ffffff !important; 
             box-sizing: border-box;
         }
         
-        /* Sticky Columns - Refined to prevent double borders */
-        table.budget-table thead th:nth-child(1), .row-total td:nth-child(1) { position: sticky; left: 0; z-index: 11; background: #1e3a8a !important; border-left: 1px dashed rgba(255,255,255,0.4) !important; }
-        table.budget-table thead th:nth-child(2), .row-total td:nth-child(2) { position: sticky; left: 40px; z-index: 11; background: #1e3a8a !important; }
-        table.budget-table thead th:nth-child(3), .row-total td:nth-child(3) { position: sticky; left: 160px; z-index: 11; background: #1e3a8a !important; }
-
-        /* Regular Data Rows (Solid) */
-        table.budget-table tbody td:nth-child(1) { position: sticky; left: 0; z-index: 11; background: #fff; border-right: 1px solid #cbd5e1; }
-        table.budget-table tbody td:nth-child(2) { position: sticky; left: 40px; z-index: 11; background: #fff; border-right: 1px solid #cbd5e1; }
-        table.budget-table tbody td:nth-child(3) { position: sticky; left: 160px; z-index: 11; background: #fff; border-right: 2px solid #cbd5e1; width: 250px; }
+        /* Sticky Columns - Highest priority for the first two columns */
+        table.budget-table thead th.col-stt, table.budget-table .row-total td.col-stt, table.budget-table tbody td.col-stt { 
+            position: sticky !important; left: 0 !important; z-index: 10 !important; min-width: 40px; 
+        }
         
+        .col-block { min-width: 120px; }
+        table.budget-table thead th.col-block, table.budget-table .row-total td.col-block, table.budget-table tbody td.col-block { 
+            position: sticky !important; left: 40px !important; z-index: 10 !important; 
+        }
+        
+        .col-dept { min-width: 250px; }
+        table.budget-table thead th.col-dept, table.budget-table .row-total td.col-dept, table.budget-table tbody td.col-dept { 
+            position: sticky !important; left: 160px !important; z-index: 5 !important; 
+        }
+        
+        /* Adjustment if Khối is hidden - must be highly specific to override individual row styles */
+        table.budget-table.block-hidden th.col-dept,
+        table.budget-table.block-hidden tbody td.col-dept,
+        table.budget-table.block-hidden tbody .row-division td.col-dept,
+        table.budget-table.block-hidden tbody .row-category td.col-dept,
+        table.budget-table.block-hidden .row-total td.col-dept { 
+            left: 40px !important; 
+        }
+
+        /* Standard body cell background - Allow row highlights to show through while remaining sticky */
+        table.budget-table tbody td.col-stt,
+        table.budget-table tbody td.col-block,
+        table.budget-table tbody td.col-dept {
+            background-color: inherit !important; /* Take the highlight color of the parent row */
+        }
+
+        table.budget-table thead th.col-stt,
+        table.budget-table thead th.col-block {
+            background-color: #1e3a8a !important;
+            z-index: 30 !important; /* Top-left corner cells must stay above generic headers */
+        }
+
+        table.budget-table thead th.col-dept {
+            background-color: #1e3a8a !important;
+            z-index: 30 !important; /* Top-left corner cells must stay above generic headers */
+        }
+        
+        /* Ensure specific rows maintain highlights while sticky */
+        table.budget-table tbody .row-division td.col-stt { left: 0 !important; position: sticky !important; }
+        table.budget-table tbody .row-division td.col-block { left: 40px !important; position: sticky !important; }
+        table.budget-table tbody .row-division td.col-dept { left: 160px !important; position: sticky !important; }
+        
+        table.budget-table tbody .row-category td.col-stt { left: 0 !important; position: sticky !important; }
+        table.budget-table tbody .row-category td.col-block { left: 40px !important; position: sticky !important; }
+        table.budget-table tbody .row-category td.col-dept { left: 160px !important; position: sticky !important; }
+
+        table.budget-table .row-total td.col-stt { left: 0 !important; position: sticky !important; background: #1e3a8a !important; color: #ffffff !important; }
+        table.budget-table .row-total td.col-block { left: 40px !important; position: sticky !important; background: #1e3a8a !important; color: #ffffff !important; }
+        table.budget-table .row-total td.col-dept { left: 160px !important; position: sticky !important; background: #1e3a8a !important; color: #ffffff !important; }
+
+
         /* Fixed: Remove conflicting solid rule */
         table.budget-table thead th { background: #1e3a8a !important; }
 
@@ -451,7 +703,18 @@ function get_display_val($row, $values, $div_totals, $cat_totals, $month, $type)
         .editable-cell:hover { background: #eff6ff !important; outline: 1px solid #3b82f6; }
         .cell-input { width: 100%; border: none; background: transparent; text-align: right; outline: none; padding: 2px; }
         
-        .filter-bar { display: flex; gap: 1rem; margin-bottom: 1.5rem; background: white; padding: 1rem; border-radius: 8px; border: 1px solid #e2e8f0; align-items: center; }
+        .col-hidden { display: none !important; }
+        .column-settings-dropdown { position: relative; display: inline-block; }
+        .column-settings-content { 
+            display: none; position: absolute; right: 0; background-color: #ffffff; 
+            min-width: 200px; box-shadow: 0 10px 15px -3px rgba(0,0,0,0.1); 
+            z-index: 100; border: 1px solid #e2e8f0; border-radius: 8px; padding: 12px;
+            margin-top: 8px;
+        }
+        .column-settings-dropdown:hover .column-settings-content { display: block; }
+        .column-option { display: flex; align-items: center; gap: 10px; padding: 6px 0; cursor: pointer; font-size: 13px; color: #475569; }
+        .column-option:hover { color: #1e293b; }
+        .column-option input { cursor: pointer; }
         .filter-select { padding: 8px 12px; border-radius: 6px; border: 1px solid #cbd5e1; font-weight: 600; outline: none; }
         
         .btn-primary { background: #0f172a; color: white; border: none; padding: 10px 20px; border-radius: 8px; cursor: pointer; font-weight: 600; }
@@ -515,20 +778,96 @@ function get_display_val($row, $values, $div_totals, $cat_totals, $month, $type)
                                 </label>
                             <?php endif; ?>
                         </div>
-                        <button class="btn-primary" onclick="openModal()">+ Quản lý cấu trúc</button>
+                        <div class="column-settings-dropdown">
+                            <button class="btn-primary" style="background: white; color: #475569; border: 1px solid #cbd5e1; display: flex; align-items: center; gap: 8px;">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6h16M4 12h16M4 18h16"></path></svg> Ẩn/Hiện cột
+                            </button>
+                            <div class="column-settings-content">
+                                <label class="column-option"><input type="checkbox" checked onchange="toggleCol('col-block', this.checked)"> Khối</label>
+                                <label class="column-option"><input type="checkbox" checked onchange="toggleCol('col-vtkt', this.checked)"> VTKT</label>
+                                <label class="column-option"><input type="checkbox" checked onchange="toggleCol('col-owner', this.checked)"> Owner</label>
+                                <label class="column-option"><input type="checkbox" checked onchange="toggleCol('col-rec', this.checked)"> Recognised Revenue</label>
+                                <label class="column-option"><input type="checkbox" checked onchange="toggleCol('col-inv', this.checked)"> Invoiced Revenue</label>
+                                <label class="column-option"><input type="checkbox" checked onchange="toggleCol('col-plan', this.checked)"> Kế hoạch Q</label>
+                                <label class="column-option"><input type="checkbox" checked onchange="toggleCol('col-actual', this.checked)"> Thực tế chi</label>
+                            </div>
+                        </div>
+                        <button class="btn-primary" onclick="openModal()" style="background: white; color: #0f172a; border: 1px solid #e2e8f0;">+ Quản lý cấu trúc</button>
+                        <?php if ($is_admin): ?>
+                            <button class="btn-primary" onclick="openRevSettingsModal()" style="background: white; color: #4338ca; border: 1px solid #c7d2fe;">&#9881; Cảnh báo DT</button>
+                        <?php endif; ?>
                     </div>
                 </div>
 
                 <style>
+                    .col-hidden { display: none !important; }
                     .hidden { display: none !important; }
                     .planning-active .actual-col { display: none !important; }
                     /* Default: Actions column is hidden unless Editing Mode is ON */
                     .actions-col { display: none; }
                     .editing-active .actions-col { display: table-cell !important; }
+                    /* Radio styling */
+                    .rev-status-radio {
+                        appearance: none;
+                        -webkit-appearance: none;
+                        width: 18px;
+                        height: 18px;
+                        border: 2px solid #cbd5e1;
+                        border-radius: 50%;
+                        background: #fff;
+                        cursor: pointer;
+                        position: relative;
+                        transition: all 0.2s;
+                        margin: 0;
+                        flex-shrink: 0;
+                    }
+                    .rev-status-radio:checked {
+                        border-color: #2563eb;
+                        background: #2563eb;
+                    }
+                    .rev-status-radio:checked::after {
+                        content: '';
+                        position: absolute;
+                        top: 50%;
+                        left: 50%;
+                        transform: translate(-50%, -50%);
+                        width: 8px;
+                        height: 8px;
+                        background: #fff;
+                        border-radius: 50%;
+                    }
+                    .rev-cell-inner {
+                        display: flex;
+                        align-items: center;
+                        justify-content: flex-end;
+                        gap: 10px;
+                        width: 100%;
+                    }
+                    /* Highlighting */
+                    .active-scenario { 
+                        background-color: rgba(37, 99, 235, 0.04) !important;
+                        box-shadow: inset 0 0 0 1px rgba(37, 99, 235, 0.1);
+                    }
+                    th.active-scenario {
+                        box-shadow: inset 0 0 10px rgba(0, 0, 0, 0.05) !important;
+                        position: relative;
+                    }
+                    /* Indicator dot for active scenario in header */
+                    th.active-scenario::after {
+                        content: '';
+                        position: absolute;
+                        bottom: 2px;
+                        left: 50%;
+                        transform: translateX(-50%);
+                        width: 4px;
+                        height: 4px;
+                        border-radius: 50%;
+                        background: currentColor;
+                    }
                 </style>
 
                 <div class="card">
-                    <?php if (empty($raw)): ?>
+                    <?php if (!$has_actual_items): ?>
                         <div style="background: #f8fafc; border: 2px dashed #cbd5e1; padding: 3rem; border-radius: 12px; text-align: center; margin: 2rem;">
                             <div style="font-size: 1.5rem; font-weight: 700; color: #475569; margin-bottom: 12px;">📊 Quý <?php echo $current_quarter; ?>/<?php echo $current_year; ?> chưa có cấu trúc</div>
                             <p style="color: #64748b; margin-bottom: 24px; font-size: 1rem;">
@@ -550,21 +889,47 @@ function get_display_val($row, $values, $div_totals, $cat_totals, $month, $type)
                         <table class="budget-table">
                             <thead>
                                 <tr>
-                                    <th rowspan="2" class="text-center" width="50">STT</th>
-                                    <th rowspan="2">Khối</th>
-                                    <th rowspan="2">Bộ phận/ Khoản chi</th>
-                                    <th rowspan="2">Owner</th>
-                                    <th rowspan="2" class="text-center" width="100">Kế hoạch Q<?php echo $current_quarter; ?></th>
-                                    <th colspan="2" class="text-center">Tháng <?php echo $months[0]; ?></th>
-                                    <th colspan="2" class="text-center">Tháng <?php echo $months[1]; ?></th>
-                                    <th colspan="2" class="text-center">Tháng <?php echo $months[2]; ?></th>
-                                    <th rowspan="2" class="text-center" width="100" style="min-width: 140px;">Thực tế chi</th>
-                                    <th rowspan="2" class="text-center actions-col" width="100">Thao tác</th>
+                                    <th id="sh-info" colspan="5" class="text-center" style="background:#1e3a8a!important; position: sticky; left: 0; z-index: 31; font-size: 14px; border-bottom: 1px dashed #ffffff !important;">Information</th>
+                                    <th id="sh-income" colspan="6" class="text-center" style="background:#1e3a8a!important; font-size: 14px; border-bottom: 1px dashed #ffffff !important;">Income</th>
+                                    <th id="sh-exp" colspan="9" class="text-center" style="background:#1e3a8a!important; font-size: 14px; border-bottom: 1px dashed #ffffff !important;">Expenses</th>
                                 </tr>
                                 <tr>
-                                    <th class="actual-col">Lương Gross</th><th class="actual-col">HĐ khác</th>
-                                    <th class="actual-col">Lương Gross</th><th class="actual-col">HĐ khác</th>
-                                    <th class="actual-col">Lương Gross</th><th class="actual-col">HĐ khác</th>
+                                    <th rowspan="2" class="text-center col-stt" width="50" data-sh="info">STT</th>
+                                    <th rowspan="2" class="col-block" data-sh="info">Khối</th>
+                                    <th rowspan="2" class="col-dept" data-sh="info">Bộ phận/ Khoản chi</th>
+                                    <th rowspan="2" class="text-center col-vtkt" data-sh="info">VTKT</th>
+                                    <th rowspan="2" class="col-owner" data-sh="info">Owner</th>
+                                    <th colspan="3" class="text-center col-rec" data-sh="income">Recognised Revenue</th>
+                                    <th colspan="3" class="text-center col-inv" data-sh="income">Invoiced Revenue</th>
+                                    <th rowspan="2" class="text-center col-plan" width="100" data-sh="exp">Kế hoạch Q<?php echo $current_quarter; ?></th>
+                                    <th colspan="2" class="text-center col-month col-actual" data-sh="exp">Tháng <?php echo $months[0]; ?></th>
+                                    <th colspan="2" class="text-center col-month col-actual" data-sh="exp">Tháng <?php echo $months[1]; ?></th>
+                                    <th colspan="2" class="text-center col-month col-actual" data-sh="exp">Tháng <?php echo $months[2]; ?></th>
+                                    <th rowspan="2" class="text-center col-actual" width="100" style="min-width: 140px;" data-sh="exp">Thực tế chi</th>
+                                    <th rowspan="2" class="text-center actions-col" width="100" data-sh="exp">Thao tác</th>
+                                </tr>
+                                <tr>
+                                    <th class="text-center col-rec <?php echo ($q_status['rec_status'] == 1 ? 'active-scenario' : ''); ?>" style="font-size: 11px; width: 112px; min-width: 112px;">
+                                        Tốt
+                                    </th>
+                                    <th class="text-center col-rec <?php echo ($q_status['rec_status'] == 2 ? 'active-scenario' : ''); ?>" style="font-size: 11px; width: 112px; min-width: 112px;">
+                                        Trung bình
+                                    </th>
+                                    <th class="text-center col-rec <?php echo ($q_status['rec_status'] == 3 ? 'active-scenario' : ''); ?>" style="font-size: 11px; width: 112px; min-width: 112px;">
+                                        Xấu
+                                    </th>
+                                    <th class="text-center col-inv <?php echo ($q_status['inv_status'] == 1 ? 'active-scenario' : ''); ?>" style="font-size: 11px; width: 112px; min-width: 112px;">
+                                        Tốt
+                                    </th>
+                                    <th class="text-center col-inv <?php echo ($q_status['inv_status'] == 2 ? 'active-scenario' : ''); ?>" style="font-size: 11px; width: 112px; min-width: 112px;">
+                                        Trung bình
+                                    </th>
+                                    <th class="text-center col-inv <?php echo ($q_status['inv_status'] == 3 ? 'active-scenario' : ''); ?>" style="font-size: 11px; width: 112px; min-width: 112px;">
+                                        Xấu
+                                    </th>
+                                    <th class="actual-col col-actual">Lương Gross</th><th class="actual-col col-actual">HĐ khác</th>
+                                    <th class="actual-col col-actual">Lương Gross</th><th class="actual-col col-actual">HĐ khác</th>
+                                    <th class="actual-col col-actual">Lương Gross</th><th class="actual-col col-actual">HĐ khác</th>
                                 </tr>
                             </thead>
                             <tbody id="budget-body">
@@ -580,8 +945,17 @@ function get_display_val($row, $values, $div_totals, $cat_totals, $month, $type)
                                 }
                                 ?>
                                 <tr class="row-total" data-type="grand-total">
-                                    <td class="text-center">#</td>
-                                    <td colspan="3">TỔNG CỘNG TOÀN BỘ</td>
+                                    <td class="text-center col-stt" style="background: #1e3a8a !important; color: white !important;">#</td>
+                                    <td class="col-block" style="background: #1e3a8a !important;"></td>
+                                    <td class="col-dept" style="background: #1e3a8a !important; color: white !important; font-weight: 700;">TỔNG CỘNG TOÀN BỘ</td>
+                                    <td class="col-vtkt" style="background: #1e3a8a !important;"></td>
+                                    <td class="col-owner" style="background: #1e3a8a !important;"></td>
+                                    <td class="text-right col-rec" style="background: #1e3a8a !important; color: white !important;"><?php echo format_vnd($grand_totals['_rev_']['rec_rev_good'] ?? 0); ?></td>
+                                    <td class="text-right col-rec" style="background: #1e3a8a !important; color: white !important;"><?php echo format_vnd($grand_totals['_rev_']['rec_rev_avg'] ?? 0); ?></td>
+                                    <td class="text-right col-rec" style="background: #1e3a8a !important; color: white !important;"><?php echo format_vnd($grand_totals['_rev_']['rec_rev_bad'] ?? 0); ?></td>
+                                    <td class="text-right col-inv" style="background: #1e3a8a !important; color: white !important;"><?php echo format_vnd($grand_totals['_rev_']['inv_rev_good'] ?? 0); ?></td>
+                                    <td class="text-right col-inv" style="background: #1e3a8a !important; color: white !important;"><?php echo format_vnd($grand_totals['_rev_']['inv_rev_avg'] ?? 0); ?></td>
+                                    <td class="text-right col-inv" style="background: #1e3a8a !important; color: white !important;"><?php echo format_vnd($grand_totals['_rev_']['inv_rev_bad'] ?? 0); ?></td>
                                     <?php 
                                     $gt_planned = $grand_totals[0]['planned'] ?? 0;
                                     $gt_actual_m1 = ($grand_totals[$months[0]]['actual_salary'] ?? 0) + ($grand_totals[$months[0]]['actual_other'] ?? 0);
@@ -590,14 +964,14 @@ function get_display_val($row, $values, $div_totals, $cat_totals, $month, $type)
                                     $gt_total_actual = $gt_actual_m1 + $gt_actual_m2 + $gt_actual_m3;
                                     $gt_percent = ($gt_planned > 0) ? ($gt_total_actual / $gt_planned) * 100 : 0;
                                     ?>
-                                    <td class="text-right" data-month="0" data-type="planned"><?php echo number_format($gt_planned, 0, ',', '.'); ?> đ</td>
-                                    <td class="text-right" data-month="<?php echo $months[0]; ?>" data-type="actual_salary"><?php echo number_format($grand_totals[$months[0]]['actual_salary'] ?? 0, 0, ',', '.'); ?> đ</td>
-                                    <td class="text-right" data-month="<?php echo $months[0]; ?>" data-type="actual_other"><?php echo number_format($grand_totals[$months[0]]['actual_other'] ?? 0, 0, ',', '.'); ?> đ</td>
-                                    <td class="text-right" data-month="<?php echo $months[1]; ?>" data-type="actual_salary"><?php echo number_format($grand_totals[$months[1]]['actual_salary'] ?? 0, 0, ',', '.'); ?> đ</td>
-                                    <td class="text-right" data-month="<?php echo $months[1]; ?>" data-type="actual_other"><?php echo number_format($grand_totals[$months[1]]['actual_other'] ?? 0, 0, ',', '.'); ?> đ</td>
-                                    <td class="text-right" data-month="<?php echo $months[2]; ?>" data-type="actual_salary"><?php echo number_format($grand_totals[$months[2]]['actual_salary'] ?? 0, 0, ',', '.'); ?> đ</td>
-                                    <td class="text-right" data-month="<?php echo $months[2]; ?>" data-type="actual_other"><?php echo number_format($grand_totals[$months[2]]['actual_other'] ?? 0, 0, ',', '.'); ?> đ</td>
-                                    <td class="text-right" style="color: #ffffff !important;">
+                                    <td class="text-right col-plan" data-month="0" data-type="planned" style="background: #1e3a8a !important; color: white !important; font-weight: 700;"><?php echo number_format($gt_planned, 0, ',', '.'); ?> đ</td>
+                                    <td class="text-right actual-col col-actual" data-month="<?php echo $months[0]; ?>" data-type="actual_salary" style="background: #1e3a8a !important; color: white !important;"><?php echo number_format($grand_totals[$months[0]]['actual_salary'] ?? 0, 0, ',', '.'); ?> đ</td>
+                                    <td class="text-right actual-col col-actual" data-month="<?php echo $months[0]; ?>" data-type="actual_other" style="background: #1e3a8a !important; color: white !important;"><?php echo number_format($grand_totals[$months[0]]['actual_other'] ?? 0, 0, ',', '.'); ?> đ</td>
+                                    <td class="text-right actual-col col-actual" data-month="<?php echo $months[1]; ?>" data-type="actual_salary" style="background: #1e3a8a !important; color: white !important;"><?php echo number_format($grand_totals[$months[1]]['actual_salary'] ?? 0, 0, ',', '.'); ?> đ</td>
+                                    <td class="text-right actual-col col-actual" data-month="<?php echo $months[1]; ?>" data-type="actual_other" style="background: #1e3a8a !important; color: white !important;"><?php echo number_format($grand_totals[$months[1]]['actual_other'] ?? 0, 0, ',', '.'); ?> đ</td>
+                                    <td class="text-right actual-col col-actual" data-month="<?php echo $months[2]; ?>" data-type="actual_salary" style="background: #1e3a8a !important; color: white !important;"><?php echo number_format($grand_totals[$months[2]]['actual_salary'] ?? 0, 0, ',', '.'); ?> đ</td>
+                                    <td class="text-right actual-col col-actual" data-month="<?php echo $months[2]; ?>" data-type="actual_other" style="background: #1e3a8a !important; color: white !important;"><?php echo number_format($grand_totals[$months[2]]['actual_other'] ?? 0, 0, ',', '.'); ?> đ</td>
+                                    <td class="text-right col-actual" style="background: #1e3a8a !important; color: white !important; font-weight: 700;">
                                         <?php echo number_format($gt_total_actual, 0, ',', '.'); ?> đ
                                     </td>
                                     <td class="actions-col"></td>
@@ -621,40 +995,52 @@ function get_display_val($row, $values, $div_totals, $cat_totals, $month, $type)
                                      $total_actual = $actual_m1 + $actual_m2 + $actual_m3;
                                      
                                      $percent = ($planned > 0) ? ($total_actual / $planned) * 100 : 0;
-                                     $bg_highlight = '';
+                                     $row_bg = '';
+                                     $data_bg = '';
                                      if ($row['type'] === 'division') {
                                          // Level 1: Sky Blue BG / Black Text (always)
-                                         $bg_highlight = 'background-color: #bfdbfe !important; color: #000000 !important; font-weight: 800; border-bottom: 2px solid #93c5fd;'; 
-                                         if ($percent > 100) $bg_highlight .= ' border-left: 6px solid #ef4444;'; 
-                                         elseif ($percent > 80) $bg_highlight .= ' border-left: 6px solid #f59e0b;'; 
+                                         $row_bg = 'background-color: #bfdbfe !important; color: #000000 !important; font-weight: 800; border-bottom: 2px solid #93c5fd;'; 
+                                         if ($percent > 100) { $row_bg .= ' border-left: 6px solid #ef4444;'; $data_bg = 'background-color: #ffcccc !important;'; }
+                                         elseif ($percent > 80) { $row_bg .= ' border-left: 6px solid #f59e0b;'; $data_bg = 'background-color: #fde047 !important;'; }
                                      } elseif ($row['type'] === 'category') {
                                          // Level 2: Slate BG / Black Text (always)
-                                         $bg_highlight = 'background-color: #f8fafc !important; color: #000000 !important; font-weight: 600; border-bottom: 1px dashed #cbd5e1;';
+                                         $row_bg = 'background-color: #f8fafc !important; color: #000000 !important; font-weight: 600; border-bottom: 1px dashed #cbd5e1;';
+                                         if ($percent > 100) { $data_bg = 'background-color: #ffcccc !important;'; }
+                                         elseif ($percent > 80) { $data_bg = 'background-color: #fde047 !important;'; }
                                      } else {
-                                         // Level 3: Item (Peach or Alerting BG) / Black Text (always)
-                                         if ($percent > 100) $bg_highlight = 'background-color: #fee2e2 !important; color: #000000 !important;'; 
-                                         elseif ($percent > 80) $bg_highlight = 'background-color: #fef3c7 !important; color: #000000 !important;';
-                                         else $bg_highlight = 'background-color: #fff7ed !important; color: #000000 !important; border-bottom: 1px dashed #fed7aa;'; 
+                                         // Level 3: Item (Peach BG) / Black Text (always)
+                                         $row_bg = 'background-color: #fff7ed !important; color: #000000 !important; border-bottom: 1px dashed #fed7aa;'; 
+                                         if ($percent > 100) $data_bg = 'background-color: #ffcccc !important;'; 
+                                         elseif ($percent > 80) $data_bg = 'background-color: #fde047 !important;';
                                      }
                                  ?>
                                  <tr class="<?php echo $row_class; ?>" 
-                                     style="<?php echo $bg_highlight; ?>"
+                                     style="<?php echo $row_bg; ?>"
                                      data-type="<?php echo $row['type']; ?>"
                                      data-div="<?php echo ($row['type'] === 'division' ? $this_name : $p_div); ?>"
                                      data-cat="<?php echo ($row['type'] === 'category' ? $this_name : $p_cat); ?>">
-                                     <?php $cell_style = ($row['type'] === 'division' ? 'background: transparent !important; color: inherit !important;' : ''); ?>
+                                     <?php $cell_style = ''; // Removed transparent background hack which broke sticky layering ?>
                                      
-                                     <td class="text-center" style="<?php echo $cell_style; ?>"><?php echo ($row['type'] === 'division' ? $idx : ''); ?></td>
-                                     <td style="font-weight: 600; <?php echo $cell_style; ?>"><?php echo ($row['type'] === 'division' ? htmlspecialchars($row['item_name']) : ''); ?></td>
-                                     <td style="padding-left: <?php echo ($row['type'] === 'category' ? '25px' : ($row['type'] === 'item' ? '45px' : '8px')); ?>; <?php echo $cell_style; ?>">
+                                     <td class="text-center col-stt" style="<?php echo $cell_style; ?>"><?php echo ($row['type'] === 'division' ? $idx : ''); ?></td>
+                                     <td class="col-block" style="font-weight: 600; <?php echo $cell_style; ?>">
+                                         <?php echo ($row['type'] !== 'division' ? htmlspecialchars($p_div) : ''); ?>
+                                     </td>
+                                     <td class="col-dept" style="padding-left: <?php echo ($row['type'] === 'category' ? '25px' : ($row['type'] === 'item' ? '45px' : '8px')); ?>; font-weight: 700; <?php echo $cell_style; ?>">
                                          <?php 
-                                            $prefix = '';
-                                            if ($row['type'] === 'category') $prefix = '• ';
-                                            if ($row['type'] === 'item') $prefix = '- ';
-                                            echo $prefix . htmlspecialchars($row['item_name']); 
+                                            if ($row['type'] === 'division') {
+                                                echo htmlspecialchars($row['item_name']);
+                                            } else {
+                                                $prefix = '';
+                                                if ($row['type'] === 'category') $prefix = '• ';
+                                                if ($row['type'] === 'item') $prefix = '- ';
+                                                echo $prefix . htmlspecialchars($row['item_name']); 
+                                            }
                                          ?>
                                      </td>
-                                     <td style="<?php echo $cell_style; ?>">
+                                     <td class="text-center col-vtkt" style="font-size: 11px; color: #64748b; font-weight: 600; <?php echo $cell_style; ?>">
+                                         <?php echo htmlspecialchars($row['acct_abbreviation'] ?? ''); ?>
+                                     </td>
+                                     <td class="col-owner" style="<?php echo $cell_style; ?>">
                                          <?php 
                                             $owner_parts = explode(' ', trim($row['owner'] ?? ''));
                                             echo htmlspecialchars($owner_parts[0]);
@@ -663,35 +1049,53 @@ function get_display_val($row, $values, $div_totals, $cat_totals, $month, $type)
                                      
                                      <?php $is_editable = ($row['type'] === 'item' ? 'editable-cell' : ''); ?>
                                      
-                                     <td class="text-right <?php echo $is_editable; ?>" data-iid="<?php echo $iid; ?>" data-month="0" data-type="planned" style="font-weight:700; <?php echo ($row['type'] === 'division' ? $cell_style : 'color:#0f172a;'); ?>">
+                                     <!-- Recognised Revenue Data -->
+                                     <?php $val = get_rev_val($row, $div_totals, $cat_totals, 'rec_rev_good'); ?>
+                                     <td class="text-right <?php echo $is_editable; ?> col-rec <?php echo ($q_status['rec_status'] == 1 ? 'active-scenario' : ''); ?>" data-iid="<?php echo $iid; ?>" data-month="0" data-type="rec_rev_good" style="font-size: 11px; <?php echo get_rev_bg_color($val, $planned, $rev_red, $rev_yellow, $rev_green); ?>"><?php echo format_vnd($val); ?></td>
+                                     <?php $val = get_rev_val($row, $div_totals, $cat_totals, 'rec_rev_avg'); ?>
+                                     <td class="text-right <?php echo $is_editable; ?> col-rec <?php echo ($q_status['rec_status'] == 2 ? 'active-scenario' : ''); ?>" data-iid="<?php echo $iid; ?>" data-month="0" data-type="rec_rev_avg" style="font-size: 11px; <?php echo get_rev_bg_color($val, $planned, $rev_red, $rev_yellow, $rev_green); ?>"><?php echo format_vnd($val); ?></td>
+                                     <?php $val = get_rev_val($row, $div_totals, $cat_totals, 'rec_rev_bad'); ?>
+                                     <td class="text-right <?php echo $is_editable; ?> col-rec <?php echo ($q_status['rec_status'] == 3 ? 'active-scenario' : ''); ?>" data-iid="<?php echo $iid; ?>" data-month="0" data-type="rec_rev_bad" style="font-size: 11px; <?php echo get_rev_bg_color($val, $planned, $rev_red, $rev_yellow, $rev_green); ?>"><?php echo format_vnd($val); ?></td>
+                                     
+                                     <!-- Invoiced Revenue Data -->
+                                     <?php $val = get_rev_val($row, $div_totals, $cat_totals, 'inv_rev_good'); ?>
+                                     <td class="text-right <?php echo $is_editable; ?> col-inv <?php echo ($q_status['inv_status'] == 1 ? 'active-scenario' : ''); ?>" data-iid="<?php echo $iid; ?>" data-month="0" data-type="inv_rev_good" style="font-size: 11px; <?php echo get_rev_bg_color($val, $planned, $rev_red, $rev_yellow, $rev_green); ?>"><?php echo format_vnd($val); ?></td>
+                                     <?php $val = get_rev_val($row, $div_totals, $cat_totals, 'inv_rev_avg'); ?>
+                                     <td class="text-right <?php echo $is_editable; ?> col-inv <?php echo ($q_status['inv_status'] == 2 ? 'active-scenario' : ''); ?>" data-iid="<?php echo $iid; ?>" data-month="0" data-type="inv_rev_avg" style="font-size: 11px; <?php echo get_rev_bg_color($val, $planned, $rev_red, $rev_yellow, $rev_green); ?>"><?php echo format_vnd($val); ?></td>
+                                     <?php $val = get_rev_val($row, $div_totals, $cat_totals, 'inv_rev_bad'); ?>
+                                     <td class="text-right <?php echo $is_editable; ?> col-inv <?php echo ($q_status['inv_status'] == 3 ? 'active-scenario' : ''); ?>" data-iid="<?php echo $iid; ?>" data-month="0" data-type="inv_rev_bad" style="font-size: 11px; <?php echo get_rev_bg_color($val, $planned, $rev_red, $rev_yellow, $rev_green); ?>"><?php echo format_vnd($val); ?></td>
+                                     
+                                     <?php $is_editable = ($row['type'] === 'item' ? 'editable-cell' : ''); ?>
+                                     
+                                     <td class="text-right <?php echo $is_editable; ?> col-plan" data-iid="<?php echo $iid; ?>" data-month="0" data-type="planned" style="font-weight:700; <?php echo ($row['type'] === 'division' ? '' : 'color:#0f172a;'); ?> <?php echo $data_bg; ?>">
                                          <?php echo format_vnd($planned); ?>
                                      </td>
                                      
-                                     <td class="text-right <?php echo $is_editable; ?> actual-col" data-iid="<?php echo $iid; ?>" data-month="<?php echo $months[0]; ?>" data-type="actual_salary" style="<?php echo $cell_style; ?>">
+                                     <td class="text-right <?php echo $is_editable; ?> actual-col col-actual" data-iid="<?php echo $iid; ?>" data-month="<?php echo $months[0]; ?>" data-type="actual_salary" style="<?php echo $data_bg; ?>">
                                          <?php echo format_vnd(get_display_val($row, $values, $div_totals, $cat_totals, $months[0], 'actual_salary')); ?>
                                      </td>
-                                     <td class="text-right <?php echo $is_editable; ?> actual-col" data-iid="<?php echo $iid; ?>" data-month="<?php echo $months[0]; ?>" data-type="actual_other" style="<?php echo $cell_style; ?>">
+                                     <td class="text-right <?php echo $is_editable; ?> actual-col col-actual" data-iid="<?php echo $iid; ?>" data-month="<?php echo $months[0]; ?>" data-type="actual_other" style="<?php echo $data_bg; ?>">
                                          <?php echo format_vnd(get_display_val($row, $values, $div_totals, $cat_totals, $months[0], 'actual_other')); ?>
                                      </td>
  
-                                     <td class="text-right <?php echo $is_editable; ?> actual-col" data-iid="<?php echo $iid; ?>" data-month="<?php echo $months[1]; ?>" data-type="actual_salary" style="<?php echo $cell_style; ?>">
+                                     <td class="text-right <?php echo $is_editable; ?> actual-col col-actual" data-iid="<?php echo $iid; ?>" data-month="<?php echo $months[1]; ?>" data-type="actual_salary" style="<?php echo $data_bg; ?>">
                                          <?php echo format_vnd(get_display_val($row, $values, $div_totals, $cat_totals, $months[1], 'actual_salary')); ?>
                                      </td>
-                                     <td class="text-right <?php echo $is_editable; ?> actual-col" data-iid="<?php echo $iid; ?>" data-month="<?php echo $months[1]; ?>" data-type="actual_other" style="<?php echo $cell_style; ?>">
+                                     <td class="text-right <?php echo $is_editable; ?> actual-col col-actual" data-iid="<?php echo $iid; ?>" data-month="<?php echo $months[1]; ?>" data-type="actual_other" style="<?php echo $data_bg; ?>">
                                          <?php echo format_vnd(get_display_val($row, $values, $div_totals, $cat_totals, $months[1], 'actual_other')); ?>
                                      </td>
  
-                                     <td class="text-right <?php echo $is_editable; ?> actual-col" data-iid="<?php echo $iid; ?>" data-month="<?php echo $months[2]; ?>" data-type="actual_salary" style="<?php echo $cell_style; ?>">
+                                     <td class="text-right <?php echo $is_editable; ?> actual-col col-actual" data-iid="<?php echo $iid; ?>" data-month="<?php echo $months[2]; ?>" data-type="actual_salary" style="<?php echo $data_bg; ?>">
                                          <?php echo format_vnd(get_display_val($row, $values, $div_totals, $cat_totals, $months[2], 'actual_salary')); ?>
                                      </td>
-                                     <td class="text-right <?php echo $is_editable; ?> actual-col" data-iid="<?php echo $iid; ?>" data-month="<?php echo $months[2]; ?>" data-type="actual_other" style="<?php echo $cell_style; ?>">
+                                     <td class="text-right <?php echo $is_editable; ?> actual-col col-actual" data-iid="<?php echo $iid; ?>" data-month="<?php echo $months[2]; ?>" data-type="actual_other" style="<?php echo $data_bg; ?>">
                                          <?php echo format_vnd(get_display_val($row, $values, $div_totals, $cat_totals, $months[2], 'actual_other')); ?>
                                      </td>
                                      
-                                     <td class="text-right actual-col" style="font-weight:700; width:120px; <?php echo $cell_style; ?>">
+                                     <td class="text-right actual-col col-actual" style="font-weight:700; width:120px; <?php echo $data_bg; ?>">
                                          <?php echo format_vnd($total_actual); ?>
                                      </td>
-
+ 
                                      <td class="text-center actions-col" style="white-space:nowrap; <?php echo $cell_style; ?>">
                                          <button onclick='editStructure(<?php echo json_encode($row); ?>)' style="background:none; border:none; cursor:pointer;" title="Sửa">✏️</button>
                                          <button onclick='deleteStructure(<?php echo $row['id']; ?>)' style="background:none; border:none; cursor:pointer;" title="Xóa">🗑️</button>
@@ -869,24 +1273,26 @@ function get_display_val($row, $values, $div_totals, $cat_totals, $month, $type)
                 
                 <div style="margin-bottom:15px;" id="divGroup">
                     <label style="display:block; font-size:13px; font-weight:600; margin-bottom:5px; color:#475569;">Khối cha (Level 1)</label>
-                    <input type="text" name="division" id="modalDivision" list="div-list" placeholder="Chọn hoặc nhập mới..." class="form-control" style="width:100%; padding:10px; border:1px solid #cbd5e1; border-radius:8px;">
-                    <datalist id="div-list">
-                        <?php 
-                        $unique_divs = array_unique(array_filter(array_column($structure, 'division')));
-                        foreach ($unique_divs as $ud) echo "<option value='".htmlspecialchars($ud)."'>";
-                        ?>
-                    </datalist>
+                    <div style="position:relative;">
+                        <input type="text" name="division" id="modalDivision" autocomplete="off" placeholder="Chọn hoặc nhập mới..." class="form-control" style="width:100%; padding:10px 30px 10px 10px; border:1px solid #cbd5e1; border-radius:8px;" 
+                               onfocus="showCustomDropdown('modalDivision', 'div-dropdown', ALL_DIVS)" 
+                               oninput="showCustomDropdown('modalDivision', 'div-dropdown', ALL_DIVS)" 
+                               onblur="setTimeout(()=>document.getElementById('div-dropdown').style.display='none', 200)">
+                        <button type="button" tabindex="-1" onclick="document.getElementById('modalDivision').value=''; showCustomDropdown('modalDivision', 'div-dropdown', ALL_DIVS); document.getElementById('modalDivision').focus(); document.getElementById('modalCategory').value = '';" style="position:absolute; right:5px; top:50%; transform:translateY(-50%); background:none; border:none; color:#cbd5e1; font-size:18px; cursor:pointer; padding:5px;">&times;</button>
+                        <div id="div-dropdown" style="display:none; position:absolute; top:100%; left:0; right:0; background:#fff; border:1px solid #cbd5e1; border-radius:8px; box-shadow:0 10px 25px rgba(0,0,0,0.1); z-index:100; max-height:200px; overflow-y:auto; margin-top:5px;"></div>
+                    </div>
                 </div>
                 
                 <div style="margin-bottom:15px;" id="catGroup">
                     <label style="display:block; font-size:13px; font-weight:600; margin-bottom:5px; color:#475569;">Bộ phận cha (Level 2)</label>
-                    <input type="text" name="category" id="modalCategory" list="cat-list" placeholder="Chọn hoặc nhập mới..." class="form-control" style="width:100%; padding:10px; border:1px solid #cbd5e1; border-radius:8px;">
-                    <datalist id="cat-list">
-                        <?php 
-                        $unique_cats = array_unique(array_filter(array_column($structure, 'category')));
-                        foreach ($unique_cats as $uc) echo "<option value='".htmlspecialchars($uc)."'>";
-                        ?>
-                    </datalist>
+                    <div style="position:relative;">
+                        <input type="text" name="category" id="modalCategory" autocomplete="off" placeholder="Chọn hoặc nhập mới..." class="form-control" style="width:100%; padding:10px 30px 10px 10px; border:1px solid #cbd5e1; border-radius:8px;"
+                               onfocus="showCustomDropdown('modalCategory', 'cat-dropdown', ALL_CATS)" 
+                               oninput="showCustomDropdown('modalCategory', 'cat-dropdown', ALL_CATS)" 
+                               onblur="setTimeout(()=>document.getElementById('cat-dropdown').style.display='none', 200)">
+                        <button type="button" tabindex="-1" onclick="document.getElementById('modalCategory').value=''; showCustomDropdown('modalCategory', 'cat-dropdown', ALL_CATS); document.getElementById('modalCategory').focus();" style="position:absolute; right:5px; top:50%; transform:translateY(-50%); background:none; border:none; color:#cbd5e1; font-size:18px; cursor:pointer; padding:5px;">&times;</button>
+                        <div id="cat-dropdown" style="display:none; position:absolute; top:100%; left:0; right:0; background:#fff; border:1px solid #cbd5e1; border-radius:8px; box-shadow:0 10px 25px rgba(0,0,0,0.1); z-index:100; max-height:200px; overflow-y:auto; margin-top:5px;"></div>
+                    </div>
                 </div>
                 
                 <div style="margin-bottom:15px;">
@@ -896,12 +1302,19 @@ function get_display_val($row, $values, $div_totals, $cat_totals, $month, $type)
                 
                 <div style="margin-bottom:15px;">
                     <label style="display:block; font-size:13px; font-weight:600; margin-bottom:5px; color:#475569;">Owner (Người phụ trách)</label>
-                    <input type="text" name="owner" id="modalOwner" list="user-list" placeholder="Chọn từ danh sách user..." class="form-control" style="width:100%; padding:10px; border:1px solid #cbd5e1; border-radius:8px;">
-                    <datalist id="user-list">
-                        <?php foreach ($users as $u): ?>
-                            <option value="<?php echo htmlspecialchars($u['full_name']); ?>">
-                        <?php endforeach; ?>
-                    </datalist>
+                    <div style="position:relative;">
+                        <input type="text" name="owner" id="modalOwner" autocomplete="off" placeholder="Chọn từ danh sách user..." class="form-control" style="width:100%; padding:10px 30px 10px 10px; border:1px solid #cbd5e1; border-radius:8px;"
+                               onfocus="showCustomDropdown('modalOwner', 'user-dropdown', ALL_USERS)" 
+                               oninput="showCustomDropdown('modalOwner', 'user-dropdown', ALL_USERS)" 
+                               onblur="setTimeout(()=>document.getElementById('user-dropdown').style.display='none', 200)">
+                        <button type="button" tabindex="-1" onclick="document.getElementById('modalOwner').value=''; showCustomDropdown('modalOwner', 'user-dropdown', ALL_USERS); document.getElementById('modalOwner').focus();" style="position:absolute; right:5px; top:50%; transform:translateY(-50%); background:none; border:none; color:#cbd5e1; font-size:18px; cursor:pointer; padding:5px;">&times;</button>
+                        <div id="user-dropdown" style="display:none; position:absolute; top:100%; left:0; right:0; background:#fff; border:1px solid #cbd5e1; border-radius:8px; box-shadow:0 10px 25px rgba(0,0,0,0.1); z-index:100; max-height:200px; overflow-y:auto; margin-top:5px;"></div>
+                    </div>
+                </div>
+                
+                <div style="margin-bottom:15px;" id="acctAbbrGroup">
+                    <label style="display:block; font-size:13px; font-weight:600; margin-bottom:5px; color:#475569;">Khoản mục Viết tắt theo Kế toán</label>
+                    <input type="text" name="acct_abbreviation" id="modalAcctAbbr" placeholder="Ví dụ: Lương, HĐ khác..." class="form-control" style="width:100%; padding:10px; border:1px solid #cbd5e1; border-radius:8px;">
                 </div>
 
                 <div style="margin-bottom:15px;">
@@ -917,7 +1330,165 @@ function get_display_val($row, $values, $div_totals, $cat_totals, $month, $type)
         </div>
     </div>
 
+    <?php if ($is_admin): ?>
+    <!-- Revenue Alert Settings Modal -->
+    <div id="revSettingsModal" class="modal" style="display:none; position:fixed; z-index:1000; left:0; top:0; width:100%; height:100%; background:rgba(0,0,0,0.5);">
+        <div style="background:#fff; margin:5% auto; padding:25px; width:450px; border-radius:12px; box-shadow:0 10px 30px rgba(0,0,0,0.2);">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
+                <h3 style="margin:0; font-size:18px; color:#1e293b;">Cấu hình màu Cảnh báo</h3>
+                <button onclick="document.getElementById('revSettingsModal').style.display='none'" style="background:none; border:none; font-size:24px; cursor:pointer; color:#94a3b8;">&times;</button>
+            </div>
+            <form onsubmit="saveRevSettings(event)">
+                <div style="margin-bottom:15px;">
+                    <label style="display:block; font-size:13px; font-weight:600; margin-bottom:5px; color:#991b1b;">Màu Đỏ (&lt;= X%)</label>
+                    <input type="number" id="set_red" value="<?php echo $rev_red; ?>" class="form-control" style="width:100%; padding:10px; border:1px solid #cbd5e1; border-radius:8px;">
+                </div>
+                <div style="margin-bottom:15px;">
+                    <label style="display:block; font-size:13px; font-weight:600; margin-bottom:5px; color:#854d0e;">Màu Vàng (&lt;= Y%)</label>
+                    <input type="number" id="set_yellow" value="<?php echo $rev_yellow; ?>" class="form-control" style="width:100%; padding:10px; border:1px solid #cbd5e1; border-radius:8px;">
+                </div>
+                <div style="margin-bottom:15px;">
+                    <label style="display:block; font-size:13px; font-weight:600; margin-bottom:5px; color:#166534;">Màu Xanh (&lt;= Z%) <br><span style="color:#6b21a8; font-weight: 500;">(Lớn hơn Z% là màu Tím)</span></label>
+                    <input type="number" id="set_green" value="<?php echo $rev_green; ?>" class="form-control" style="width:100%; padding:10px; border:1px solid #cbd5e1; border-radius:8px;">
+                </div>
+                <div style="display:flex; justify-content:flex-end; gap:12px; margin-top:20px;">
+                    <button type="submit" style="padding:10px 20px; background:#4f46e5; border:none; border-radius:8px; font-weight:600; color:#fff; cursor:pointer;">Lưu cài đặt</button>
+                </div>
+            </form>
+        </div>
+    </div>
+    <?php endif; ?>
+
     <script>
+        const REV_THRESHOLDS = {
+            red: <?php echo $rev_red; ?>,
+            yellow: <?php echo $rev_yellow; ?>,
+            green: <?php echo $rev_green; ?>
+        };
+
+        function openRevSettingsModal() {
+            document.getElementById('revSettingsModal').style.display = 'block';
+        }
+        function saveRevSettings(e) {
+            e.preventDefault();
+            const fd = new FormData();
+            fd.append('action', 'save_rev_settings');
+            fd.append('red', document.getElementById('set_red').value);
+            fd.append('yellow', document.getElementById('set_yellow').value);
+            fd.append('green', document.getElementById('set_green').value);
+            fetch(location.href, { method: 'POST', body: fd })
+            .then(async r => {
+                const text = await r.text();
+                try {
+                    return JSON.parse(text);
+                } catch(err) {
+                    console.error("Lỗi Parse JSON:", text);
+                    throw new Error("Dữ liệu trả về không đúng định dạng. F12 kiểm tra console.");
+                }
+            })
+            .then(res => {
+                if(res.success) location.reload();
+                else alert('Lỗi: '+ res.error);
+            })
+            .catch(err => alert("Lỗi hệ thống: " + err.message));
+        }
+
+        function updateRevenueStatusGlobal(section, status) {
+            const fd = new FormData();
+            fd.append('action', 'update_revenue_status');
+            fd.append('section', section);
+            fd.append('status', status);
+
+            fetch(location.href, { method: 'POST', body: fd })
+            .then(r => r.json())
+            .then(res => {
+                if(res.success) location.reload();
+                else alert('Lỗi: ' + (res.error || 'Thao tác thất bại'));
+            });
+        }
+
+        <?php 
+        $all_unique_divs = [];
+        foreach ($structure as $row) {
+            if ($row['type'] === 'division' && trim($row['item_name']) !== '') {
+                $all_unique_divs[] = trim($row['item_name']);
+            }
+            if (trim($row['division']) !== '') {
+                $all_unique_divs[] = trim($row['division']);
+            }
+        }
+        $unique_divs = array_unique($all_unique_divs);
+        ?>
+        const ALL_DIVS = <?php echo json_encode(array_values($unique_divs)); ?>;
+        const ALL_USERS = <?php echo json_encode(array_values(array_column($users, 'full_name'))); ?>;
+        const CAT_BY_DIV = <?php echo json_encode($div_cat_map_for_js); ?>;
+        const ALL_CATS = <?php echo json_encode($all_cats_for_js); ?>;
+        
+        const normalizeStr = s => (s||'').toLowerCase().replace(/\s+/g, ' ').trim();
+        const CAT_BY_DIV_LOWER = {};
+        for(let k in CAT_BY_DIV) CAT_BY_DIV_LOWER[normalizeStr(k)] = CAT_BY_DIV[k];
+
+        function showCustomDropdown(inputId, listId, dataArray) {
+            const input = document.getElementById(inputId);
+            const drop = document.getElementById(listId);
+            const type = document.getElementById('modalType').value;
+            const val = input.value.trim().toLowerCase();
+            
+            let sourceArray = dataArray;
+            
+            // Only apply strict filtering logic for categories when adding/editing a level 3 item
+            if (inputId === 'modalCategory' && type === 'item') {
+                const divInputRaw = document.getElementById('modalDivision').value;
+                const divInput = normalizeStr(divInputRaw);
+                
+                if (divInput && CAT_BY_DIV_LOWER[divInput]) {
+                    sourceArray = CAT_BY_DIV_LOWER[divInput];
+                } else if (divInput) {
+                    sourceArray = []; // strict filtering: unknown division means no known categories
+                } else {
+                    sourceArray = ALL_CATS; // fallback
+                }
+            }
+
+            const filtered = sourceArray.filter(x => x.toLowerCase().includes(val));
+            drop.innerHTML = '';
+            
+            if (filtered.length === 0) {
+                drop.style.display = 'none';
+                return;
+            }
+            
+            filtered.forEach(item => {
+                const el = document.createElement('div');
+                el.textContent = item;
+                el.style.padding = '10px 15px';
+                el.style.cursor = 'pointer';
+                el.style.fontSize = '13px';
+                el.style.color = '#334155';
+                el.style.borderBottom = '1px solid #f8fafc';
+                el.style.transition = 'background 0.2s';
+                
+                el.onmouseover = () => el.style.background = '#f1f5f9';
+                el.onmouseout = () => el.style.background = '#fff';
+                el.onmousedown = (e) => { 
+                    e.preventDefault(); // Prevents input blur from firing before click registers
+                    input.value = item;
+                    drop.style.display = 'none';
+                    if (inputId === 'modalDivision') {
+                        // clear category if division changes
+                        document.getElementById('modalCategory').value = '';
+                    }
+                };
+                drop.appendChild(el);
+            });
+            
+            drop.style.display = 'block';
+        }
+
+        function updateCatDatalist() {
+            // Deprecated logic. Now handled directly in showCustomDropdown
+        }
+
         const structureModal = document.getElementById('structureModal');
         const structureForm = document.getElementById('structureForm');
 
@@ -927,6 +1498,7 @@ function get_display_val($row, $values, $div_totals, $cat_totals, $month, $type)
             document.getElementById('modalId').value = '';
             structureForm.reset();
             toggleModalFields();
+            updateCatDatalist();
             structureModal.style.display = 'block';
         }
 
@@ -939,8 +1511,10 @@ function get_display_val($row, $values, $div_totals, $cat_totals, $month, $type)
             document.getElementById('modalCategory').value = row.category || '';
             document.getElementById('modalName').value = row.item_name;
             document.getElementById('modalOwner').value = row.owner || '';
+            document.getElementById('modalAcctAbbr').value = row.acct_abbreviation || '';
             document.getElementById('modalOrder').value = row.order_num;
             toggleModalFields();
+            updateCatDatalist();
             structureModal.style.display = 'block';
         }
 
@@ -952,17 +1526,23 @@ function get_display_val($row, $values, $div_totals, $cat_totals, $month, $type)
             const type = document.getElementById('modalType').value;
             const divGrp = document.getElementById('divGroup');
             const catGrp = document.getElementById('catGroup');
+            const acctGrp = document.getElementById('acctAbbrGroup');
             
             if (type === 'division') {
                 divGrp.style.display = 'none';
                 catGrp.style.display = 'none';
+                acctGrp.style.display = 'none';
             } else if (type === 'category') {
                 divGrp.style.display = 'block';
                 catGrp.style.display = 'none';
+                acctGrp.style.display = 'none';
             } else {
                 divGrp.style.display = 'block';
                 catGrp.style.display = 'block';
+                acctGrp.style.display = 'block';
             }
+            // Ensure datalist refilters if type changes
+            updateCatDatalist();
         }
 
         function deleteStructure(id) {
@@ -1002,8 +1582,24 @@ function get_display_val($row, $values, $div_totals, $cat_totals, $month, $type)
             .then(data => {
                 if (data.success) {
                     cell.innerText = formatVND(amount);
-                    cell.style.backgroundColor = '#dcfce7';
-                    setTimeout(() => cell.style.backgroundColor = '', 1000);
+                    if (type.startsWith('rec_rev') || type.startsWith('inv_rev')) {
+                        const row = cell.closest('tr');
+                        const planCell = row.querySelector('.col-plan');
+                        const planVal = parseInt(planCell.innerText.replace(/[^\d]/g, '')) || 0;
+                        if (planVal > 0 && amount > 0) {
+                            const pct = (amount / planVal) * 100;
+                            cell.style.cssText = '';
+                            if (pct > REV_THRESHOLDS.green) cell.style.cssText = 'background-color: #f3e8ff !important; color: #6b21a8 !important; font-weight: bold; border: 1px dashed #d8b4fe !important; outline: 1px solid #d8b4fe;';
+                            else if (pct > REV_THRESHOLDS.yellow) cell.style.cssText = 'background-color: #dcfce7 !important; color: #166534 !important; font-weight: bold; border: 1px dashed #bbf7d0 !important; outline: 1px solid #bbf7d0;';
+                            else if (pct > REV_THRESHOLDS.red) cell.style.cssText = 'background-color: #fef08a !important; color: #854d0e !important; font-weight: bold; border: 1px dashed #fde047 !important; outline: 1px solid #fde047;';
+                            else cell.style.cssText = 'background-color: #fee2e2 !important; color: #991b1b !important; font-weight: bold; border: 1px dashed #fecaca !important; outline: 1px solid #fecaca;';
+                        } else {
+                            cell.style.cssText = '';
+                        }
+                    } else {
+                        cell.style.backgroundColor = '#dcfce7';
+                        setTimeout(() => cell.style.backgroundColor = '', 1000);
+                    }
                     const row = cell.closest('tr');
                     recalculateRowHierarchy(row.dataset.div, row.dataset.cat, month, type);
                 }
@@ -1082,11 +1678,30 @@ function get_display_val($row, $values, $div_totals, $cat_totals, $month, $type)
             });
         });
 
+        function updateSuperHeaders() {
+            ['info', 'income', 'exp'].forEach(shId => {
+                const sh = document.getElementById('sh-' + shId);
+                if (sh) {
+                    let span = 0;
+                    document.querySelectorAll(`th[data-sh="${shId}"]`).forEach(th => {
+                        const isHiddenByToggle = th.classList.contains('col-hidden');
+                        const style = window.getComputedStyle(th);
+                        if (!isHiddenByToggle && style.display !== 'none') {
+                            span += th.colSpan || 1;
+                        }
+                    });
+                    sh.colSpan = span;
+                    sh.style.display = span > 0 ? 'table-cell' : 'none';
+                }
+            });
+        }
+
         function togglePlanningMode(active) {
             const table = document.querySelector('.budget-table');
             if (active) table.classList.add('planning-active');
             else table.classList.remove('planning-active');
             localStorage.setItem('budget_planning_mode', active);
+            updateSuperHeaders();
         }
 
         function toggleEditingMode(active) {
@@ -1094,6 +1709,7 @@ function get_display_val($row, $values, $div_totals, $cat_totals, $month, $type)
             if (active) table.classList.add('editing-active');
             else table.classList.remove('editing-active');
             localStorage.setItem('budget_editing_mode', active);
+            updateSuperHeaders();
         }
 
         // Initialize modes on load
@@ -1138,6 +1754,47 @@ function get_display_val($row, $values, $div_totals, $cat_totals, $month, $type)
             link.download = "Budget_Plan_<?php echo $current_year; ?>_Q<?php echo $current_quarter; ?>.csv";
             link.click();
         }
+        
+        function toggleCol(colClass, show) {
+            document.querySelectorAll('.' + colClass).forEach(el => {
+                if (show) el.classList.remove('col-hidden');
+                else el.classList.add('col-hidden');
+            });
+            
+            // Handle sticky gaps
+            const table = document.querySelector('.budget-table');
+            if (colClass === 'col-block') {
+                if (!show) table.classList.add('block-hidden');
+                else table.classList.remove('block-hidden');
+             }
+            
+            localStorage.setItem('budget_col_' + colClass, show);
+            updateSuperHeaders();
+        }
+
+        function initColumnVisibility() {
+            const cols = ['col-block', 'col-vtkt', 'col-owner', 'col-rec', 'col-inv', 'col-plan', 'col-actual'];
+            cols.forEach(c => {
+                const state = localStorage.getItem('budget_col_' + c);
+                if (state !== null) {
+                    const isChecked = state === 'true';
+                    toggleCol(c, isChecked);
+                    // Update checkbox in settings
+                    const cb = document.querySelector(`input[onchange*="${c}"]`);
+                    if (cb) cb.checked = isChecked;
+                }
+            });
+            
+            // Initial sticky check
+            const table = document.querySelector('.budget-table');
+            if (localStorage.getItem('budget_col_col-block') === 'false') {
+                table.classList.add('block-hidden');
+            }
+            
+            updateSuperHeaders();
+        }
+
+        window.addEventListener('DOMContentLoaded', initColumnVisibility);
     </script>
 </body>
 </html>

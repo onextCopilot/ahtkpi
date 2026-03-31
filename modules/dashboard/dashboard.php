@@ -14,10 +14,13 @@ $full_name = $_SESSION['full_name'];
 $role = $_SESSION['role'];
 $avatar = $_SESSION['avatar'] ?? null;
 
-// Get total users count
-$total_users_query = "SELECT COUNT(*) as total FROM users";
-$total_users_result = $conn->query($total_users_query);
-$total_users = $total_users_result->fetch_assoc()['total'];
+// Get total users count (Admin only)
+$total_users = 0;
+if ($role === 'admin') {
+    $total_users_query = "SELECT COUNT(*) as total FROM users";
+    $total_users_result = $conn->query($total_users_query);
+    $total_users = $total_users_result->fetch_assoc()['total'] ?? 0;
+}
 
 // Filter parameters
 $filter_year = isset($_GET['year']) ? (int) $_GET['year'] : 0;
@@ -139,10 +142,19 @@ foreach ($teams_data as $t => $d) {
     $chart_unpaid[] = $d['unpaid'] ?? 0;
 }
 
-// Fetch KPI Data
+// Fetch KPI Data (Filtered for non-admins)
 $kpi_dept_names = [];
 $kpi_counts = [];
 $kpi_weights = [];
+$kpi_where = "WHERE 1=1";
+
+if ($role !== 'admin') {
+    // Only show user's department
+    $res_u = $conn->query("SELECT department_id FROM users WHERE id = $user_id");
+    $u_dept = $res_u->fetch_assoc()['department_id'] ?? 0;
+    $kpi_where .= " AND d.id = $u_dept";
+}
+
 $kpi_join_condition = "d.id = k.department_id";
 if ($filter_year > 0) {
     $kpi_join_condition .= " AND k.year = $filter_year";
@@ -154,6 +166,7 @@ $res_kpi = $conn->query("
                COALESCE(SUM(k.weight), 0) AS total_weight
         FROM departments d
         LEFT JOIN kpi_definitions k ON $kpi_join_condition
+        $kpi_where
         GROUP BY d.id
         ORDER BY d.sort_order ASC, d.id ASC
     ");
@@ -223,6 +236,25 @@ $coffset = ($cpage - 1) * $climit;
 
 $paged_customers = array_slice($new_customers, $coffset, $climit);
 
+// Fetch Plan & Budgeting Data (Filtered by Owner if not admin)
+$pb_where = "WHERE 1=1";
+if ($role !== 'admin') {
+    $pb_where .= " AND bs.owner = '" . $conn->real_escape_string($full_name) . "'";
+}
+// Add time filters if applicable
+if ($filter_year > 0) $pb_where .= " AND bv.year = $filter_year";
+
+$pb_res = $conn->query("
+    SELECT 
+        SUM(CASE WHEN bv.value_type = 'Plan' THEN bv.amount ELSE 0 END) as total_plan,
+        SUM(CASE WHEN bv.value_type = 'Actual' THEN bv.amount ELSE 0 END) as total_actual
+    FROM budget_values bv
+    JOIN budget_structure bs ON bv.item_id = bs.id
+    $pb_where
+");
+$pb_data = $pb_res->fetch_assoc();
+$dashboard_total_plan = (float)($pb_data['total_plan'] ?? 0);
+$dashboard_total_actual = (float)($pb_data['total_actual'] ?? 0);
 
 ?>
 <!DOCTYPE html>
@@ -300,6 +332,7 @@ $paged_customers = array_slice($new_customers, $coffset, $climit);
 
                 <!-- Stats Cards -->
                 <div class="stats-grid">
+                    <?php if ($role === 'admin'): ?>
                     <div class="stat-card">
                         <div class="stat-icon blue">
                             <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -311,12 +344,13 @@ $paged_customers = array_slice($new_customers, $coffset, $climit);
                             </svg>
                         </div>
                         <div class="stat-content">
-                            <h3>Total Users</h3>
+                            <h3>Total Employees</h3>
                             <p class="stat-number">
                                 <?php echo $total_users; ?>
                             </p>
                         </div>
                     </div>
+                    <?php endif; ?>
 
                     <div class="stat-card">
                         <div class="stat-icon purple">
@@ -361,6 +395,37 @@ $paged_customers = array_slice($new_customers, $coffset, $climit);
                             <h3>Pending (VND)</h3>
                             <p style="font-size: 1.1rem; font-weight: 700; color: #dc2626; margin: 0;">
                                 <?php echo number_format($total_unpaid_vnd, 0, ',', '.'); ?> ₫
+                            </p>
+                        </div>
+                    </div>
+
+                    <!-- Plan & Budget Stats -->
+                    <div class="stat-card">
+                        <div class="stat-icon blue">
+                            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M12 2v20"></path>
+                                <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path>
+                            </svg>
+                        </div>
+                        <div class="stat-content">
+                            <h3>Your Total Plan</h3>
+                            <p style="font-size: 1.1rem; font-weight: 700; color: #2563eb; margin: 0;">
+                                <?php echo number_format($dashboard_total_plan, 0, ',', '.'); ?> ₫
+                            </p>
+                        </div>
+                    </div>
+
+                    <div class="stat-card" style="border-left: 4px solid #7c3aed;">
+                        <div class="stat-icon purple">
+                             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <polyline points="23 6 13.5 15.5 8.5 10.5 1 18"></polyline>
+                                <polyline points="17 6 23 6 23 12"></polyline>
+                            </svg>
+                        </div>
+                        <div class="stat-content">
+                            <h3>Actual Spend</h3>
+                            <p style="font-size: 1.1rem; font-weight: 700; color: #7c3aed; margin: 0;">
+                                <?php echo number_format($dashboard_total_actual, 0, ',', '.'); ?> ₫
                             </p>
                         </div>
                     </div>
