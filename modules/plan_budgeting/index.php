@@ -88,6 +88,26 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
         exit();
     }
 
+    if ($action === 'save_cost_settings') {
+        if (!$is_admin) { echo json_encode(['success' => false, 'error' => 'Permission denied']); exit(); }
+        $yellow = floatval($_POST['yellow'] ?? 80);
+        $red = floatval($_POST['red'] ?? 100);
+        
+        $stmt = $conn->prepare("INSERT INTO system_settings (setting_key, setting_value) VALUES (?, ?) ON DUPLICATE KEY UPDATE setting_value = ?");
+        
+        $keys = ['budget_cost_yellow' => $yellow, 'budget_cost_red' => $red];
+        foreach ($keys as $k => $v) {
+            $v_str = (string)$v;
+            $stmt->bind_param("sss", $k, $v_str, $v_str);
+            if (!$stmt->execute()) {
+                echo json_encode(['success' => false, 'error' => $stmt->error]);
+                exit();
+            }
+        }
+        echo json_encode(['success' => true]);
+        exit();
+    }
+
     if ($action === 'update_value') {
         $item_id = intval($_POST['item_id']);
         $month = intval($_POST['month']);
@@ -259,6 +279,12 @@ $res = $conn->query("SELECT * FROM budget_structure ORDER BY order_num ASC, id A
 while ($row = $res->fetch_assoc()) $raw_structure[] = $row;
 
 // --- ENSURE DB SCHEMA (v6 - Multi-Quarter support) ---
+$conn->query("CREATE TABLE IF NOT EXISTS system_settings (
+    setting_key VARCHAR(255) PRIMARY KEY,
+    setting_value TEXT,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;");
+
 $conn->query("SET @col_exists = (SELECT COUNT(*) FROM information_schema.columns WHERE table_name = 'budget_structure' AND table_schema = DATABASE() AND column_name = 'year');");
 $conn->query("SET @sql = IF(@col_exists = 0, 'ALTER TABLE budget_structure ADD COLUMN year INT DEFAULT 2026 AFTER id', 'SELECT 1');");
 $conn->query("PREPARE stmt FROM @sql;");
@@ -540,7 +566,7 @@ function get_display_val($row, $values, $div_totals, $cat_totals, $month, $type)
 
 // --- LOAD REVENUE THRESHOLDS ---
 $settings_map = [];
-$res_set = $conn->query("SELECT setting_key, setting_value FROM system_settings WHERE setting_key LIKE 'budget_rev_%'");
+$res_set = $conn->query("SELECT setting_key, setting_value FROM system_settings WHERE setting_key LIKE 'budget_%'");
 if ($res_set) {
     while ($r = $res_set->fetch_assoc()) {
         $settings_map[$r['setting_key']] = floatval($r['setting_value']);
@@ -549,6 +575,9 @@ if ($res_set) {
 $rev_red = $settings_map['budget_rev_red'] ?? 50;
 $rev_yellow = $settings_map['budget_rev_yellow'] ?? 80;
 $rev_green = $settings_map['budget_rev_green'] ?? 100;
+
+$cost_yellow = $settings_map['budget_cost_yellow'] ?? 80;
+$cost_red = $settings_map['budget_cost_red'] ?? 100;
 
 function get_rev_bg_color($val, $planned, $red, $yellow, $green) {
     if ($val == 0 || $planned == 0) return '';
@@ -795,6 +824,7 @@ function get_rev_bg_color($val, $planned, $red, $yellow, $green) {
                         <button class="btn-primary" onclick="openModal()" style="background: white; color: #0f172a; border: 1px solid #e2e8f0;">+ Quản lý cấu trúc</button>
                         <?php if ($is_admin): ?>
                             <button class="btn-primary" onclick="openRevSettingsModal()" style="background: white; color: #4338ca; border: 1px solid #c7d2fe;">&#9881; Cảnh báo DT</button>
+                            <button class="btn-primary" onclick="openCostSettingsModal()" style="background: white; color: #991b1b; border: 1px solid #fecaca; margin-left: 8px;">&#9881; Cảnh báo CP</button>
                         <?php endif; ?>
                     </div>
                 </div>
@@ -1000,18 +1030,18 @@ function get_rev_bg_color($val, $planned, $red, $yellow, $green) {
                                      if ($row['type'] === 'division') {
                                          // Level 1: Sky Blue BG / Black Text (always)
                                          $row_bg = 'background-color: #bfdbfe !important; color: #000000 !important; font-weight: 800; border-bottom: 2px solid #93c5fd;'; 
-                                         if ($percent > 100) { $row_bg .= ' border-left: 6px solid #ef4444;'; $data_bg = 'background-color: #ffcccc !important;'; }
-                                         elseif ($percent > 80) { $row_bg .= ' border-left: 6px solid #f59e0b;'; $data_bg = 'background-color: #fde047 !important;'; }
+                                         if ($percent >= $cost_red) { $row_bg .= ' border-left: 6px solid #ef4444;'; $data_bg = 'background-color: #ffcccc !important;'; }
+                                         elseif ($percent >= $cost_yellow) { $row_bg .= ' border-left: 6px solid #f59e0b;'; $data_bg = 'background-color: #fde047 !important;'; }
                                      } elseif ($row['type'] === 'category') {
                                          // Level 2: Slate BG / Black Text (always)
                                          $row_bg = 'background-color: #f8fafc !important; color: #000000 !important; font-weight: 600; border-bottom: 1px dashed #cbd5e1;';
-                                         if ($percent > 100) { $data_bg = 'background-color: #ffcccc !important;'; }
-                                         elseif ($percent > 80) { $data_bg = 'background-color: #fde047 !important;'; }
+                                         if ($percent >= $cost_red) { $data_bg = 'background-color: #ffcccc !important;'; }
+                                         elseif ($percent >= $cost_yellow) { $data_bg = 'background-color: #fde047 !important;'; }
                                      } else {
                                          // Level 3: Item (Peach BG) / Black Text (always)
                                          $row_bg = 'background-color: #fff7ed !important; color: #000000 !important; border-bottom: 1px dashed #fed7aa;'; 
-                                         if ($percent > 100) $data_bg = 'background-color: #ffcccc !important;'; 
-                                         elseif ($percent > 80) $data_bg = 'background-color: #fde047 !important;';
+                                         if ($percent >= $cost_red) $data_bg = 'background-color: #ffcccc !important;'; 
+                                         elseif ($percent >= $cost_yellow) $data_bg = 'background-color: #fde047 !important;';
                                      }
                                  ?>
                                  <tr class="<?php echo $row_class; ?>" 
@@ -1357,6 +1387,28 @@ function get_rev_bg_color($val, $planned, $red, $yellow, $green) {
             </form>
         </div>
     </div>
+    <div id="costSettingsModal" class="modal" style="display:none; position:fixed; z-index:1000; left:0; top:0; width:100%; height:100%; background:rgba(0,0,0,0.5);">
+        <div style="background:#fff; margin:5% auto; padding:25px; width:450px; border-radius:12px; box-shadow:0 10px 30px rgba(0,0,0,0.2);">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
+                <h3 style="margin:0; font-size:18px; color:#1e293b;">Cấu hình màu Cảnh báo Chi Phí</h3>
+                <button onclick="document.getElementById('costSettingsModal').style.display='none'" style="background:none; border:none; font-size:24px; cursor:pointer; color:#94a3b8;">&times;</button>
+            </div>
+            <form onsubmit="saveCostSettings(event)">
+                <p style="font-size: 13px; color: #64748b; margin-bottom: 15px;">Dựa trên tỷ lệ Thực tế / Kế hoạch (%).</p>
+                <div style="margin-bottom:15px;">
+                    <label style="display:block; font-size:13px; font-weight:600; margin-bottom:5px; color:#854d0e;">Màu Vàng (>= Y%)</label>
+                    <input type="number" id="set_cost_yellow" value="<?php echo $cost_yellow; ?>" class="form-control" style="width:100%; padding:10px; border:1px solid #cbd5e1; border-radius:8px;">
+                </div>
+                <div style="margin-bottom:15px;">
+                    <label style="display:block; font-size:13px; font-weight:600; margin-bottom:5px; color:#991b1b;">Màu Đỏ (>= X%)</label>
+                    <input type="number" id="set_cost_red" value="<?php echo $cost_red; ?>" class="form-control" style="width:100%; padding:10px; border:1px solid #cbd5e1; border-radius:8px;">
+                </div>
+                <div style="display:flex; justify-content:flex-end; gap:12px; margin-top:20px;">
+                    <button type="submit" style="padding:10px 20px; background:#4f46e5; border:none; border-radius:8px; font-weight:600; color:#fff; cursor:pointer;">Lưu cài đặt</button>
+                </div>
+            </form>
+        </div>
+    </div>
     <?php endif; ?>
 
     <script>
@@ -1386,6 +1438,25 @@ function get_rev_bg_color($val, $planned, $red, $yellow, $green) {
                     throw new Error("Dữ liệu trả về không đúng định dạng. F12 kiểm tra console.");
                 }
             })
+            .then(res => {
+                if(res.success) location.reload();
+                else alert('Lỗi: '+ res.error);
+            })
+            .catch(err => alert("Lỗi hệ thống: " + err.message));
+        }
+
+        function openCostSettingsModal() {
+            document.getElementById('costSettingsModal').style.display = 'block';
+        }
+
+        function saveCostSettings(e) {
+            e.preventDefault();
+            const fd = new FormData();
+            fd.append('action', 'save_cost_settings');
+            fd.append('yellow', document.getElementById('set_cost_yellow').value);
+            fd.append('red', document.getElementById('set_cost_red').value);
+            fetch(location.href, { method: 'POST', body: fd })
+            .then(r => r.json())
             .then(res => {
                 if(res.success) location.reload();
                 else alert('Lỗi: '+ res.error);
