@@ -1185,6 +1185,7 @@ if ($res_am && $res_am->num_rows > 0) {
             <div class="debt-container">
                 <div class="page-controls">
                     <form method="GET" class="filter-group">
+                        <input type="hidden" name="team" value="<?php echo htmlspecialchars($selected_team); ?>">
                         <input type="text" name="q" class="search-input"
                             placeholder="Search Client, Project, Invoice..."
                             value="<?php echo htmlspecialchars($_GET['q'] ?? ''); ?>">
