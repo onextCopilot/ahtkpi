@@ -402,7 +402,6 @@ $avatar = $_SESSION['avatar'] ?? '';
             border-color: #d2e3fc;
         }
 
-        /* Loading & Empty States */
         .loading-spinner {
             border: 2px solid #f3f3f3;
             border-top: 2px solid #1a73e8;
@@ -416,6 +415,188 @@ $avatar = $_SESSION['avatar'] ?? '';
         .empty-state {
             padding: 40px;
             color: #5f6368;
+        }
+
+        /* Click to edit styles */
+        .editable-cell-content {
+            cursor: pointer;
+            min-height: 24px;
+            display: block;
+            padding: 4px;
+            border-radius: 4px;
+            border: 1px solid transparent;
+            transition: all 0.2s;
+            width: 100%;
+            font-size: 11px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .editable-cell-content:hover {
+            background-color: #f8f9fa;
+            border-color: #1a73e8;
+            color: #1a73e8;
+        }
+
+        .editable-cell-content.empty {
+            color: #94a3b8;
+            font-style: italic;
+        }
+
+        .edit-wrapper {
+            display: none;
+        }
+
+        .edit-active .edit-wrapper {
+            display: block;
+        }
+
+        .edit-active .display-wrapper {
+            display: none;
+        }
+
+        .project-display {
+            max-height: 60px;
+            overflow-y: auto;
+            white-space: pre-wrap;
+            font-size: 11px;
+            line-height: 1.4;
+        }
+
+        /* Note Sidebar Styles - Unique prefixed classes to avoid conflicts */
+        .note-sidebar-panel {
+            position: fixed;
+            right: -500px;
+            top: 0;
+            width: 500px;
+            height: 100vh;
+            background: white;
+            box-shadow: -4px 0 15px rgba(0, 0, 0, 0.1);
+            z-index: 2000;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            display: flex;
+            flex-direction: column;
+            border-left: 1px solid #dadce0;
+        }
+
+        .note-sidebar-panel.active {
+            right: 0;
+        }
+
+        .note-sb-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            background: rgba(0, 0, 0, 0.4);
+            z-index: 1999;
+            display: none;
+            opacity: 0;
+            transition: opacity 0.3s ease;
+            pointer-events: none;
+        }
+
+        .note-sb-overlay.active {
+            display: block;
+            opacity: 1;
+            pointer-events: auto;
+        }
+
+        .note-sb-header {
+            padding: 20px;
+            border-bottom: 1px solid #eee;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: #f8f9fa;
+        }
+
+        .note-sb-body {
+            flex: 1;
+            padding: 20px;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .note-item {
+            padding: 12px;
+            border-bottom: 1px solid #f1f3f4;
+            margin-bottom: 8px;
+            background: #fff;
+            border-radius: 4px;
+            transition: background 0.2s;
+        }
+
+        .note-item:hover {
+            background: #f8f9fa;
+        }
+        
+        .note-content-text {
+            font-size: 13px;
+            line-height: 1.5;
+            color: #3c4043;
+            margin-bottom: 8px;
+        }
+
+        .note-meta {
+            font-size: 11px;
+            color: #70757a;
+            display: flex;
+            justify-content: space-between;
+        }
+
+        .note-author {
+            font-weight: 600;
+            color: #1a73e8;
+        }
+
+        /* Column Visibility Hiding */
+        .col-hidden {
+            display: none !important;
+        }
+
+        .column-toggle-container {
+            position: relative;
+            display: inline-block;
+        }
+
+        .column-toggle-menu {
+            display: none;
+            position: absolute;
+            top: 100%;
+            right: 0;
+            background: white;
+            border: 1px solid #dadce0;
+            border-radius: 4px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            z-index: 1001;
+            width: 200px;
+            padding: 8px 0;
+            margin-top: 4px;
+        }
+
+        .column-toggle-menu.show {
+            display: block;
+        }
+
+        .column-toggle-item {
+            padding: 6px 16px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            cursor: pointer;
+            font-size: 13px;
+            color: #3c4043;
+        }
+
+        .column-toggle-item:hover {
+            background-color: #f1f3f4;
+        }
+
+        .column-toggle-item input {
+            cursor: pointer;
         }
     </style>
 </head>
@@ -437,8 +618,42 @@ $avatar = $_SESSION['avatar'] ?? '';
                     style="margin-bottom: 32px; background: white; border: 1px solid #dadce0; border-radius: 4px; padding: 16px;">
                     <div
                         style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
-                        <h2 style="font-size: 18px; color: #1a73e8; margin: 0;">Thống kê Key Accounts</h2>
-                        <div class="filter-controls">
+                        <div style="display: flex; align-items: center; gap: 12px;">
+                            <h2 style="font-size: 18px; color: #1a73e8; margin: 0;">Thống kê Key Accounts</h2>
+                            <div id="cacheInfo" style="font-size: 11px; color: #70757a; background: #f1f3f4; padding: 2px 8px; border-radius: 12px; display: none;">
+                                Dữ liệu từ cache: <span id="cacheTimestamp">...</span>
+                            </div>
+                        </div>
+                        <div class="filter-controls" style="gap: 8px;">
+                            <button id="refreshStatsBtn" onclick="handleRefreshStats()" class="btn-clear" style="background: #1a73e8; color: white; border: none; padding: 6px 14px;">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right: 4px;">
+                                    <path d="M23 4v6h-6"></path>
+                                    <path d="M1 20v-6h6"></path>
+                                    <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
+                                </svg>
+                                Làm mới dữ liệu Odoo
+                            </button>
+
+                            <!-- Column Visibility Settings -->
+                            <div class="column-toggle-container">
+                                <button class="btn-clear" onclick="toggleColumnMenu(event)" style="padding: 6px 10px;">
+                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                        <path d="M12 15V3m0 12l-4-4m4 4l4-4M2 17l.621 2.485A2 2 0 0 0 4.561 21h14.878a2 2 0 0 0 1.94-1.515L22 17"></path>
+                                    </svg>
+                                    Hiển thị cột
+                                </button>
+                                <div id="columnToggleMenu" class="column-toggle-menu">
+                                    <label class="column-toggle-item"><input type="checkbox" data-col="col-index" checked onchange="updateColumnVisibility()"> <span>#</span></label>
+                                    <label class="column-toggle-item"><input type="checkbox" data-col="col-toggle" checked onchange="updateColumnVisibility()"> <span>Bật/Tắt</span></label>
+                                    <label class="column-toggle-item"><input type="checkbox" data-col="col-company" checked onchange="updateColumnVisibility()"> <span>Thuộc Cty</span></label>
+                                    <label class="column-toggle-item"><input type="checkbox" data-col="col-am" checked onchange="updateColumnVisibility()"> <span>AM/BD</span></label>
+                                    <label class="column-toggle-item"><input type="checkbox" data-col="col-bc" checked onchange="updateColumnVisibility()"> <span>BCs</span></label>
+                                    <label class="column-toggle-item"><input type="checkbox" data-col="col-project" checked onchange="updateColumnVisibility()"> <span>Dự án</span></label>
+                                    <label class="column-toggle-item"><input type="checkbox" data-col="col-avg-revenue" checked onchange="updateColumnVisibility()"> <span>Doanh Thu TB</span></label>
+                                    <label class="column-toggle-item"><input type="checkbox" data-col="col-yearly-total" checked onchange="updateColumnVisibility()"> <span>Tổng Năm</span></label>
+                                </div>
+                            </div>
+
                             <select id="statsAmFilter" onchange="sortAndRenderStats()" class="filter-select">
                                 <option value="">Tất cả AM/BD</option>
                             </select>
@@ -677,58 +892,54 @@ $avatar = $_SESSION['avatar'] ?? '';
         </main>
     </div>
 
-    <!-- Note Modal -->
-    <div id="noteModal" class="modal">
-        <div class="modal-content" style="max-width: 600px;">
-            <div class="modal-header">
-                <h3 id="noteModalTitle" style="margin:0; font-size:18px;">Ghi chú khách hàng</h3>
-                <span class="close" onclick="closeNoteModal()">&times;</span>
+    <!-- Note Sidebar -->
+    <div id="sidebarOverlay" class="note-sb-overlay" onclick="closeNoteSidebar()"></div>
+    <div id="noteSidebar" class="note-sidebar-panel">
+        <div class="note-sb-header">
+            <h3 id="noteSidebarTitle" style="margin:0; font-size:18px; color: #1a73e8;">Ghi chú khách hàng</h3>
+            <button onclick="closeNoteSidebar()" style="background:none; border:none; cursor:pointer; font-size:24px; color:#5f6368;">&times;</button>
+        </div>
+        <div class="note-sb-body">
+            <!-- Filter Controls -->
+            <div class="note-history-filters"
+                style="display: flex; gap: 8px; margin-bottom: 16px; flex-wrap: wrap; background: #f8f9fa; padding: 12px; border-radius: 4px; border: 1px solid #eee;">
+                <select id="noteYearFilter" class="filter-select"
+                    style="font-size: 11px; height: 32px; flex: 1;"
+                    onchange="loadNotesHistory(currentEditingOdooId, 1)">
+                    <option value="">Năm (Tất cả)</option>
+                    <option value="2026">2026</option>
+                    <option value="2025">2025</option>
+                    <option value="2024">2024</option>
+                </select>
+                <select id="noteQuarterFilter" class="filter-select"
+                    style="font-size: 11px; height: 32px; flex: 1;"
+                    onchange="loadNotesHistory(currentEditingOdooId, 1)">
+                    <option value="">Quý (Tất cả)</option>
+                    <option value="1">Quý 1</option>
+                    <option value="2">Quý 2</option>
+                    <option value="3">Quý 3</option>
+                    <option value="4">Quý 4</option>
+                </select>
+                <button class="btn-clear" style="padding: 0 12px; font-size: 11px; height: 32px;"
+                    onclick="clearNoteFilters()">Xóa lọc</button>
             </div>
-            <div class="modal-body">
-                <!-- Filter Controls for History -->
-                <div class="note-history-filters"
-                    style="display: flex; gap: 8px; margin-bottom: 12px; flex-wrap: wrap; background: #f8f9fa; padding: 10px; border-radius: 4px;">
-                    <select id="noteYearFilter" class="filter-select"
-                        style="padding-right: 25px; font-size: 12px; height: 32px; min-width: 110px;"
-                        onchange="loadNotesHistory(currentEditingOdooId, 1)">
-                        <option value="">Năm (Tất cả)</option>
-                        <option value="2026">2026</option>
-                        <option value="2025">2025</option>
-                        <option value="2024">2024</option>
-                    </select>
-                    <select id="noteQuarterFilter" class="filter-select"
-                        style="padding-right: 25px; font-size: 12px; height: 32px; min-width: 110px;"
-                        onchange="loadNotesHistory(currentEditingOdooId, 1)">
-                        <option value="">Quý (Tất cả)</option>
-                        <option value="1">Quý 1</option>
-                        <option value="2">Quý 2</option>
-                        <option value="3">Quý 3</option>
-                        <option value="4">Quý 4</option>
-                    </select>
-                    <select id="noteMonthFilter" class="filter-select"
-                        style="padding-right: 25px; font-size: 12px; height: 32px; min-width: 125px;"
-                        onchange="loadNotesHistory(currentEditingOdooId, 1)">
-                        <option value="">Tháng (Tất cả)</option>
-                        ${Array.from({length: 12}, (_, i) => `<option value="${i+1}">Tháng ${i+1}</option>`).join('')}
-                    </select>
-                    <button class="btn-clear" style="padding: 0 12px; font-size: 12px; height: 32px;"
-                        onclick="clearNoteFilters()">Xóa lọc</button>
-                </div>
 
-                <div id="notesHistory"
-                    style="max-height: 300px; overflow-y: auto; margin-bottom: 15px; border-bottom: 1px solid #eee; padding-bottom: 10px;">
-                    <!-- History logs here -->
-                </div>
+            <h4 style="font-size: 13px; margin: 0 0 12px 0; color: #5f6368; font-weight: 600; text-transform: uppercase;">Lịch sử ghi chú</h4>
+            <div id="notesHistory" style="flex: 1; overflow-y: auto; margin-bottom: 15px;">
+                <!-- History logs here -->
+            </div>
 
-                <div id="notePagination"
-                    style="display: flex; justify-content: center; align-items: center; gap: 10px; margin-bottom: 20px;">
-                    <!-- Pagination buttons here -->
-                </div>
-                <div class="note-input-area" style="margin-top: 10px;">
-                    <div id="quillEditor" style="height: 120px; background: white; margin-bottom: 10px;"></div>
-                    <div style="text-align: right;">
-                        <button class="btn btn-primary" onclick="saveNewNote()">Lưu ghi chú</button>
-                    </div>
+            <div id="notePagination" style="display: flex; justify-content: center; align-items: center; gap: 10px; margin-bottom: 20px;">
+                <!-- Pagination buttons here -->
+            </div>
+
+            <div class="note-input-area" style="border-top: 1px solid #eee; padding-top: 20px;">
+                <h4 style="font-size: 13px; margin: 0 0 12px 0; color: #5f6368; font-weight: 600; text-transform: uppercase;">Thêm ghi chú mới</h4>
+                <div id="quillEditor" style="height: 150px; background: white; margin-bottom: 12px;"></div>
+                <div style="text-align: right;">
+                    <button class="btn btn-primary" onclick="saveNewNote()" style="background: #1a73e8; color: white; border: none; padding: 8px 16px; border-radius: 4px; font-weight: 500;">
+                        Lưu ghi chú
+                    </button>
                 </div>
             </div>
         </div>
@@ -1171,16 +1382,51 @@ $avatar = $_SESSION['avatar'] ?? '';
         let currentUsdRate = 24000; // Default fallback
         const BC_LIST = ['BC1', 'BC2', 'BC3', 'BC4', 'BC5', 'BC6', 'BC7', 'BC8', 'BC9', 'BC10'];
 
-        function loadKeyAccountStats() {
+        function handleRefreshStats() {
+            const btn = document.getElementById('refreshStatsBtn');
+            const originalHtml = btn.innerHTML;
+            btn.disabled = true;
+            btn.innerHTML = 'Đang đồng bộ Odoo...';
+            btn.style.background = '#ccc';
+
+            loadKeyAccountStats(true).finally(() => {
+                btn.disabled = false;
+                btn.innerHTML = originalHtml;
+                btn.style.background = '#1a73e8';
+            });
+        }
+
+        function loadKeyAccountStats(forceRefresh = false) {
             const year = document.getElementById('statsYearFilter').value;
             const container = document.getElementById('keyAccountsStatsBody');
 
-            container.innerHTML = `<tr><td colspan="20" style="text-align:center; padding: 20px;">Đang tính toán thống kê...</td></tr>`;
+            if (forceRefresh) {
+                container.innerHTML = `<tr><td colspan="20" style="text-align:center; padding: 20px;">
+                    <div class="loading-state">
+                        <div class="loading-spinner"></div>
+                        <p>Đang đồng bộ dữ liệu từ Odoo (Hàng chục nghìn hóa đơn)... Vui lòng đợi...</p>
+                    </div>
+                </td></tr>`;
+            } else {
+                container.innerHTML = `<tr><td colspan="20" style="text-align:center; padding: 20px;">Đang tải dữ liệu cache...</td></tr>`;
+            }
 
-            fetch(`/api/key_accounts_stats_v2.php?force_refresh=1&v=${Date.now()}`)
+            const url = `/api/key_accounts_stats_v2.php?v=${Date.now()}${(forceRefresh ? '&force_refresh=1' : '')}`;
+
+            return fetch(url)
                 .then(res => res.json())
                 .then(data => {
                     if (data.success) {
+                        // Display cache info
+                        const cacheInfo = document.getElementById('cacheInfo');
+                        const cacheTs = document.getElementById('cacheTimestamp');
+                        if (data.from_cache) {
+                            cacheInfo.style.display = 'block';
+                            cacheTs.textContent = data.cache_time;
+                        } else {
+                            cacheInfo.style.display = 'block';
+                            cacheTs.textContent = 'Vừa cập nhật (Odoo)';
+                        }
                         globalAmBdList = data.am_bd_list || [];
                         const amFilter = document.getElementById('statsAmFilter');
                         if (amFilter && globalAmBdList.length > 0) {
@@ -1411,21 +1657,77 @@ $avatar = $_SESSION['avatar'] ?? '';
             renderUsdRevenueStats();
         }
 
-        function updateKeyAccountMetadata(odooId, field, value) {
+        function updateKeyAccountMetadata(odooId, field, value, element = null, toggleUI = true) {
             const payload = {
                 odoo_id: odooId,
                 [field]: value
             };
 
-            fetch('/api/customers.php', {
+            // If we have an element and toggleUI is true, find its parent cell and toggle back to display
+            if (element && toggleUI) {
+                const cell = element.closest('td');
+                if (cell) {
+                    const display = cell.querySelector('.editable-cell-content');
+                    if (display) {
+                        if (element.tagName === 'SELECT') {
+                            display.textContent = element.options[element.selectedIndex].text;
+                        } else {
+                            display.textContent = value || '---';
+                        }
+                        display.classList.toggle('empty', !value);
+                    }
+                    cell.classList.remove('edit-active');
+                }
+            } else if (element && !toggleUI) {
+                // Update display mirror while still in edit mode if needed
+                const cell = element.closest('td');
+                const display = cell.querySelector('.editable-cell-content');
+                if (display) {
+                    display.textContent = value || '---';
+                    display.classList.toggle('empty', !value);
+                    
+                    // Also update button text for BCs
+                    const btn = cell.querySelector('.bc-dropdown-btn');
+                    if (btn) btn.textContent = value || 'Chọn BCs...';
+                }
+            }
+
+            return fetch('/api/customers.php', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(payload)
             })
                 .then(res => res.json())
                 .then(data => {
-                    if (!data.success) alert('Lỗi: ' + data.error);
+                    if (!data.success) {
+                        alert('Lỗi khi lưu: ' + (data.error || 'Unknown error'));
+                    } else {
+                        // Update local in-memory data to ensure it stays during sorting/filtering
+                        if (typeof allStatsData !== 'undefined' && Array.isArray(allStatsData)) {
+                            const localItem = allStatsData.find(item => item.id == odooId);
+                            if (localItem) {
+                                localItem[field] = value;
+                            }
+                        }
+                        console.log(`Metadata updated: ${field} = ${value}`);
+                    }
+                })
+                .catch(err => {
+                    console.error('Save error:', err);
+                    alert('Lỗi kết nối khi lưu: ' + err.message);
                 });
+        }
+
+        function enterEditMode(element) {
+            const cell = element.closest('td');
+            cell.classList.add('edit-active');
+            const input = cell.querySelector('input, select, textarea');
+            if (input) {
+                input.focus();
+                if (input.tagName === 'SELECT' && input.classList.contains('bc-dropdown-btn')) {
+                    // Specific logic for BC dropdown if needed
+                }
+            }
         }
 
         function renderStats(data, year) {
@@ -1440,24 +1742,24 @@ $avatar = $_SESSION['avatar'] ?? '';
             // Generate Headers 
             header.innerHTML = `
                 <tr>
-                    <th onclick="sortAndRenderStats('order_index')" style="width: 40px; text-align: center; cursor: pointer;">
+                    <th class="col-index" onclick="sortAndRenderStats('order_index')" style="width: 40px; text-align: center; cursor: pointer;">
                         # ${getSortIcon('order_index')}
                     </th>
-                    <th style="width: 80px; text-align: center;">Bật/Tắt</th>
-                    <th onclick="sortAndRenderStats('name')" style="width: 300px; position: sticky; left: 0; background: #f8f9fa; z-index: 20; text-align: left; cursor: pointer;">
+                    <th class="col-toggle" style="width: 80px; text-align: center;">Bật/Tắt</th>
+                    <th onclick="sortAndRenderStats('name')" style="width: 250px; position: sticky; left: 0; background: #f8f9fa; z-index: 20; text-align: left; cursor: pointer;">
                         Khách hàng ${getSortIcon('name')}
                     </th>
-                    <th style="width: 120px;">Thuộc Cty</th>
-                    <th style="width: 130px;">AM/BD</th>
-                    <th style="width: 150px;">Delivery Owner (BCs)</th>
-                    <th style="width: 150px;">Dự án đang chạy</th>
-                    <th onclick="sortAndRenderStats('avgRevenue')" style="width: 150px; text-align: right; cursor: pointer;">
+                    <th class="col-company" style="width: 120px;">Thuộc Cty</th>
+                    <th class="col-am" style="width: 130px;">AM/BD</th>
+                    <th class="col-bc" style="width: 150px;">Delivery Owner (BCs)</th>
+                    <th class="col-project" style="width: 150px;">Dự án đang chạy</th>
+                    <th class="col-avg-revenue" onclick="sortAndRenderStats('avgRevenue')" style="width: 150px; text-align: right; cursor: pointer;">
                          Doanh Thu TB (6th) ${getSortIcon('avgRevenue')}
                     </th>
-                    <th onclick="sortAndRenderStats('yearlyTotal')" class="revenue-cell" style="width: 130px; cursor: pointer;">
+                    <th class="col-yearly-total" onclick="sortAndRenderStats('yearlyTotal')" class="revenue-cell" style="width: 130px; cursor: pointer;">
                         Tổng Năm ${getSortIcon('yearlyTotal')}
                     </th>
-                    <th style="min-width: 400px;">Ghi chú</th>
+                    <th class="col-note" style="min-width: 400px;">Ghi chú</th>
                 </tr>
             `;
 
@@ -1468,7 +1770,6 @@ $avatar = $_SESSION['avatar'] ?? '';
 
             body.innerHTML = data.map(customer => {
                 const stats = customer.stats;
-                const formatVND = (val) => val ? new Intl.NumberFormat('vi-VN').format(Math.round(Math.abs(val))) : '-';
                 const formatUSD = (val) => {
                     if (!val) return '-';
                     return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(val);
@@ -1476,14 +1777,6 @@ $avatar = $_SESSION['avatar'] ?? '';
 
                 const avgRevenue = customer.avgRevenue;
                 const yearlyTotal = customer.yearlyTotal;
-
-                const q_vnd = stats.quarterly || {};
-                const qs = [
-                    q_vnd[`${year}-Q1`] || 0,
-                    q_vnd[`${year}-Q2`] || 0,
-                    q_vnd[`${year}-Q3`] || 0,
-                    q_vnd[`${year}-Q4`] || 0
-                ];
 
                 // Toggle Switch (Column 1)
                 const toggleSwitch = `
@@ -1495,46 +1788,74 @@ $avatar = $_SESSION['avatar'] ?? '';
                     </div>
                 `;
 
-                // Company Source select
+                // Company Source
                 const companies = ['AHT TECH', 'AC1 VN', 'AC1 MY', 'AHT Japan'];
-                const companySelect = `
-                    <select class="company-source-select" onchange="updateKeyAccountMetadata(${customer.id}, 'company_source', this.value)">
-                        <option value="">-- Chọn --</option>
-                        ${companies.map(c => `<option value="${c}" ${customer.company_source === c ? 'selected' : ''}>${c}</option>`).join('')}
-                    </select>
+                const companyDisplay = customer.company_source || '---';
+                const companyCell = `
+                    <div class="display-wrapper">
+                        <span class="editable-cell-content ${!customer.company_source ? 'empty' : ''}" onclick="enterEditMode(this)">${escapeHtml(companyDisplay)}</span>
+                    </div>
+                    <div class="edit-wrapper">
+                        <select class="company-source-select" onchange="updateKeyAccountMetadata(${customer.id}, 'company_source', this.value, this)" onblur="this.closest('td').classList.remove('edit-active')">
+                            <option value="">-- Chọn --</option>
+                            ${companies.map(c => `<option value="${c}" ${customer.company_source === c ? 'selected' : ''}>${c}</option>`).join('')}
+                        </select>
+                    </div>
                 `;
 
-                // AM/BD Select
-                const amSelect = `
-                    <select class="inline-edit-select" style="font-size: 11px;" onchange="updateKeyAccountMetadata(${customer.id}, 'am_bd_id', this.value)">
-                        <option value="">-- AM/BD --</option>
-                        ${globalAmBdList.map(am => `<option value="${am.id}" ${customer.am_bd_id == am.id ? 'selected' : ''}>${escapeHtml(am.full_name)}</option>`).join('')}
-                    </select>
+                // AM/BD
+                const selectedAm = globalAmBdList.find(am => am.id == customer.am_bd_id);
+                const amDisplay = selectedAm ? selectedAm.full_name : '---';
+                const amCell = `
+                    <div class="display-wrapper">
+                        <span class="editable-cell-content ${!selectedAm ? 'empty' : ''}" onclick="enterEditMode(this)">${escapeHtml(amDisplay)}</span>
+                    </div>
+                    <div class="edit-wrapper">
+                        <select class="inline-edit-select" style="font-size: 11px;" onchange="updateKeyAccountMetadata(${customer.id}, 'am_bd_id', this.value, this)" onblur="this.closest('td').classList.remove('edit-active')">
+                            <option value="">-- AM/BD --</option>
+                            ${globalAmBdList.map(am => `<option value="${am.id}" ${customer.am_bd_id == am.id ? 'selected' : ''}>${escapeHtml(am.full_name)}</option>`).join('')}
+                        </select>
+                    </div>
                 `;
 
-                // BC Multi-select Dropdown
+                // BCs
                 const currentBCs = (customer.delivery_owners || '').split(',').filter(b => b.trim() !== '');
-                const bcDropdown = `
-                    <div class="bc-dropdown-container">
-                        <button class="bc-dropdown-btn" onclick="toggleBCDropdown(event, this)">
-                            ${currentBCs.length > 0 ? currentBCs.join(', ') : 'Chọn BCs...'}
-                        </button>
-                        <div class="bc-dropdown-content">
-                            ${BC_LIST.map(bc => `
-                                <label class="bc-option" style="display:flex; align-items:center; gap:8px; padding:4px 8px; cursor:pointer;">
-                                    <input type="checkbox" value="${bc}" ${currentBCs.includes(bc) ? 'checked' : ''} 
-                                        onchange="handleBCChange(${customer.id}, this)">
-                                    <span style="font-size:12px;">${bc}</span>
-                                </label>
-                            `).join('')}
+                const bcDisplay = currentBCs.length > 0 ? currentBCs.join(', ') : '---';
+                const bcCell = `
+                    <div class="display-wrapper">
+                        <span class="editable-cell-content ${currentBCs.length === 0 ? 'empty' : ''}" onclick="enterEditMode(this)">${escapeHtml(bcDisplay)}</span>
+                    </div>
+                    <div class="edit-wrapper">
+                        <div class="bc-dropdown-container">
+                            <button class="bc-dropdown-btn" onclick="toggleBCDropdown(event, this)">
+                                ${bcDisplay !== '---' ? bcDisplay : 'Chọn BCs...'}
+                            </button>
+                            <div class="bc-dropdown-content">
+                                ${BC_LIST.map(bc => `
+                                    <label class="bc-option" style="display:flex; align-items:center; gap:8px; padding:4px 8px; cursor:pointer;">
+                                        <input type="checkbox" value="${bc}" ${currentBCs.includes(bc) ? 'checked' : ''} 
+                                            onchange="handleBCChange(${customer.id}, this)">
+                                        <span style="font-size:12px;">${bc}</span>
+                                    </label>
+                                `).join('')}
+                                <div style="padding: 8px; border-top: 1px solid #eee; text-align: right;">
+                                    <button class="pagination-btn" style="background: #1a73e8; color: white;" onclick="this.closest('td').classList.remove('edit-active')">Xong</button>
+                                </div>
+                            </div>
                         </div>
                     </div>
                 `;
 
-                // Project Field (Jira or manual)
-                const projectField = `
-                    <textarea class="project-input" placeholder="Dự án..." 
-                        onblur="updateKeyAccountMetadata(${customer.id}, 'active_projects', this.value)">${escapeHtml(customer.active_projects || '')}</textarea>
+                // Projects
+                const projectDisplay = customer.active_projects || '---';
+                const projectCell = `
+                    <div class="display-wrapper">
+                        <div class="editable-cell-content project-display ${!customer.active_projects ? 'empty' : ''}" onclick="enterEditMode(this)">${escapeHtml(projectDisplay)}</div>
+                    </div>
+                    <div class="edit-wrapper">
+                        <textarea class="project-input" placeholder="Dự án..." 
+                            onblur="updateKeyAccountMetadata(${customer.id}, 'active_projects', this.value, this)">${escapeHtml(customer.active_projects || '')}</textarea>
+                    </div>
                 `;
 
                 const noteBtn = `
@@ -1560,7 +1881,7 @@ $avatar = $_SESSION['avatar'] ?? '';
 
                 return `
                     <tr data-id="${customer.id}" class="sortable-row">
-                        <td class="drag-handle">
+                        <td class="drag-handle col-index">
                             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                                 <circle cx="9" cy="5" r="1"></circle>
                                 <circle cx="9" cy="12" r="1"></circle>
@@ -1570,24 +1891,25 @@ $avatar = $_SESSION['avatar'] ?? '';
                                 <circle cx="15" cy="19" r="1"></circle>
                             </svg>
                         </td>
-                        <td style="text-align: center;">${toggleSwitch}</td>
+                        <td class="col-toggle" style="text-align: center;">${toggleSwitch}</td>
                         <td style="font-weight: 500; position: sticky; left: 0; background: white; z-index: 10; border-right: 2px solid #dadce0; text-align: left;" title="${escapeHtml(customer.name)}">
                             ${escapeHtml(customer.name)}
                         </td>
-                        <td>${companySelect}</td>
-                        <td>${amSelect}</td>
-                        <td style="padding: 4px;">${bcDropdown}</td>
-                        <td style="padding: 4px;">${projectField}</td>
-                        <td class="avg-revenue-cell">
+                        <td class="col-company" style="padding: 4px;">${companyCell}</td>
+                        <td class="col-am" style="padding: 4px;">${amCell}</td>
+                        <td class="col-bc" style="padding: 4px;">${bcCell}</td>
+                        <td class="col-project" style="padding: 4px;">${projectCell}</td>
+                        <td class="col-avg-revenue avg-revenue-cell">
                              ${formatUSD(avgRevenue)} <span class="currency-unit">USD</span>
                         </td>
-                        <td class="revenue-cell revenue-total">${formatUSD(yearlyTotal)}</td>
-                        <td style="padding: 8px; white-space: normal;">${noteBtn}</td>
+                        <td class="col-yearly-total revenue-cell revenue-total">${formatUSD(yearlyTotal)}</td>
+                        <td class="col-note" style="padding: 8px; white-space: normal;">${noteBtn}</td>
                     </tr>
                 `;
             }).join('');
 
             initSortable();
+            updateColumnVisibility(); // Apply preferences immediately
         }
 
         function initSortable() {
@@ -1679,27 +2001,48 @@ $avatar = $_SESSION['avatar'] ?? '';
 
         function openNoteModal(odooId, customerName) {
             currentEditingOdooId = odooId;
-            document.getElementById('noteModalTitle').textContent = `Lịch sử ghi chú: ${customerName}`;
-            if (quill) quill.setContents([]);
+            const titleEl = document.getElementById('noteSidebarTitle');
+            if (titleEl) titleEl.textContent = `Ghi chú: ${customerName}`;
+            
+            if (quill) {
+                try { quill.setContents([]); } catch (e) { console.error('Quill reset error:', e); }
+            }
 
-            // Reset filters when opening
-            document.getElementById('noteYearFilter').value = '';
-            document.getElementById('noteQuarterFilter').value = '';
-            document.getElementById('noteMonthFilter').value = '';
+            // Reset filters safely
+            const yr = document.getElementById('noteYearFilter');
+            const qt = document.getElementById('noteQuarterFilter');
+            if (yr) yr.value = '';
+            if (qt) qt.value = '';
 
-            document.getElementById('noteModal').style.display = 'block';
-            loadNotesHistory(odooId, 1);
+            const sidebar = document.getElementById('noteSidebar');
+            const overlay = document.getElementById('sidebarOverlay');
+            
+            if (sidebar) sidebar.classList.add('active');
+            if (overlay) overlay.classList.add('active');
+            
+            if (odooId) {
+                loadNotesHistory(odooId, 1);
+            }
         }
 
-        function closeNoteModal() {
-            document.getElementById('noteModal').style.display = 'none';
+        function closeNoteSidebar() {
+            const sidebar = document.getElementById('noteSidebar');
+            const overlay = document.getElementById('sidebarOverlay');
+            if (sidebar) sidebar.classList.remove('active');
+            if (overlay) overlay.classList.remove('active');
             currentEditingOdooId = null;
         }
 
+        // Keep alias for compatibility if needed elsewhere
+        const closeNoteModal = closeNoteSidebar;
+
         function clearNoteFilters() {
-            document.getElementById('noteYearFilter').value = '';
-            document.getElementById('noteQuarterFilter').value = '';
-            document.getElementById('noteMonthFilter').value = '';
+            const yr = document.getElementById('noteYearFilter');
+            const qt = document.getElementById('noteQuarterFilter');
+            const mn = document.getElementById('noteMonthFilter');
+            if (yr) yr.value = '';
+            if (qt) qt.value = '';
+            if (mn) mn.value = '';
             loadNotesHistory(currentEditingOdooId, 1);
         }
 
@@ -1707,9 +2050,14 @@ $avatar = $_SESSION['avatar'] ?? '';
             currentEditingOdooId = odooId;
             const historyContainer = document.getElementById('notesHistory');
             const paginationContainer = document.getElementById('notePagination');
-            const year = document.getElementById('noteYearFilter').value;
-            const quarter = document.getElementById('noteQuarterFilter').value;
-            const month = document.getElementById('noteMonthFilter').value;
+            
+            const yrEl = document.getElementById('noteYearFilter');
+            const qtEl = document.getElementById('noteQuarterFilter');
+            const mnEl = document.getElementById('noteMonthFilter');
+            
+            const year = yrEl ? yrEl.value : '';
+            const quarter = qtEl ? qtEl.value : '';
+            const month = mnEl ? mnEl.value : '';
 
             if (!historyContainer) return;
             historyContainer.innerHTML = '<div style="text-align:center; padding:20px;"><div class="loading-spinner"></div><p>Đang tải lịch sử...</p></div>';
@@ -1760,9 +2108,14 @@ $avatar = $_SESSION['avatar'] ?? '';
         }
 
         function saveNewNote() {
+            const btn = document.querySelector('.note-input-area .btn-primary');
             const content = quill.root.innerHTML;
             const text = quill.getText().trim();
             if (!text) return;
+
+            const originalHtml = btn.innerHTML;
+            btn.disabled = true;
+            btn.innerHTML = '<span class="loading-spinner" style="width:14px; height:14px; margin:0; display:inline-block; border-width:1px;"></span> Đang lưu...';
 
             fetch('/api/customer_notes.php', {
                 method: 'POST',
@@ -1775,12 +2128,30 @@ $avatar = $_SESSION['avatar'] ?? '';
                 .then(res => res.json())
                 .then(data => {
                     if (data.success) {
+                        // Success Feedback
+                        btn.innerHTML = '✅ Đã lưu';
+                        btn.style.background = '#28a745';
+                        
                         loadNotesHistory(currentEditingOdooId, 1);
                         quill.setContents([]);
                         loadKeyAccountStats();
+
+                        setTimeout(() => {
+                            btn.innerHTML = originalHtml;
+                            btn.style.background = '#1a73e8';
+                            btn.disabled = false;
+                        }, 2000);
                     } else {
                         alert('Lỗi: ' + data.error);
+                        btn.innerHTML = originalHtml;
+                        btn.disabled = false;
                     }
+                })
+                .catch(err => {
+                    console.error('Save error:', err);
+                    alert('Lỗi kết nối: ' + err.message);
+                    btn.innerHTML = originalHtml;
+                    btn.disabled = false;
                 });
         }
 
@@ -1819,6 +2190,59 @@ $avatar = $_SESSION['avatar'] ?? '';
             }
         }
 
+        // Column Visibility Logic
+        function toggleColumnMenu(event) {
+            event.stopPropagation();
+            document.getElementById('columnToggleMenu').classList.toggle('show');
+        }
+
+        function updateColumnVisibility() {
+            const checkboxes = document.querySelectorAll('#columnToggleMenu input');
+            const prefs = {};
+            checkboxes.forEach(cb => {
+                const colClass = cb.getAttribute('data-col');
+                const isChecked = cb.checked;
+                prefs[colClass] = isChecked;
+
+                document.querySelectorAll('.' + colClass).forEach(el => {
+                    if (isChecked) {
+                        el.classList.remove('col-hidden');
+                    } else {
+                        el.classList.add('col-hidden');
+                    }
+                });
+            });
+            localStorage.setItem('customer_column_visibility', JSON.stringify(prefs));
+        }
+
+        function loadColumnPrefs() {
+            const saved = localStorage.getItem('customer_column_visibility');
+            if (saved) {
+                const prefs = JSON.parse(saved);
+                const checkboxes = document.querySelectorAll('#columnToggleMenu input');
+                checkboxes.forEach(cb => {
+                    const colClass = cb.getAttribute('data-col');
+                    if (prefs.hasOwnProperty(colClass)) {
+                        cb.checked = prefs[colClass];
+                    }
+                });
+                updateColumnVisibility();
+            }
+        }
+
+        // Initialize on load
+        document.addEventListener('DOMContentLoaded', () => {
+            loadColumnPrefs();
+            
+            // Close menu on click outside
+            window.addEventListener('click', (e) => {
+                const menu = document.getElementById('columnToggleMenu');
+                if (menu && !e.target.closest('.column-toggle-container')) {
+                    menu.classList.remove('show');
+                }
+            });
+        });
+
         // Close dropdowns on click outside
         window.onclick = function (event) {
             if (!event.target.closest('.bc-dropdown-container')) {
@@ -1832,8 +2256,11 @@ $avatar = $_SESSION['avatar'] ?? '';
             const checkedInputs = Array.from(container.querySelectorAll('input:checked'));
             const checked = checkedInputs.map(i => i.value);
 
-            btn.textContent = checked.length > 0 ? checked.join(', ') : 'Chọn BCs...';
-            updateKeyAccountMetadata(odooId, 'delivery_owners', checked.join(','));
+            const selectedStr = checked.length > 0 ? checked.join(', ') : '---';
+            btn.textContent = selectedStr;
+            
+            // Background save, don't close the dropdown yet
+            updateKeyAccountMetadata(odooId, 'delivery_owners', checked.join(','), checkbox, false);
         }
 
         function renderCustomers(customers, pagination) {

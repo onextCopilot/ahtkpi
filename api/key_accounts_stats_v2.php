@@ -10,15 +10,68 @@ if (!isset($_SESSION['user_id']) || (empty($_SESSION['can_view_invoice']) && emp
 }
 
 try {
+    set_time_limit(300); // Allow up to 5 minutes for Odoo sync
     $odoo = new OdooAPI();
-    if (isset($_GET['force_refresh'])) {
-        $odoo->refreshInvoiceCache();
-    }
+    $cache_file = __DIR__ . '/../cache/key_accounts_snapshot.cache.php';
+    $is_refresh = isset($_GET['force_refresh']) && $_GET['force_refresh'] == '1';
 
-    // Auto-migrate if column is missing (handles live DB update)
+    // Auto-migrate if column is missing (handles live DB update) - Always run this
     $check_order_index = $conn->query("SHOW COLUMNS FROM customers_metadata LIKE 'order_index'");
     if ($check_order_index && $check_order_index->num_rows == 0) {
         $conn->query("ALTER TABLE customers_metadata ADD COLUMN order_index INT DEFAULT 0");
+    }
+
+    // If not refreshing, try to serve from cache
+    if (!$is_refresh && file_exists($cache_file)) {
+        $cache_content = file_get_contents($cache_file);
+        $cache_data = json_decode(str_replace('<?php exit; ?>', '', $cache_content), true);
+        if ($cache_data) {
+            // ALWAYS refresh metadata from DB specifically, even when using cached stats
+            $sql = "SELECT cm.odoo_id, cm.am_bd_id, cm.delivery_owners, 
+                           COALESCE(latest_note.note_content, cm.account_note) as account_note,
+                           latest_note.author_name,
+                           latest_note.created_at as note_time,
+                           cm.company_source, cm.active_projects, cm.order_index
+                    FROM customers_metadata cm
+                    LEFT JOIN (
+                        SELECT cn1.odoo_id, cn1.note_content, cn1.created_at, u.full_name as author_name
+                        FROM customer_notes cn1
+                        JOIN users u ON cn1.user_id = u.id
+                        WHERE cn1.id = (SELECT MAX(id) FROM customer_notes cn2 WHERE cn2.odoo_id = cn1.odoo_id)
+                    ) latest_note ON cm.odoo_id = latest_note.odoo_id
+                    WHERE cm.is_key_account = 1
+                    ORDER BY cm.order_index ASC";
+            
+            $db_res = $conn->query($sql);
+            $db_meta = [];
+            while($row = $db_res->fetch_assoc()) {
+                $db_meta[(int)$row['odoo_id']] = $row;
+            }
+
+            // Merge DB Metadata into Cached Stats
+            foreach ($cache_data['data'] as &$customer) {
+                if (isset($db_meta[(int)$customer['id']])) {
+                    $m = $db_meta[(int)$customer['id']];
+                    $customer['am_bd_id'] = $m['am_bd_id'];
+                    $customer['delivery_owners'] = $m['delivery_owners'];
+                    $customer['company_source'] = $m['company_source'];
+                    $customer['active_projects'] = $m['active_projects'];
+                    $customer['order_index'] = $m['order_index'];
+                    $customer['account_note'] = !empty($m['account_note']) ? $m['account_note'] : $customer['account_note'];
+                    $customer['author_name'] = $m['author_name'] ?? $customer['author_name'];
+                    $customer['note_time'] = $m['note_time'] ?? $customer['note_time'];
+                }
+            }
+
+            $cache_data['from_cache'] = true;
+            $cache_data['cache_time'] = date('Y-m-d H:i:s', filemtime($cache_file));
+            echo json_encode($cache_data);
+            exit;
+        }
+    }
+
+    if ($is_refresh) {
+        $odoo->refreshInvoiceCache();
     }
 
     // 1. Get Key Account IDs and Metadata from DB (including latest note from history)
@@ -56,7 +109,8 @@ try {
     }
 
     if (empty($key_account_ids)) {
-        echo json_encode(['success' => true, 'data' => [], 'am_bd_list' => $am_bd_list]);
+        $response = ['success' => true, 'data' => [], 'am_bd_list' => $am_bd_list];
+        echo json_encode($response);
         exit;
     }
 
@@ -110,13 +164,8 @@ try {
 
             $amount_vnd = (float) ($inv['amount_total_signed'] ?? 0);
 
-            // ACCURACY FIX: 
-            // 1. If invoice is already USD, use amount_total for exact decimals.
-            // 2. If NOT USD (VND, EUR, etc.), Odoo converts to VND in amount_total_signed.
-            //    We convert that VND to USD using the Odoo exchange rate on the INVOICE DATE.
             if (($inv['currency_id'][1] ?? '') === 'USD') {
                 $amount_usd = (float) ($inv['amount_total'] ?? 0);
-                // Adjust sign for credit notes if necessary
                 if (($inv['move_type'] ?? '') === 'out_refund') {
                     $amount_usd = -$amount_usd;
                 }
@@ -167,7 +216,6 @@ try {
     $internal_revenue_usd_by_year = [];
 
     foreach ($all_invoices as $inv) {
-        // Only count posted customer invoices
         if ($inv['state'] !== 'posted' || ($inv['move_type'] ?? '') !== 'out_invoice')
             continue;
 
@@ -187,7 +235,6 @@ try {
 
         $inv_year = date('Y', strtotime($date_str));
 
-        // EXCLUDE internal invoices as requested for Total Volume
         if (($inv['x_studio_invoice_type_1'] ?? '') === 'Internal') {
             if (!isset($internal_revenue_vnd_by_year[$inv_year])) {
                 $internal_revenue_vnd_by_year[$inv_year] = 0;
@@ -212,7 +259,7 @@ try {
     $current_vnd = $odoo->getRate('VND', date('Y-m-d'));
     $display_rate = $current_usd > 0 ? $current_vnd / $current_usd : 25400;
 
-    echo json_encode([
+    $final_response = [
         'success' => true,
         'data' => $data,
         'am_bd_list' => $am_bd_list,
@@ -221,8 +268,16 @@ try {
         'internal_total_res' => $internal_revenue_vnd_by_year,
         'internal_total_usd_res' => $internal_revenue_usd_by_year,
         'usd_rate' => $display_rate,
-        'api_version' => '2.7'
-    ]);
+        'api_version' => '2.8'
+    ];
+
+    // Save to Cache
+    if (!is_dir(dirname($cache_file))) {
+        mkdir(dirname($cache_file), 0777, true);
+    }
+    file_put_contents($cache_file, '<?php exit; ?>' . json_encode($final_response));
+    
+    echo json_encode($final_response);
 
 } catch (Exception $e) {
     http_response_code(500);
