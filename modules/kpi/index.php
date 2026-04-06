@@ -260,7 +260,7 @@ if ($tab === 'quarterly') {
 
 // Fetch monthly actuals for monthly + quarterly + definitions tabs
 $monthly_map = []; // [def_id][month] => row
-$r = $conn->query("SELECT * FROM kpi_monthly WHERE year=$year");
+$r = $conn->query("SELECT m.*, u.full_name as updater_name FROM kpi_monthly m LEFT JOIN users u ON m.updated_by = u.id WHERE m.year=$year");
 if ($r)
     while ($row = $r->fetch_assoc()) {
         $def_id = (string)($row['kpi_def_id'] ?? '');

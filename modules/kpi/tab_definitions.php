@@ -299,7 +299,30 @@ $COLS = 14; // STT+Nhóm+Tên+TargetNăm+CảNăm+Tỷtrọng+Q1+Q2+Q3+Q4+Owner+
                         
                         $qProg = ($tot && !$tot['mixed'] && $qPlan) ? calcProgress($tot['sum'], $qPlan) : null;
                         ?>
-                        <td style="padding:2px 4px;background:<?= $qc['bg'] ?>;vertical-align:top">
+                        <?php
+                            $months_detail = [];
+                            foreach ($q_months_def[$qi] as $m_num) {
+                                $m_row = $monthly_map[$d['id']][$m_num] ?? null;
+                                $months_detail[$m_num] = [
+                                    'val' => $m_row['actual_value'] ?? '—',
+                                    'by' => $m_row['updater_name'] ?? ($m_row ? 'User' : '—'),
+                                    'at' => ($m_row && !empty($m_row['updated_at'])) ? date('H:i d/m', strtotime($m_row['updated_at'])) : ''
+                                ];
+                            }
+                            $q_data_json = json_encode([
+                                'kpi_name' => $d['kpi_name'],
+                                'q_label' => 'QUÝ ' . $qi,
+                                'target' => $qPlanR ?: ($qPlan ? number_format($qPlan, 0, ',', '.') : '—'),
+                                'unit' => $d['unit'] ?? '',
+                                'months' => $months_detail,
+                                'total_actual' => $tot ? $tot['fmt'] : '—',
+                                'progress' => $qProg ? $qProg['pct'].'%' : '—',
+                                'color' => $qc['head']
+                            ], JSON_HEX_APOS | JSON_HEX_QUOT);
+                        ?>
+                        <td class="q-drilldown-cell" 
+                            style="padding:2px 4px;background:<?= $qc['bg'] ?>;vertical-align:top;cursor:pointer;"
+                            onclick='openQDetailDraw(<?= $q_data_json ?>)'>
                             <?php if ($tot && !$tot['mixed']): ?>
                                 <div style="font-size:12px;font-weight:700;color:<?= $qc['head'] ?>;margin-bottom:3px">
                                     <?= $tot['fmt'] ?>
@@ -508,4 +531,147 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 });
 </script>
+
 <?php endif; ?>
+
+<!-- Drilldown Sidebar Styles -->
+<style>
+.q-drilldown-cell:hover {
+    filter: brightness(0.96);
+    box-shadow: inset 0 0 0 2px rgba(0,0,0,0.05);
+}
+#qDetailLayout {
+    position: fixed; top: 0; right: -420px; width: 400px; height: 100vh;
+    background: #fff; box-shadow: -5px 0 25px rgba(0,0,0,0.1);
+    z-index: 10001; transition: right 0.3s ease-out;
+    display: flex; flex-direction: column; font-family: 'Roboto', sans-serif;
+}
+#qDetailLayout.open { right: 0; }
+#qDetailOverlay {
+    position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+    background: rgba(0,0,0,0.3); z-index: 10000;
+    display: none; opacity: 0; transition: opacity 0.3s;
+}
+#qDetailOverlay.open { display: block; opacity: 1; }
+
+.q-detail-head { padding: 24px; border-bottom: 1px solid #f0f0f0; background: #fafafa; }
+.q-detail-body { padding: 24px; flex: 1; overflow-y: auto; }
+.q-month-card { 
+    background: #fff; border: 1px solid #edf2f7; border-radius: 12px; 
+    padding: 16px; margin-bottom: 12px; display: flex; align-items: center; justify-content: space-between;
+    transition: transform 0.2s;
+}
+.q-month-card:hover { transform: translateY(-2px); border-color: #e2e8f0; }
+.q-data-pill {
+    padding: 4px 12px; border-radius: 20px; font-weight: 700; font-size: 14px;
+}
+</style>
+
+<!-- Drilldown Sidebar HTML -->
+<div id="qDetailOverlay" onclick="closeQDetailDraw()"></div>
+<div id="qDetailLayout">
+    <div class="q-detail-head">
+        <div style="display:flex; justify-content:space-between; align-items:flex-start;">
+            <div>
+                <div id="drawQText" style="font-size:12px; font-weight:700; letter-spacing:1px; text-transform:uppercase; margin-bottom:4px;"></div>
+                <h3 id="drawKPIName" style="margin:0; font-size:18px; color:#1a202c; line-height:1.4;"></h3>
+            </div>
+            <button onclick="closeQDetailDraw()" style="background:none; border:none; cursor:pointer; color:#a0aec0; padding:4px;">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg>
+            </button>
+        </div>
+    </div>
+    <div class="q-detail-body">
+        <!-- Summary Card -->
+        <div style="background:#f8fafc; border-radius:16px; padding:20px; margin-bottom:24px; border:1px solid #e2e8f0;">
+            <div style="display:flex; gap:12px; margin-bottom:16px;">
+                <div style="flex:1;">
+                    <div style="font-size:11px; color:#718096; margin-bottom:4px; font-weight:600;">TARGET QUÝ</div>
+                    <div id="drawTarget" style="font-size:18px; font-weight:700; color:#2d3748;"></div>
+                </div>
+                <div style="flex:1; text-align:right;">
+                    <div style="font-size:11px; color:#718096; margin-bottom:4px; font-weight:600;">THỰC TẾ QUÝ</div>
+                    <div id="drawActual" style="font-size:18px; font-weight:700; color:#1d4ed8;"></div>
+                </div>
+            </div>
+            <div style="height:8px; background:#e2e8f0; border-radius:4px; overflow:hidden; margin-bottom:8px;">
+                <div id="drawBar" style="height:100%; transition:width 0.6s ease;"></div>
+            </div>
+            <div style="display:flex; justify-content:space-between; align-items:baseline;">
+                <span style="font-size:12px; color:#718096;">Hoàn thành kế hoạch</span>
+                <span id="drawPct" style="font-size:20px; font-weight:800; color:#2d3748;"></span>
+            </div>
+        </div>
+
+        <h4 style="font-size:13px; color:#4a5568; margin-top:0; margin-bottom:12px; display:flex; align-items:center; gap:8px;">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20V10M18 20V4M6 20v-4"/></svg>
+            BIẾN ĐỘNG QUÝ
+        </h4>
+        <div id="drawMonthsList" style="margin-bottom:32px;"></div>
+
+        <h4 style="font-size:13px; color:#4a5568; margin-top:0; margin-bottom:12px; display:flex; align-items:center; gap:8px;">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+            LỊCH SỬ CẬP NHẬT
+        </h4>
+        <div id="drawAuditList" style="display:flex; flex-direction:column; gap:8px;"></div>
+    </div>
+</div>
+
+<script>
+function openQDetailDraw(data) {
+    document.getElementById('drawQText').style.color = data.color;
+    document.getElementById('drawQText').textContent = data.q_label;
+    document.getElementById('drawKPIName').textContent = data.kpi_name;
+    document.getElementById('drawTarget').textContent = data.target + ' ' + data.unit;
+    document.getElementById('drawActual').textContent = data.total_actual + ' ' + data.unit;
+    document.getElementById('drawActual').style.color = data.color;
+    document.getElementById('drawPct').textContent = data.progress;
+    
+    // Determine dynamic color based on progress percentage
+    let statusColor = '#EF4444'; // default red
+    const pctVal = data.progress === '—' ? 0 : parseFloat(data.progress);
+    if (pctVal >= 100) statusColor = '#10B981';
+    else if (pctVal >= 80) statusColor = '#3B82F6';
+    else if (pctVal >= 60) statusColor = '#F59E0B';
+
+    const bar = document.getElementById('drawBar');
+    bar.style.width = data.progress === '—' ? '0%' : (pctVal > 100 ? '100%' : pctVal + '%');
+    bar.style.background = statusColor;
+    document.getElementById('drawPct').style.color = statusColor;
+
+    let monthsHtml = '';
+    let auditHtml = '';
+    for (const [m, info] of Object.entries(data.months)) {
+        monthsHtml += `
+            <div class="q-month-card" style="margin-bottom:8px; padding:12px 16px;">
+                <div>
+                    <div style="font-size:10px; color:#a0aec0; font-weight:700; text-transform:uppercase;">Tháng ${m}</div>
+                    <div style="font-size:15px; font-weight:700; color:#2d3748;">${info.val} <small style="font-weight:400; font-size:11px; color:#718096;">${data.unit}</small></div>
+                </div>
+                <div style="width:40px; height:4px; border-radius:2px; background:${data.color}; opacity:0.3;"></div>
+            </div>
+        `;
+        if (info.at) {
+            auditHtml += `
+                <div style="display:flex; align-items:center; gap:12px; padding:8px 0; border-bottom:1px dashed #edf2f7;">
+                    <div style="width:8px; height:8px; border-radius:50%; background:${data.color}; flex-shrink:0;"></div>
+                    <div style="flex:1;">
+                        <div style="font-size:12px; color:#2d3748; font-weight:600;">${info.by} <span style="font-weight:400; color:#718096;">cập nhật tháng ${m}</span></div>
+                        <div style="font-size:11px; color:#a0aec0;">${info.at}</div>
+                    </div>
+                </div>
+            `;
+        }
+    }
+    document.getElementById('drawMonthsList').innerHTML = monthsHtml;
+    document.getElementById('drawAuditList').innerHTML = auditHtml || '<div style="font-size:12px; color:#a0aec0; padding:12px; text-align:center; background:#f7fafc; border-radius:8px;">Chưa có lịch sử cập nhật</div>';
+
+    document.getElementById('qDetailOverlay').classList.add('open');
+    document.getElementById('qDetailLayout').classList.add('open');
+}
+
+function closeQDetailDraw() {
+    document.getElementById('qDetailOverlay').classList.remove('open');
+    document.getElementById('qDetailLayout').classList.remove('open');
+}
+</script>
