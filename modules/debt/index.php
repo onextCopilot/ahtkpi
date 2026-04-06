@@ -989,6 +989,124 @@ if ($res_am && $res_am->num_rows > 0) {
             border: 1px solid #10b981;
         }
 
+        /* Filter Sidebar Drawer */
+        .filter-sidebar-overlay {
+            display: none;
+            position: fixed;
+            inset: 0;
+            background: rgba(0, 0, 0, 0.4);
+            backdrop-filter: blur(2px);
+            z-index: 2000;
+            transition: opacity 0.3s;
+        }
+
+        .filter-sidebar {
+            position: fixed;
+            top: 0;
+            right: -350px;
+            width: 350px;
+            height: 100%;
+            background: white;
+            z-index: 2001;
+            box-shadow: -4px 0 20px rgba(0, 0, 0, 0.1);
+            display: flex;
+            flex-direction: column;
+            transition: right 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        .filter-sidebar.open {
+            right: 0;
+        }
+
+        .filter-sidebar-header {
+            padding: 1.25rem 1.5rem;
+            border-bottom: 1px solid #f1f5f9;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: #f8fafc;
+        }
+
+        .filter-sidebar-header h3 {
+            margin: 0;
+            font-size: 1.1rem;
+            color: #0f172a;
+            font-weight: 700;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .filter-sidebar-body {
+            flex: 1;
+            padding: 1.5rem;
+            overflow-y: auto;
+        }
+
+        .filter-sidebar-footer {
+            padding: 1.25rem 1.5rem;
+            border-top: 1px solid #f1f5f9;
+            display: flex;
+            gap: 12px;
+        }
+
+        .filter-item-label {
+            display: block;
+            margin-bottom: 8px;
+            font-size: 12px;
+            font-weight: 700;
+            color: #64748b;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        .filter-sidebar .filter-select,
+        .filter-sidebar .search-input {
+            width: 100%;
+            margin-bottom: 20px;
+            padding: 10px 12px;
+            background: #fff;
+            border: 1px solid #cbd5e1;
+        }
+
+        .btn-filter-toggle {
+            background: white;
+            border: 1px solid #cbd5e1;
+            color: #475569;
+            padding: 8px 16px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            transition: all 0.2s;
+            position: relative;
+        }
+
+        .btn-filter-toggle:hover {
+            border-color: #2563eb;
+            color: #2563eb;
+            background: #f0f7ff;
+        }
+
+        .filter-badge {
+            position: absolute;
+            top: -5px;
+            right: -5px;
+            background: #2563eb;
+            color: white;
+            font-size: 10px;
+            width: 18px;
+            height: 18px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 700;
+            box-shadow: 0 0 0 2px white;
+        }
+
         /* Modal */
         .modal {
             display: none;
@@ -1194,100 +1312,144 @@ if ($res_am && $res_am->num_rows > 0) {
 
             <div class="debt-container">
                 <div class="page-controls">
-                    <form method="GET" class="filter-group">
-                        <input type="hidden" name="team" value="<?php echo htmlspecialchars($selected_team); ?>">
-                        <input type="text" name="q" class="search-input"
-                            placeholder="Search Client, Project, Invoice..."
-                            value="<?php echo htmlspecialchars($_GET['q'] ?? ''); ?>">
-
-                        <select name="am" class="filter-select" onchange="this.form.submit()">
-                            <option value="">AM: All</option>
-                            <?php foreach ($am_list as $am_name): ?>
-                                <option value="<?php echo htmlspecialchars($am_name); ?>" <?php echo (isset($_GET['am']) && $_GET['am'] === $am_name) ? 'selected' : ''; ?>>
-                                    <?php echo htmlspecialchars($am_name); ?>
-                                </option>
-                            <?php endforeach; ?>
-                        </select>
-
-                        <select name="status" class="filter-select" onchange="this.form.submit()">
-                            <option value="">Status: All</option>
-                            <option value="Not paid" <?php echo (isset($_GET['status']) && $_GET['status'] == 'Not paid') ? 'selected' : ''; ?>>Not paid</option>
-                            <option value="Paid" <?php echo (isset($_GET['status']) && $_GET['status'] == 'Paid') ? 'selected' : ''; ?>>Paid</option>
-                        </select>
-
-                        <select name="invoice_status_class" class="filter-select" onchange="this.form.submit()">
-                            <option value="">Phân loại HĐ: All</option>
-                            <option value="Trắng" <?php echo (isset($_GET['invoice_status_class']) && $_GET['invoice_status_class'] == 'Trắng') ? 'selected' : ''; ?>>Trắng</option>
-                            <option value="Xanh" <?php echo (isset($_GET['invoice_status_class']) && $_GET['invoice_status_class'] == 'Xanh') ? 'selected' : ''; ?>>Xanh</option>
-                            <option value="Tím" <?php echo (isset($_GET['invoice_status_class']) && $_GET['invoice_status_class'] == 'Tím') ? 'selected' : ''; ?>>Tím</option>
-                            <option value="Đỏ" <?php echo (isset($_GET['invoice_status_class']) && $_GET['invoice_status_class'] == 'Đỏ') ? 'selected' : ''; ?>>Đỏ</option>
-                            <option value="PP" <?php echo (isset($_GET['invoice_status_class']) && $_GET['invoice_status_class'] == 'PP') ? 'selected' : ''; ?>>PP</option>
-                            <option value="Draft" <?php echo (isset($_GET['invoice_status_class']) && $_GET['invoice_status_class'] == 'Draft') ? 'selected' : ''; ?>>Draft</option>
-                            <option value="Done" <?php echo (isset($_GET['invoice_status_class']) && $_GET['invoice_status_class'] == 'Done') ? 'selected' : ''; ?>>Done</option>
-                            <option value="Chưa xác định" <?php echo (isset($_GET['invoice_status_class']) && $_GET['invoice_status_class'] == 'Chưa xác định') ? 'selected' : ''; ?>>Chưa xác định
-                            </option>
-                        </select>
-
-                        <select name="year" class="filter-select" onchange="this.form.submit()">
-                            <option value="">Year: All</option>
-                            <?php
-                            $currentYear = date('Y');
-                            for ($y = $currentYear; $y >= $currentYear - 2; $y--) {
-                                $sel = (isset($_GET['year']) && $_GET['year'] == $y) ? 'selected' : '';
-                                echo "<option value='$y' $sel>$y</option>";
-                            }
-                            ?>
-                        </select>
-
-                        <select name="quarter" class="filter-select" onchange="this.form.submit()">
-                            <option value="">Quarter: All</option>
-                            <option value="1" <?php echo (isset($_GET['quarter']) && $_GET['quarter'] == '1') ? 'selected' : ''; ?>>Q1</option>
-                            <option value="2" <?php echo (isset($_GET['quarter']) && $_GET['quarter'] == '2') ? 'selected' : ''; ?>>Q2</option>
-                            <option value="3" <?php echo (isset($_GET['quarter']) && $_GET['quarter'] == '3') ? 'selected' : ''; ?>>Q3</option>
-                            <option value="4" <?php echo (isset($_GET['quarter']) && $_GET['quarter'] == '4') ? 'selected' : ''; ?>>Q4</option>
-                        </select>
-
-                        <select name="month" class="filter-select" onchange="this.form.submit()">
-                            <option value="">Month: All</option>
-                            <?php
-                            for ($m = 1; $m <= 12; $m++) {
-                                $sel = (isset($_GET['month']) && $_GET['month'] == $m) ? 'selected' : '';
-                                $mName = date('F', mktime(0, 0, 0, $m, 1));
-                                echo "<option value='$m' $sel>$mName</option>";
-                            }
-                            ?>
-                        </select>
-
-                        <select name="week" class="filter-select" onchange="this.form.submit()">
-                            <option value="">Tuần: All</option>
-                            <?php
-                            for ($w = 1; $w <= 5; $w++) {
-                                $sel = (isset($_GET['week']) && $_GET['week'] == $w) ? 'selected' : '';
-                                echo "<option value='$w' $sel>Tuần $w</option>";
-                            }
-                            ?>
-                        </select>
-
-                        <div style="display:flex; align-items:center; gap:6px; background:#f8fafc; border:1px solid #e2e8f0; border-radius:8px; padding:4px 10px;">
-                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>
-                            <input type="date" name="date_from" id="date_from"
-                                value="<?php echo htmlspecialchars($_GET['date_from'] ?? ''); ?>"
-                                onchange="this.form.submit()"
-                                style="border:none; background:transparent; font-size:13px; color:#475569; outline:none; width:130px; cursor:pointer;">
-                            <span style="color:#94a3b8; font-size:12px;">→</span>
-                            <input type="date" name="date_to" id="date_to"
-                                value="<?php echo htmlspecialchars($_GET['date_to'] ?? ''); ?>"
-                                onchange="this.form.submit()"
-                                style="border:none; background:transparent; font-size:13px; color:#475569; outline:none; width:130px; cursor:pointer;">
-                            <?php if (!empty($_GET['date_from']) || !empty($_GET['date_to'])): ?>
-                            <button type="button" onclick="clearDateRange()" title="Xóa bộ lọc ngày" style="background:none; border:none; cursor:pointer; color:#94a3b8; padding:0; line-height:1; font-size:16px;">&times;</button>
-                            <?php endif; ?>
+                    <div style="display: flex; align-items: center; gap: 12px;">
+                        <?php if(!empty($_GET['q'])): ?>
+                        <div style="display:flex; align-items:center; gap:8px; background:#f1f5f9; padding:4px 12px; border-radius:20px; font-size:12px; border:1px solid #e2e8f0; color:#475569;">
+                            <span>Từ khóa: <strong><?php echo htmlspecialchars($_GET['q']); ?></strong></span>
+                            <a href="?team=<?php echo htmlspecialchars($selected_team); ?>" style="color:#94a3b8; text-decoration:none; font-size:14px; font-weight:bold;">&times;</a>
                         </div>
+                        <?php endif; ?>
+                        
+                        <!-- Hiển thị các badge filter đang active khác nếu muốn -->
+                    </div>
 
-                        <button type="submit" style="display:none;"></button>
-                    </form>
-                    <div class="total-badge">
-                        Total: <?php echo formatVND($total_amount_vnd); ?>
+                    <div style="display: flex; align-items: center; gap: 12px; margin-left: auto;">
+                        <div class="total-badge">
+                            Total: <?php echo formatVND($total_amount_vnd); ?>
+                        </div>
+                        
+                        <button class="btn-filter-toggle" onclick="toggleFilterSidebar()">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon></svg>
+                            <span>Bộ lọc</span>
+                            <?php 
+                            $active_filters = 0;
+                            $filter_params = ['am', 'status', 'invoice_status_class', 'year', 'quarter', 'month', 'week', 'date_from', 'date_to', 'q']; 
+                            foreach($filter_params as $p) {
+                                if(!empty($_GET[$p])) $active_filters++;
+                            }
+                            if($active_filters > 0) echo "<span class='filter-badge'>$active_filters</span>";
+                            ?>
+                        </button>
+
+                        <button class="btn-add" onclick="openModal()">
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>Thêm mới
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Filter Sidebar Drawer -->
+                <div class="filter-sidebar-overlay" id="filterOverlay" onclick="toggleFilterSidebar()"></div>
+                <div class="filter-sidebar" id="filterSidebar">
+                    <div class="filter-sidebar-header">
+                        <h3><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon></svg> Bộ lọc dữ liệu</h3>
+                        <span class="close" onclick="toggleFilterSidebar()">&times;</span>
+                    </div>
+                    <div class="filter-sidebar-body">
+                        <form method="GET" id="filterForm">
+                            <input type="hidden" name="team" value="<?php echo htmlspecialchars($selected_team); ?>">
+                            
+                            <label class="filter-item-label">Tìm kiếm nhanh</label>
+
+                            <label class="filter-item-label">Người quản lý (AM)</label>
+                            <select name="am" class="filter-select">
+                                <option value="">Tất cả AM</option>
+                                <?php foreach ($am_list as $am_name): ?>
+                                    <option value="<?php echo htmlspecialchars($am_name); ?>" <?php echo (isset($_GET['am']) && $_GET['am'] === $am_name) ? 'selected' : ''; ?>>
+                                        <?php echo htmlspecialchars($am_name); ?>
+                                    </option>
+                                <?php endforeach; ?>
+                            </select>
+
+                            <label class="filter-item-label">Trạng thái thanh toán</label>
+                            <select name="status" class="filter-select">
+                                <option value="">Tất cả trạng thái</option>
+                                <option value="Not paid" <?php echo (isset($_GET['status']) && $_GET['status'] == 'Not paid') ? 'selected' : ''; ?>>Not paid</option>
+                                <option value="Paid" <?php echo (isset($_GET['status']) && $_GET['status'] == 'Paid') ? 'selected' : ''; ?>>Paid</option>
+                            </select>
+
+                            <label class="filter-item-label">Phân loại Invoice</label>
+                            <select name="invoice_status_class" class="filter-select">
+                                <option value="">Tất cả phân loại</option>
+                                <option value="Trắng" <?php echo (isset($_GET['invoice_status_class']) && $_GET['invoice_status_class'] == 'Trắng') ? 'selected' : ''; ?>>Trắng</option>
+                                <option value="Xanh" <?php echo (isset($_GET['invoice_status_class']) && $_GET['invoice_status_class'] == 'Xanh') ? 'selected' : ''; ?>>Xanh</option>
+                                <option value="Tím" <?php echo (isset($_GET['invoice_status_class']) && $_GET['invoice_status_class'] == 'Tím') ? 'selected' : ''; ?>>Tím</option>
+                                <option value="Đỏ" <?php echo (isset($_GET['invoice_status_class']) && $_GET['invoice_status_class'] == 'Đỏ') ? 'selected' : ''; ?>>Đỏ</option>
+                                <option value="PP" <?php echo (isset($_GET['invoice_status_class']) && $_GET['invoice_status_class'] == 'PP') ? 'selected' : ''; ?>>PP</option>
+                                <option value="Draft" <?php echo (isset($_GET['invoice_status_class']) && $_GET['invoice_status_class'] == 'Draft') ? 'selected' : ''; ?>>Draft</option>
+                                <option value="Done" <?php echo (isset($_GET['invoice_status_class']) && $_GET['invoice_status_class'] == 'Done') ? 'selected' : ''; ?>>Done</option>
+                                <option value="Chưa xác định" <?php echo (isset($_GET['invoice_status_class']) && $_GET['invoice_status_class'] == 'Chưa xác định') ? 'selected' : ''; ?>>Chưa xác định</option>
+                            </select>
+
+                            <label class="filter-item-label">Khoảng thời gian (Ngày HĐ)</label>
+                            <div style="display:flex; flex-direction:column; gap:8px; margin-bottom:20px;">
+                                <div style="display:flex; align-items:center; gap:8px; background:#f8fafc; border:1px solid #cbd5e1; border-radius:6px; padding:8px 10px;">
+                                    <span style="font-size:12px; color:#94a3b8; width:30px;">Từ:</span>
+                                    <input type="date" name="date_from" value="<?php echo htmlspecialchars($_GET['date_from'] ?? ''); ?>" style="border:none; background:transparent; font-size:13px; outline:none; flex:1;">
+                                </div>
+                                <div style="display:flex; align-items:center; gap:8px; background:#f8fafc; border:1px solid #cbd5e1; border-radius:6px; padding:8px 10px;">
+                                    <span style="font-size:12px; color:#94a3b8; width:30px;">Đến:</span>
+                                    <input type="date" name="date_to" value="<?php echo htmlspecialchars($_GET['date_to'] ?? ''); ?>" style="border:none; background:transparent; font-size:13px; outline:none; flex:1;">
+                                </div>
+                            </div>
+
+                            <label class="filter-item-label">Thời gian (Theo Quý/Tháng)</label>
+                            <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px; margin-bottom:20px;">
+                                <select name="year" class="filter-select" style="margin-bottom:0;">
+                                    <option value="">Năm</option>
+                                    <?php
+                                    $currentYear = date('Y');
+                                    for ($y = $currentYear; $y >= $currentYear - 2; $y--) {
+                                        $sel = (isset($_GET['year']) && $_GET['year'] == $y) ? 'selected' : '';
+                                        echo "<option value='$y' $sel>$y</option>";
+                                    }
+                                    ?>
+                                </select>
+                                <select name="quarter" class="filter-select" style="margin-bottom:0;">
+                                    <option value="">Quý</option>
+                                    <option value="1" <?php echo (isset($_GET['quarter']) && $_GET['quarter'] == '1') ? 'selected' : ''; ?>>Q1</option>
+                                    <option value="2" <?php echo (isset($_GET['quarter']) && $_GET['quarter'] == '2') ? 'selected' : ''; ?>>Q2</option>
+                                    <option value="3" <?php echo (isset($_GET['quarter']) && $_GET['quarter'] == '3') ? 'selected' : ''; ?>>Q3</option>
+                                    <option value="4" <?php echo (isset($_GET['quarter']) && $_GET['quarter'] == '4') ? 'selected' : ''; ?>>Q4</option>
+                                </select>
+                            </div>
+
+                            <select name="month" class="filter-select">
+                                <option value="">Chọn tháng</option>
+                                <?php
+                                for ($m = 1; $m <= 12; $m++) {
+                                    $sel = (isset($_GET['month']) && $_GET['month'] == $m) ? 'selected' : '';
+                                    $mName = date('F', mktime(0, 0, 0, $m, 1));
+                                    echo "<option value='$m' $sel>$mName</option>";
+                                }
+                                ?>
+                            </select>
+
+                            <label class="filter-item-label">Cập nhật Tuần</label>
+                            <select name="week" class="filter-select">
+                                <option value="">Tất cả tuần</option>
+                                <?php
+                                for ($w = 1; $w <= 5; $w++) {
+                                    $sel = (isset($_GET['week']) && $_GET['week'] == $w) ? 'selected' : '';
+                                    echo "<option value='$w' $sel>Tuần $w</option>";
+                                }
+                                ?>
+                            </select>
+                            <button type="submit" style="display:none;"></button>
+                        </form>
+                    </div>
+                    <div class="filter-sidebar-footer">
+                        <button type="button" class="btn-cancel" style="flex:1;" onclick="window.location.href='?team=<?php echo htmlspecialchars($selected_team); ?>'">Xóa hết</button>
+                        <button type="button" class="btn-submit" style="flex:1;" onclick="document.getElementById('filterForm').submit()">Áp dụng</button>
                     </div>
                 </div>
 
@@ -2690,6 +2852,22 @@ if ($res_am && $res_am->num_rows > 0) {
             url.searchParams.delete('date_from');
             url.searchParams.delete('date_to');
             window.location.href = url.toString();
+        }
+
+        function toggleFilterSidebar() {
+            const sidebar = document.getElementById('filterSidebar');
+            const overlay = document.getElementById('filterOverlay');
+            const isOpen = sidebar.classList.contains('open');
+            
+            if (isOpen) {
+                sidebar.classList.remove('open');
+                overlay.style.display = 'none';
+                document.body.style.overflow = '';
+            } else {
+                sidebar.classList.add('open');
+                overlay.style.display = 'block';
+                document.body.style.overflow = 'hidden';
+            }
         }
     </script>
 </body>
