@@ -207,6 +207,26 @@ $COLS = 14; // STT+Nhóm+Tên+TargetNăm+CảNăm+Tỷtrọng+Q1+Q2+Q3+Q4+Owner+
                 $baseRaw = stripThousands(trim($d['target_base'] ?? ''));
                 $baseNum = (is_numeric($baseRaw) && (float) $baseRaw > 0) ? (float) $baseRaw : null;
                 $yrProg = ($yrTot && !$yrTot['mixed'] && $baseNum) ? calcProgress($yrTot['sum'], $baseNum) : null;
+
+                // Prepare 12-month data for chart drilldown
+                $yr_months_detail = [];
+                for ($m_num = 1; $m_num <= 12; $m_num++) {
+                    $m_row = $monthly_map[$d['id']][$m_num] ?? null;
+                    $yr_months_detail[$m_num] = [
+                        'val' => $m_row ? (is_numeric(stripThousands($m_row['actual_value'])) ? (float)stripThousands($m_row['actual_value']) : 0) : null,
+                        'fmt' => $m_row ? $m_row['actual_value'] : null
+                    ];
+                }
+                $yr_data_json = json_encode([
+                    'kpi_name' => $d['kpi_name'],
+                    'def_id' => $d['id'],
+                    'year' => $year,
+                    'unit' => $d['unit'] ?? '',
+                    'months' => $yr_months_detail,
+                    'total_actual' => $yrTot ? $yrTot['fmt'] : '—',
+                    'progress' => $yrProg ? $yrProg['pct'] . '%' : '—',
+                    'target' => $d['target_base'] ?? '—'
+                ], JSON_HEX_APOS | JSON_HEX_QUOT);
                 ?>
                 <tr class="kpi-item-row" data-id="<?= $d['id'] ?>">
                     <td class="col-no">
@@ -234,7 +254,9 @@ $COLS = 14; // STT+Nhóm+Tên+TargetNăm+CảNăm+Tỷtrọng+Q1+Q2+Q3+Q4+Owner+
                     $circ = round(2 * M_PI * $r, 2); // circumference
                     ?>
                     <td
-                        style="padding:2px 4px;background:#EFF6FF;vertical-align:middle;border-left:2px solid #BFDBFE;border-right:2px solid #BFDBFE;text-align:center">
+                        class="yr-drilldown-cell"
+                        onclick='openYearDetailDraw(<?= $yr_data_json ?>)'
+                        style="padding:2px 4px;background:#EFF6FF;vertical-align:middle;border-left:2px solid #BFDBFE;border-right:2px solid #BFDBFE;text-align:center;cursor:pointer">
                         <?php if ($yrTot && !$yrTot['mixed']): ?>
                             <div style="display:flex;align-items:center;gap:6px">
                                 <!-- SVG donut -->
@@ -743,4 +765,135 @@ function closeQDetailDraw() {
     document.getElementById('qDetailOverlay').classList.remove('open');
     document.getElementById('qDetailLayout').classList.remove('open');
 }
+</script>
+
+<!-- Chart.js and Sidebar Enhancements -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<style>
+.yr-drilldown-cell:hover { filter: brightness(0.96); box-shadow: inset 0 0 0 2px rgba(0,0,0,0.05); }
+#qDetailLayout { width: 450px !important; }
+.q-detail-head { padding: 20px 24px; }
+.q-month-card { transition: background 0.2s; }
+.q-month-card:hover { background: #f8fafc !important; }
+</style>
+
+<script>
+let kpiChartInstance = null;
+
+function openYearDetailDraw(data) {
+    if(!document.getElementById('chartSection')) {
+        // Inject sections dynamically if not present
+        const bodyContent = document.querySelector('.q-detail-body');
+        const chartHtml = `
+            <div id="chartSection" style="margin-bottom:24px;">
+                <h4 style="font-size:12px; color:#64748b; margin-top:0; margin-bottom:12px; display:flex; align-items:center; gap:8px;">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 21H3V3"/><path d="M18 9l-5 5-3-3-4 4"/></svg>
+                    BIẾN ĐỘNG THEO CÁC THÁNG
+                </h4>
+                <div style="height:200px; background:#fff; border:1px solid #e2e8f0; border-radius:12px; padding:12px;">
+                    <canvas id="kpiTrendChart"></canvas>
+                </div>
+            </div>
+        `;
+        bodyContent.insertAdjacentHTML('afterbegin', chartHtml);
+        
+        // Find "Chi tiết dữ liệu" title and inject before it
+        const monthsList = document.getElementById('drawMonthsList');
+        const drillTitle = monthsList.previousElementSibling;
+        drillTitle.id = 'drillTitle';
+    }
+
+    document.getElementById('chartSection').style.display = 'block';
+    document.getElementById('drawQText').style.color = '#1D4ED8';
+    document.getElementById('drawQText').textContent = 'BIẾN ĐỘNG CẢ NĂM ' + data.year;
+    document.getElementById('drawKPIName').textContent = data.kpi_name;
+    document.getElementById('drawTarget').textContent = fmtNum(data.target) + ' ' + data.unit;
+    document.getElementById('drawActual').textContent = fmtNum(data.total_actual) + ' ' + data.unit;
+    document.getElementById('drawActual').style.color = '#1D4ED8';
+    document.getElementById('drawPct').textContent = data.progress;
+    document.getElementById('drillTitle').innerHTML = `
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20V10M18 20V4M6 20v-4"/></svg>
+        BẢNG SỐ LIỆU 12 THÁNG
+    `;
+
+    let statusColor = '#EF4444';
+    const pctVal = data.progress === '—' ? 0 : parseFloat(data.progress);
+    if (pctVal >= 100) statusColor = '#10B981';
+    else if (pctVal >= 80) statusColor = '#3B82F6';
+    else if (pctVal >= 60) statusColor = '#F59E0B';
+
+    const bar = document.getElementById('drawBar');
+    bar.style.width = data.progress === '—' ? '0%' : (pctVal > 100 ? '100%' : pctVal + '%');
+    bar.style.background = statusColor;
+    document.getElementById('drawPct').style.color = statusColor;
+
+    // Build Chart Data & Months list
+    let listHtml = '';
+    const labels = [];
+    const values = [];
+
+    for (let m = 1; m <= 12; m++) {
+        const info = data.months[m];
+        const val = info && info.val !== null ? info.val : 0;
+        const fmt = info && info.fmt ? info.fmt : '—';
+        labels.push('T' + m);
+        values.push(val);
+
+        listHtml += `
+            <div class="q-month-card" style="margin-bottom:6px; padding:10px 14px; border:1px solid #f1f5f9; border-radius:10px; display:flex; justify-content:space-between; align-items:center;">
+                <div>
+                    <div style="font-size:10px; color:#94a3b8; font-weight:700;">THÁNG ${m}</div>
+                    <div style="font-size:14px; font-weight:700; color:#334155;">${fmt} <small style="font-weight:400; font-size:11px;">${data.unit}</small></div>
+                </div>
+                <div style="width:24px; height:4px; border-radius:10px; background:#e2e8f0;"></div>
+            </div>
+        `;
+    }
+    document.getElementById('drawMonthsList').innerHTML = listHtml;
+
+    // Render Chart
+    setTimeout(() => {
+        const ctx = document.getElementById('kpiTrendChart').getContext('2d');
+        if (kpiChartInstance) kpiChartInstance.destroy();
+        kpiChartInstance = new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: labels,
+                datasets: [{
+                    data: values,
+                    borderColor: '#1D4ED8',
+                    backgroundColor: 'rgba(29, 78, 216, 0.08)',
+                    borderWidth: 2,
+                    tension: 0.35,
+                    pointRadius: 3,
+                    pointBackgroundColor: '#fff',
+                    pointBorderWidth: 2,
+                    fill: true
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: { legend: { display: false } },
+                scales: {
+                    y: { beginAtZero: true, grid: { color: '#f8fafc' }, ticks: { font: { size: 10 }, color: '#94a3b8' } },
+                    x: { grid: { display: false }, ticks: { font: { size: 10 }, color: '#94a3b8' } }
+                }
+            }
+        });
+    }, 100);
+
+    currentKPIData = data;
+    loadKPIHistory(true);
+    document.getElementById('qDetailOverlay').classList.add('open');
+    document.getElementById('qDetailLayout').classList.add('open');
+}
+
+// Intercept existing function to reset view
+const oldOpenQ = openQDetailDraw;
+openQDetailDraw = function(data) {
+    if(document.getElementById('chartSection')) document.getElementById('chartSection').style.display = 'none';
+    if(document.getElementById('drillTitle')) document.getElementById('drillTitle').textContent = 'BIẾN ĐỘNG QUÝ';
+    oldOpenQ(data);
+};
 </script>
