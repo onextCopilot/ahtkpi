@@ -77,6 +77,8 @@ addColumnIfNotExists($conn, 'users', 'phone', "VARCHAR(20) DEFAULT NULL");
 addColumnIfNotExists($conn, 'users', 'can_view_invoice', "TINYINT(1) DEFAULT 0");
 addColumnIfNotExists($conn, 'users', 'can_view_all_debts', "TINYINT(1) DEFAULT 0");
 addColumnIfNotExists($conn, 'users', 'is_am_bd', "TINYINT(1) DEFAULT 0");
+addColumnIfNotExists($conn, 'users', 'can_view_all_kpi', "TINYINT(1) DEFAULT 0");
+addColumnIfNotExists($conn, 'users', 'viewable_department_ids', "TEXT DEFAULT NULL");
 addColumnIfNotExists($conn, 'users', 'avatar', "VARCHAR(255) DEFAULT NULL"); // Ensure avatar exists
 
 // --- USER SALE LEVEL HISTORY TABLE ---
@@ -128,6 +130,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $join_date = !empty($_POST['join_date']) ? $_POST['join_date'] : NULL;
             $can_view_invoice = isset($_POST['can_view_invoice']) ? 1 : 0;
             $can_view_all_debts = isset($_POST['can_view_all_debts']) ? 1 : 0;
+            $can_view_all_kpi = isset($_POST['can_view_all_kpi']) ? 1 : 0;
+            $viewable_dept_ids = isset($_POST['viewable_dept_ids']) ? implode(',', $_POST['viewable_dept_ids']) : '';
             $is_am_bd = isset($_POST['is_am_bd']) ? 1 : 0;
             $team_ids = isset($_POST['team_ids']) ? $_POST['team_ids'] : [];
             $role_val = $_POST['role'] ?? 'user';
@@ -146,9 +150,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
             if (!empty($email) && !empty($name) && !empty($username)) {
                 try {
-                    $stmt = $conn->prepare("INSERT INTO users (username, email, full_name, password, employee_code, job_title, level, department_id, status, join_date, can_view_invoice, can_view_all_debts, is_am_bd, role, sale_level_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+                    $stmt = $conn->prepare("INSERT INTO users (username, email, full_name, password, employee_code, job_title, level, department_id, status, join_date, can_view_invoice, can_view_all_debts, can_view_all_kpi, viewable_department_ids, is_am_bd, role, sale_level_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
                     $stmt->bind_param(
-                        "sssssssissiissi",
+                        "sssssssissiiisisi",
                         $username,
                         $email,
                         $name,
@@ -161,6 +165,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         $join_date,
                         $can_view_invoice,
                         $can_view_all_debts,
+                        $can_view_all_kpi,
+                        $viewable_dept_ids,
                         $is_am_bd,
                         $role_val,
                         $sale_level_id
@@ -210,6 +216,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $join_date = !empty($_POST['join_date']) ? $_POST['join_date'] : NULL;
             $can_view_invoice = isset($_POST['can_view_invoice']) ? 1 : 0;
             $can_view_all_debts = isset($_POST['can_view_all_debts']) ? 1 : 0;
+            $can_view_all_kpi = isset($_POST['can_view_all_kpi']) ? 1 : 0;
+            $viewable_dept_ids = isset($_POST['viewable_dept_ids']) ? implode(',', $_POST['viewable_dept_ids']) : '';
             $is_am_bd = isset($_POST['is_am_bd']) ? 1 : 0;
             $team_ids = isset($_POST['team_ids']) ? $_POST['team_ids'] : [];
             $role_val = $_POST['role'] ?? 'user';
@@ -225,9 +233,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
             if ($id > 0 && !empty($email)) {
                 try {
-                    $sql = "UPDATE users SET username=?, email=?, full_name=?, employee_code=?, job_title=?, level=?, department_id=?, status=?, join_date=?, can_view_invoice=?, can_view_all_debts=?, is_am_bd=?, role=?, sale_level_id=? WHERE id=?";
+                    $sql = "UPDATE users SET username=?, email=?, full_name=?, employee_code=?, job_title=?, level=?, department_id=?, status=?, join_date=?, can_view_invoice=?, can_view_all_debts=?, can_view_all_kpi=?, viewable_department_ids=?, is_am_bd=?, role=?, sale_level_id=? WHERE id=?";
                     $stmt = $conn->prepare($sql);
-                    $stmt->bind_param("ssssssissiiisii", $username, $email, $name, $emp_code, $job, $level, $dept_id, $status, $join_date, $can_view_invoice, $can_view_all_debts, $is_am_bd, $role_val, $sale_level_id, $id);
+                    $stmt->bind_param("ssssssissiiisiiii", $username, $email, $name, $emp_code, $job, $level, $dept_id, $status, $join_date, $can_view_invoice, $can_view_all_debts, $can_view_all_kpi, $viewable_dept_ids, $is_am_bd, $role_val, $sale_level_id, $id);
                     ;
                     $stmt->execute();
 
@@ -1050,6 +1058,21 @@ if ($sl_tbl && $sl_tbl->num_rows > 0) {
                             <input type="checkbox" name="can_view_all_debts" id="can_view_all_debts">
                         </div>
                         <div class="toggle-item">
+                            <label for="can_view_all_kpi" style="font-size: 13px; color: #3c4043;">Can View All
+                                KPIs (Full access)</label>
+                            <input type="checkbox" name="can_view_all_kpi" id="can_view_all_kpi">
+                        </div>
+
+                        <div id="viewable_depts_row" class="team-select-container" style="border-top:none; margin-top:5px; padding-top:0;">
+                            <label style="display:block; margin-bottom: 8px; color: #3c4043; font-size: 13px; font-weight: 500;">Can View Specific Teams</label>
+                            <select name="viewable_dept_ids[]" id="viewable_dept_ids" multiple style="height: 100px; width:100%; border-radius: 6px; border:1px solid #dadce0;">
+                                <?php foreach ($depts as $d): ?>
+                                    <option value="<?php echo $d['id']; ?>"><?php echo htmlspecialchars($d['name']); ?></option>
+                                <?php endforeach; ?>
+                            </select>
+                            <small style="color: #70757a; font-size: 11px;">Hold Cmd/Ctrl to select multiple Teams.</small>
+                        </div>
+                        <div class="toggle-item">
                             <label for="is_am_bd" style="font-size: 13px; color: #3c4043;">Is AM/BD Member</label>
                             <input type="checkbox" name="is_am_bd" id="is_am_bd" onchange="toggleTeamSelect()">
                         </div>
@@ -1209,6 +1232,9 @@ if ($sl_tbl && $sl_tbl->num_rows > 0) {
             joinDate.value = '';
             canViewInvoice.checked = false;
             canViewAllDebts.checked = false;
+            document.getElementById('can_view_all_kpi').checked = false;
+            const viewableDeptSel = document.getElementById('viewable_dept_ids');
+            if(viewableDeptSel) { for(let opt of viewableDeptSel.options) opt.selected = false; }
             document.getElementById('is_am_bd').checked = false;
             // Hide history
             document.getElementById('modal_level_history').style.display = 'none';
@@ -1234,6 +1260,21 @@ if ($sl_tbl && $sl_tbl->num_rows > 0) {
             joinDate.value = user.join_date || '';
             canViewInvoice.checked = user.can_view_invoice == 1;
             canViewAllDebts.checked = user.can_view_all_debts == 1;
+            document.getElementById('can_view_all_kpi').checked = user.can_view_all_kpi == 1;
+            
+            // Set viewable depts
+            const viewableDeptSel = document.getElementById('viewable_dept_ids');
+            if(viewableDeptSel) {
+                for(let opt of viewableDeptSel.options) opt.selected = false;
+                if(user.viewable_department_ids) {
+                    const vids = user.viewable_department_ids.split(',');
+                    for(let vid of vids) {
+                        const opt = viewableDeptSel.querySelector(`option[value="${vid}"]`);
+                        if(opt) opt.selected = true;
+                    }
+                }
+            }
+
             document.getElementById('is_am_bd').checked = user.is_am_bd == 1;
 
             // Set teams

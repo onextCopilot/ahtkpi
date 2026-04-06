@@ -22,23 +22,35 @@ if (isset($_SESSION['flash_msg_err'])) {
     unset($_SESSION['flash_msg_err']);
 }
 
-// FIX: Ensure department_id is in session if not already there
-if (!isset($_SESSION['department_id']) && isset($_SESSION['user_id'])) {
-    $su_stmt = $conn->prepare("SELECT department_id FROM users WHERE id = ?");
+// FIX: Ensure department_id and special permissions are in session
+if ((!isset($_SESSION['department_id']) || !isset($_SESSION['viewable_department_ids'])) && isset($_SESSION['user_id'])) {
+    $su_stmt = $conn->prepare("SELECT department_id, can_view_all_kpi, viewable_department_ids FROM users WHERE id = ?");
     $su_stmt->bind_param("i", $_SESSION['user_id']);
     $su_stmt->execute();
     $su_res = $su_stmt->get_result();
     if ($su_row = $su_res->fetch_assoc()) {
         $_SESSION['department_id'] = $su_row['department_id'];
+        $_SESSION['can_view_all_kpi'] = $su_row['can_view_all_kpi'] ?? 0;
+        $_SESSION['viewable_department_ids'] = $su_row['viewable_department_ids'] ?? '';
     }
 }
+
+// Define permission flag
+$is_kpi_admin = ($_SESSION['role'] === 'admin' || ($_SESSION['can_view_all_kpi'] ?? 0) == 1);
+$viewable_depts = array_filter(explode(',', $_SESSION['viewable_department_ids'] ?? ''));
+if ($_SESSION['department_id']) $viewable_depts[] = $_SESSION['department_id'];
+$viewable_depts = array_unique($viewable_depts);
 
 // ── Lookups ───────────────────────────────────────
 $departments = [];
 $dept_sql = "SELECT id, name FROM departments";
-if ($_SESSION['role'] !== 'admin') {
-    $user_dept_id = intval($_SESSION['department_id'] ?? 0);
-    $dept_sql .= " WHERE id = $user_dept_id";
+if (!$is_kpi_admin) {
+    if (!empty($viewable_depts)) {
+        $dept_sql .= " WHERE id IN (" . implode(',', array_map('intval', $viewable_depts)) . ")";
+    } else {
+        $user_dept_id = intval($_SESSION['department_id'] ?? 0);
+        $dept_sql .= " WHERE id = $user_dept_id";
+    }
 }
 $dept_sql .= " ORDER BY sort_order ASC, id ASC";
 
@@ -193,10 +205,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 $defs = [];
 $filter_dept = isset($_GET['dept']) ? intval($_GET['dept']) : (!empty($departments) ? $departments[0]['id'] : 0);
 
-// Force user's department if not admin
-if ($_SESSION['role'] !== 'admin') {
-    $filter_dept = intval($_SESSION['department_id'] ?? 0);
-    // User must have a department to see anything, or at least be restricted to it
+// Force user's department restrictions if not admin
+if (!$is_kpi_admin) {
+    // Check if current filter_dept is allowed
+    if (!in_array($filter_dept, $viewable_depts)) {
+        $filter_dept = !empty($viewable_depts) ? $viewable_depts[0] : intval($_SESSION['department_id'] ?? 0);
+    }
+    
     $where = "WHERE k.year = $year AND k.department_id = $filter_dept";
 } else {
     // Admin can filter by dept or see all (if filter_dept is 0)
@@ -209,10 +224,10 @@ if ($col_check && $col_check->num_rows == 0) {
             ADD COLUMN sort_order INT DEFAULT 0 AFTER kpi_name,
             ADD COLUMN group_order INT DEFAULT 0 AFTER kpi_group");
 }
-// Auto-create calc_method if missing
-$calc_col_check = $conn->query("SHOW COLUMNS FROM kpi_definitions LIKE 'calc_method'");
-if ($calc_col_check && $calc_col_check->num_rows == 0) {
-    $conn->query("ALTER TABLE kpi_definitions ADD COLUMN calc_method VARCHAR(10) NOT NULL DEFAULT 'sum' AFTER notes");
+// Auto-create viewable_department_ids if missing
+$vdept_col_check = $conn->query("SHOW COLUMNS FROM users LIKE 'viewable_department_ids'");
+if ($vdept_col_check && $vdept_col_check->num_rows == 0) {
+    $conn->query("ALTER TABLE users ADD COLUMN viewable_department_ids TEXT DEFAULT NULL AFTER department_id");
 }
 
 $r = $conn->query("SELECT k.*, d.name dept_name, u.full_name owner_name, u.avatar owner_avatar, d.owner_id as dept_owner_id, d.manager_id as dept_manager_id
