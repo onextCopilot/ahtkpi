@@ -175,11 +175,20 @@ try {
                 $grouped_data[$b] = [
                     'branch' => $b,
                     'totalVnd' => 0,
+                    'month_groups' => []
+                ];
+            }
+
+            if (!isset($grouped_data[$b]['month_groups'][$inv_month])) {
+                $grouped_data[$b]['month_groups'][$inv_month] = [
+                    'month' => $inv_month,
+                    'label' => "Tháng " . $inv_month,
+                    'totalVnd' => 0,
                     'invoices' => []
                 ];
             }
 
-            $grouped_data[$b]['invoices'][] = [
+            $grouped_data[$b]['month_groups'][$inv_month]['invoices'][] = [
                 'id' => $inv['id'],
                 'name' => $inv['name'],
                 'type' => is_array($inv['x_studio_invoice_type_1']) ? $inv['x_studio_invoice_type_1'][1] : ($inv['x_studio_invoice_type_1'] ?? ''),
@@ -191,13 +200,20 @@ try {
                 'amount_total' => $inv['amount_total'],
                 'amount_total_signed' => $amount_vnd,
             ];
+            $grouped_data[$b]['month_groups'][$inv_month]['totalVnd'] += $amount_vnd;
             $grouped_data[$b]['totalVnd'] += $amount_vnd;
         }
     }
 
-    // Sort the response alphabetically by Branch name
+    // Sort branches by name
     ksort($grouped_data);
-    $response = array_values($grouped_data);
+    $response = [];
+    foreach ($grouped_data as $b_name => $b_data) {
+        // Sort months within each branch (Descending: latest month first)
+        krsort($b_data['month_groups']);
+        $b_data['month_groups'] = array_values($b_data['month_groups']);
+        $response[] = $b_data;
+    }
 
     echo json_encode([
         'success' => true,

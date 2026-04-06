@@ -411,7 +411,7 @@ $page_title = 'BC Reports';
 
             let html = '<div class="tabs-container">';
 
-            // Render Tab Buttons
+            // Render Tab Buttons (Teams)
             data.forEach((group, idx) => {
                 const activeClass = idx === 0 ? 'active' : '';
                 html += `<button id="tab-btn-${idx}" class="tab-button ${activeClass}" onclick="switchTab(${idx})">${group.branch}</button>`;
@@ -421,14 +421,38 @@ $page_title = 'BC Reports';
             // Render Tab Contents
             data.forEach((group, idx) => {
                 const activeClass = idx === 0 ? 'active' : '';
-                html += `
-                <div id="tab-content-${idx}" class="tab-content ${activeClass}">
-                    <div class="bc-group">
-                        <div class="bc-header">
-                            <div class="bc-title">${group.branch}</div>
-                            <div class="bc-total">Total: ${formatMoney(group.totalVnd)}</div>
+                let monthsHtml = '';
+                
+                group.month_groups.forEach(mGroup => {
+                    let rowsHtml = '';
+                    mGroup.invoices.forEach((inv, i) => {
+                        const badgeClass = inv.state === 'posted' ? 'badge-posted' : 'badge-draft';
+                        const paymentClass = (inv.payment_state === 'paid' || inv.payment_state === 'in_payment') ? 'badge-posted' : 'badge-draft';
+                        const paymentText = (inv.payment_state === 'paid' || inv.payment_state === 'in_payment') ? 'Paid' : 'Not Paid';
+                        const invType = inv.type ? String(inv.type) : '';
+                        const typeBadge = invType.toLowerCase().includes('internal') ? `<span class="badge" style="background:#fef08a; color:#854d0e;">${invType}</span>` : `<span style="color:#64748b;">${invType}</span>`;
+                        
+                        rowsHtml += `
+                            <tr>
+                                <td>${i + 1}</td>
+                                <td style="font-weight: 500;">${inv.name || 'Draft'}</td>
+                                <td>${inv.customer}</td>
+                                <td>${inv.date}</td>
+                                <td>${typeBadge}</td>
+                                <td><span class="badge ${badgeClass}">${inv.state}</span></td>
+                                <td><span class="badge ${paymentClass}">${paymentText}</span></td>
+                                <td style="text-align: right; font-weight: 500;">${formatMoney(inv.amount_total_signed)}</td>
+                            </tr>
+                        `;
+                    });
+
+                    monthsHtml += `
+                    <div class="bc-month-block" style="margin-bottom: 2.5rem;">
+                        <div style="background: #f1f5f9; padding: 0.75rem 1.25rem; border-left: 4px solid #3b82f6; display: flex; justify-content: space-between; align-items: center; margin-bottom: 0px; border-radius: 4px 4px 0 0;">
+                            <div style="font-weight: 700; color: #1e293b; font-size: 1.05rem;">${mGroup.label}</div>
+                            <div style="font-weight: 700; color: #0ea5e9;">Total: ${formatMoney(mGroup.totalVnd)}</div>
                         </div>
-                        <div class="table-wrap">
+                        <div class="table-wrap" style="background: white; border: 1px solid #e2e8f0; border-top: none; border-radius: 0 0 4px 4px;">
                             <table>
                                 <thead>
                                     <tr>
@@ -442,32 +466,22 @@ $page_title = 'BC Reports';
                                         <th style="text-align: right;">Amount (VND)</th>
                                     </tr>
                                 </thead>
-                                <tbody>`;
-
-                group.invoices.forEach((inv, i) => {
-                    const badgeClass = inv.state === 'posted' ? 'badge-posted' : 'badge-draft';
-                    const paymentClass = (inv.payment_state === 'paid' || inv.payment_state === 'in_payment') ? 'badge-posted' : 'badge-draft';
-                    const paymentText = (inv.payment_state === 'paid' || inv.payment_state === 'in_payment') ? 'Paid' : 'Not Paid';
-                    const invType = inv.type ? String(inv.type) : '';
-                    const typeBadge = invType.toLowerCase().includes('internal') ? `<span class="badge" style="background:#fef08a; color:#854d0e;">${invType}</span>` : `<span style="color:#64748b;">${invType}</span>`;
-                    html += `
-                        <tr>
-                            <td>${i + 1}</td>
-                            <td style="font-weight: 500;">${inv.name || 'Draft'}</td>
-                            <td>${inv.customer}</td>
-                            <td>${inv.date}</td>
-                            <td>${typeBadge}</td>
-                            <td><span class="badge ${badgeClass}">${inv.state}</span></td>
-                            <td><span class="badge ${paymentClass}">${paymentText}</span></td>
-                            <td style="text-align: right; font-weight: 500;">${formatMoney(inv.amount_total_signed)}</td>
-                        </tr>
-                    `;
-                });
-
-                html += `
+                                <tbody>
+                                    ${rowsHtml}
                                 </tbody>
                             </table>
                         </div>
+                    </div>`;
+                });
+
+                html += `
+                <div id="tab-content-${idx}" class="tab-content ${activeClass}">
+                    <div class="bc-group" style="box-shadow: none; background: transparent; margin-bottom: 0;">
+                        <div class="bc-header" style="background: white; padding: 1.5rem; border: 1px solid #e2e8f0; border-radius: 8px; margin-bottom: 1.5rem;">
+                            <div class="bc-title" style="font-size: 1.5rem;">${group.branch} Overview</div>
+                            <div class="bc-total" style="font-size: 1.5rem;">Year Total: ${formatMoney(group.totalVnd)}</div>
+                        </div>
+                        ${monthsHtml}
                     </div>
                 </div>`;
             });
