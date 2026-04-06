@@ -224,6 +224,16 @@ if (!empty($_GET['week'])) {
     $where_clauses[] = "(d.weekly_update LIKE '%Tuần $week_number%' OR d.weekly_update LIKE '%tuần $week_number%' OR d.weekly_update = '$week_number' OR d.weekly_update LIKE '%W$week_number%' OR d.weekly_update LIKE '%w$week_number%')";
 }
 
+if (!empty($_GET['date_from'])) {
+    $date_from = $conn->real_escape_string($_GET['date_from']);
+    $where_clauses[] = "d.invoice_date >= '$date_from'";
+}
+
+if (!empty($_GET['date_to'])) {
+    $date_to = $conn->real_escape_string($_GET['date_to']);
+    $where_clauses[] = "d.invoice_date <= '$date_to'";
+}
+
 $selected_team = $_GET['team'] ?? 'dashboard'; // Default to dashboard as requested
 
 if (!$can_view_all_debts && !in_array($selected_team, ['dashboard', 'analytics'])) {
@@ -1257,6 +1267,23 @@ if ($res_am && $res_am->num_rows > 0) {
                             }
                             ?>
                         </select>
+
+                        <div style="display:flex; align-items:center; gap:6px; background:#f8fafc; border:1px solid #e2e8f0; border-radius:8px; padding:4px 10px;">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>
+                            <input type="date" name="date_from" id="date_from"
+                                value="<?php echo htmlspecialchars($_GET['date_from'] ?? ''); ?>"
+                                onchange="this.form.submit()"
+                                style="border:none; background:transparent; font-size:13px; color:#475569; outline:none; width:130px; cursor:pointer;">
+                            <span style="color:#94a3b8; font-size:12px;">→</span>
+                            <input type="date" name="date_to" id="date_to"
+                                value="<?php echo htmlspecialchars($_GET['date_to'] ?? ''); ?>"
+                                onchange="this.form.submit()"
+                                style="border:none; background:transparent; font-size:13px; color:#475569; outline:none; width:130px; cursor:pointer;">
+                            <?php if (!empty($_GET['date_from']) || !empty($_GET['date_to'])): ?>
+                            <button type="button" onclick="clearDateRange()" title="Xóa bộ lọc ngày" style="background:none; border:none; cursor:pointer; color:#94a3b8; padding:0; line-height:1; font-size:16px;">&times;</button>
+                            <?php endif; ?>
+                        </div>
+
                         <button type="submit" style="display:none;"></button>
                     </form>
                     <div class="total-badge">
@@ -2656,6 +2683,14 @@ if ($res_am && $res_am->num_rows > 0) {
                 }
             });
         });
+    </script>
+    <script>
+        function clearDateRange() {
+            const url = new URL(window.location.href);
+            url.searchParams.delete('date_from');
+            url.searchParams.delete('date_to');
+            window.location.href = url.toString();
+        }
     </script>
 </body>
 
