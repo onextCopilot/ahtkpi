@@ -740,7 +740,7 @@ function get_rev_bg_color($val, $planned, $red, $yellow, $green) {
             z-index: 100; border: 1px solid #e2e8f0; border-radius: 8px; padding: 12px;
             margin-top: 8px;
         }
-        .column-settings-dropdown:hover .column-settings-content { display: block; }
+        .column-settings-dropdown.open .column-settings-content { display: block; }
         .column-option { display: flex; align-items: center; gap: 10px; padding: 6px 0; cursor: pointer; font-size: 13px; color: #475569; }
         .column-option:hover { color: #1e293b; }
         .column-option input { cursor: pointer; }
@@ -1898,6 +1898,35 @@ function get_rev_bg_color($val, $planned, $red, $yellow, $green) {
         }
 
         window.addEventListener('DOMContentLoaded', initColumnVisibility);
+
+        // --- Dropdown click-to-toggle (thay thế CSS hover) ---
+        document.querySelectorAll('.column-settings-dropdown').forEach(function(dropdown) {
+            var btn = dropdown.querySelector('button');
+            if (!btn) return;
+            btn.addEventListener('click', function(e) {
+                e.stopPropagation();
+                var isOpen = dropdown.classList.contains('open');
+                // Đóng tất cả dropdowns khác
+                document.querySelectorAll('.column-settings-dropdown.open').forEach(function(d) {
+                    d.classList.remove('open');
+                });
+                if (!isOpen) dropdown.classList.add('open');
+            });
+        });
+
+        // Click ra ngoài thì đóng hết
+        document.addEventListener('click', function() {
+            document.querySelectorAll('.column-settings-dropdown.open').forEach(function(d) {
+                d.classList.remove('open');
+            });
+        });
+
+        // Click bên trong content không đóng dropdown
+        document.querySelectorAll('.column-settings-content').forEach(function(content) {
+            content.addEventListener('click', function(e) {
+                e.stopPropagation();
+            });
+        });
     </script>
 </body>
 </html>
