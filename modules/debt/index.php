@@ -1329,14 +1329,45 @@ if ($res_am && $res_am->num_rows > 0) {
             <div class="debt-container">
                 <div class="page-controls">
                     <div style="display: flex; align-items: center; gap: 12px;">
-                        <?php if(!empty($_GET['q'])): ?>
-                        <div style="display:flex; align-items:center; gap:8px; background:#f1f5f9; padding:4px 12px; border-radius:20px; font-size:12px; border:1px solid #e2e8f0; color:#475569;">
-                            <span>Từ khóa: <strong><?php echo htmlspecialchars($_GET['q']); ?></strong></span>
-                            <a href="?team=<?php echo htmlspecialchars($selected_team); ?>" style="color:#94a3b8; text-decoration:none; font-size:14px; font-weight:bold;">&times;</a>
-                        </div>
-                        <?php endif; ?>
-                        
-                        <!-- Hiển thị các badge filter đang active khác nếu muốn -->
+                        <?php
+                        $active_chips = [];
+                        $chip_labels = [
+                            'am' => 'AM',
+                            'status' => 'Trạng thái',
+                            'invoice_status_class' => 'Phân loại',
+                            'year' => 'Năm',
+                            'quarter' => 'Quý',
+                            'month' => 'Tháng',
+                            'week' => 'Tuần',
+                            'date_from' => 'Từ',
+                            'date_to' => 'Đến',
+                            'q' => 'Tìm kiếm'
+                        ];
+
+                        foreach ($chip_labels as $key => $label) {
+                            if (!empty($_GET[$key])) {
+                                $val = $_GET[$key];
+                                if ($key === 'month') {
+                                    $val = date('m', mktime(0, 0, 0, (int)$val, 1));
+                                } else if ($key === 'quarter') {
+                                    $val = 'Q' . $val;
+                                } else if ($key === 'date_from' || $key === 'date_to') {
+                                    $val = date('d/m/Y', strtotime($val));
+                                }
+
+                                // Build reset URL for this specific filter
+                                $r_params = $_GET;
+                                unset($r_params[$key]);
+                                $reset_url = "?" . http_build_query($r_params);
+
+                                echo '
+                                <div style="display:flex; align-items:center; gap:8px; background:#f0f9ff; padding:4px 12px; border-radius:20px; font-size:11px; border:1px solid #bae6fd; color:#0369a1; white-space:nowrap;">
+                                    <span>' . $label . ': <strong>' . htmlspecialchars($val) . '</strong></span>
+                                    <a href="' . $reset_url . '" style="color:#38bdf8; text-decoration:none; font-size:16px; font-weight:bold; line-height:1;">&times;</a>
+                                </div>';
+                            }
+                        }
+                        ?>
                     </div>
 
                     <div style="display: flex; align-items: center; gap: 12px; margin-left: auto;">
