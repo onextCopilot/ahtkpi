@@ -618,12 +618,19 @@ document.addEventListener('DOMContentLoaded', function() {
 </div>
 
 <script>
+function fmtNum(val) {
+    if (!val || val === '—') return '—';
+    const s = String(val).trim().replace(/\./g, '');
+    if (/^\d+$/.test(s)) return s.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+    return val;
+}
+
 function openQDetailDraw(data) {
     document.getElementById('drawQText').style.color = data.color;
     document.getElementById('drawQText').textContent = data.q_label;
     document.getElementById('drawKPIName').textContent = data.kpi_name;
-    document.getElementById('drawTarget').textContent = data.target + ' ' + data.unit;
-    document.getElementById('drawActual').textContent = data.total_actual + ' ' + data.unit;
+    document.getElementById('drawTarget').textContent = fmtNum(data.target) + ' ' + data.unit;
+    document.getElementById('drawActual').textContent = fmtNum(data.total_actual) + ' ' + data.unit;
     document.getElementById('drawActual').style.color = data.color;
     document.getElementById('drawPct').textContent = data.progress;
     
@@ -642,29 +649,30 @@ function openQDetailDraw(data) {
     let monthsHtml = '';
     let auditHtml = '';
     for (const [m, info] of Object.entries(data.months)) {
+        const fmtVal = fmtNum(info.val);
         monthsHtml += `
             <div class="q-month-card" style="margin-bottom:8px; padding:12px 16px;">
                 <div>
                     <div style="font-size:10px; color:#a0aec0; font-weight:700; text-transform:uppercase;">Tháng ${m}</div>
-                    <div style="font-size:15px; font-weight:700; color:#2d3748;">${info.val} <small style="font-weight:400; font-size:11px; color:#718096;">${data.unit}</small></div>
+                    <div style="font-size:15px; font-weight:700; color:#2d3748;">${fmtVal} <small style="font-weight:400; font-size:11px; color:#718096;">${data.unit}</small></div>
                 </div>
                 <div style="width:40px; height:4px; border-radius:2px; background:${data.color}; opacity:0.3;"></div>
             </div>
         `;
         if (info.at) {
             auditHtml += `
-                <div style="display:flex; align-items:center; gap:12px; padding:8px 0; border-bottom:1px dashed #edf2f7;">
+                <div style="display:flex; align-items:center; gap:12px; padding:10px 0; border-bottom:1px dashed #edf2f7;">
                     <div style="width:8px; height:8px; border-radius:50%; background:${data.color}; flex-shrink:0;"></div>
                     <div style="flex:1;">
-                        <div style="font-size:12px; color:#2d3748; font-weight:600;">${info.by} <span style="font-weight:400; color:#718096;">cập nhật tháng ${m}</span></div>
-                        <div style="font-size:11px; color:#a0aec0;">${info.at}</div>
+                        <div style="font-size:12px; color:#2d3748; font-weight:600;">${info.by} <span style="font-weight:400; color:#718096;">cập nhật KPI này tháng ${m}</span></div>
+                        <div style="font-size:11px; color:#a0aec0;">lúc ${info.at}</div>
                     </div>
                 </div>
             `;
         }
     }
     document.getElementById('drawMonthsList').innerHTML = monthsHtml;
-    document.getElementById('drawAuditList').innerHTML = auditHtml || '<div style="font-size:12px; color:#a0aec0; padding:12px; text-align:center; background:#f7fafc; border-radius:8px;">Chưa có lịch sử cập nhật</div>';
+    document.getElementById('drawAuditList').innerHTML = auditHtml || '<div style="font-size:12px; color:#a0aec0; padding:12px; text-align:center; background:#f7fafc; border-radius:8px;">Chưa có lịch sử cập nhật cho KPI này</div>';
 
     document.getElementById('qDetailOverlay').classList.add('open');
     document.getElementById('qDetailLayout').classList.add('open');
