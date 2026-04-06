@@ -22,9 +22,27 @@ if (isset($_SESSION['flash_msg_err'])) {
     unset($_SESSION['flash_msg_err']);
 }
 
+// FIX: Ensure department_id is in session if not already there
+if (!isset($_SESSION['department_id']) && isset($_SESSION['user_id'])) {
+    $su_stmt = $conn->prepare("SELECT department_id FROM users WHERE id = ?");
+    $su_stmt->bind_param("i", $_SESSION['user_id']);
+    $su_stmt->execute();
+    $su_res = $su_stmt->get_result();
+    if ($su_row = $su_res->fetch_assoc()) {
+        $_SESSION['department_id'] = $su_row['department_id'];
+    }
+}
+
 // ── Lookups ───────────────────────────────────────
 $departments = [];
-$r = $conn->query("SELECT id, name FROM departments ORDER BY sort_order ASC, id ASC");
+$dept_sql = "SELECT id, name FROM departments";
+if ($_SESSION['role'] !== 'admin') {
+    $user_dept_id = intval($_SESSION['department_id'] ?? 0);
+    $dept_sql .= " WHERE id = $user_dept_id";
+}
+$dept_sql .= " ORDER BY sort_order ASC, id ASC";
+
+$r = $conn->query($dept_sql);
 if ($r)
     while ($row = $r->fetch_assoc())
         $departments[] = $row;
@@ -174,7 +192,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 // ── Fetch KPI definitions for selected year ───────
 $defs = [];
 $filter_dept = isset($_GET['dept']) ? intval($_GET['dept']) : (!empty($departments) ? $departments[0]['id'] : 0);
-$where = "WHERE k.year = $year" . ($filter_dept ? " AND k.department_id = $filter_dept" : "");
+
+// Force user's department if not admin
+if ($_SESSION['role'] !== 'admin') {
+    $filter_dept = intval($_SESSION['department_id'] ?? 0);
+    // User must have a department to see anything, or at least be restricted to it
+    $where = "WHERE k.year = $year AND k.department_id = $filter_dept";
+} else {
+    // Admin can filter by dept or see all (if filter_dept is 0)
+    $where = "WHERE k.year = $year" . ($filter_dept ? " AND k.department_id = $filter_dept" : "");
+}
 // ── Auto-create sorting columns if missing ──
 $col_check = $conn->query("SHOW COLUMNS FROM kpi_definitions LIKE 'sort_order'");
 if ($col_check && $col_check->num_rows == 0) {
@@ -243,14 +270,10 @@ $status_map = ['draft' => ['#F1F5F9', '#64748B'], 'active' => ['#DBEAFE', '#1D4E
     <style>
         .content-wrapper {
             padding: .6rem 1rem;
-            /* 64px topbar + 40px sheet-footer */
-            height: calc(100vh - 64px - 40px);
-            max-height: calc(100vh - 64px - 40px);
             display: flex;
             flex-direction: column;
             gap: .5rem;
-            overflow: hidden;
-            padding-bottom:50px!important;
+            padding-bottom: 50px !important;
         }
 
         /* Tab bar */
@@ -335,11 +358,10 @@ $status_map = ['draft' => ['#F1F5F9', '#64748B'], 'active' => ['#DBEAFE', '#1D4E
 
         /* Sheet */
         .sheet-wrap {
-            flex: 1;
-            overflow: auto;
+            overflow-x: auto;
             border: 1px solid #E5E7EB;
             border-radius: 0 0 8px 8px;
-            background: #fff
+            background: #fff;
         }
 
         table.sheet {
@@ -369,7 +391,8 @@ $status_map = ['draft' => ['#F1F5F9', '#64748B'], 'active' => ['#DBEAFE', '#1D4E
             position: sticky;
             top: 0;
             z-index: 10;
-            border-bottom: 2px solid #E5E7EB
+            border-bottom: 2px solid #E5E7EB;
+            box-shadow: 0 2px 2px -1px rgba(0,0,0,0.05); /* Added subtle shadow for sticky separation */
         }
 
         table.sheet tbody tr:hover td {
@@ -824,20 +847,78 @@ $status_map = ['draft' => ['#F1F5F9', '#64748B'], 'active' => ['#DBEAFE', '#1D4E
         }
 
         @media print {
-
-            .toolbar,
-            .tab-bar,
-            .stats-bar,
-            .sheet-footer,
-            .col-act {
-                display: none !important
-            }
-
-            .sheet-wrap {
-                overflow: visible;
-                border: none
-            }
+            .toolbar, .tab-bar, .stats-bar, .sheet-footer, .col-act { display: none !important }
+            .sheet-wrap { overflow: visible; border: none }
         }
+
+        /* ── Team Sidebar Drawer ─────────────────────── */
+        .team-sidebar-overlay {
+            display: none;
+            position: fixed;
+            inset: 0;
+            background: rgba(0, 0, 0, 0.4);
+            backdrop-filter: blur(2px);
+            z-index: 2100;
+        }
+        .team-sidebar {
+            position: fixed;
+            top: 0;
+            right: -350px;
+            width: 350px;
+            height: 100%;
+            background: #fff;
+            z-index: 2101;
+            box-shadow: -5px 0 25px rgba(0,0,0,0.15);
+            display: flex;
+            flex-direction: column;
+            transition: right 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        .team-sidebar.open { right: 0; }
+        .team-sb-header {
+            padding: 1.25rem 1.5rem;
+            border-bottom: 1px solid #F1F5F9;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: #F8FAFC;
+        }
+        .team-sb-header h3 { margin: 0; font-size: 1.1rem; color: #111827; font-weight: 700; display: flex; align-items: center; gap: 10px; }
+        .team-sb-header .close { cursor: pointer; font-size: 24px; color: #94a3b8; line-height: 1; }
+        .team-sb-header .close:hover { color: #1e293b; }
+        .team-sb-body { flex: 1; padding: 1rem; overflow-y: auto; }
+        .dept-list-item {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 10px 14px;
+            border-radius: 8px;
+            text-decoration: none;
+            color: #4B5563;
+            font-size: 13.5px;
+            font-weight: 500;
+            margin-bottom: 4px;
+            transition: all 0.2s;
+        }
+        .dept-list-item:hover { background: #F3F4F6; color: #111827; }
+        .dept-list-item.active { background: #EFF6FF; color: #1D4ED8; font-weight: 600; }
+        .dept-cnt {
+            font-size: 11px;
+            background: #E5E7EB;
+            color: #4B5563;
+            padding: 2px 8px;
+            border-radius: 99px;
+        }
+        .dept-list-item.active .dept-cnt { background: #DBEAFE; color: #1D4ED8; }
+        
+        .btn-dept-trigger {
+            margin-left: auto;
+            border-left: 1px solid #E5E7EB !important;
+            border-radius: 0 !important;
+            padding: 0 20px !important;
+            color: #1D4ED8 !important;
+            background: #F8FAFF !important;
+        }
+        .btn-dept-trigger:hover { background: #EFF6FF !important; }
     </style>
 </head>
 
@@ -896,9 +977,18 @@ $status_map = ['draft' => ['#F1F5F9', '#64748B'], 'active' => ['#DBEAFE', '#1D4E
                         class="tab-btn <?= $tab === 'monthly' ? 'active' : '' ?>">
                         📈 Số liệu theo Tháng
                     </a>
+
+                    <button class="tab-btn btn-dept-trigger" onclick="toggleTeamSidebar()">
+                        👥 <?php 
+                        $cur_dept_name = 'Chọn bộ phận';
+                        foreach($departments as $d) if($d['id'] == $filter_dept) $cur_dept_name = $d['name'];
+                        echo htmlspecialchars($cur_dept_name);
+                        ?> ▾
+                    </button>
+
                     <a href="?tab=settings&year=<?= $year ?>&dept=<?= $filter_dept ?>"
                         class="tab-btn <?= $tab === 'settings' ? 'active' : '' ?>"
-                        style="margin-left:auto;color:#6B7280">
+                        style="color:#6B7280">
                         ⚙️ Cài đặt
                     </a>
                 </div>
@@ -920,49 +1010,32 @@ $status_map = ['draft' => ['#F1F5F9', '#64748B'], 'active' => ['#DBEAFE', '#1D4E
 
             </div><!-- /content-wrapper -->
 
-            <!-- Google Sheets–style dept footer -->
+            <!-- Team Sidebar Drawer -->
             <?php
             $dept_counts_q = $conn->query("SELECT department_id, COUNT(*) AS cnt FROM kpi_definitions WHERE year=$year GROUP BY department_id");
             $dept_kpi_count = [];
-            $all_year_total = 0;
             if ($dept_counts_q)
                 while ($dr = $dept_counts_q->fetch_assoc()) {
                     $d_id = (string)($dr['department_id'] ?? '');
                     $dept_kpi_count[$d_id] = $dr['cnt'];
-                    $all_year_total += $dr['cnt'];
                 }
             ?>
-            <div class="sheet-footer" id="sheetFooter">
-                <!-- Left: Scroll nav + add btn -->
-                <div class="sf-nav">
-                    <button class="sf-nav-btn" id="sfPrev" title="Scroll left" onclick="sfScroll(-1)" disabled>
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                            stroke-width="2.5">
-                            <polyline points="15 18 9 12 15 6" />
-                        </svg>
-                    </button>
-                    <button class="sf-nav-btn" id="sfNext" title="Scroll right" onclick="sfScroll(1)">
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                            stroke-width="2.5">
-                            <polyline points="9 18 15 12 9 6" />
-                        </svg>
-                    </button>
+            <div class="team-sidebar-overlay" id="teamOverlay" onclick="toggleTeamSidebar()"></div>
+            <div class="team-sidebar" id="teamSidebar">
+                <div class="team-sb-header">
+                    <h3>👥 Chọn Bộ phận / Team</h3>
+                    <span class="close" onclick="toggleTeamSidebar()">&times;</span>
                 </div>
-                <!-- Tab strip (JS-scrolled) -->
-                <div class="sf-strip" id="sfStrip">
-                    <div class="sf-tabs" id="sfTabs">
-                        <?php foreach ($departments as $dpt):
-                            $d_id = (string)($dpt['id'] ?? '');
-                            $cnt = $dept_kpi_count[$d_id] ?? 0;
-                            ?>
-                            <a href="?tab=<?= $tab ?>&year=<?= $year ?>&dept=<?= $dpt['id'] ?>"
-                                class="sheet-tab <?= $filter_dept == $dpt['id'] ? 'active' : '' ?>"
-                                data-id="<?= $dpt['id'] ?>" draggable="true">
-                                <?= htmlspecialchars($dpt['name']) ?>
-                                <span class="tab-badge"><?= $cnt ?></span>
-                            </a>
-                        <?php endforeach; ?>
-                    </div>
+                <div class="team-sb-body">
+                    <?php foreach ($departments as $dpt): 
+                        $cnt = $dept_kpi_count[$dpt['id']] ?? 0;
+                    ?>
+                        <a href="?tab=<?= $tab ?>&year=<?= $year ?>&dept=<?= $dpt['id'] ?>" 
+                           class="dept-list-item <?= $filter_dept == $dpt['id'] ? 'active' : '' ?>">
+                            <span><?= htmlspecialchars($dpt['name']) ?></span>
+                            <span class="dept-cnt"><?= $cnt ?></span>
+                        </a>
+                    <?php endforeach; ?>
                 </div>
             </div>
         </main>
@@ -1155,156 +1228,17 @@ $status_map = ['draft' => ['#F1F5F9', '#64748B'], 'active' => ['#DBEAFE', '#1D4E
         // Generic inline save (quarterly & monthly)
         function saveInline(form) { form.submit() }
 
-        // ── Google Sheets tab-strip scroll logic ────────────────────
-        (function () {
-            const strip = document.getElementById('sfStrip');
-            const tabs = document.getElementById('sfTabs');
-            const prev = document.getElementById('sfPrev');
-            const next = document.getElementById('sfNext');
-            if (!strip || !tabs) return;
-
-            let offset = 0; // current translateX (negative = scrolled right)
-
-            function maxOffset() {
-                return Math.max(0, tabs.scrollWidth - strip.clientWidth);
+        function toggleTeamSidebar() {
+            const sb = document.getElementById('teamSidebar');
+            const overlay = document.getElementById('teamOverlay');
+            if (sb.classList.contains('open')) {
+                sb.classList.remove('open');
+                overlay.style.display = 'none';
+            } else {
+                sb.classList.add('open');
+                overlay.style.display = 'block';
             }
-            function applyOffset(v) {
-                offset = Math.max(-maxOffset(), Math.min(0, v));
-                tabs.style.transform = 'translateX(' + offset + 'px)';
-                prev.disabled = offset >= 0;
-                next.disabled = offset <= -maxOffset();
-            }
-            function sfScroll(dir) {
-                // scroll by ~3 tab widths
-                const stepPx = strip.clientWidth * 0.4;
-                applyOffset(offset + dir * -stepPx);
-            }
-            window.sfScroll = sfScroll;
-
-            // Scroll active tab into view on load
-            function sfScrollToActive() {
-                const active = tabs.querySelector('.sheet-tab.active');
-                if (!active) return;
-                const tabLeft = active.offsetLeft;
-                const tabRight = tabLeft + active.offsetWidth;
-                const visible = strip.clientWidth;
-                if (tabLeft + offset < 0) {
-                    applyOffset(-tabLeft + 8);
-                } else if (tabRight + offset > visible) {
-                    applyOffset(-(tabRight - visible + 8));
-                }
-            }
-            window.sfScrollToActive = sfScrollToActive;
-
-            // Mouse-wheel horizontal scroll on footer
-            document.getElementById('sheetFooter').addEventListener('wheel', function (e) {
-                e.preventDefault();
-                applyOffset(offset + (e.deltaY || e.deltaX) * -1);
-            }, { passive: false });
-
-            // Recalculate on resize
-            window.addEventListener('resize', () => applyOffset(offset));
-
-            // Auto scroll active into view on load
-            setTimeout(sfScrollToActive, 50);
-        })();
-
-        // ── Drag-and-drop tab reorder ──────────────────────────────
-        (function () {
-            const tabsEl = document.getElementById('sfTabs');
-            if (!tabsEl) return;
-
-            let dragSrc = null;       // the tab being dragged
-            let indicator = null;     // blue drop line element
-
-            function createIndicator() {
-                const el = document.createElement('span');
-                el.className = 'sf-drop-indicator';
-                return el;
-            }
-            function removeIndicator() {
-                if (indicator && indicator.parentNode) indicator.parentNode.removeChild(indicator);
-                indicator = null;
-            }
-
-            tabsEl.addEventListener('dragstart', function (e) {
-                const tab = e.target.closest('.sheet-tab[draggable="true"]');
-                if (!tab) { e.preventDefault(); return; }
-                dragSrc = tab;
-                setTimeout(() => tab.classList.add('dragging'), 0);
-                e.dataTransfer.effectAllowed = 'move';
-                e.dataTransfer.setData('text/plain', tab.dataset.id);
-            });
-
-            tabsEl.addEventListener('dragover', function (e) {
-                e.preventDefault();
-                e.dataTransfer.dropEffect = 'move';
-                if (!dragSrc) return;
-
-                // Find which tab we're over
-                const overTab = e.target.closest('.sheet-tab');
-                removeIndicator();
-                indicator = createIndicator();
-
-                if (!overTab || overTab === dragSrc) {
-                    tabsEl.appendChild(indicator);
-                    return;
-                }
-                // Determine left/right half
-                const rect = overTab.getBoundingClientRect();
-                const mid = rect.left + rect.width / 2;
-                if (e.clientX < mid) {
-                    tabsEl.insertBefore(indicator, overTab);
-                } else {
-                    overTab.nextSibling
-                        ? tabsEl.insertBefore(indicator, overTab.nextSibling)
-                        : tabsEl.appendChild(indicator);
-                }
-            });
-
-            tabsEl.addEventListener('dragleave', function (e) {
-                if (!tabsEl.contains(e.relatedTarget)) removeIndicator();
-            });
-
-            tabsEl.addEventListener('drop', function (e) {
-                e.preventDefault();
-                if (!dragSrc || !indicator) return;
-
-                // Insert dragSrc before indicator position
-                tabsEl.insertBefore(dragSrc, indicator);
-                removeIndicator();
-                dragSrc.classList.remove('dragging');
-
-                // Collect new order (skip data-id=0, that's "Tất cả" pinned)
-                const newOrder = [...tabsEl.querySelectorAll('.sheet-tab[draggable="true"]')]
-                    .map(t => parseInt(t.dataset.id))
-                    .filter(id => id > 0);
-
-                // Save via AJAX
-                fetch('/api/kpi_tab_order', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ order: newOrder })
-                })
-                    .then(r => r.json())
-                    .then(data => {
-                        if (!data.success) console.error('Save order failed:', data);
-                        // Show brief toast
-                        const t = document.createElement('div');
-                        t.textContent = '✓ Đã lưu thứ tự';
-                        t.style.cssText = 'position:fixed;bottom:50px;left:50%;transform:translateX(-50%);background:#323232;color:#fff;padding:6px 16px;border-radius:4px;font-size:13px;z-index:9999;transition:opacity .4s';
-                        document.body.appendChild(t);
-                        setTimeout(() => { t.style.opacity = '0'; setTimeout(() => t.remove(), 400); }, 1500);
-                    });
-
-                dragSrc = null;
-            });
-
-            tabsEl.addEventListener('dragend', function () {
-                removeIndicator();
-                if (dragSrc) { dragSrc.classList.remove('dragging'); dragSrc = null; }
-            });
-        })();
+        }
     </script>
 </body>
 

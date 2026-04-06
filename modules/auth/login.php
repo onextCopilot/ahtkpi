@@ -17,7 +17,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     if (empty($username) || empty($password)) {
         $error = 'Please enter all required information';
     } else {
-        $stmt = $conn->prepare("SELECT id, username, password, full_name, role, can_view_invoice, can_view_all_debts, is_am_bd FROM users WHERE username = ?");
+        $stmt = $conn->prepare("SELECT id, username, password, full_name, role, department_id, can_view_invoice, can_view_all_debts, is_am_bd FROM users WHERE username = ?");
         if (!$stmt) {
             $error = "Lỗi Database: " . $conn->error;
         } else {
@@ -34,6 +34,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                     $_SESSION['username'] = $user['username'];
                     $_SESSION['full_name'] = $user['full_name'];
                     $_SESSION['role'] = $user['role'];
+                    $_SESSION['department_id'] = $user['department_id'];
                     $_SESSION['can_view_invoice'] = $user['can_view_invoice'];
                     $_SESSION['can_view_all_debts'] = $user['can_view_all_debts'];
                     $_SESSION['is_am_bd'] = $user['is_am_bd'];
