@@ -189,7 +189,12 @@ if (!empty($_GET['invoice_status_class'])) {
 
 if (!empty($_GET['status'])) {
     $status_filter = $conn->real_escape_string($_GET['status']);
-    $where_clauses[] = "d.payment_status = '$status_filter'";
+    if ($status_filter === 'Draft') {
+        // Drafts are effectively 'Not paid' in our DB, but we will filter strictly to 'draft' state in the PHP loop below
+        $where_clauses[] = "d.payment_status = 'Not paid'";
+    } else {
+        $where_clauses[] = "d.payment_status = '$status_filter'";
+    }
 }
 
 if (!empty($_GET['q'])) {
@@ -273,6 +278,17 @@ $odoo_map = $odoo->getInvoiceMap();
 
 if ($res) {
     while ($row = $res->fetch_assoc()) {
+        $oid = (string)$row['odoo_invoice_id'];
+        $odoo_inv = isset($odoo_map[$oid]) ? $odoo_map[$oid] : null;
+
+        // Strict Filter for "Draft" status (checking Odoo state)
+        if (isset($_GET['status']) && $_GET['status'] === 'Draft') {
+            $odoo_state = ($odoo_inv && isset($odoo_inv['state'])) ? (string)$odoo_inv['state'] : '';
+            if ($odoo_state !== 'draft') {
+                continue;
+            }
+        }
+
         $amount = (float) $row['amount'];
         $curr = $row['currency'] ?: 'USD';
         $date = !empty($row['invoice_date']) ? $row['invoice_date'] : date('Y-m-d');
@@ -1375,6 +1391,7 @@ if ($res_am && $res_am->num_rows > 0) {
                                 <option value="">Tất cả trạng thái</option>
                                 <option value="Not paid" <?php echo (isset($_GET['status']) && $_GET['status'] == 'Not paid') ? 'selected' : ''; ?>>Not paid</option>
                                 <option value="Paid" <?php echo (isset($_GET['status']) && $_GET['status'] == 'Paid') ? 'selected' : ''; ?>>Paid</option>
+                                <option value="Draft" <?php echo (isset($_GET['status']) && $_GET['status'] == 'Draft') ? 'selected' : ''; ?>>Draft</option>
                             </select>
 
                             <label class="filter-item-label">Phân loại Invoice</label>
@@ -1467,11 +1484,24 @@ if ($res_am && $res_am->num_rows > 0) {
                     $cw_sql = count($count_where_clauses) > 0 ? "WHERE " . implode(" AND ", $count_where_clauses) : "";
 
                     $counts = [];
-                    $c_res = $conn->query("SELECT d.sale_team_id, COUNT(*) as total FROM debts d $cw_sql GROUP BY d.sale_team_id");
+                    // Get both sale_team_id and odoo_invoice_id to correctly filter by Odoo status when needed
+                    $c_res = $conn->query("SELECT d.sale_team_id, d.odoo_invoice_id FROM debts d $cw_sql");
                     if ($c_res) {
                         while ($cr = $c_res->fetch_assoc()) {
                             $k = $cr['sale_team_id'] ?? 'undefined';
-                            $counts[$k] = $cr['total'];
+                            
+                            // If strict "Draft" filter is active, we must match the Odoo state check used in the main loop
+                            if (isset($_GET['status']) && $_GET['status'] === 'Draft') {
+                                $oid = (string)$cr['odoo_invoice_id'];
+                                $odoo_inv = isset($odoo_map[$oid]) ? $odoo_map[$oid] : null;
+                                $odoo_state = ($odoo_inv && isset($odoo_inv['state'])) ? (string)$odoo_inv['state'] : '';
+                                if ($odoo_state !== 'draft') {
+                                    continue;
+                                }
+                            }
+                            
+                            if (!isset($counts[$k])) $counts[$k] = 0;
+                            $counts[$k]++;
                         }
                     }
 
