@@ -772,10 +772,11 @@ function get_rev_bg_color($val, $planned, $red, $yellow, $green) {
                     </a>
                 </div>
 
-                <div class="budget-header" style="display: flex; align-items: center; justify-content: space-between; background: white; padding: 1rem; border-radius: 12px; border: 1px solid #e2e8f0; margin-bottom: 1.5rem;">
-                    <div style="display: flex; align-items: center; gap: 1rem;">
-                        <div style="font-weight: 700; color: #475569; white-space: nowrap;">XEM DỮ LIÊU:</div>
-                        <select class="filter-select" onchange="location.href='?year=' + this.value + '&quarter=<?php echo $current_quarter; ?>'">
+                <div class="budget-header" style="display: flex; align-items: center; justify-content: space-between; background: white; padding: 0.75rem 1rem; border-radius: 12px; border: 1px solid #e2e8f0; margin-bottom: 1.5rem; gap: 12px; flex-wrap: wrap;">
+                    <!-- Left: Filter Controls -->
+                    <div style="display: flex; align-items: center; gap: 8px;">
+                        <span style="font-size: 11px; font-weight: 700; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.05em; white-space: nowrap;">Xem dữ liệu:</span>
+                        <select class="filter-select" style="font-size:13px; padding:6px 10px;" onchange="location.href='?year=' + this.value + '&quarter=<?php echo $current_quarter; ?>'">
                             <?php 
                             $start_year = 2024;
                             $end_year = date('Y') + 1;
@@ -784,32 +785,42 @@ function get_rev_bg_color($val, $planned, $red, $yellow, $green) {
                                 <option value="<?php echo $y; ?>" <?php if($current_year == $y) echo 'selected'; ?>>Năm <?php echo $y; ?></option>
                             <?php endfor; ?>
                         </select>
-                        <select class="filter-select" onchange="location.href='?year=<?php echo $current_year; ?>&quarter=' + this.value">
-                            <option value="1" <?php if($current_quarter == 1) echo 'selected'; ?>>Quý 1 (T1-T3)</option>
-                            <option value="2" <?php if($current_quarter == 2) echo 'selected'; ?>>Quý 2 (T4-T6)</option>
-                            <option value="3" <?php if($current_quarter == 3) echo 'selected'; ?>>Quý 3 (T7-T9)</option>
-                            <option value="4" <?php if($current_quarter == 4) echo 'selected'; ?>>Quý 4 (T10-T12)</option>
+                        <select class="filter-select" style="font-size:13px; padding:6px 10px;" onchange="location.href='?year=<?php echo $current_year; ?>&quarter=' + this.value">
+                            <option value="1" <?php if($current_quarter == 1) echo 'selected'; ?>>Quý 1</option>
+                            <option value="2" <?php if($current_quarter == 2) echo 'selected'; ?>>Quý 2</option>
+                            <option value="3" <?php if($current_quarter == 3) echo 'selected'; ?>>Quý 3</option>
+                            <option value="4" <?php if($current_quarter == 4) echo 'selected'; ?>>Quý 4</option>
                         </select>
                     </div>
-                    <div style="display: flex; align-items: center; gap: 1rem;">
-                        <button class="btn-primary" onclick="exportExcel()" style="background:#10b981;">
-                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right:8px; vertical-align:middle;"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>Xuất Excel
+
+                    <!-- Right: Action Controls -->
+                    <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+                        <!-- Export -->
+                        <button class="btn-primary" onclick="exportExcel()" style="background:#10b981; padding: 7px 14px; font-size:13px; display:flex; align-items:center; gap:6px;">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>Xuất Excel
                         </button>
-                        <div style="display: flex; align-items: center; gap: 8px; background: #f1f5f9; padding: 6px 12px; border-radius: 20px; font-size: 13px; font-weight: 600;">
-                            <input type="checkbox" id="planningMode" onchange="togglePlanningMode(this.checked)" style="cursor:pointer;">
-                            <label for="planningMode" style="cursor:pointer; color:#475569;">Planning Mode</label>
-                        </div>
-                        <div style="display: flex; align-items: center; gap: 8px; background: #f1f5f9; padding: 6px 12px; border-radius: 20px; font-size: 13px; font-weight: 600;">
+
+                        <!-- Divider -->
+                        <div style="width:1px; height:28px; background:#e2e8f0;"></div>
+
+                        <!-- Modes group -->
+                        <div style="display:flex; align-items:center; gap:6px; background:#f8fafc; padding: 5px 10px; border-radius:8px; border:1px solid #e2e8f0;">
+                            <input type="checkbox" id="planningMode" onchange="togglePlanningMode(this.checked)" style="display:none;">
                             <?php if ($is_admin): ?>
-                                <label style="display: flex; align-items: center; gap: 0.5rem; color: #1e40af; font-weight: 500; cursor: pointer; background: #fff; padding: 6px 12px; border-radius: 6px; border: 1px solid #dbeafe;">
-                                    <input type="checkbox" id="budget-editing-mode" onchange="toggleEditingMode(this.checked)" style="width: 16px; height: 16px;">
-                                    Editing Mode
-                                </label>
+                            <label style="display:flex; align-items:center; gap:5px; cursor:pointer; font-size:13px; color:#1e40af; white-space:nowrap;">
+                                <input type="checkbox" id="budget-editing-mode" onchange="toggleEditingMode(this.checked)" style="cursor:pointer; width:14px; height:14px;">
+                                Editing Mode
+                            </label>
                             <?php endif; ?>
                         </div>
+
+                        <!-- Divider -->
+                        <div style="width:1px; height:28px; background:#e2e8f0;"></div>
+
+                        <!-- Column visibility -->
                         <div class="column-settings-dropdown">
-                            <button class="btn-primary" style="background: white; color: #475569; border: 1px solid #cbd5e1; display: flex; align-items: center; gap: 8px;">
-                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6h16M4 12h16M4 18h16"></path></svg> Ẩn/Hiện cột
+                            <button class="btn-primary" style="background:white; color:#475569; border:1px solid #cbd5e1; display:flex; align-items:center; gap:6px; padding:7px 12px; font-size:13px;">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6h16M4 12h16M4 18h7"></path></svg>Ẩn/Hiện cột
                             </button>
                             <div class="column-settings-content">
                                 <label class="column-option"><input type="checkbox" checked onchange="toggleCol('col-block', this.checked)"> Khối</label>
@@ -821,10 +832,31 @@ function get_rev_bg_color($val, $planned, $red, $yellow, $green) {
                                 <label class="column-option"><input type="checkbox" checked onchange="toggleCol('col-actual', this.checked)"> Thực tế chi</label>
                             </div>
                         </div>
-                        <button class="btn-primary" onclick="openModal()" style="background: white; color: #0f172a; border: 1px solid #e2e8f0;">+ Quản lý cấu trúc</button>
+
+                        <!-- Structure management -->
+                        <button class="btn-primary" onclick="openModal()" style="background:white; color:#0f172a; border:1px solid #e2e8f0; padding:7px 12px; font-size:13px;">+ Quản lý cấu trúc</button>
+
                         <?php if ($is_admin): ?>
-                            <button class="btn-primary" onclick="openRevSettingsModal()" style="background: white; color: #4338ca; border: 1px solid #c7d2fe;">&#9881; Cảnh báo DT</button>
-                            <button class="btn-primary" onclick="openCostSettingsModal()" style="background: white; color: #991b1b; border: 1px solid #fecaca; margin-left: 8px;">&#9881; Cảnh báo CP</button>
+                        <!-- Divider -->
+                        <div style="width:1px; height:28px; background:#e2e8f0;"></div>
+                        <!-- Alert Settings Dropdown -->
+                        <div class="column-settings-dropdown">
+                            <button class="btn-primary" style="background:white; color:#64748b; border:1px solid #e2e8f0; display:flex; align-items:center; gap:6px; padding:7px 12px; font-size:13px;">
+                                &#9881; Cảnh báo
+                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"></polyline></svg>
+                            </button>
+                            <div class="column-settings-content" style="min-width:180px;">
+                                <div onclick="openRevSettingsModal()" style="display:flex; align-items:center; gap:10px; padding:9px 10px; cursor:pointer; border-radius:6px; font-size:13px; color:#4338ca; font-weight:600; transition:background 0.15s;" onmouseover="this.style.background='#f5f3ff'" onmouseout="this.style.background='transparent'">
+                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"></circle><path d="M19.07 4.93a10 10 0 0 1 0 14.14M16.24 7.76a6 6 0 0 1 0 8.49M4.93 19.07a10 10 0 0 1 0-14.14M7.76 16.24a6 6 0 0 1 0-8.49"></path></svg>
+                                    Cảnh báo Doanh thu
+                                </div>
+                                <div style="height:1px; background:#f1f5f9; margin:4px 0;"></div>
+                                <div onclick="openCostSettingsModal()" style="display:flex; align-items:center; gap:10px; padding:9px 10px; cursor:pointer; border-radius:6px; font-size:13px; color:#991b1b; font-weight:600; transition:background 0.15s;" onmouseover="this.style.background='#fff1f2'" onmouseout="this.style.background='transparent'">
+                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"></circle><path d="M19.07 4.93a10 10 0 0 1 0 14.14M16.24 7.76a6 6 0 0 1 0 8.49M4.93 19.07a10 10 0 0 1 0-14.14M7.76 16.24a6 6 0 0 1 0-8.49"></path></svg>
+                                    Cảnh báo Chi phí
+                                </div>
+                            </div>
+                        </div>
                         <?php endif; ?>
                     </div>
                 </div>
