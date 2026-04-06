@@ -129,7 +129,7 @@ $q_border = [1 => '#BFDBFE', 2 => '#BFDBFE', 3 => '#BFDBFE', 4 => '#A7F3D0', 5 =
                         ?>
                         <td class="as-cell <?= $isCur ? 'cur-month-col' : '' ?>"
                             style="background:<?= $q_bg[$m] ?>;padding:3px 4px">
-                            <?php if ($_SESSION['role'] === 'admin' || $_SESSION['user_id'] == $d['kpi_owner_id'] || $_SESSION['user_id'] == $d['dept_owner_id'] || $_SESSION['user_id'] == $d['dept_manager_id']): ?>
+                            <?php if ($is_kpi_admin || $_SESSION['user_id'] == $d['kpi_owner_id'] || $_SESSION['user_id'] == $d['dept_owner_id'] || $_SESSION['user_id'] == $d['dept_manager_id'] || in_array($d['department_id'], $viewable_depts)): ?>
                                 <input type="text" class="as-input" data-def="<?= $did ?>" data-year="<?= $year ?>"
                                     data-month="<?= $m ?>" placeholder="Thực tế T<?= $m ?>" value="<?= fmtDisplay($act) ?>">
                             <?php else: ?>
@@ -182,7 +182,7 @@ $q_border = [1 => '#BFDBFE', 2 => '#BFDBFE', 3 => '#BFDBFE', 4 => '#A7F3D0', 5 =
 
         input.classList.add('saving');
 
-        fetch('/api/kpi_monthly_save', {
+        fetch('/api/kpi_monthly_save.php', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({

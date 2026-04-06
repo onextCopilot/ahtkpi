@@ -175,7 +175,7 @@ function fmtDisplayTarget($val)
                                     Kế hoạch Q<?= $qi ?></div>
 
                                 <!-- Target input -->
-                                <?php if ($_SESSION['role'] === 'admin' || $_SESSION['user_id'] == $d['kpi_owner_id'] || $_SESSION['user_id'] == $d['dept_owner_id'] || $_SESSION['user_id'] == $d['dept_manager_id']): ?>
+                                <?php if ($is_kpi_admin || $_SESSION['user_id'] == $d['kpi_owner_id'] || $_SESSION['user_id'] == $d['dept_owner_id'] || $_SESSION['user_id'] == $d['dept_manager_id'] || in_array($d['department_id'], $viewable_depts)): ?>
                                     <input type="text" class="qs-input" data-def="<?= $d['id'] ?>" data-quarter="<?= $qi ?>"
                                         data-year="<?= $year ?>" placeholder="Nhập target Q<?= $qi ?>"
                                         value="<?= htmlspecialchars(fmtDisplayTarget($qrow['target_value'] ?? '')) ?>"
@@ -278,7 +278,7 @@ function fmtDisplayTarget($val)
         if (!td) return;
         const inp = td.querySelector('.qs-input');
         const rawVal = stripFmt(inp?.value ?? ''); // strip formatting before saving
-        fetch('/api/kpi_quarterly_save', {
+        fetch('/api/kpi_quarterly_save.php', {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ kpi_def_id: +defId, quarter: +quarter, year: +year, target_value: rawVal, weight_q: 0, status: 'active', notes: '' })
         }).then(r => r.json()).then(d => qsSaveBadge(defId, quarter, d.success ? '✓ Đã lưu' : '✗ Lỗi', !d.success))
