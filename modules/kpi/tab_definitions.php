@@ -312,6 +312,9 @@ $COLS = 14; // STT+Nhóm+Tên+TargetNăm+CảNăm+Tỷtrọng+Q1+Q2+Q3+Q4+Owner+
                             $q_data_json = json_encode([
                                 'kpi_name' => $d['kpi_name'],
                                 'q_label' => 'QUÝ ' . $qi,
+                                'def_id' => $d['id'],
+                                'quarter' => $qi,
+                                'year' => $year,
                                 'target' => $qPlanR ?: ($qPlan ? number_format($qPlan, 0, ',', '.') : '—'),
                                 'unit' => $d['unit'] ?? '',
                                 'months' => $months_detail,
@@ -625,6 +628,62 @@ function fmtNum(val) {
     return val;
 }
 
+let historyPage = 1;
+let currentKPIData = null;
+
+function loadKPIHistory(isNew = false) {
+    if (isNew) {
+        historyPage = 1;
+        document.getElementById('drawAuditList').innerHTML = '<div style="font-size:12px; color:#a0aec0; text-align:center; padding:12px;">Đang tải lịch sử...</div>';
+    }
+    const data = currentKPIData;
+    fetch(`/api/kpi_history.php?def_id=${data.def_id}&quarter=${data.quarter}&year=${data.year}&page=${historyPage}`)
+        .then(r => r.json())
+        .then(res => {
+            if (isNew) document.getElementById('drawAuditList').innerHTML = '';
+            
+            // Remove existing Load More btn
+            const oldMore = document.getElementById('btnHistoryMore');
+            if (oldMore) oldMore.remove();
+
+            if (res.success && res.logs.length > 0) {
+                let logHtml = '';
+                res.logs.forEach(log => {
+                    const oldF = fmtNum(log.old_value);
+                    const newF = fmtNum(log.new_value);
+                    logHtml += `
+                        <div style="padding:12px 0; border-bottom:1px dashed #edf2f7; position:relative;">
+                            <div style="display:flex; justify-content:space-between; margin-bottom:4px;">
+                                <span style="font-size:12px; color:#2d3748; font-weight:700;">${log.updater_name}</span>
+                                <span style="font-size:11px; color:#a0aec0;">${log.updated_at_fmt}</span>
+                            </div>
+                            <div style="display:flex; align-items:center; gap:8px; font-size:12px;">
+                                <span style="color:#718096; font-weight:600;">${log.kpi_name} - ${log.month > 0 ? 'Tháng ' + log.month : 'Quý ' + log.quarter} (${log.field_name}):</span>
+                                <span style="color:#a0aec0; text-decoration:line-through;">${oldF}</span>
+                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#a0aec0" stroke-width="2"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+                                <span style="color:${data.color}; font-weight:700;">${newF}</span>
+                            </div>
+                        </div>
+                    `;
+                });
+                document.getElementById('drawAuditList').innerHTML += logHtml;
+
+                if (res.has_more) {
+                    historyPage++;
+                    document.getElementById('drawAuditList').innerHTML += `
+                        <button id="btnHistoryMore" onclick="loadKPIHistory()" style="width:100%; padding:10px; margin-top:10px; background:#f7fafc; border:1px solid #edf2f7; color:#718096; font-size:12px; font-weight:600; cursor:pointer; border-radius:8px; transition:0.2s;">
+                            Xem thêm lịch sử...
+                        </button>
+                    `;
+                }
+            } else if (isNew) {
+                document.getElementById('drawAuditList').innerHTML = '<div style="font-size:12px; color:#a0aec0; padding:12px; text-align:center; background:#f7fafc; border-radius:8px;">Chưa có lịch sử thay đổi</div>';
+            }
+        }).catch(() => {
+            if (isNew) document.getElementById('drawAuditList').innerHTML = '<div style="font-size:12px; color:#ef4444; padding:12px; text-align:center;">Lỗi tải lịch sử</div>';
+        });
+}
+
 function openQDetailDraw(data) {
     document.getElementById('drawQText').style.color = data.color;
     document.getElementById('drawQText').textContent = data.q_label;
@@ -672,7 +731,9 @@ function openQDetailDraw(data) {
         }
     }
     document.getElementById('drawMonthsList').innerHTML = monthsHtml;
-    document.getElementById('drawAuditList').innerHTML = auditHtml || '<div style="font-size:12px; color:#a0aec0; padding:12px; text-align:center; background:#f7fafc; border-radius:8px;">Chưa có lịch sử cập nhật cho KPI này</div>';
+    
+    currentKPIData = data;
+    loadKPIHistory(true);
 
     document.getElementById('qDetailOverlay').classList.add('open');
     document.getElementById('qDetailLayout').classList.add('open');

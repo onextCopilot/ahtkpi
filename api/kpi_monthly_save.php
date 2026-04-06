@@ -46,6 +46,7 @@ $chk = $conn->query("
 );
 if ($chk && $row = $chk->fetch_assoc()) {
     $v_depts = array_filter(explode(',', $_SESSION['viewable_department_ids'] ?? ''));
+    $kpi_name = $row['kpi_name'] ?? '';
     $can_edit = ($_SESSION['role'] === 'admin'
         || ($_SESSION['can_view_all_kpi'] ?? 0) == 1
         || $_SESSION['user_id'] == $row['kpi_owner_id']
@@ -80,9 +81,39 @@ function stripFormat($val)
     return $v;
 }
 
+// 1. Get OLD row for auditing
+$old_row = null;
+$check_old = $conn->prepare("SELECT * FROM kpi_monthly WHERE kpi_def_id=? AND year=? AND month=?");
+$check_old->bind_param("iii", $def_id, $year, $month);
+$check_old->execute();
+$res_old = $check_old->get_result();
+if ($r_old = $res_old->fetch_assoc()) {
+    $old_row = $r_old;
+}
+
+// 2. Prepare new values
 $actual = stripFormat($body['actual_value'] ?? '');
 $score = ($body['score'] !== null && $body['score'] !== '') ? floatval($body['score']) : null;
 $notes = trim($body['notes'] ?? '');
+
+// 3. Audit Logging
+function logChange($conn, $def_id, $kpi_name, $year, $month, $field, $old, $new, $uid) {
+    if ($old == $new) return;
+    $log_stmt = $conn->prepare("INSERT INTO kpi_audit_logs (kpi_def_id, kpi_name, year, month, quarter, field_name, old_value, new_value, updated_by) VALUES (?, ?, ?, ?, 0, ?, ?, ?, ?)");
+    $log_stmt->bind_param("isiisssi", $def_id, $kpi_name, $year, $month, $field, $old, $new, $uid);
+    $log_stmt->execute();
+}
+
+if ($old_row) {
+    logChange($conn, $def_id, $kpi_name, $year, $month, 'Giá trị thực tế', $old_row['actual_value'] ?? '', $actual, $uid);
+    logChange($conn, $def_id, $kpi_name, $year, $month, 'Điểm số', $old_row['score'] ?? '', $score ?? '', $uid);
+    logChange($conn, $def_id, $kpi_name, $year, $month, 'Ghi chú', $old_row['notes'] ?? '', $notes, $uid);
+} else {
+    // New Record
+    if ($actual !== '') logChange($conn, $def_id, $kpi_name, $year, $month, 'Giá trị thực tế', '', $actual, $uid);
+    if ($score !== null) logChange($conn, $def_id, $kpi_name, $year, $month, 'Điểm số', '', $score, $uid);
+    if ($notes !== '') logChange($conn, $def_id, $kpi_name, $year, $month, 'Ghi chú', '', $notes, $uid);
+}
 
 $stmt = $conn->prepare("
     INSERT INTO kpi_monthly (kpi_def_id, year, month, actual_value, score, notes, updated_by)
