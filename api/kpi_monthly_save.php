@@ -107,12 +107,12 @@ function logChange($conn, $def_id, $kpi_name, $year, $month, $field, $old, $new,
 if ($old_row) {
     logChange($conn, $def_id, $kpi_name, $year, $month, 'Giá trị thực tế', $old_row['actual_value'] ?? '', $actual, $uid);
     logChange($conn, $def_id, $kpi_name, $year, $month, 'Điểm số', $old_row['score'] ?? '', $score ?? '', $uid);
-    logChange($conn, $def_id, $kpi_name, $year, $month, 'Ghi chú', $old_row['notes'] ?? '', $notes, $uid);
+    // logChange($conn, $def_id, $kpi_name, $year, $month, 'Ghi chú', $old_row['notes'] ?? '', $notes, $uid);
 } else {
     // New Record
     if ($actual !== '') logChange($conn, $def_id, $kpi_name, $year, $month, 'Giá trị thực tế', '', $actual, $uid);
     if ($score !== null) logChange($conn, $def_id, $kpi_name, $year, $month, 'Điểm số', '', $score, $uid);
-    if ($notes !== '') logChange($conn, $def_id, $kpi_name, $year, $month, 'Ghi chú', '', $notes, $uid);
+    // if ($notes !== '') logChange($conn, $def_id, $kpi_name, $year, $month, 'Ghi chú', '', $notes, $uid);
 }
 
 $stmt = $conn->prepare("

@@ -214,7 +214,10 @@ $COLS = 14; // STT+Nhóm+Tên+TargetNăm+CảNăm+Tỷtrọng+Q1+Q2+Q3+Q4+Owner+
                     $m_row = $monthly_map[$d['id']][$m_num] ?? null;
                     $yr_months_detail[$m_num] = [
                         'val' => $m_row ? (is_numeric(stripThousands($m_row['actual_value'])) ? (float)stripThousands($m_row['actual_value']) : 0) : null,
-                        'fmt' => $m_row ? $m_row['actual_value'] : null
+                        'fmt' => $m_row ? $m_row['actual_value'] : '—',
+                        'notes' => $m_row['notes'] ?? '',
+                        'by' => $m_row['updater_name'] ?? ($m_row ? 'User' : '—'),
+                        'at' => ($m_row && !empty($m_row['updated_at'])) ? date('H:i d/m', strtotime($m_row['updated_at'])) : ''
                     ];
                 }
                 $yr_data_json = json_encode([
@@ -327,6 +330,7 @@ $COLS = 14; // STT+Nhóm+Tên+TargetNăm+CảNăm+Tỷtrọng+Q1+Q2+Q3+Q4+Owner+
                                 $m_row = $monthly_map[$d['id']][$m_num] ?? null;
                                 $months_detail[$m_num] = [
                                     'val' => $m_row['actual_value'] ?? '—',
+                                    'notes' => $m_row['notes'] ?? '',
                                     'by' => $m_row['updater_name'] ?? ($m_row ? 'User' : '—'),
                                     'at' => ($m_row && !empty($m_row['updated_at'])) ? date('H:i d/m', strtotime($m_row['updated_at'])) : ''
                                 ];
@@ -559,17 +563,41 @@ document.addEventListener('DOMContentLoaded', function() {
 
 <?php endif; ?>
 
+<!-- Quill Rich Text Editor Assets -->
+<link href="https://cdn.quilljs.com/1.3.6/quill.snow.css" rel="stylesheet">
+<script src="https://cdn.quilljs.com/1.3.6/quill.js"></script>
+
 <!-- Drilldown Sidebar Styles -->
 <style>
+    /* Custom Quill adjustments */
+    #quillExEditor {
+        height: 100%;
+        border: none !important;
+        background: #fff;
+        font-family: 'Roboto', sans-serif;
+        font-size: 14px;
+    }
+    .ql-toolbar.ql-snow {
+        border: 1px solid #e2e8f0 !important;
+        border-radius: 12px 12px 0 0;
+        background: #fff;
+    }
+    .ql-container.ql-snow {
+        border: 1px solid #e2e8f0 !important;
+        border-radius: 0 0 12px 12px;
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+    }
 .q-drilldown-cell:hover {
     filter: brightness(0.96);
     box-shadow: inset 0 0 0 2px rgba(0,0,0,0.05);
 }
 #qDetailLayout {
-    position: fixed; top: 0; right: -420px; width: 400px; height: 100vh;
+    position: fixed; top: 0; right: -1000px; width: 450px; height: 100vh;
     background: #fff; box-shadow: -5px 0 25px rgba(0,0,0,0.1);
-    z-index: 10001; transition: right 0.3s ease-out;
-    display: flex; flex-direction: column; font-family: 'Roboto', sans-serif;
+    z-index: 10001; transition: right 0.3s ease-out, width 0.3s ease-out;
+    display: flex; flex-direction: row; font-family: 'Roboto', sans-serif;
 }
 #qDetailLayout.open { right: 0; }
 #qDetailOverlay {
@@ -593,52 +621,79 @@ document.addEventListener('DOMContentLoaded', function() {
 </style>
 
 <!-- Drilldown Sidebar HTML -->
-<div id="qDetailOverlay" onclick="closeQDetailDraw()"></div>
-<div id="qDetailLayout">
-    <div class="q-detail-head">
-        <div style="display:flex; justify-content:space-between; align-items:flex-start;">
-            <div>
-                <div id="drawQText" style="font-size:12px; font-weight:700; letter-spacing:1px; text-transform:uppercase; margin-bottom:4px;"></div>
-                <h3 id="drawKPIName" style="margin:0; font-size:18px; color:#1a202c; line-height:1.4;"></h3>
+<div id="qDetailOverlay" class="q-detail-overlay" onclick="closeQDetailDraw()"></div>
+<div id="qDetailLayout" class="q-detail-layout" style="display: flex; overflow: hidden; height: 100vh;">
+    <!-- Main Content Panel (450px) -->
+    <div style="width: 450px; flex-shrink: 0; display: flex; flex-direction: column; background: #fff; height: 100%;">
+        <div class="q-detail-head">
+            <div style="display:flex; justify-content:space-between; align-items:flex-start;">
+                <div>
+                    <div id="drawQText" style="font-size:12px; font-weight:700; letter-spacing:1px; text-transform:uppercase; margin-bottom:4px;"></div>
+                    <h3 id="drawKPIName" style="margin:0; font-size:18px; color:#1a202c; line-height:1.4;"></h3>
+                </div>
+                <button onclick="closeQDetailDraw()" style="background:none; border:none; cursor:pointer; color:#a0aec0; padding:4px;">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg>
+                </button>
             </div>
-            <button onclick="closeQDetailDraw()" style="background:none; border:none; cursor:pointer; color:#a0aec0; padding:4px;">
-                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg>
-            </button>
+        </div>
+        <div class="q-detail-body">
+            <!-- Summary Card -->
+            <div style="background:#f8fafc; border-radius:16px; padding:20px; margin-bottom:24px; border:1px solid #e2e8f0;">
+                <div style="display:flex; gap:12px; margin-bottom:16px;">
+                    <div style="flex:1;">
+                        <div style="font-size:11px; color:#718096; margin-bottom:4px; font-weight:600;">MỤC TIÊU</div>
+                        <div id="drawTarget" style="font-size:18px; font-weight:700; color:#2d3748;"></div>
+                    </div>
+                    <div style="flex:1; text-align:right;">
+                        <div style="font-size:11px; color:#718096; margin-bottom:4px; font-weight:600;">THỰC TẾ</div>
+                        <div id="drawActual" style="font-size:18px; font-weight:700; color:#1d4ed8;"></div>
+                    </div>
+                </div>
+                <div style="height:8px; background:#e2e8f0; border-radius:4px; overflow:hidden; margin-bottom:8px;">
+                    <div id="drawBar" style="height:100%; transition:width 0.6s ease;"></div>
+                </div>
+                <div style="display:flex; justify-content:space-between; align-items:baseline;">
+                    <span style="font-size:12px; color:#718096;">Hoàn thành kế hoạch</span>
+                    <span id="drawPct" style="font-size:20px; font-weight:800; color:#2d3748;"></span>
+                </div>
+            </div>
+
+            <h4 style="font-size:13px; color:#4a5568; margin-top:0; margin-bottom:12px; display:flex; align-items:center; gap:8px;">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20V10M18 20V4M6 20v-4"/></svg>
+                <span id="drillTitle">BIẾN ĐỘNG QUÝ</span>
+            </h4>
+            
+            <!-- Chart Section (Annual view only) -->
+            <div id="chartSection" style="margin-bottom:24px; height:200px; display:none;">
+                <canvas id="drillChart"></canvas>
+            </div>
+
+            <div id="drawMonthsList" style="margin-bottom:32px;"></div>
+
+            <h4 style="font-size:13px; color:#4a5568; margin-top:0; margin-bottom:12px; display:flex; align-items:center; gap:8px;">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+                LỊCH SỬ CẬP NHẬT
+            </h4>
+            <div id="drawAuditList" style="display:flex; flex-direction:column; gap:8px;"></div>
         </div>
     </div>
-    <div class="q-detail-body">
-        <!-- Summary Card -->
-        <div style="background:#f8fafc; border-radius:16px; padding:20px; margin-bottom:24px; border:1px solid #e2e8f0;">
-            <div style="display:flex; gap:12px; margin-bottom:16px;">
-                <div style="flex:1;">
-                    <div style="font-size:11px; color:#718096; margin-bottom:4px; font-weight:600;">TARGET QUÝ</div>
-                    <div id="drawTarget" style="font-size:18px; font-weight:700; color:#2d3748;"></div>
-                </div>
-                <div style="flex:1; text-align:right;">
-                    <div style="font-size:11px; color:#718096; margin-bottom:4px; font-weight:600;">THỰC TẾ QUÝ</div>
-                    <div id="drawActual" style="font-size:18px; font-weight:700; color:#1d4ed8;"></div>
-                </div>
+
+    <!-- Explanation Panel (450px) -->
+    <div id="explanationPanel" style="width: 450px; flex-shrink: 0; background: #f8fafc; border-left: 1px solid #e2e8f0; display: flex; flex-direction: column; height: 100%;">
+        <div style="padding: 24px; background: #fff; border-bottom: 1px solid #e2e8f0;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                <h3 id="exMonthTitle" style="margin: 0; font-size: 16px; color: #1e293b;">Nội dung giải trình</h3>
+                <button onclick="closeKPIExplanation()" style="background: none; border: none; font-size: 20px; color: #94a3b8; cursor: pointer;">&times;</button>
             </div>
-            <div style="height:8px; background:#e2e8f0; border-radius:4px; overflow:hidden; margin-bottom:8px;">
-                <div id="drawBar" style="height:100%; transition:width 0.6s ease;"></div>
-            </div>
-            <div style="display:flex; justify-content:space-between; align-items:baseline;">
-                <span style="font-size:12px; color:#718096;">Hoàn thành kế hoạch</span>
-                <span id="drawPct" style="font-size:20px; font-weight:800; color:#2d3748;"></span>
+            <div id="exKPIName" style="font-size: 12px; color: #64748b;">—</div>
+        </div>
+        <div style="flex: 1; padding: 24px; display: flex; flex-direction: column; gap: 12px; min-height: 0;">
+            <div id="quillExEditor" placeholder="Nhập nội dung giải trình cho tháng này..."></div>
+            <div style="display: flex; justify-content: flex-end; gap: 12px; padding-top: 8px;">
+                <button onclick="closeKPIExplanation()" class="btn" style="background: #fff; border: 1px solid #e2e8f0; color: #64748b; padding: 8px 16px;">Hủy</button>
+                <button onclick="saveKPIExplanation()" id="btnSaveEx" class="btn btn-primary" style="min-width: 120px; padding: 8px 24px; font-weight: 600;">Lưu giải trình</button>
             </div>
         </div>
-
-        <h4 style="font-size:13px; color:#4a5568; margin-top:0; margin-bottom:12px; display:flex; align-items:center; gap:8px;">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20V10M18 20V4M6 20v-4"/></svg>
-            BIẾN ĐỘNG QUÝ
-        </h4>
-        <div id="drawMonthsList" style="margin-bottom:32px;"></div>
-
-        <h4 style="font-size:13px; color:#4a5568; margin-top:0; margin-bottom:12px; display:flex; align-items:center; gap:8px;">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
-            LỊCH SỬ CẬP NHẬT
-        </h4>
-        <div id="drawAuditList" style="display:flex; flex-direction:column; gap:8px;"></div>
     </div>
 </div>
 
@@ -731,13 +786,27 @@ function openQDetailDraw(data) {
     let auditHtml = '';
     for (const [m, info] of Object.entries(data.months)) {
         const fmtVal = fmtNum(info.val);
+        const hasEx = info.notes && info.notes.trim().length > 0;
         monthsHtml += `
-            <div class="q-month-card" style="margin-bottom:8px; padding:12px 16px;">
+            <div class="q-month-card" style="margin-bottom:8px; padding:14px 18px; display:flex; justify-content:space-between; align-items:center;">
                 <div>
-                    <div style="font-size:10px; color:#a0aec0; font-weight:700; text-transform:uppercase;">Tháng ${m}</div>
-                    <div style="font-size:15px; font-weight:700; color:#2d3748;">${fmtVal} <small style="font-weight:400; font-size:11px; color:#718096;">${data.unit}</small></div>
+                    <div style="font-size:10px; color:#a0aec0; font-weight:700; text-transform:uppercase; margin-bottom:2px">Tháng ${m}</div>
+                    <div style="font-size:15px; font-weight:700; color:#2d3748; margin-bottom:6px">${fmtVal} <small style="font-weight:400; font-size:11px; color:#718096;">${data.unit}</small></div>
+                    <button onclick="toggleKPIExplanation(${m}, event)" 
+                        data-notes="${encodeURIComponent(info.notes || '')}"
+                        style="font-size:11px; color:#2563eb; background:#eff6ff; border:1px solid #dbeafe; padding:4px 10px; border-radius:6px; cursor:pointer; font-weight:600; display:flex; align-items:center; gap:4px; transition:all .2s; margin-bottom: 4px;">
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                        ${hasEx ? 'Sửa giải trình' : 'Thêm giải trình'}
+                    </button>
+                    ${hasEx ? `
+                    <div style="font-size:11px; color:#92400e; background:#fffbeb; border:1px solid #fef3c7; border-radius:8px; padding:8px 12px; margin-top:10px; display:flex; gap:8px; align-items:flex-start;">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="flex-shrink:0; margin-top:1px;"><path d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
+                        <div style="overflow:hidden;">
+                            <strong>Giải trình:</strong> ${info.notes}
+                        </div>
+                    </div>` : ''}
                 </div>
-                <div style="width:40px; height:4px; border-radius:2px; background:${data.color}; opacity:0.3;"></div>
+                <div style="width:4px; height:40px; border-radius:2px; background:${data.color || '#3b82f6'}; opacity:0.3;"></div>
             </div>
         `;
         if (info.at) {
@@ -771,7 +840,6 @@ function closeQDetailDraw() {
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <style>
 .yr-drilldown-cell:hover { filter: brightness(0.96); box-shadow: inset 0 0 0 2px rgba(0,0,0,0.05); }
-#qDetailLayout { width: 450px !important; }
 .q-detail-head { padding: 20px 24px; }
 .q-month-card { transition: background 0.2s; }
 .q-month-card:hover { background: #f8fafc !important; }
@@ -779,6 +847,24 @@ function closeQDetailDraw() {
 
 <script>
 let kpiChartInstance = null;
+let quillEx = null;
+
+// Initialize Quill once
+document.addEventListener('DOMContentLoaded', () => {
+    if (document.getElementById('quillExEditor')) {
+        quillEx = new Quill('#quillExEditor', {
+            theme: 'snow',
+            modules: {
+                toolbar: [
+                    ['bold', 'italic', 'underline'],
+                    [{ 'list': 'ordered' }, { 'list': 'bullet' }],
+                    ['clean']
+                ]
+            },
+            placeholder: 'Nhập nội dung giải trình cho tháng này...'
+        });
+    }
+});
 
 function openYearDetailDraw(data) {
     if(!document.getElementById('chartSection')) {
@@ -839,13 +925,23 @@ function openYearDetailDraw(data) {
         labels.push('T' + m);
         values.push(val);
 
+        const hasEx = info && info.notes && info.notes.trim().length > 0;
         listHtml += `
-            <div class="q-month-card" style="margin-bottom:6px; padding:10px 14px; border:1px solid #f1f5f9; border-radius:10px; display:flex; justify-content:space-between; align-items:center;">
-                <div>
-                    <div style="font-size:10px; color:#94a3b8; font-weight:700;">THÁNG ${m}</div>
-                    <div style="font-size:14px; font-weight:700; color:#334155;">${fmt} <small style="font-weight:400; font-size:11px;">${data.unit}</small></div>
+            <div class="q-month-card" style="margin-bottom:8px; padding:12px 18px; border:1px solid #f1f5f9; border-radius:12px; display:block;">
+                <div style="display:flex; justify-content:space-between; align-items:center; width:100%;">
+                    <div>
+                        <div style="font-size:10px; color:#94a3b8; font-weight:700; text-transform:uppercase;">THÁNG ${m}</div>
+                        <div style="font-size:15px; font-weight:700; color:#334155; margin-bottom:6px;">${fmt} <small style="font-weight:400; font-size:11px;">${data.unit}</small></div>
+                    </div>
+                    <div style="width:4px; height:40px; border-radius:2px; background:#e2e8f0;"></div>
                 </div>
-                <div style="width:24px; height:4px; border-radius:10px; background:#e2e8f0;"></div>
+                ${hasEx ? `
+                <div style="font-size:11px; color:#92400e; background:#fffbeb; border:1px solid #fef3c7; border-radius:8px; padding:8px 12px; margin-top:10px; display:flex; gap:8px; align-items:flex-start;">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="flex-shrink:0; margin-top:1px;"><path d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
+                    <div style="overflow:hidden;">
+                        <strong>Giải trình:</strong> ${info.notes}
+                    </div>
+                </div>` : ''}
             </div>
         `;
     }
@@ -853,7 +949,9 @@ function openYearDetailDraw(data) {
 
     // Render Chart
     setTimeout(() => {
-        const ctx = document.getElementById('kpiTrendChart').getContext('2d');
+        const canvas = document.getElementById('drillChart');
+        if (!canvas) return; 
+        const ctx = canvas.getContext('2d');
         if (kpiChartInstance) kpiChartInstance.destroy();
         kpiChartInstance = new Chart(ctx, {
             type: 'line',
@@ -895,5 +993,89 @@ openQDetailDraw = function(data) {
     if(document.getElementById('chartSection')) document.getElementById('chartSection').style.display = 'none';
     if(document.getElementById('drillTitle')) document.getElementById('drillTitle').textContent = 'BIẾN ĐỘNG QUÝ';
     oldOpenQ(data);
-};
+}
+
+// --- KPI Explanation Functions ---
+let currentExMonth = null;
+
+function toggleKPIExplanation(month, event) {
+    const btn = event.currentTarget;
+    const notes = decodeURIComponent(btn.getAttribute('data-notes') || '');
+    
+    currentExMonth = month;
+    document.getElementById('exMonthTitle').textContent = `Giải trình Tháng ${month}`;
+    document.getElementById('exKPIName').textContent = currentKPIData.kpi_name;
+    
+    if (quillEx) {
+        quillEx.root.innerHTML = notes;
+    }
+    
+    // Expand Sidebar
+    const layout = document.getElementById('qDetailLayout');
+    layout.style.width = '900px';
+}
+
+function closeKPIExplanation() {
+    const layout = document.getElementById('qDetailLayout');
+    layout.style.width = '450px'; // Original width
+}
+
+function saveKPIExplanation() {
+    const notes = quillEx ? quillEx.root.innerHTML.trim() : '';
+    // If user deleted all, innerHTML might be <p><br></p>
+    const cleanNotes = (notes === '<p><br></p>') ? '' : notes;
+    
+    const btn = document.getElementById('btnSaveEx');
+    const originalText = btn.textContent;
+    
+    btn.disabled = true;
+    btn.textContent = 'Đang lưu...';
+
+    const payload = {
+        kpi_def_id: currentKPIData.def_id,
+        year: currentKPIData.year,
+        month: currentExMonth,
+        notes: notes,
+        actual_value: currentKPIData.months[currentExMonth]?.val || '',
+        score: null 
+    };
+
+    fetch('api/kpi_monthly_save.php', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+    })
+    .then(res => res.json())
+    .then(res => {
+        if (res.success) {
+            // Update local state so it reflects in the UI immediately
+            if(!currentKPIData.months[currentExMonth]) currentKPIData.months[currentExMonth] = {};
+            currentKPIData.months[currentExMonth].notes = notes;
+            
+            // Re-render the month list
+            if(currentKPIData.quarter) {
+                openQDetailDraw(currentKPIData);
+            } else {
+                openYearDetailDraw(currentKPIData);
+            }
+            
+            closeKPIExplanation();
+            // Optional: toast success
+        } else {
+            alert('Lỗi: ' + (res.error || 'Không rõ lỗi'));
+        }
+    })
+    .catch(err => alert('Lỗi kết nối: ' + err))
+    .finally(() => {
+        btn.disabled = false;
+        btn.textContent = originalText;
+    });
+}
+
+// Override close side draw to reset explanation
+const originCloseSide = closeQDetailDraw;
+closeQDetailDraw = function() {
+    closeKPIExplanation();
+    originCloseSide();
+}
 </script>
