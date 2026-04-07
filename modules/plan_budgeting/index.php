@@ -740,7 +740,9 @@ foreach ($structure as $row) {
             if ($did !== '') {
                 if (!isset($div_totals[$did][$m][$k])) $div_totals[$did][$m][$k] = 0;
                 $div_totals[$did][$m][$k] += $val;
-                $grand_totals[$m][$k] = ($grand_totals[$m][$k] ?? 0) + $val;
+                if ($grand_total_blocks === null || in_array($did, $grand_total_blocks)) {
+                    $grand_totals[$m][$k] = ($grand_totals[$m][$k] ?? 0) + $val;
+                }
             }
             if ($cat_name !== '') {
                 if (!isset($cat_totals[$cid][$m][$k])) $cat_totals[$cid][$m][$k] = 0;

@@ -175,26 +175,36 @@ if (!$can_view_all_debts) {
 }
 
 if (!empty($_GET['am'])) {
-    $am_filter = $conn->real_escape_string($_GET['am']);
-    $where_clauses[] = "d.am = '$am_filter'";
+    $vals = is_array($_GET['am']) ? $_GET['am'] : [$_GET['am']];
+    $clean = [];
+    foreach ($vals as $v) if ($v !== '') $clean[] = "'" . $conn->real_escape_string($v) . "'";
+    if (count($clean) > 0) $where_clauses[] = "d.am IN (" . implode(',', $clean) . ")";
 }
+
 if (!empty($_GET['invoice_status_class'])) {
-    $inv_class_filter = $conn->real_escape_string($_GET['invoice_status_class']);
-    if ($inv_class_filter === 'Xanh') {
-        $where_clauses[] = "(d.invoice_status_class = 'Xanh' OR d.invoice_status_class = 'Tốt')";
-    } else {
-        $where_clauses[] = "d.invoice_status_class = '$inv_class_filter'";
+    $vals = is_array($_GET['invoice_status_class']) ? $_GET['invoice_status_class'] : [$_GET['invoice_status_class']];
+    $clean = [];
+    $has_xanh = false;
+    foreach ($vals as $v) {
+        if ($v !== '') {
+            $clean[] = "'" . $conn->real_escape_string($v) . "'";
+            if ($v === 'Xanh') $has_xanh = true;
+        }
     }
+    if ($has_xanh) $clean[] = "'Tốt'";
+    if (count($clean) > 0) $where_clauses[] = "d.invoice_status_class IN (" . implode(',', $clean) . ")";
 }
 
 if (!empty($_GET['status'])) {
-    $status_filter = $conn->real_escape_string($_GET['status']);
-    if ($status_filter === 'Draft') {
-        // Drafts are effectively 'Not paid' in our DB, but we will filter strictly to 'draft' state in the PHP loop below
-        $where_clauses[] = "d.payment_status = 'Not paid'";
-    } else {
-        $where_clauses[] = "d.payment_status = '$status_filter'";
+    $vals = is_array($_GET['status']) ? $_GET['status'] : [$_GET['status']];
+    $clean = [];
+    foreach ($vals as $v) {
+        if ($v !== '') {
+            if ($v === 'Draft') $clean[] = "'Not paid'";
+            else $clean[] = "'" . $conn->real_escape_string($v) . "'";
+        }
     }
+    if (count($clean) > 0) $where_clauses[] = "d.payment_status IN (" . implode(',', $clean) . ")";
 }
 
 if (!empty($_GET['q'])) {
@@ -203,30 +213,47 @@ if (!empty($_GET['q'])) {
 }
 
 if (!empty($_GET['year'])) {
-    $year = intval($_GET['year']);
-    $where_clauses[] = "YEAR(d.invoice_date) = $year";
+    $vals = is_array($_GET['year']) ? $_GET['year'] : [$_GET['year']];
+    $y_ins = [];
+    foreach ($vals as $v) {
+        $y = intval($v);
+        if ($y > 2000) $y_ins[] = $y;
+    }
+    if (count($y_ins) > 0) $where_clauses[] = "YEAR(d.invoice_date) IN (" . implode(',', $y_ins) . ")";
 }
 
 if (!empty($_GET['quarter'])) {
-    $qtr = intval($_GET['quarter']);
-    if ($qtr == 1)
-        $where_clauses[] = "MONTH(d.invoice_date) IN (1,2,3)";
-    elseif ($qtr == 2)
-        $where_clauses[] = "MONTH(d.invoice_date) IN (4,5,6)";
-    elseif ($qtr == 3)
-        $where_clauses[] = "MONTH(d.invoice_date) IN (7,8,9)";
-    elseif ($qtr == 4)
-        $where_clauses[] = "MONTH(d.invoice_date) IN (10,11,12)";
+    $vals = is_array($_GET['quarter']) ? $_GET['quarter'] : [$_GET['quarter']];
+    $m_ins = [];
+    foreach ($vals as $v) {
+        if ($v == 1) $m_ins = array_merge($m_ins, [1,2,3]);
+        if ($v == 2) $m_ins = array_merge($m_ins, [4,5,6]);
+        if ($v == 3) $m_ins = array_merge($m_ins, [7,8,9]);
+        if ($v == 4) $m_ins = array_merge($m_ins, [10,11,12]);
+    }
+    if (count($m_ins) > 0) $where_clauses[] = "MONTH(d.invoice_date) IN (" . implode(',', $m_ins) . ")";
 }
 
 if (!empty($_GET['month'])) {
-    $month = intval($_GET['month']);
-    $where_clauses[] = "MONTH(d.invoice_date) = $month";
+    $vals = is_array($_GET['month']) ? $_GET['month'] : [$_GET['month']];
+    $m_ins = [];
+    foreach ($vals as $v) {
+        $m = intval($v);
+        if ($m > 0 && $m <= 12) $m_ins[] = $m;
+    }
+    if (count($m_ins) > 0) $where_clauses[] = "MONTH(d.invoice_date) IN (" . implode(',', $m_ins) . ")";
 }
 
 if (!empty($_GET['week'])) {
-    $week_number = intval($_GET['week']);
-    $where_clauses[] = "(d.weekly_update LIKE '%Tuần $week_number%' OR d.weekly_update LIKE '%tuần $week_number%' OR d.weekly_update = '$week_number' OR d.weekly_update LIKE '%W$week_number%' OR d.weekly_update LIKE '%w$week_number%')";
+    $vals = is_array($_GET['week']) ? $_GET['week'] : [$_GET['week']];
+    $ors = [];
+    foreach ($vals as $v) {
+        $w = intval($v);
+        if ($w > 0) {
+            $ors[] = "d.weekly_update LIKE '%Tuần $w%' OR d.weekly_update LIKE '%tuần $w%' OR d.weekly_update = '$w' OR d.weekly_update LIKE '%W$w%' OR d.weekly_update LIKE '%w$w%'";
+        }
+    }
+    if (count($ors) > 0) $where_clauses[] = "(" . implode(" OR ", $ors) . ")";
 }
 
 if (!empty($_GET['date_from'])) {
@@ -282,10 +309,13 @@ if ($res) {
         $odoo_inv = isset($odoo_map[$oid]) ? $odoo_map[$oid] : null;
 
         // Strict Filter for "Draft" status (checking Odoo state)
-        if (isset($_GET['status']) && $_GET['status'] === 'Draft') {
+        $status_filter = $_GET['status'] ?? [];
+        if (!is_array($status_filter)) $status_filter = [$status_filter];
+        
+        if (in_array('Draft', $status_filter)) {
             $odoo_state = ($odoo_inv && isset($odoo_inv['state'])) ? (string)$odoo_inv['state'] : '';
-            if ($odoo_state !== 'draft') {
-                continue;
+            if ($row['payment_status'] === 'Not paid' && !in_array('Not paid', $status_filter)) {
+                if ($odoo_state !== 'draft') continue;
             }
         }
 
@@ -454,6 +484,13 @@ function formatDate($date)
     return ($date && $date != '0000-00-00') ? date('d/m/Y', strtotime($date)) : '';
 }
 
+function is_filter_selected($key_name, $val) {
+    if (!isset($_GET[$key_name])) return false;
+    $v = $_GET[$key_name];
+    if (is_array($v)) return in_array((string)$val, $v);
+    return (string)$v === (string)$val;
+}
+
 // Fetch AM / BD Users
 $am_list = [];
 $res_am = $conn->query("SELECT full_name FROM users WHERE is_am_bd = 1 ORDER BY full_name ASC");
@@ -478,6 +515,9 @@ if ($res_am && $res_am->num_rows > 0) {
     <title>Debt Management</title>
     <link rel="stylesheet" href="/assets/css/dashboard.css">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <!-- Tom Select -->
+    <link href="https://cdn.jsdelivr.net/npm/tom-select@2.3.1/dist/css/tom-select.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/tom-select@2.3.1/dist/js/tom-select.complete.min.js"></script>
     <style>
         /* Prevent horizontal scroll on page */
         body {
@@ -960,6 +1000,17 @@ if ($res_am && $res_am->num_rows > 0) {
             transition: all 0.2s;
         }
 
+        .ts-wrapper.filter-select {
+            padding: 0 !important;
+        }
+        .ts-wrapper.filter-select .ts-control {
+            border: none;
+            padding: 8px 12px;
+            border-radius: 6px;
+            font-size: 0.875rem;
+            min-height: 38px;
+        }
+
         .search-input {
             width: 250px;
         }
@@ -1347,12 +1398,29 @@ if ($res_am && $res_am->num_rows > 0) {
                         foreach ($chip_labels as $key => $label) {
                             if (!empty($_GET[$key])) {
                                 $val = $_GET[$key];
-                                if ($key === 'month') {
-                                    $val = date('m', mktime(0, 0, 0, (int)$val, 1));
-                                } else if ($key === 'quarter') {
-                                    $val = 'Q' . $val;
-                                } else if ($key === 'date_from' || $key === 'date_to') {
-                                    $val = date('d/m/Y', strtotime($val));
+                                $val_str = '';
+                                if (is_array($val)) {
+                                    $mapped = [];
+                                    foreach($val as $v) {
+                                        if ($key === 'month') {
+                                            $mapped[] = date('m', mktime(0, 0, 0, (int)$v, 1));
+                                        } else if ($key === 'quarter') {
+                                            $mapped[] = 'Q' . $v;
+                                        } else {
+                                            $mapped[] = $v;
+                                        }
+                                    }
+                                    $val_str = implode(', ', $mapped);
+                                } else {
+                                    if ($key === 'month') {
+                                        $val_str = date('m', mktime(0, 0, 0, (int)$val, 1));
+                                    } else if ($key === 'quarter') {
+                                        $val_str = 'Q' . $val;
+                                    } else if ($key === 'date_from' || $key === 'date_to') {
+                                        $val_str = date('d/m/Y', strtotime($val));
+                                    } else {
+                                        $val_str = $val;
+                                    }
                                 }
 
                                 // Build reset URL for this specific filter
@@ -1362,7 +1430,7 @@ if ($res_am && $res_am->num_rows > 0) {
 
                                 echo '
                                 <div style="display:flex; align-items:center; gap:8px; background:#f0f9ff; padding:4px 12px; border-radius:20px; font-size:11px; border:1px solid #bae6fd; color:#0369a1; white-space:nowrap;">
-                                    <span>' . $label . ': <strong>' . htmlspecialchars($val) . '</strong></span>
+                                    <span>' . $label . ': <strong>' . htmlspecialchars($val_str) . '</strong></span>
                                     <a href="' . $reset_url . '" style="color:#38bdf8; text-decoration:none; font-size:16px; font-weight:bold; line-height:1;">&times;</a>
                                 </div>';
                             }
@@ -1408,34 +1476,34 @@ if ($res_am && $res_am->num_rows > 0) {
                             <label class="filter-item-label">Tìm kiếm nhanh</label>
 
                             <label class="filter-item-label">Người quản lý (AM)</label>
-                            <select name="am" class="filter-select">
+                            <select name="am[]" multiple class="filter-select ts-multiselect" placeholder="Tất cả AM">
                                 <option value="">Tất cả AM</option>
                                 <?php foreach ($am_list as $am_name): ?>
-                                    <option value="<?php echo htmlspecialchars($am_name); ?>" <?php echo (isset($_GET['am']) && $_GET['am'] === $am_name) ? 'selected' : ''; ?>>
+                                    <option value="<?php echo htmlspecialchars($am_name); ?>" <?php echo is_filter_selected('am', $am_name) ? 'selected' : ''; ?>>
                                         <?php echo htmlspecialchars($am_name); ?>
                                     </option>
                                 <?php endforeach; ?>
                             </select>
 
                             <label class="filter-item-label">Trạng thái thanh toán</label>
-                            <select name="status" class="filter-select">
+                            <select name="status[]" multiple class="filter-select ts-multiselect" placeholder="Tất cả trạng thái">
                                 <option value="">Tất cả trạng thái</option>
-                                <option value="Not paid" <?php echo (isset($_GET['status']) && $_GET['status'] == 'Not paid') ? 'selected' : ''; ?>>Not paid</option>
-                                <option value="Paid" <?php echo (isset($_GET['status']) && $_GET['status'] == 'Paid') ? 'selected' : ''; ?>>Paid</option>
-                                <option value="Draft" <?php echo (isset($_GET['status']) && $_GET['status'] == 'Draft') ? 'selected' : ''; ?>>Draft</option>
+                                <option value="Not paid" <?php echo is_filter_selected('status', 'Not paid') ? 'selected' : ''; ?>>Not paid</option>
+                                <option value="Paid" <?php echo is_filter_selected('status', 'Paid') ? 'selected' : ''; ?>>Paid</option>
+                                <option value="Draft" <?php echo is_filter_selected('status', 'Draft') ? 'selected' : ''; ?>>Draft</option>
                             </select>
 
                             <label class="filter-item-label">Phân loại Invoice</label>
-                            <select name="invoice_status_class" class="filter-select">
+                            <select name="invoice_status_class[]" multiple class="filter-select ts-multiselect" placeholder="Tất cả phân loại">
                                 <option value="">Tất cả phân loại</option>
-                                <option value="Trắng" <?php echo (isset($_GET['invoice_status_class']) && $_GET['invoice_status_class'] == 'Trắng') ? 'selected' : ''; ?>>Trắng</option>
-                                <option value="Xanh" <?php echo (isset($_GET['invoice_status_class']) && $_GET['invoice_status_class'] == 'Xanh') ? 'selected' : ''; ?>>Xanh</option>
-                                <option value="Tím" <?php echo (isset($_GET['invoice_status_class']) && $_GET['invoice_status_class'] == 'Tím') ? 'selected' : ''; ?>>Tím</option>
-                                <option value="Đỏ" <?php echo (isset($_GET['invoice_status_class']) && $_GET['invoice_status_class'] == 'Đỏ') ? 'selected' : ''; ?>>Đỏ</option>
-                                <option value="PP" <?php echo (isset($_GET['invoice_status_class']) && $_GET['invoice_status_class'] == 'PP') ? 'selected' : ''; ?>>PP</option>
-                                <option value="Draft" <?php echo (isset($_GET['invoice_status_class']) && $_GET['invoice_status_class'] == 'Draft') ? 'selected' : ''; ?>>Draft</option>
-                                <option value="Done" <?php echo (isset($_GET['invoice_status_class']) && $_GET['invoice_status_class'] == 'Done') ? 'selected' : ''; ?>>Done</option>
-                                <option value="Chưa xác định" <?php echo (isset($_GET['invoice_status_class']) && $_GET['invoice_status_class'] == 'Chưa xác định') ? 'selected' : ''; ?>>Chưa xác định</option>
+                                <option value="Trắng" <?php echo is_filter_selected('invoice_status_class', 'Trắng') ? 'selected' : ''; ?>>Trắng</option>
+                                <option value="Xanh" <?php echo is_filter_selected('invoice_status_class', 'Xanh') ? 'selected' : ''; ?>>Xanh</option>
+                                <option value="Tím" <?php echo is_filter_selected('invoice_status_class', 'Tím') ? 'selected' : ''; ?>>Tím</option>
+                                <option value="Đỏ" <?php echo is_filter_selected('invoice_status_class', 'Đỏ') ? 'selected' : ''; ?>>Đỏ</option>
+                                <option value="PP" <?php echo is_filter_selected('invoice_status_class', 'PP') ? 'selected' : ''; ?>>PP</option>
+                                <option value="Draft" <?php echo is_filter_selected('invoice_status_class', 'Draft') ? 'selected' : ''; ?>>Draft</option>
+                                <option value="Done" <?php echo is_filter_selected('invoice_status_class', 'Done') ? 'selected' : ''; ?>>Done</option>
+                                <option value="Chưa xác định" <?php echo is_filter_selected('invoice_status_class', 'Chưa xác định') ? 'selected' : ''; ?>>Chưa xác định</option>
                             </select>
 
                             <label class="filter-item-label">Khoảng thời gian (Ngày HĐ)</label>
@@ -1452,30 +1520,30 @@ if ($res_am && $res_am->num_rows > 0) {
 
                             <label class="filter-item-label">Thời gian (Theo Quý/Tháng)</label>
                             <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px; margin-bottom:20px;">
-                                <select name="year" class="filter-select" style="margin-bottom:0;">
+                                <select name="year[]" multiple class="filter-select ts-multiselect" placeholder="Năm" style="margin-bottom:0;">
                                     <option value="">Năm</option>
                                     <?php
                                     $currentYear = date('Y');
                                     for ($y = $currentYear; $y >= $currentYear - 2; $y--) {
-                                        $sel = (isset($_GET['year']) && $_GET['year'] == $y) ? 'selected' : '';
+                                        $sel = is_filter_selected('year', $y) ? 'selected' : '';
                                         echo "<option value='$y' $sel>$y</option>";
                                     }
                                     ?>
                                 </select>
-                                <select name="quarter" class="filter-select" style="margin-bottom:0;">
+                                <select name="quarter[]" multiple class="filter-select ts-multiselect" placeholder="Quý" style="margin-bottom:0;">
                                     <option value="">Quý</option>
-                                    <option value="1" <?php echo (isset($_GET['quarter']) && $_GET['quarter'] == '1') ? 'selected' : ''; ?>>Q1</option>
-                                    <option value="2" <?php echo (isset($_GET['quarter']) && $_GET['quarter'] == '2') ? 'selected' : ''; ?>>Q2</option>
-                                    <option value="3" <?php echo (isset($_GET['quarter']) && $_GET['quarter'] == '3') ? 'selected' : ''; ?>>Q3</option>
-                                    <option value="4" <?php echo (isset($_GET['quarter']) && $_GET['quarter'] == '4') ? 'selected' : ''; ?>>Q4</option>
+                                    <option value="1" <?php echo is_filter_selected('quarter', '1') ? 'selected' : ''; ?>>Q1</option>
+                                    <option value="2" <?php echo is_filter_selected('quarter', '2') ? 'selected' : ''; ?>>Q2</option>
+                                    <option value="3" <?php echo is_filter_selected('quarter', '3') ? 'selected' : ''; ?>>Q3</option>
+                                    <option value="4" <?php echo is_filter_selected('quarter', '4') ? 'selected' : ''; ?>>Q4</option>
                                 </select>
                             </div>
 
-                            <select name="month" class="filter-select">
+                            <select name="month[]" multiple class="filter-select ts-multiselect" placeholder="Chọn tháng">
                                 <option value="">Chọn tháng</option>
                                 <?php
                                 for ($m = 1; $m <= 12; $m++) {
-                                    $sel = (isset($_GET['month']) && $_GET['month'] == $m) ? 'selected' : '';
+                                    $sel = is_filter_selected('month', $m) ? 'selected' : '';
                                     $mName = date('F', mktime(0, 0, 0, $m, 1));
                                     echo "<option value='$m' $sel>$mName</option>";
                                 }
@@ -1483,11 +1551,11 @@ if ($res_am && $res_am->num_rows > 0) {
                             </select>
 
                             <label class="filter-item-label">Cập nhật Tuần</label>
-                            <select name="week" class="filter-select">
+                            <select name="week[]" multiple class="filter-select ts-multiselect" placeholder="Tất cả tuần">
                                 <option value="">Tất cả tuần</option>
                                 <?php
                                 for ($w = 1; $w <= 5; $w++) {
-                                    $sel = (isset($_GET['week']) && $_GET['week'] == $w) ? 'selected' : '';
+                                    $sel = is_filter_selected('week', $w) ? 'selected' : '';
                                     echo "<option value='$w' $sel>Tuần $w</option>";
                                 }
                                 ?>
@@ -2849,6 +2917,15 @@ if ($res_am && $res_am->num_rows > 0) {
 
             document.addEventListener('mouseup', function () {
                 isDragging = false;
+            });
+
+            // Initialize Tom Select for filter multi-selects
+            document.querySelectorAll('.ts-multiselect').forEach(function(el) {
+                new TomSelect(el, {
+                    plugins: ['remove_button'],
+                    hideSelected: false,
+                    placeholder: el.getAttribute('placeholder') || 'Chọn giá trị',
+                });
             });
 
             document.addEventListener('mousemove', function (e) {
