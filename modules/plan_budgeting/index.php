@@ -2250,8 +2250,14 @@ function get_rev_bg_color($val, $planned, $red, $yellow, $green) {
                     { name: 'Trung bình (Avg)', data: history.map(h => h.rec.avg) },
                     { name: 'Xấu (Bad)', data: history.map(h => h.rec.bad) }
                 ],
-                chart: { type: 'line', height: 180, toolbar: { show: false } },
+                chart: { type: 'line', height: 200, toolbar: { show: false } },
                 stroke: { curve: 'smooth', width: 3 },
+                dataLabels: { 
+                    enabled: true, 
+                    formatter: v => (v/1000000).toFixed(1) + 'M', 
+                    style: { fontSize: '9px' },
+                    offsetY: -5 
+                },
                 colors: ['#10b981', '#3b82f6', '#ef4444'],
                 xaxis: { categories: history.map(h => h.period) },
                 yaxis: { labels: { formatter: v => (v/1000000).toFixed(1) + 'M' } },
@@ -2267,8 +2273,14 @@ function get_rev_bg_color($val, $planned, $red, $yellow, $green) {
                     { name: 'Trung bình (Avg)', data: history.map(h => h.inv.avg) },
                     { name: 'Xấu (Bad)', data: history.map(h => h.inv.bad) }
                 ],
-                chart: { type: 'line', height: 180, toolbar: { show: false } },
+                chart: { type: 'line', height: 200, toolbar: { show: false } },
                 stroke: { curve: 'smooth', width: 3, dashArray: [0, 0, 4] },
+                dataLabels: { 
+                    enabled: true, 
+                    formatter: v => (v/1000000).toFixed(1) + 'M', 
+                    style: { fontSize: '9px' },
+                    offsetY: -5 
+                },
                 colors: ['#059669', '#2563eb', '#dc2626'],
                 xaxis: { categories: history.map(h => h.period) },
                 yaxis: { labels: { formatter: v => (v/1000000).toFixed(1) + 'M' } },
@@ -2283,7 +2295,12 @@ function get_rev_bg_color($val, $planned, $red, $yellow, $green) {
                     { name: 'Lương (Salary)', data: history.map(h => h.salary) },
                     { name: 'Khác (Other)', data: history.map(h => h.other) }
                 ],
-                chart: { type: 'bar', height: 180, stacked: true, toolbar: { show: false } },
+                chart: { type: 'bar', height: 200, stacked: true, toolbar: { show: false } },
+                dataLabels: { 
+                    enabled: true, 
+                    formatter: v => (v/1000000).toFixed(1) + 'M',
+                    style: { fontSize: '9px' }
+                },
                 colors: ['#3b82f6', '#f59e0b'],
                 xaxis: { categories: history.map(h => h.period) },
                 legend: { position: 'top', horizontalAlign: 'right' }
