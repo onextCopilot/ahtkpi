@@ -348,7 +348,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
     }
 
     if ($action === 'get_owner_performance') {
-        $owner = $_POST['owner'] ?? '';
+        $owner = trim($_POST['owner'] ?? '');
         $year = intval($_POST['year']);
         $quarter = intval($_POST['quarter']);
 
@@ -357,9 +357,39 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
             exit();
         }
 
-        // Fetch all items owned by this person in the selected period (only leaf items to avoid double-counting)
-        $stmt = $conn->prepare("SELECT * FROM budget_structure WHERE owner = ? AND year = ? AND quarter = ? AND type = 'item'");
-        $stmt->bind_param("sii", $owner, $year, $quarter);
+        // Level-aware Ownership Retrieval:
+        // 1. Find all identifiers (Division, Category) that this person explicitly owns at a grouping level
+        $stmt_owned = $conn->prepare("SELECT item_name, division, category, type FROM budget_structure WHERE owner = ? AND year = ? AND quarter = ?");
+        $stmt_owned->bind_param("sii", $owner, $year, $quarter);
+        $stmt_owned->execute();
+        $owned_groups = $stmt_owned->get_result()->fetch_all(MYSQLI_ASSOC);
+        
+        $owned_divs = []; $owned_cats = [];
+        foreach ($owned_groups as $og) {
+            // Use item_name for headers as it contains the group name that matches descendant division/category columns
+            if ($og['type'] === 'division') $owned_divs[] = $og['item_name'];
+            if ($og['type'] === 'category') $owned_cats[] = $og['item_name'];
+        }
+
+        // 2. Fetch all leaf items (Level 3) that are either directly owned OR belong to an owned group
+        $params = [$owner]; $types = "s";
+        $sub_conds = ["owner = ?"];
+        if (!empty($owned_divs)) {
+            $placeholders = implode(',', array_fill(0, count($owned_divs), '?'));
+            $sub_conds[] = "division IN ($placeholders)";
+            foreach ($owned_divs as $d) { $params[] = $d; $types .= "s"; }
+        }
+        if (!empty($owned_cats)) {
+            $placeholders = implode(',', array_fill(0, count($owned_cats), '?'));
+            $sub_conds[] = "category IN ($placeholders)";
+            foreach ($owned_cats as $c) { $params[] = $c; $types .= "s"; }
+        }
+
+        $sql = "SELECT * FROM budget_structure WHERE (" . implode(" OR ", $sub_conds) . ") AND type = 'item' AND year = ? AND quarter = ? ORDER BY order_num ASC";
+        $params[] = $year; $params[] = $quarter; $types .= "ii";
+        
+        $stmt = $conn->prepare($sql);
+        $stmt->bind_param($types, ...$params);
         $stmt->execute();
         $items = $stmt->get_result()->fetch_all(MYSQLI_ASSOC);
 
@@ -2453,12 +2483,41 @@ function get_rev_bg_color($val, $planned, $red, $yellow, $green) {
                 return;
             }
 
+            let lastDivision = '';
+            let lastCategory = '';
             data.items.forEach(it => {
+                // Division Header (Level 1)
+                if (it.division !== lastDivision) {
+                    const divRow = document.createElement('tr');
+                    divRow.style.background = '#e2e8f0';
+                    divRow.innerHTML = `
+                        <td colspan="10" style="padding: 10px 12px; font-weight: 800; color: #1e3a8a; font-size: 12px; text-transform: uppercase; border-bottom: 2px solid #cbd5e1; border-top: 15px solid #fff;">
+                            <i class="fas fa-sitemap" style="margin-right: 8px;"></i> KHỐI: ${it.division}
+                        </td>
+                    `;
+                    body.appendChild(divRow);
+                    lastDivision = it.division;
+                    lastCategory = ''; // Reset category when division changes
+                }
+
+                // Category Header (Level 2)
+                if (it.category !== lastCategory) {
+                    const headerRow = document.createElement('tr');
+                    headerRow.style.background = '#f1f5f9';
+                    headerRow.innerHTML = `
+                        <td colspan="10" style="padding: 8px 12px 8px 30px; font-weight: 700; color: #475569; font-size: 11px; text-transform: uppercase; border-bottom: 1px solid #e2e8f0;">
+                            <i class="fas fa-folder-open" style="margin-right: 6px; color: #94a3b8;"></i> ${it.category}
+                        </td>
+                    `;
+                    body.appendChild(headerRow);
+                    lastCategory = it.category;
+                }
+
                 const tr = document.createElement('tr');
                 tr.innerHTML = `
-                    <td style="padding: 10px; border-bottom: 1px solid #f1f5f9; font-weight: 600; background: #f8fafc;">
-                        <div style="font-size: 11px;">${it.name}</div>
-                        <div style="font-size: 9px; color: #64748b; font-weight: normal; margin-top: 1px;">${it.category}</div>
+                    <td style="padding: 10px 10px 10px 48px; border-bottom: 1px solid #f1f5f9; font-weight: 600; background: #fff; position: relative;">
+                        <span style="color: #cbd5e1; position: absolute; left: 32px;">└─</span>
+                        <div style="font-size: 11px; color: #1e293b;">${it.name}</div>
                     </td>
                     
                     <td style="padding: 4px; border-bottom: 1px solid #f1f5f9; text-align: right; color: #166534; background: #f0fdf4;">${formatVND(it.rec.good)}</td>
