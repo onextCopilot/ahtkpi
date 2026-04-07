@@ -271,6 +271,82 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
         exit();
     }
 
+    if ($action === 'get_item_drilldown') {
+        $id = intval($_POST['id']);
+        $year = intval($_POST['year']);
+        $quarter = intval($_POST['quarter']);
+
+        $res = $conn->query("SELECT * FROM budget_structure WHERE id = $id");
+        $current_item = $res->fetch_assoc();
+        if (!$current_item) {
+            echo json_encode(['success' => false, 'error' => 'Item not found']);
+            exit();
+        }
+
+        $history_data = [];
+        $temp_y = $year;
+        $temp_q = $quarter;
+
+        for ($i = 0; $i < 4; $i++) {
+            // Find item in this specific y/q
+            $stmt = $conn->prepare("SELECT * FROM budget_structure WHERE item_name = ? AND division = ? AND category = ? AND year = ? AND quarter = ? LIMIT 1");
+            $stmt->bind_param("sssii", $current_item['item_name'], $current_item['division'], $current_item['category'], $temp_y, $temp_q);
+            $stmt->execute();
+            $item_info = $stmt->get_result()->fetch_assoc();
+
+            // Fetch quarterly status (to know which revenue scenario was selected)
+            $res_stat = $conn->query("SELECT rec_status, inv_status FROM budget_quarterly_status WHERE year = $temp_y AND quarter = $temp_q");
+            $status = $res_stat->fetch_assoc() ?? ['rec_status' => 2, 'inv_status' => 2]; // Default to Avg
+
+            $sal_total = 0;
+            $oth_total = 0;
+            $rec_good = 0; $rec_avg = 0; $rec_bad = 0;
+            $inv_good = 0; $inv_avg = 0; $inv_bad = 0;
+
+            if ($item_info) {
+                // Expenses
+                $item_id = $item_info['id'];
+                $res_sal = $conn->query("SELECT SUM(amount) as s FROM budget_values WHERE item_id = $item_id AND year = $temp_y AND quarter = $temp_q AND value_type = 'actual_salary'");
+                $sal_total = floatval($res_sal->fetch_assoc()['s'] ?? 0);
+                $res_oth = $conn->query("SELECT SUM(amount) as s FROM budget_values WHERE item_id = $item_id AND year = $temp_y AND quarter = $temp_q AND value_type = 'actual_other'");
+                $oth_total = floatval($res_oth->fetch_assoc()['s'] ?? 0);
+
+                // Income scenarios
+                $rec_good = floatval($item_info['rec_rev_good'] ?? 0);
+                $rec_avg  = floatval($item_info['rec_rev_avg'] ?? 0);
+                $rec_bad  = floatval($item_info['rec_rev_bad'] ?? 0);
+                
+                $inv_good = floatval($item_info['inv_rev_good'] ?? 0);
+                $inv_avg  = floatval($item_info['inv_rev_avg'] ?? 0);
+                $inv_bad  = floatval($item_info['inv_rev_bad'] ?? 0);
+            }
+
+            $history_data[] = [
+                'period' => "Q$temp_q/" . substr($temp_y, 2),
+                'salary' => $sal_total,
+                'other' => $oth_total,
+                'total_expense' => $sal_total + $oth_total,
+                'rec' => ['good' => $rec_good, 'avg' => $rec_avg, 'bad' => $rec_bad],
+                'inv' => ['good' => $inv_good, 'avg' => $inv_avg, 'bad' => $inv_bad],
+                'year' => $temp_y,
+                'quarter' => $temp_q
+            ];
+
+            // Step back one quarter
+            $temp_q--;
+            if ($temp_q < 1) { $temp_q = 4; $temp_y--; }
+        }
+
+        $history_data = array_reverse($history_data);
+
+        echo json_encode([
+            'success' => true,
+            'current_item' => $current_item,
+            'history' => $history_data
+        ]);
+        exit();
+    }
+
 }
 
 // --- BUILD HIERARCHICAL STRUCTURE ---
@@ -595,6 +671,7 @@ function get_rev_bg_color($val, $planned, $red, $yellow, $green) {
     <title>Plan & Budgeting</title>
     <link rel="stylesheet" href="/assets/css/dashboard.css">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/apexcharts"></script>
     <style>
         .budget-container { padding: 1.5rem; background: #f8fafc; min-height: calc(100vh - 80px); }
         .card { background: white; border-radius: 12px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); overflow: hidden; margin-bottom: 2rem; }
@@ -753,6 +830,85 @@ function get_rev_bg_color($val, $planned, $red, $yellow, $green) {
         .modal-content { background: white; border-radius: 12px; max-width: 800px; margin: 10vh auto; padding: 20px; }
         .form-group { margin-bottom: 1rem; }
         .form-control { width: 100%; padding: 10px; border: 1px solid #cbd5e1; border-radius: 6px; }
+
+        /* Drilldown Sidebar */
+        .drilldown-overlay {
+            display: none;
+            position: fixed;
+            top: 0; left: 0;
+            width: 100%; height: 100%;
+            background: rgba(0,0,0,0.4);
+            z-index: 1999;
+            backdrop-filter: blur(2px);
+        }
+        .drilldown-sidebar {
+            position: fixed;
+            top: 0; right: -600px;
+            width: 600px; height: 100%;
+            background: white;
+            z-index: 2000;
+            box-shadow: -5px 0 25px rgba(0,0,0,0.1);
+            transition: right 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            padding: 0;
+            display: flex;
+            flex-direction: column;
+        }
+        .drilldown-sidebar.open { right: 0; }
+        .drilldown-header {
+            padding: 24px;
+            background: #1e3a8a;
+            color: white;
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+        }
+        .drilldown-content {
+            padding: 24px;
+            overflow-y: auto;
+            flex-grow: 1;
+        }
+        .drilldown-close {
+            background: rgba(255,255,255,0.1);
+            border: none;
+            color: white;
+            font-size: 24px;
+            cursor: pointer;
+            width: 36px; height: 36px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 50%;
+            transition: background 0.2s;
+        }
+        .drilldown-close:hover { background: rgba(255,255,255,0.2); }
+        .drilldown-section { margin-bottom: 30px; }
+        .drilldown-title {
+            font-size: 14px;
+            font-weight: 700;
+            color: #1e293b;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            margin-bottom:  profile;
+            border-bottom: 2px solid #f1f5f9;
+            padding-bottom: 8px;
+            margin-bottom: 16px;
+        }
+        .comparison-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 16px;
+        }
+        .comp-card {
+            background: #f8fafc;
+            padding: 16px;
+            border-radius: 12px;
+            border: 1px solid #e2e8f0;
+        }
+        .comp-period { font-size: 11px; font-weight: 700; color: #64748b; margin-bottom: 4px; }
+        .comp-value { font-size: 18px; font-weight: 700; color: #0f172a; }
+        .comp-diff { font-size: 12px; margin-top: 8px; display: flex; align-items: center; gap: 4px; }
+        .clickable-vtkt { cursor: pointer; text-decoration: none; transition: color 0.2s; }
+        .clickable-vtkt:hover { color: #2563eb !important; background: rgba(37, 99, 235, 0.05); }
     </style>
 </head>
 <body>
@@ -1099,7 +1255,11 @@ function get_rev_bg_color($val, $planned, $red, $yellow, $green) {
                                             }
                                          ?>
                                      </td>
-                                     <td class="text-center col-vtkt" style="font-size: 11px; color: #64748b; font-weight: 600; <?php echo $cell_style; ?>">
+                                     <td class="text-center col-vtkt <?php echo trim($row['acct_abbreviation'] ?? '') !== '' ? 'clickable-vtkt' : ''; ?>" 
+                                         <?php if(trim($row['acct_abbreviation'] ?? '') !== ''): ?>
+                                         onclick="openDrilldownSidebar(<?php echo $row['id']; ?>, <?php echo $current_year; ?>, <?php echo $current_quarter; ?>)"
+                                         <?php endif; ?>
+                                         style="font-size: 11px; color: #64748b; font-weight: 600; <?php echo $cell_style; ?>">
                                          <?php echo htmlspecialchars($row['acct_abbreviation'] ?? ''); ?>
                                      </td>
                                      <td class="col-owner" style="<?php echo $cell_style; ?>">
@@ -1310,6 +1470,87 @@ function get_rev_bg_color($val, $planned, $red, $yellow, $green) {
                 </div>
             </div>
         </main>
+    </div>
+
+    <!-- Drilldown Sidebar -->
+    <div class="drilldown-overlay" id="drilldownOverlay" onclick="closeDrilldownSidebar()"></div>
+    <div class="drilldown-sidebar" id="drilldownSidebar">
+        <div class="drilldown-header">
+            <div>
+                <div id="dd-title" style="font-size: 20px; font-weight: 700; margin-bottom: 4px;">Detail Drilldown</div>
+                <div id="dd-subtitle" style="font-size: 13px; opacity: 0.9; font-weight: 500;">Comparision with previous quarter</div>
+            </div>
+            <button class="drilldown-close" onclick="closeDrilldownSidebar()">&times;</button>
+        </div>
+        <div class="drilldown-content">
+            <div class="drilldown-section">
+                <div class="drilldown-title">Thông tin chung</div>
+                <div id="dd-info-grid" style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+                    <!-- General info pops up here -->
+                    <div style="background: #f8fafc; padding: 12px; border-radius: 8px;">
+                        <div style="font-size: 11px; font-weight: 700; color: #64748b; margin-bottom: 2px;">Khối</div>
+                        <div id="dd-info-div" style="font-size: 13px; font-weight: 600; color: #1e293b;">-</div>
+                    </div>
+                    <div style="background: #f8fafc; padding: 12px; border-radius: 8px;">
+                        <div style="font-size: 11px; font-weight: 700; color: #64748b; margin-bottom: 2px;">Bộ phận</div>
+                        <div id="dd-info-cat" style="font-size: 13px; font-weight: 600; color: #1e293b;">-</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="drilldown-section">
+                <div class="drilldown-title">So sánh với Quý trước</div>
+                <div class="comparison-grid">
+                    <div class="comp-card">
+                        <div class="comp-period" id="dd-period-prev">Quý trước</div>
+                        <div class="comp-value" id="dd-value-prev">0 đ</div>
+                        <div style="font-size: 11px; color: #94a3b8; margin-top: 4px;">Tổng chi phí thực tế</div>
+                    </div>
+                    <div class="comp-card" style="border-color: #3b82f633; background: #eff6ff88;">
+                        <div class="comp-period" id="dd-period-curr">Quý này</div>
+                        <div class="comp-value" id="dd-value-curr">0 đ</div>
+                        <div id="dd-compare-stat" class="comp-diff">
+                            <!-- Comparison percentage here -->
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="drilldown-section">
+                <div class="drilldown-title">Recognised Revenue (3 Scenarios)</div>
+                <div id="dd-chart-rec" style="background: #fff; border-radius: 12px; padding: 10px; min-height: 180px;"></div>
+            </div>
+
+            <div class="drilldown-section">
+                <div class="drilldown-title">Invoiced Revenue (3 Scenarios)</div>
+                <div id="dd-chart-inv" style="background: #fff; border-radius: 12px; padding: 10px; min-height: 180px;"></div>
+            </div>
+
+            <div class="drilldown-section">
+                <div class="drilldown-title">Expense Breakdown</div>
+                <div id="dd-chart-expenses" style="background: #fff; border-radius: 12px; padding: 10px; min-height: 180px;"></div>
+            </div>
+
+            <div class="drilldown-section">
+                <div class="drilldown-title">Chi tiết số liệu</div>
+                <div id="dd-details-table-wrap" style="overflow-x: auto;">
+                    <!-- Detailed monthly comparison table -->
+                    <table style="width: 100%; border-collapse: collapse; font-size: 13px;">
+                        <thead>
+                            <tr style="background: #f1f5f9;">
+                                <th style="padding: 10px; text-align: left; border-bottom: 2px solid #e2e8f0;">Tháng</th>
+                                <th style="padding: 10px; text-align: right; border-bottom: 2px solid #e2e8f0;">Quý trước</th>
+                                <th style="padding: 10px; text-align: right; border-bottom: 2px solid #e2e8f0;">Quý này</th>
+                                <th style="padding: 10px; text-align: right; border-bottom: 2px solid #e2e8f0;">Biến động</th>
+                            </tr>
+                        </thead>
+                        <tbody id="dd-table-body">
+                            <!-- Rows pop up here -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
     </div>
 
     <!-- Structure Management Modal (Add/Edit) -->
@@ -1898,6 +2139,157 @@ function get_rev_bg_color($val, $planned, $red, $yellow, $green) {
         }
 
         window.addEventListener('DOMContentLoaded', initColumnVisibility);
+
+        // --- DRILLDOWN SIDEBAR LOGIC ---
+        let recChart = null;
+        let invChart = null;
+        let expenseChart = null;
+
+        function openDrilldownSidebar(id, year, quarter) {
+            const overlay = document.getElementById('drilldownOverlay');
+            const sidebar = document.getElementById('drilldownSidebar');
+            
+            overlay.style.display = 'block';
+            sidebar.classList.add('open');
+
+            const fd = new FormData();
+            fd.append('action', 'get_item_drilldown');
+            fd.append('id', id);
+            fd.append('year', year);
+            fd.append('quarter', quarter);
+
+            fetch(location.href, { method: 'POST', body: fd })
+            .then(r => r.json())
+            .then(data => {
+                if (data.success) {
+                    renderDrilldownData(data);
+                } else {
+                    alert('Lỗi: ' + data.error);
+                    closeDrilldownSidebar();
+                }
+            })
+            .catch(err => {
+                console.error(err);
+                closeDrilldownSidebar();
+            });
+        }
+
+        function closeDrilldownSidebar() {
+            document.getElementById('drilldownOverlay').style.display = 'none';
+            document.getElementById('drilldownSidebar').classList.remove('open');
+        }
+
+        function renderDrilldownData(data) {
+            const item = data.current_item;
+            const history = data.history;
+
+            document.getElementById('dd-title').innerText = item.item_name;
+            document.getElementById('dd-info-div').innerText = item.division || 'N/A';
+            document.getElementById('dd-info-cat').innerText = item.category || 'N/A';
+            
+            const curr = history[3];
+            const prev = history[2];
+
+            document.getElementById('dd-period-prev').innerText = 'Tổng ' + prev.period;
+            document.getElementById('dd-period-curr').innerText = 'Tổng ' + curr.period;
+
+            document.getElementById('dd-value-curr').innerText = formatVND(curr.total_expense);
+            document.getElementById('dd-value-prev').innerText = formatVND(prev.total_expense);
+
+            const diffStat = document.getElementById('dd-compare-stat');
+            if (prev.total_expense > 0) {
+                const diffPerc = ((curr.total_expense - prev.total_expense) / prev.total_expense) * 100;
+                const sign = diffPerc >= 0 ? '+' : '';
+                const color = diffPerc > 0 ? '#ef4444' : '#10b981';
+                const arrow = diffPerc > 0 ? '↗' : '↘';
+                diffStat.innerHTML = `<span style="color: ${color}; font-weight: 700;">${arrow} ${sign}${diffPerc.toFixed(1)}%</span> so với Q trước`;
+            } else {
+                diffStat.innerHTML = '<span style="color: #64748b;">N/A</span>';
+            }
+
+            // Sort newest to oldest for the table
+            const tableHistory = [...history].reverse();
+            
+            const tableBody = document.getElementById('dd-table-body');
+            tableBody.innerHTML = '';
+            
+            document.querySelector('#dd-details-table-wrap thead tr').innerHTML = `
+                <th style="padding: 10px; text-align: left; border-bottom: 2px solid #e2e8f0; width: 70px;">Quý</th>
+                <th style="padding: 10px; text-align: center; border-bottom: 2px solid #e2e8f0; border-left: 1px solid #e263eb22; background: #f0f9ff; color: #0369a1; font-size: 10px;" colspan="3">Recognised Rev (G/A/B)</th>
+                <th style="padding: 10px; text-align: center; border-bottom: 2px solid #e2e8f0; border-left: 1px solid #e263eb22; background: #fdf2f8; color: #9d174d; font-size: 10px;" colspan="3">Invoiced Rev (G/A/B)</th>
+                <th style="padding: 10px; text-align: right; border-bottom: 2px solid #e2e8f0; color: #3b82f6;">Lương</th>
+                <th style="padding: 10px; text-align: right; border-bottom: 2px solid #e2e8f0; color: #f59e0b;">Khác</th>
+                <th style="padding: 10px; text-align: right; border-bottom: 2px solid #e2e8f0; font-weight: 800;">Tổng Chi</th>
+            `;
+
+            tableHistory.forEach(h => {
+                const tr = document.createElement('tr');
+                tr.innerHTML = `
+                    <td style="padding: 10px; border-bottom: 1px solid #f1f5f9; font-weight: 700; background: #f8fafc;">${h.period}</td>
+                    
+                    <td style="padding: 8px 4px; border-bottom: 1px solid #f1f5f9; text-align: right; font-size: 11px; color: #166534; background: #f0fdf4;">${formatVND(h.rec.good)}</td>
+                    <td style="padding: 8px 4px; border-bottom: 1px solid #f1f5f9; text-align: right; font-size: 11px; color: #1e40af; background: #eff6ff;">${formatVND(h.rec.avg)}</td>
+                    <td style="padding: 8px 4px; border-bottom: 1px solid #f1f5f9; text-align: right; font-size: 11px; color: #991b1b; background: #fef2f2;">${formatVND(h.rec.bad)}</td>
+                    
+                    <td style="padding: 8px 4px; border-bottom: 1px solid #f1f5f9; text-align: right; font-size: 11px; color: #166534; background: #f0fdf4;">${formatVND(h.inv.good)}</td>
+                    <td style="padding: 8px 4px; border-bottom: 1px solid #f1f5f9; text-align: right; font-size: 11px; color: #1e40af; background: #eff6ff;">${formatVND(h.inv.avg)}</td>
+                    <td style="padding: 8px 4px; border-bottom: 1px solid #f1f5f9; text-align: right; font-size: 11px; color: #991b1b; background: #fef2f2;">${formatVND(h.inv.bad)}</td>
+                    
+                    <td style="padding: 10px; border-bottom: 1px solid #f1f5f9; text-align: right; color: #3b82f6;">${formatVND(h.salary)}</td>
+                    <td style="padding: 10px; border-bottom: 1px solid #f1f5f9; text-align: right; color: #f59e0b;">${formatVND(h.other)}</td>
+                    <td style="padding: 10px; border-bottom: 1px solid #f1f5f9; text-align: right; font-weight: 800;">${formatVND(h.total_expense)}</td>
+                `;
+                tableBody.appendChild(tr);
+            });
+
+            // --- RECOGNISED REVENUE CHART (3 Scenarios) ---
+            if (recChart) recChart.destroy();
+            recChart = new ApexCharts(document.querySelector("#dd-chart-rec"), {
+                series: [
+                    { name: 'Tốt (Good)', data: history.map(h => h.rec.good) },
+                    { name: 'Trung bình (Avg)', data: history.map(h => h.rec.avg) },
+                    { name: 'Xấu (Bad)', data: history.map(h => h.rec.bad) }
+                ],
+                chart: { type: 'line', height: 180, toolbar: { show: false } },
+                stroke: { curve: 'smooth', width: 3 },
+                colors: ['#10b981', '#3b82f6', '#ef4444'],
+                xaxis: { categories: history.map(h => h.period) },
+                yaxis: { labels: { formatter: v => (v/1000000).toFixed(1) + 'M' } },
+                legend: { position: 'top', horizontalAlign: 'right' }
+            });
+            recChart.render();
+
+            // --- INVOICED REVENUE CHART (3 Scenarios) ---
+            if (invChart) invChart.destroy();
+            invChart = new ApexCharts(document.querySelector("#dd-chart-inv"), {
+                series: [
+                    { name: 'Tốt (Good)', data: history.map(h => h.inv.good) },
+                    { name: 'Trung bình (Avg)', data: history.map(h => h.inv.avg) },
+                    { name: 'Xấu (Bad)', data: history.map(h => h.inv.bad) }
+                ],
+                chart: { type: 'line', height: 180, toolbar: { show: false } },
+                stroke: { curve: 'smooth', width: 3, dashArray: [0, 0, 4] },
+                colors: ['#059669', '#2563eb', '#dc2626'],
+                xaxis: { categories: history.map(h => h.period) },
+                yaxis: { labels: { formatter: v => (v/1000000).toFixed(1) + 'M' } },
+                legend: { position: 'top', horizontalAlign: 'right' }
+            });
+            invChart.render();
+
+            // --- EXPENSE CHART (Stacked Bar) ---
+            if (expenseChart) expenseChart.destroy();
+            expenseChart = new ApexCharts(document.querySelector("#dd-chart-expenses"), {
+                series: [
+                    { name: 'Lương (Salary)', data: history.map(h => h.salary) },
+                    { name: 'Khác (Other)', data: history.map(h => h.other) }
+                ],
+                chart: { type: 'bar', height: 180, stacked: true, toolbar: { show: false } },
+                colors: ['#3b82f6', '#f59e0b'],
+                xaxis: { categories: history.map(h => h.period) },
+                legend: { position: 'top', horizontalAlign: 'right' }
+            });
+            expenseChart.render();
+        }
 
         // --- Dropdown click-to-toggle (thay thế CSS hover) ---
         document.querySelectorAll('.column-settings-dropdown').forEach(function(dropdown) {
