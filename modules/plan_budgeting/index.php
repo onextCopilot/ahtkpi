@@ -108,6 +108,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
         exit();
     }
 
+    if ($action === 'save_grand_total_settings') {
+        if (!$is_admin) { echo json_encode(['success' => false, 'error' => 'Permission denied']); exit(); }
+        $blocks = $_POST['blocks'] ?? [];
+        if (!is_array($blocks)) $blocks = [];
+        
+        $v_str = json_encode($blocks);
+        $k = 'budget_grand_total_blocks';
+        
+        $stmt = $conn->prepare("INSERT INTO system_settings (setting_key, setting_value) VALUES (?, ?) ON DUPLICATE KEY UPDATE setting_value = ?");
+        $stmt->bind_param("sss", $k, $v_str, $v_str);
+        if (!$stmt->execute()) {
+            echo json_encode(['success' => false, 'error' => $stmt->error]);
+            exit();
+        }
+        echo json_encode(['success' => true]);
+        exit();
+    }
+
     if ($action === 'update_value') {
         $item_id = intval($_POST['item_id']);
         $month = intval($_POST['month']);
@@ -672,6 +690,20 @@ $div_totals = [];
 $cat_totals = [];
 $grand_totals = []; // Reset and rebuild with revenue
 
+// --- LOAD SETTINGS (THRESHOLDS & GRAND TOTAL FILTERS) ---
+$settings_map = [];
+$res_set = $conn->query("SELECT setting_key, setting_value FROM system_settings WHERE setting_key LIKE 'budget_%'");
+if ($res_set) {
+    while ($r = $res_set->fetch_assoc()) {
+        if ($r['setting_key'] === 'budget_grand_total_blocks') {
+            $settings_map[$r['setting_key']] = json_decode($r['setting_value'], true) ?: [];
+        } else {
+            $settings_map[$r['setting_key']] = floatval($r['setting_value']);
+        }
+    }
+}
+$grand_total_blocks = $settings_map['budget_grand_total_blocks'] ?? null;
+
 foreach ($structure as $row) {
     if ($row['type'] !== 'item') continue;
     
@@ -688,7 +720,11 @@ foreach ($structure as $row) {
         if ($val == 0) continue;
         if ($did !== '') {
             $div_totals[$did]['_rev_'][$rk] = ($div_totals[$did]['_rev_'][$rk] ?? 0) + $val;
-            $grand_totals['_rev_'][$rk] = ($grand_totals['_rev_'][$rk] ?? 0) + $val;
+            
+            // Check grand total inclusion for revenue
+            if ($grand_total_blocks === null || in_array($did, $grand_total_blocks)) {
+                $grand_totals['_rev_'][$rk] = ($grand_totals['_rev_'][$rk] ?? 0) + $val;
+            }
         }
         if ($cat_name !== '') $cat_totals[$cid]['_rev_'][$rk] = ($cat_totals[$cid]['_rev_'][$rk] ?? 0) + $val;
     }
@@ -747,14 +783,7 @@ function get_display_val($row, $values, $div_totals, $cat_totals, $month, $type)
     return 0;
 }
 
-// --- LOAD REVENUE THRESHOLDS ---
-$settings_map = [];
-$res_set = $conn->query("SELECT setting_key, setting_value FROM system_settings WHERE setting_key LIKE 'budget_%'");
-if ($res_set) {
-    while ($r = $res_set->fetch_assoc()) {
-        $settings_map[$r['setting_key']] = floatval($r['setting_value']);
-    }
-}
+// --- USE PRE-LOADED THRESHOLDS ---
 $rev_red = $settings_map['budget_rev_red'] ?? 50;
 $rev_yellow = $settings_map['budget_rev_yellow'] ?? 80;
 $rev_green = $settings_map['budget_rev_green'] ?? 100;
@@ -1105,7 +1134,7 @@ function get_rev_bg_color($val, $planned, $red, $yellow, $green) {
                         <!-- Alert Settings Dropdown -->
                         <div class="column-settings-dropdown">
                             <button class="btn-primary" style="background:white; color:#64748b; border:1px solid #e2e8f0; display:flex; align-items:center; gap:6px; padding:7px 12px; font-size:13px;">
-                                &#9881; Cảnh báo
+                                &#9881; Cài đặt
                                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"></polyline></svg>
                             </button>
                             <div class="column-settings-content" style="min-width:180px;">
@@ -1117,6 +1146,11 @@ function get_rev_bg_color($val, $planned, $red, $yellow, $green) {
                                 <div onclick="openCostSettingsModal()" style="display:flex; align-items:center; gap:10px; padding:9px 10px; cursor:pointer; border-radius:6px; font-size:13px; color:#991b1b; font-weight:600; transition:background 0.15s;" onmouseover="this.style.background='#fff1f2'" onmouseout="this.style.background='transparent'">
                                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"></circle><path d="M19.07 4.93a10 10 0 0 1 0 14.14M16.24 7.76a6 6 0 0 1 0 8.49M4.93 19.07a10 10 0 0 1 0-14.14M7.76 16.24a6 6 0 0 1 0-8.49"></path></svg>
                                     Cảnh báo Chi phí
+                                </div>
+                                <div style="height:1px; background:#f1f5f9; margin:4px 0;"></div>
+                                <div onclick="openGrandTotalSettingsModal()" style="display:flex; align-items:center; gap:10px; padding:9px 10px; cursor:pointer; border-radius:6px; font-size:13px; color:#0f766e; font-weight:600; transition:background 0.15s;" onmouseover="this.style.background='#ecfdf5'" onmouseout="this.style.background='transparent'">
+                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>
+                                    Cấu hình Tổng doanh thu
                                 </div>
                             </div>
                         </div>
@@ -1259,15 +1293,7 @@ function get_rev_bg_color($val, $planned, $red, $yellow, $green) {
                             </thead>
                             <tbody id="budget-body">
                                 <?php 
-                                // Calculate Grand Totals
-                                $grand_totals = [];
-                                foreach ($div_totals as $d => $m_data) {
-                                    foreach ($m_data as $m => $k_data) {
-                                        foreach ($k_data as $k => $v) {
-                                            $grand_totals[$m][$k] = ($grand_totals[$m][$k] ?? 0) + $v;
-                                        }
-                                    }
-                                }
+                                // Grand Totals were already calculated and filtered in the earlier logic loop
                                 ?>
                                 <tr class="row-total" data-type="grand-total">
                                     <td class="text-center col-stt" style="background: #1e3a8a !important; color: white !important;">#</td>
@@ -1837,6 +1863,46 @@ function get_rev_bg_color($val, $planned, $red, $yellow, $green) {
             </form>
         </div>
     </div>
+    
+    <!-- Grand Total Settings Modal -->
+    <?php
+    $all_divisions = [];
+    foreach ($structure as $row) {
+        if ($row['type'] === 'division' && !empty($row['item_name'])) {
+            $all_divisions[] = trim($row['item_name']);
+        }
+    }
+    $all_divisions = array_unique($all_divisions);
+    ?>
+    <div id="grandTotalSettingsModal" class="modal" style="display:none; position:fixed; z-index:1000; left:0; top:0; width:100%; height:100%; background:rgba(0,0,0,0.5);">
+        <div style="background:#fff; margin:10vh auto; padding:25px; width:450px; border-radius:12px; box-shadow:0 10px 30px rgba(0,0,0,0.2);">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
+                <h3 style="margin:0; font-size:18px; color:#1e293b;">Cấu hình Tính tổng</h3>
+                <button onclick="document.getElementById('grandTotalSettingsModal').style.display='none'" style="background:none; border:none; font-size:24px; cursor:pointer; color:#94a3b8;">&times;</button>
+            </div>
+            <form onsubmit="saveGrandTotalSettings(event)">
+                <p style="font-size:13px; color:#64748b; margin-bottom:15px;">Chọn các khối sẽ được cộng dồn vào dòng TỔNG CỘNG TOÀN BỘ (áp dụng cho các cột Doanh thu).</p>
+                <div style="max-height: 250px; overflow-y: auto; padding: 10px; border: 1px solid #e2e8f0; border-radius: 8px; margin-bottom: 20px;">
+                    <?php if (empty($all_divisions)): ?>
+                        <div style="font-size:13px; color:#94a3b8; font-style:italic;">Chưa có khối nào trong cấu trúc ngân sách.</div>
+                    <?php else: ?>
+                        <?php foreach ($all_divisions as $div): 
+                            $isChecked = ($grand_total_blocks === null || in_array($div, $grand_total_blocks)) ? 'checked' : '';
+                        ?>
+                        <label style="display:flex; margin-bottom:10px; font-size:14px; color:#334155; cursor:pointer; align-items:center; gap:8px;">
+                            <input type="checkbox" name="gt_blocks[]" value="<?php echo htmlspecialchars($div); ?>" <?php echo $isChecked; ?> style="width:16px; height:16px; cursor:pointer; accent-color:#0f766e;">
+                            <?php echo htmlspecialchars($div); ?>
+                        </label>
+                        <?php endforeach; ?>
+                    <?php endif; ?>
+                </div>
+                
+                <div style="display:flex; justify-content:flex-end; gap:12px;">
+                    <button type="submit" style="padding:10px 20px; background:#0f766e; border:none; border-radius:8px; font-weight:600; color:#fff; cursor:pointer; transition: background 0.15s;" onmouseover="this.style.background='#0d9488'" onmouseout="this.style.background='#0f766e'">Lưu cấu hình</button>
+                </div>
+            </form>
+        </div>
+    </div>
     <?php endif; ?>
 
     <script>
@@ -1883,6 +1949,29 @@ function get_rev_bg_color($val, $planned, $red, $yellow, $green) {
             fd.append('action', 'save_cost_settings');
             fd.append('yellow', document.getElementById('set_cost_yellow').value);
             fd.append('red', document.getElementById('set_cost_red').value);
+            fetch(location.href, { method: 'POST', body: fd })
+            .then(r => r.json())
+            .then(res => {
+                if(res.success) location.reload();
+                else alert('Lỗi: '+ res.error);
+            })
+            .catch(err => alert("Lỗi hệ thống: " + err.message));
+        }
+
+        function openGrandTotalSettingsModal() {
+            document.getElementById('grandTotalSettingsModal').style.display = 'block';
+        }
+
+        function saveGrandTotalSettings(e) {
+            e.preventDefault();
+            const form = e.target;
+            const checkboxes = form.querySelectorAll('input[name="gt_blocks[]"]:checked');
+            const blocks = Array.from(checkboxes).map(cb => cb.value);
+            
+            const fd = new FormData();
+            fd.append('action', 'save_grand_total_settings');
+            blocks.forEach(b => fd.append('blocks[]', b));
+            
             fetch(location.href, { method: 'POST', body: fd })
             .then(r => r.json())
             .then(res => {
