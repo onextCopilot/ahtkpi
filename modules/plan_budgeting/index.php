@@ -347,6 +347,64 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
         exit();
     }
 
+    if ($action === 'get_owner_performance') {
+        $owner = $_POST['owner'] ?? '';
+        $year = intval($_POST['year']);
+        $quarter = intval($_POST['quarter']);
+
+        if (empty($owner)) {
+            echo json_encode(['success' => false, 'error' => 'Owner name is empty']);
+            exit();
+        }
+
+        // Fetch all items owned by this person in the selected period
+        $stmt = $conn->prepare("SELECT * FROM budget_structure WHERE owner = ? AND year = ? AND quarter = ?");
+        $stmt->bind_param("sii", $owner, $year, $quarter);
+        $stmt->execute();
+        $items = $stmt->get_result()->fetch_all(MYSQLI_ASSOC);
+
+        $total_rec_avg = 0; $total_inv_avg = 0; $total_salary = 0; $total_other = 0;
+        $item_list = [];
+        $divisions = [];
+        $acct_abbr = '';
+
+        foreach ($items as $item) {
+            $iid = $item['id'];
+            if (empty($acct_abbr)) $acct_abbr = $item['acct_abbreviation'];
+            if (!in_array($item['division'], $divisions)) $divisions[] = $item['division'];
+
+            $res_v = $conn->query("SELECT SUM(amount) as s, value_type FROM budget_values WHERE item_id = $iid AND year = $year AND quarter = $quarter AND value_type IN ('actual_salary', 'actual_other') GROUP BY value_type");
+            $sal = 0; $oth = 0;
+            while($v = $res_v->fetch_assoc()) {
+                if ($v['value_type'] === 'actual_salary') $sal = floatval($v['s']);
+                else $oth = floatval($v['s']);
+            }
+            $total_salary += $sal; $total_other += $oth;
+            $total_rec_avg += floatval($item['rec_rev_avg']);
+            $total_inv_avg += floatval($item['inv_rev_avg']);
+            $item_list[] = [
+                'name' => $item['item_name'],
+                'division' => $item['division'],
+                'rec' => ['good' => floatval($item['rec_rev_good']), 'avg' => floatval($item['rec_rev_avg']), 'bad' => floatval($item['rec_rev_bad'])],
+                'inv' => ['good' => floatval($item['inv_rev_good']), 'avg' => floatval($item['inv_rev_avg']), 'bad' => floatval($item['inv_rev_bad'])],
+                'salary' => $sal,
+                'other' => $oth,
+                'expense' => $sal + $oth
+            ];
+        }
+
+        echo json_encode([
+            'success' => true, 'owner' => $owner,
+            'year' => $year, 'quarter' => $quarter,
+            'abbr' => $acct_abbr,
+            'divisions' => implode(', ', array_filter($divisions)),
+            'item_count' => count($item_list),
+            'summary' => ['rec_avg' => $total_rec_avg, 'inv_avg' => $total_inv_avg, 'salary' => $total_salary, 'other' => $total_other, 'total_expense' => $total_salary + $total_other],
+            'items' => $item_list
+        ]);
+        exit();
+    }
+
 }
 
 // --- BUILD HIERARCHICAL STRUCTURE ---
@@ -1262,7 +1320,7 @@ function get_rev_bg_color($val, $planned, $red, $yellow, $green) {
                                          style="font-size: 11px; color: #64748b; font-weight: 600; <?php echo $cell_style; ?>">
                                          <?php echo htmlspecialchars($row['acct_abbreviation'] ?? ''); ?>
                                      </td>
-                                     <td class="col-owner" style="<?php echo $cell_style; ?>">
+                                     <td class="col-owner" style="cursor: pointer; <?php echo $cell_style; ?>" onclick="openOwnerSidebar('<?php echo addslashes($row['owner'] ?? ''); ?>', <?php echo $current_year; ?>, <?php echo $current_quarter; ?>)">
                                          <?php 
                                             $owner_parts = explode(' ', trim($row['owner'] ?? ''));
                                             echo htmlspecialchars($owner_parts[0]);
@@ -1547,6 +1605,45 @@ function get_rev_bg_color($val, $planned, $red, $yellow, $green) {
                         <tbody id="dd-table-body">
                             <!-- Rows pop up here -->
                         </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- OWNER PERFORMANCE SIDEBAR -->
+    <div id="ownerSidebar" class="drilldown-sidebar">
+        <div class="drilldown-header" style="background: #1e3a8a; border-bottom: 1px solid #3b82f6;">
+            <div style="font-size: 11px; color: #94a3b8; font-weight: 700; text-transform: uppercase; margin-bottom: 4px; letter-spacing: 0.1em;">Owner Performance</div>
+            <div id="os-title" style="font-size: 24px; font-weight: 800; color: #ffffff;">Owner Name</div>
+            <div id="os-period" style="font-size: 13px; color: #cbd5e1; margin-top: 4px; font-weight: 500;">Dữ liệu quý hiện tại</div>
+        </div>
+        <div class="drilldown-content">
+            <!-- User Information Section -->
+            <div style="background: #f8fafc; border: 1px solid #e2e8f0; padding: 20px; border-radius: 12px; margin-bottom: 24px; display: flex; align-items: center; gap: 20px;">
+                <div id="os-avatar-initial" style="width: 60px; height: 60px; background: #1e3a8a; color: #fff; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 24px; font-weight: 800; text-transform: uppercase;">M</div>
+                <div style="flex: 1;">
+                    <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 4px;">
+                        <span id="os-info-name" style="font-size: 18px; font-weight: 800; color: #1e293b;"></span>
+                        <span id="os-info-abbr" style="background: #e2e8f0; color: #475569; font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 100px; text-transform: uppercase;"></span>
+                    </div>
+                    <div style="font-size: 13px; color: #64748b; margin-bottom: 8px;">
+                        <i class="fas fa-sitemap" style="width: 16px;"></i> <span id="os-info-division"></span>
+                    </div>
+                    <div style="display: flex; gap: 16px;">
+                        <div style="font-size: 12px; color: #1e293b; font-weight: 600;">
+                            <span id="os-info-count" style="color: #3b82f6;">0</span> hạng mục đang quản lý
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="drilldown-section">
+                <div class="drilldown-title">Hạng mục sở hữu</div>
+                <div id="os-table-wrap" style="background: #fff; border: 1px solid #e2e8f0; border-radius: 12px; overflow-x: auto;">
+                    <table style="width: 100%; border-collapse: collapse; font-size: 11px; min-width: 900px;">
+                        <thead id="os-table-head"></thead>
+                        <tbody id="os-table-body"></tbody>
                     </table>
                 </div>
             </div>
@@ -2177,6 +2274,92 @@ function get_rev_bg_color($val, $planned, $red, $yellow, $green) {
         function closeDrilldownSidebar() {
             document.getElementById('drilldownOverlay').style.display = 'none';
             document.getElementById('drilldownSidebar').classList.remove('open');
+            document.getElementById('ownerSidebar').classList.remove('open');
+        }
+
+        // --- OWNER SIDEBAR LOGIC ---
+        function openOwnerSidebar(owner, year, quarter) {
+            if (!owner) return;
+            const overlay = document.getElementById('drilldownOverlay');
+            const sidebar = document.getElementById('ownerSidebar');
+            
+            overlay.style.display = 'block';
+            sidebar.classList.add('open');
+
+            const fd = new FormData();
+            fd.append('action', 'get_owner_performance');
+            fd.append('owner', owner);
+            fd.append('year', year);
+            fd.append('quarter', quarter);
+
+            fetch(location.href, { method: 'POST', body: fd })
+            .then(r => r.json())
+            .then(data => {
+                if (data.success) {
+                    renderOwnerSidebarData(data);
+                } else {
+                    alert('Lỗi: ' + data.error);
+                    closeDrilldownSidebar();
+                }
+            })
+            .catch(err => {
+                console.error(err);
+                closeDrilldownSidebar();
+            });
+        }
+
+        function renderOwnerSidebarData(data) {
+            document.getElementById('os-title').innerText = data.owner;
+            document.getElementById('os-period').innerText = 'Dữ liệu Q' + data.quarter + '/' + data.year;
+            
+            // Populate Identity Info
+            document.getElementById('os-info-name').innerText = data.owner;
+            document.getElementById('os-info-abbr').innerText = data.abbr || 'N/A';
+            document.getElementById('os-info-division').innerText = data.divisions || 'N/A';
+            document.getElementById('os-info-count').innerText = data.item_count;
+            document.getElementById('os-avatar-initial').innerText = (data.owner ? data.owner.charAt(0) : '?');
+            
+            const head = document.getElementById('os-table-head');
+            const body = document.getElementById('os-table-body');
+            
+            head.innerHTML = `
+                <tr style="background: #f8fafc;">
+                    <th style="padding: 10px; text-align: left; border-bottom: 2px solid #e2e8f0; width: 140px;">Hạng mục</th>
+                    <th style="padding: 10px; text-align: center; border-bottom: 2px solid #e2e8f0; background: #f0fdf4;" colspan="3">Recognised Revenue (G/A/B)</th>
+                    <th style="padding: 10px; text-align: center; border-bottom: 2px solid #e2e8f0; background: #fdf2f8;" colspan="3">Invoiced Revenue (G/A/B)</th>
+                    <th style="padding: 10px; text-align: right; border-bottom: 2px solid #e2e8f0; color: #3b82f6;">Lương</th>
+                    <th style="padding: 10px; text-align: right; border-bottom: 2px solid #e2e8f0; color: #f59e0b;">Khác</th>
+                    <th style="padding: 10px; text-align: right; border-bottom: 2px solid #e2e8f0; font-weight: 800;">Tổng chi</th>
+                </tr>
+            `;
+
+            body.innerHTML = '';
+            if (data.items.length === 0) {
+                body.innerHTML = '<tr><td colspan="10" style="padding: 20px; text-align: center; color: #64748b;">Không có dữ liệu hạng mục.</td></tr>';
+                return;
+            }
+
+            data.items.forEach(it => {
+                const tr = document.createElement('tr');
+                tr.innerHTML = `
+                    <td style="padding: 10px; border-bottom: 1px solid #f1f5f9; font-weight: 600; background: #f8fafc;">
+                        <div style="font-size: 11px;">${it.name}</div>
+                    </td>
+                    
+                    <td style="padding: 4px; border-bottom: 1px solid #f1f5f9; text-align: right; color: #166534; background: #f0fdf4;">${formatVND(it.rec.good)}</td>
+                    <td style="padding: 4px; border-bottom: 1px solid #f1f5f9; text-align: right; color: #1e40af; background: #eff6ff;">${formatVND(it.rec.avg)}</td>
+                    <td style="padding: 4px; border-bottom: 1px solid #f1f5f9; text-align: right; color: #991b1b; background: #fef2f2;">${formatVND(it.rec.bad)}</td>
+                    
+                    <td style="padding: 4px; border-bottom: 1px solid #f1f5f9; text-align: right; color: #166534; background: #f0fdf4;">${formatVND(it.inv.good)}</td>
+                    <td style="padding: 4px; border-bottom: 1px solid #f1f5f9; text-align: right; color: #1e40af; background: #eff6ff;">${formatVND(it.inv.avg)}</td>
+                    <td style="padding: 4px; border-bottom: 1px solid #f1f5f9; text-align: right; color: #991b1b; background: #fef2f2;">${formatVND(it.inv.bad)}</td>
+                    
+                    <td style="padding: 10px; border-bottom: 1px solid #f1f5f9; text-align: right; color: #3b82f6;">${formatVND(it.salary)}</td>
+                    <td style="padding: 10px; border-bottom: 1px solid #f1f5f9; text-align: right; color: #f59e0b;">${formatVND(it.other)}</td>
+                    <td style="padding: 10px; border-bottom: 1px solid #f1f5f9; text-align: right; font-weight: 800;">${formatVND(it.expense)}</td>
+                `;
+                body.appendChild(tr);
+            });
         }
 
         function renderDrilldownData(data) {
