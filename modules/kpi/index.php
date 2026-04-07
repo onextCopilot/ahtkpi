@@ -1212,22 +1212,24 @@ $status_map = ['draft' => ['#F1F5F9', '#64748B'], 'active' => ['#DBEAFE', '#1D4E
         });
 
         // Auto-select KPI group based on template
-        document.getElementById('def_name').addEventListener('input', function (e) {
+        document.getElementById('def_name')?.addEventListener('input', function (e) {
             const val = this.value;
             const options = document.querySelectorAll('#kpiNameOptions option');
             for (let i = 0; i < options.length; i++) {
                 if (options[i].value === val) {
                     const group = options[i].getAttribute('data-group');
                     if (group) {
-                        let select = document.getElementById('def_group');
+                        const select = document.getElementById('def_group');
+                        if (!select) return;
                         let exists = false;
                         for (let j = 0; j < select.options.length; j++) {
+                            if (select.options[j].value === group) {
                                 exists = true;
                                 break;
                             }
                         }
                         if (!exists) {
-                            let newOpt = document.createElement('option');
+                            const newOpt = document.createElement('option');
                             newOpt.value = group;
                             newOpt.textContent = group;
                             select.appendChild(newOpt);

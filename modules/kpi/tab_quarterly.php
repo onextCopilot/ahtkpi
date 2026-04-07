@@ -1,409 +1,392 @@
-<?php // Tab 2: Quarterly plan — Auto-save + monthly totals + progress bar
-$q_labels = [1 => 'Q1 (T1-T3)', 2 => 'Q2 (T4-T6)', 3 => 'Q3 (T7-T9)', 4 => 'Q4 (T10-T12)'];
+<?php // Tab 2: Quarterly plan — Apple Minimalist Style Overhaul
+$q_labels = [1 => 'Q1', 2 => 'Q2', 3 => 'Q3', 4 => 'Q4'];
 $q_months = [1 => [1, 2, 3], 2 => [4, 5, 6], 3 => [7, 8, 9], 4 => [10, 11, 12]];
-$q_colors = [
-    1 => ['bg' => '#EFF6FF', 'head' => '#1D4ED8', 'border' => '#BFDBFE'],
-    2 => ['bg' => '#F0FDF4', 'head' => '#065F46', 'border' => '#A7F3D0'],
-    3 => ['bg' => '#FFFBEB', 'head' => '#92400E', 'border' => '#FDE68A'],
-    4 => ['bg' => '#FEF2F2', 'head' => '#991B1B', 'border' => '#FECACA'],
-];
+$q_accents = [1 => '#0071E3', 2 => '#28CD41', 3 => '#FF9F0A', 4 => '#FF3B30'];
 
-/** Strip thousand-separator dots: "12.000.000" → "12000000" */
-function stripThousands($val)
-{
+function stripThousands($val) {
+    if (!$val) return '';
     $v = trim($val);
-    if (preg_match('/^\d{1,3}(\.\d{3})+$/', $v))
-        return str_replace('.', '', $v);
+    if (preg_match('/^\d{1,3}(\.\d{3})+$/', $v)) return str_replace('.', '', $v);
     return $v;
 }
 
-/**
- * Try to extract numeric value from a target string.
- * "12.000.000.000" → 12000000000
- * "135000000"      → 135000000
- * "135 tỷ"         → null (ambiguous unit)
- */
-function parseTarget($val)
-{
-    if (!$val || trim($val) === '')
-        return null;
+function parseTarget($val) {
+    if (!$val || trim($val) === '') return null;
     $stripped = stripThousands(trim($val));
-    if (is_numeric($stripped))
-        return (float) $stripped;
-    return null;
+    return is_numeric($stripped) ? (float)$stripped : null;
 }
 
-/**
- * Calculate 3-month actual total for a quarter.
- * Returns ['sum'=>float,'fmt'=>string,'count'=>int,'mixed'=>bool] or null
- */
-function quarterTotal($monthly_map, $def_id, $qmonths, $calc_method = 'sum')
-{
-    $sum = 0;
-    $count = 0;
-    $mixed = false;
+function quarterTotal($monthly_map, $def_id, $qmonths, $calc_method = 'sum') {
+    $sum = 0; $count = 0; $mixed = false;
     foreach ($qmonths as $m) {
         $val = $monthly_map[$def_id][$m]['actual_value'] ?? null;
-        if ($val === null || $val === '')
-            continue;
+        if ($val === null || $val === '') continue;
         $raw = stripThousands($val);
-        if (is_numeric($raw)) {
-            $sum += (float) $raw;
-            $count++;
-        } else {
-            $mixed = true;
-            $count++;
-        }
+        if (is_numeric($raw)) { $sum += (float)$raw; $count++; } else { $mixed = true; $count++; }
     }
-    if ($count === 0)
-        return null;
+    if ($count === 0) return null;
     $display = ($calc_method === 'avg' && !$mixed && $count > 0) ? $sum / $count : $sum;
     return ['sum' => $display, 'fmt' => number_format($display, 0, ',', '.'), 'count' => $count, 'mixed' => $mixed];
 }
 
-/** Format numeric target for display: "12000000" → "12.000.000", text unchanged */
-function fmtDisplayTarget($val)
-{
-    if ($val === null || $val === '')
-        return '';
+function fmtDisplayTarget($val) {
+    if ($val === null || $val === '') return '';
     $s = stripThousands(trim($val));
-    if (is_numeric($s) && $s !== '')
-        return number_format((float) $s, 0, ',', '.');
+    if (is_numeric($s) && $s !== '') return number_format((float)$s, 0, ',', '.');
     return $val;
 }
 ?>
+
 <style>
-    .q-progress-wrap {
-        height: 7px;
-        background: #E5E7EB;
-        border-radius: 4px;
-        overflow: hidden;
+    :root {
+        --apple-bg: #F5F5F7;
+        --apple-card: #FFFFFF;
+        --apple-text: #1D1D1F;
+        --apple-text-secondary: #86868B;
+        --apple-blue: #0071E3;
+        --apple-green: #28CD41;
+        --apple-orange: #FF9F0A;
+        --apple-red: #FF3B30;
     }
 
-    .q-progress-fill {
-        height: 100%;
-        border-radius: 4px;
-        transition: width .5s ease;
+    body {
+        background-color: var(--apple-bg) !important;
+        color: var(--apple-text);
+        font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif;
+        -webkit-font-smoothing: antialiased;
     }
 
-    /* Editable cell styles */
-    .editable-cell {
-        position: relative;
-        cursor: default;
-        min-height: 24px;
+    .toolbar {
+        padding: 24px 8px;
         display: flex;
         align-items: center;
+        justify-content: space-between;
+    }
+
+    /* Professional Grid Layout */
+    .sheet-wrap {
+        padding: 0 10px 40px 10px;
+    }
+
+    #qTable {
         width: 100%;
-        border: 1px solid transparent;
-        border-radius: 4px;
-        padding: 2px 6px;
-        box-sizing: border-box;
-        transition: all 0.2s;
-        background: rgba(255, 255, 255, 0.5);
+        border-collapse: separate;
+        border-spacing: 0 4px; /* Ultra-compact vertical gap */
     }
 
-    .editable-cell:hover {
-        background: #fff;
-        border-color: #D1D5DB;
-        box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+    #qTable thead th {
+        text-align: left;
+        padding: 12px 12px;
+        font-size: 12px;
+        font-weight: 800;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        color: var(--apple-text);
+        opacity: 0.9;
+        border-bottom: 2px solid #E8E8ED;
     }
 
-    .editable-cell .edit-icon {
-        opacity: 0;
-        margin-left: auto;
-        color: #9CA3AF;
-        transition: opacity 0.2s;
-        flex-shrink: 0;
+    /* Group Headers */
+    .group-row td {
+        padding: 16px 12px 4px 12px !important; /* Scaled down */
+        font-size: 16px !important;
+        font-weight: 700 !important;
+        color: var(--apple-text) !important;
+        letter-spacing: -0.02em !important;
+        background: transparent !important;
+        border: none !important;
     }
 
-    .editable-cell:hover .edit-icon {
-        opacity: 1;
+    /* The "Airy" but Condensed Rows */
+    #qTable tbody tr:not(.group-row) td {
+        background: var(--apple-card);
+        padding: 8px 12px !important; /* Denser padding */
+        border: none;
+        box-shadow: 0 1px 2px rgba(0,0,0,0.02);
+        vertical-align: middle;
+        transition: background 0.15s, box-shadow 0.15s ease;
     }
 
-    .editable-cell .display-value {
-        font-size: 11px;
+    /* Card Rounding */
+    #qTable tbody tr:not(.group-row) td:first-child { border-radius: 12px 0 0 12px; }
+    #qTable tbody tr:not(.group-row) td:last-child { border-radius: 0 12px 12px 0; }
+
+    #qTable tbody tr:not(.group-row):hover td {
+        background-color: #FAFAFB;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.04);
+        z-index: 10;
+        position: relative;
+    }
+
+    /* KPI Name Column */
+    .kpi-name-cell {
+        font-size: 14px;
         font-weight: 700;
-        color: #111827;
-        white-space: nowrap;
-        overflow: hidden;
-        text-overflow: ellipsis;
+        color: var(--apple-text);
+        letter-spacing: -0.01em;
+        line-height: 1.2;
+    }
+    .kpi-meta-badge {
+        display: inline-flex;
+        padding: 2px 6px;
+        background: #F2F2F7;
+        border-radius: 4px;
+        font-size: 10px;
+        font-weight: 600;
+        color: var(--apple-text-secondary);
+        margin-top: 4px;
+        gap: 5px;
     }
 
-    .editable-cell .qs-input {
+    /* Quarterly Info Section */
+    .q-box {
+        display: flex;
+        flex-direction: column;
+        gap: 6px; /* Micro-gap */
+    }
+
+    .q-header-row {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+    }
+
+    .q-label-badge {
+        font-size: 9px;
+        font-weight: 800;
+        text-transform: uppercase;
+        color: var(--apple-text-secondary);
+        letter-spacing: 0.05em;
+    }
+
+    /* Editable Target */
+    .editable-target {
+        display: flex;
+        align-items: center;
+        gap: 5px;
+    }
+    .val-text {
+        font-size: 15px;
+        font-weight: 800;
+        color: var(--apple-text);
+        letter-spacing: -0.03em;
+    }
+    .edit-trigger {
+        opacity: 0;
+        cursor: pointer;
+        color: var(--apple-blue);
+        transition: opacity 0.2s, transform 0.2s;
+    }
+    #qTable tr:hover .edit-trigger { opacity: 0.5; }
+    .edit-trigger:hover { opacity: 1 !important; transform: scale(1.2); }
+
+    /* Progress - Apple Style */
+    .progress-track {
+        height: 4px;
+        background: #F2F2F7;
+        border-radius: 10px;
+        overflow: hidden;
+    }
+    .progress-fill {
+        height: 100%;
+        border-radius: 10px;
+        transition: width 1.2s cubic-bezier(0.2, 1, 0.2, 1);
+    }
+
+    /* Results */
+    .actual-row {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-end;
+    }
+    .actual-num {
+        font-size: 13px;
+        font-weight: 700;
+        color: var(--apple-text);
+    }
+    .pct-val {
+        font-size: 12px;
+        font-weight: 800;
+    }
+
+    /* Input Overlays */
+    .qs-input {
         display: none;
         width: 100%;
-        padding: 2px 5px;
-        border: 1px solid #3B82F6 !important;
-        border-radius: 3px;
-        font-size: 11px;
+        border: 2px solid var(--apple-blue) !important;
+        border-radius: 12px;
+        padding: 10px 14px;
+        font-size: 16px;
+        font-weight: 700;
         background: #fff;
-        box-sizing: border-box;
+        box-shadow: 0 10px 30px rgba(0,0,0,0.1);
         outline: none;
-        box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.1);
     }
+    .editing .val-text, .editing .edit-trigger, .editing .q-label-badge { display: none; }
+    .editing .qs-input { display: block; }
 
-    .editable-cell.editing {
-        background: #fff;
-        border-color: #3B82F6;
-        padding: 0;
+    /* Micro-Notifications */
+    .qs-badge {
+        font-size: 10px;
+        font-weight: 700;
+        color: var(--apple-blue);
+        animation: appleFadeIn 0.3s ease;
     }
-
-    .editable-cell.editing .display-value,
-    .editable-cell.editing .edit-icon {
-        display: none;
-    }
-
-    .editable-cell.editing .qs-input {
-        display: block;
+    @keyframes appleFadeIn {
+        from { opacity: 0; transform: translateY(2px); }
+        to { opacity: 1; transform: translateY(0); }
     }
 </style>
 
 <div class="toolbar">
-    <span style="font-size:13px;color:#6B7280">
-        💡 Nhập kế hoạch từng quý — <b>tự động lưu</b>. Tổng thực tế &amp; % hoàn thành tính từ số liệu tháng.
-    </span>
-    <div style="flex:1"></div>
-    <input type="text" id="qSearch" placeholder="🔍 Tìm KPI..." onkeyup="filterTbl('qTable','qSearch')"
-        style="padding:6px 10px;border:1px solid #D1D5DB;border-radius:6px;font-size:13px;width:180px">
+    <div style="font-size:28px; font-weight:800; letter-spacing:-0.04em;">Quarterly Performance</div>
+    <input type="text" id="qSearch" placeholder="Search KPI..." onkeyup="filterTbl('qTable','qSearch')"
+        style="padding:12px 20px; border:none; border-radius:14px; background:#E8E8ED; font-size:15px; width:240px; outline:none; font-weight:500;">
 </div>
 
 <div class="sheet-wrap">
-    <table class="sheet" id="qTable">
+    <table id="qTable">
         <thead>
             <tr>
-                <th class="col-no">STT</th>
-                <th style="min-width:200px">KPI</th>
-                <th style="min-width:100px">Target năm</th>
-                <th style="text-align:right;width:80px">Tỷ trọng</th>
+                <th style="width:60px; text-align:center;">Pos</th>
+                <th style="min-width:300px;">Metric Definition</th>
                 <?php foreach ($q_labels as $qi => $ql): ?>
-                    <th
-                        style="min-width:210px;background:<?= $q_colors[$qi]['bg'] ?>;color:<?= $q_colors[$qi]['head'] ?>;border-bottom:2px solid <?= $q_colors[$qi]['border'] ?>">
-                        <?= $ql ?>
-                    </th>
+                    <th style="min-width:240px;"><?= $ql ?> Planning</th>
                 <?php endforeach; ?>
             </tr>
         </thead>
         <tbody>
-            <?php $cur_group = null;
-            $stt = 1;
+            <?php $cur_group = null; $stt = 1;
             foreach ($defs as $d):
                 if ($d['kpi_group'] !== $cur_group):
                     $cur_group = $d['kpi_group']; ?>
                     <tr class="group-row">
-                        <td colspan="<?= 4 + count($q_labels) ?>"><?= htmlspecialchars($cur_group ?? '(Chưa phân nhóm)') ?></td>
+                        <td colspan="6"><?= htmlspecialchars($cur_group ?? 'Overview') ?></td>
                     </tr>
                 <?php endif; ?>
                 <tr>
-                    <td class="col-no"><?= $stt++ ?></td>
-                    <td style="white-space:normal;font-weight:500">
-                        <?= htmlspecialchars($d['kpi_name']) ?>
-                        <?php if ($d['is_condition']): ?><span class="badge badge-cond">ĐK</span><?php endif; ?>
-                            <?php if (($d['calc_method'] ?? 'sum') === 'avg'): ?>
-                                    <span style="font-size:10px;background:#FEF3C7;color:#92400E;padding:1px 5px;border-radius:4px;border:1px solid #FDE68A">÷ TB</span><?php endif; ?>
+                    <td style="text-align:center; font-weight:700; color:#AEAEB2;"><?= sprintf('%02d', $stt++) ?></td>
+                    <td class="kpi-name-cell">
+                        <div><?= htmlspecialchars($d['kpi_name']) ?></div>
+                        <div class="kpi-meta-badge">
+                            <?php if ($d['is_condition']): ?><span>Condition Only</span><?php endif; ?>
+                            <span>Weight: <?= number_format($d['weight'], 1) ?>%</span>
+                            <span>Target: <?= htmlspecialchars($d['target_base'] ?? '—') ?></span>
+                        </div>
                     </td>
-                    <td style="font-size:12px;color:#6B7280;white-space:nowrap">
-                        <?= htmlspecialchars($d['target_base'] ?? '—') ?>     <?php if (!empty($d['unit'])): ?><span
-                                style="font-weight: 500;"><?= htmlspecialchars($d['unit']) ?></span><?php endif; ?>
-                    </td>
-                    <td style="text-align:right;font-weight:600"><?= number_format($d['weight'], 1) ?>%</td>
 
                     <?php foreach ($q_labels as $qi => $ql):
                         $qrow = $quarterly_map[$d['id']][$qi] ?? null;
-                        $bgCol = $q_colors[$qi]['bg'];
-                        $headCol = $q_colors[$qi]['head'];
+                        $accent = $q_accents[$qi];
                         $calc_method = $d['calc_method'] ?? 'sum';
                         $total = quarterTotal($monthly_map, $d['id'], $q_months[$qi], $calc_method);
 
-                        // Progress calculation
                         $targetNum = parseTarget($qrow['target_value'] ?? '');
-                        $pct = null;
-                        $barColor = '#E5E7EB';
-                        $textColor = '#9CA3AF';
+                        $pct = null; $statusColor = '#AEAEB2';
                         if ($total && !$total['mixed'] && $targetNum > 0) {
-                            $pct = min(999, round($total['sum'] / $targetNum * 100, 1));
-                            if ($pct >= 100) {
-                                $barColor = '#10B981';
-                                $textColor = '#065F46';
-                            } elseif ($pct >= 80) {
-                                $barColor = '#3B82F6';
-                                $textColor = '#1D4ED8';
-                            } elseif ($pct >= 60) {
-                                $barColor = '#F59E0B';
-                                $textColor = '#B45309';
-                            } else {
-                                $barColor = '#EF4444';
-                                $textColor = '#B91C1C';
-                            }
+                            $pct = round($total['sum'] / $targetNum * 100, 0);
+                            $statusColor = ($pct >= 100) ? '#248A3D' : (($pct >= 70) ? '#0071E3' : (($pct >= 40) ? '#F2994A' : '#EB5757'));
+                            $statusColor = ($pct >= 100) ? 'var(--apple-green)' : (($pct >= 70) ? 'var(--apple-blue)' : (($pct >= 40) ? 'var(--apple-orange)' : 'var(--apple-red)'));
                         }
                         $barPct = $pct !== null ? min(100, $pct) : 0;
                         ?>
-                        <td style="padding:2px 4px;background:<?= $bgCol ?>;vertical-align:top">
-                            <div style="display:flex;flex-direction:column;gap:2px">
-
-                                <!-- Label -->
-                                <div
-                                    style="font-size:9px;color:<?= $headCol ?>;font-weight:700;text-transform:uppercase;letter-spacing:.05em">
-                                    Kế hoạch Q<?= $qi ?></div>
-
-                                <!-- Target input -->
-                                <?php if ($is_kpi_admin || $_SESSION['user_id'] == $d['kpi_owner_id'] || $_SESSION['user_id'] == $d['dept_owner_id'] || $_SESSION['user_id'] == $d['dept_manager_id'] || in_array($d['department_id'], $viewable_depts)): ?>
-                                    <div class="editable-cell">
-                                        <span class="display-value"><?= htmlspecialchars(fmtDisplayTarget($qrow['target_value'] ?? '')) ?: '—' ?></span>
-                                        <svg class="edit-icon" width="12" height="12" viewBox="0 0 24 24" fill="none"
-                                            stroke="currentColor" stroke-width="2" stroke-linecap="round"
-                                            stroke-linejoin="round" style="cursor:pointer"
-                                            onclick="startEdit(this.closest('.editable-cell'))">
-                                            <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
-                                            <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
-                                        </svg>
-                                        <input type="text" class="qs-input" data-def="<?= $d['id'] ?>" data-quarter="<?= $qi ?>"
-                                            data-year="<?= $year ?>" placeholder="Nhập target Q<?= $qi ?>"
-                                            value="<?= htmlspecialchars(stripThousands($qrow['target_value'] ?? '')) ?>">
-                                    </div>
-                                <?php else: ?>
-                                    <div
-                                        style="width:100%;padding:2px 5px;border:1px solid transparent;font-size:11px;box-sizing:border-box;color:#111827;font-weight:600">
-                                        <?= htmlspecialchars(fmtDisplayTarget($qrow['target_value'] ?? '')) ?: '—' ?>
-                                    </div>
-                                <?php endif; ?>
-
-                                <!-- Divider -->
-                                <div style="height:1px;background:rgba(0,0,0,.08);margin:1px 0"></div>
-
-                                <!-- Actual + Progress -->
-                                <div
-                                    style="padding:2px 4px;background:rgba(0,0,0,.04);border-radius:4px;border-left:3px solid <?= $headCol ?>">
-                                    <div
-                                        style="font-size:9px;color:#6B7280;font-weight:600;text-transform:uppercase;letter-spacing:.04em;margin-bottom:2px">
-                                        Thực tế (<?= $total ? $total['count'] : 0 ?>/3 tháng)
-                                    </div>
-                                    <?php if ($total && !$total['mixed']): ?>
-                                        <div style="font-size:13px;font-weight:700;color:<?= $headCol ?>;margin-bottom:5px">
-                                            <?= htmlspecialchars($total['fmt']) ?>
-                                        </div>
-                                    <?php elseif ($total && $total['mixed']): ?>
-                                        <div style="font-size:11px;color:#9CA3AF;margin-bottom:5px">Dữ liệu hỗn hợp</div>
-                                    <?php else: ?>
-                                        <div style="font-size:11px;color:#D1D5DB;margin-bottom:5px">Chưa có số liệu</div>
-                                    <?php endif; ?>
-
-                                    <!-- Progress bar -->
-                                    <div class="q-progress-wrap">
-                                        <div class="q-progress-fill" style="width:<?= $barPct ?>%;background:<?= $barColor ?>">
-                                        </div>
-                                    </div>
-
-                                    <!-- % label row -->
-                                    <div style="display:flex;justify-content:space-between;align-items:center;margin-top:3px">
-                                        <?php if ($pct !== null): ?>
-                                            <span style="font-size:10px;color:#6B7280">
-                                                <?= htmlspecialchars($total['fmt'] ?? '0') ?> /
-                                                <?= number_format($targetNum, 0, ',', '.') ?>
-                                                <?php if (!empty($d['unit'])): ?><span><?= htmlspecialchars($d['unit']) ?></span><?php endif; ?>
-                                            </span>
-                                            <span style="font-size:12px;font-weight:800;color:<?= $textColor ?>"><?= $pct ?>%</span>
-                                        <?php elseif ($targetNum === null && ($qrow['target_value'] ?? '') !== ''): ?>
-                                            <span style="font-size:10px;color:#D1D5DB">Target không phải số</span>
-                                        <?php else: ?>
-                                            <span style="font-size:10px;color:#D1D5DB">—</span>
-                                        <?php endif; ?>
+                        <td>
+                            <div class="q-box">
+                                <div class="q-header-row">
+                                    <div class="q-label-badge"><?= $ql ?> Goal</div>
+                                    <div class="qs-badge" data-def="<?= $d['id'] ?>" data-quarter="<?= $qi ?>" style="display:none;">Saved ✓</div>
+                                    <div class="edit-trigger" onclick="const box = this.closest('.q-box'); if(box) startEdit(box.querySelector('.editable-target'))">
+                                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
                                     </div>
                                 </div>
 
-                                <!-- Save badge -->
-                                <span class="qs-badge" data-def="<?= $d['id'] ?>" data-quarter="<?= $qi ?>"
-                                    style="font-size:10px;color:#6B7280;display:none;text-align:right"></span>
+                                <div class="editable-target">
+                                    <div class="val-text"><?= htmlspecialchars(fmtDisplayTarget($qrow['target_value'] ?? '')) ?: '—' ?></div>
+                                    <input type="text" class="qs-input" data-def="<?= $d['id'] ?>" data-quarter="<?= $qi ?>" data-year="<?= $year ?>" 
+                                        value="<?= htmlspecialchars(stripThousands($qrow['target_value'] ?? '')) ?>">
+                                </div>
+
+                                <div class="progress-track">
+                                    <div class="progress-fill" style="width: <?= $barPct ?>%; background: <?= $statusColor ?>;"></div>
+                                </div>
+
+                                <div class="actual-row">
+                                    <div class="actual-num"><?= $total ? $total['fmt'] : '0' ?> <span style="font-size:10px; opacity:0.5;"><?= htmlspecialchars($d['unit'] ?? '') ?></span></div>
+                                    <?php if ($pct !== null): ?>
+                                        <div class="pct-val" style="color: <?= $statusColor ?>;"><?= $pct ?>%</div>
+                                    <?php endif; ?>
+                                </div>
                             </div>
                         </td>
                     <?php endforeach; ?>
                 </tr>
             <?php endforeach; ?>
-            <?php if (empty($defs)): ?>
-                <tr>
-                    <td colspan="<?= 4 + count($q_labels) ?>" style="text-align:center;padding:40px;color:#9CA3AF">
-                        Chưa có KPI. <a href="?tab=definitions&year=<?= $year ?>">→ Tạo bộ KPI trước</a>
-                    </td>
-                </tr>
-            <?php endif; ?>
         </tbody>
     </table>
 </div>
 
 <script>
-    // ── Number format helpers ─────────────────────────────────
     function stripFmt(val) {
         if (!val && val !== 0) return '';
         const s = String(val).trim();
-        // "12.000.000" → "12000000"
         if (/^\d{1,3}(\.\d{3})+$/.test(s)) return s.replace(/\./g, '');
-        if (/^\d+$/.test(s)) return s;
-        return s; // free-text unchanged
+        return s;
     }
     function fmtNumber(val) {
         if (!val) return '';
         const raw = stripFmt(val.trim());
-        if (/^\d+$/.test(raw) && raw.length > 0)
+        if (/^\d+$/.test(raw)) {
             return raw.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
-        return val; // non-numeric: unchanged
+        }
+        return val;
     }
 
-    function qsSaveBadge(defId, quarter, msg, isErr) {
-        const b = document.querySelector(`.qs-badge[data-def="${defId}"][data-quarter="${quarter}"]`);
-        if (!b) return;
-        b.style.display = 'block'; b.style.color = isErr ? '#EF4444' : '#10B981'; b.textContent = msg;
-        if (!isErr) setTimeout(() => b.style.display = 'none', 1500);
-    }
     function qsSaveCell(defId, quarter, year) {
-        const container = document.querySelector(`.qs-input[data-def="${defId}"][data-quarter="${quarter}"]`)?.closest('.editable-cell');
-        const inp = container ? container.querySelector('.qs-input') : document.querySelector(`.qs-input[data-def="${defId}"][data-quarter="${quarter}"]`);
-        const rawVal = stripFmt(inp?.value ?? ''); // strip formatting before saving
+        const inp = document.querySelector(`.qs-input[data-def="${defId}"][data-quarter="${quarter}"]`);
+        const rawVal = stripFmt(inp?.value ?? '');
         fetch('/api/kpi_quarterly_save.php', {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ kpi_def_id: +defId, quarter: +quarter, year: +year, target_value: rawVal, weight_q: 0, status: 'active', notes: '' })
-        }).then(r => r.json()).then(d => qsSaveBadge(defId, quarter, d.success ? '✓ Đã lưu' : '✗ Lỗi', !d.success))
-            .catch(() => qsSaveBadge(defId, quarter, '✗ Lỗi kết nối', true));
+        }).then(r => r.json()).then(d => {
+            const badge = document.querySelector(`.qs-badge[data-def="${defId}"][data-quarter="${quarter}"]`);
+            if (badge && d.success) {
+                badge.style.display = 'block';
+                setTimeout(() => { badge.style.display = 'none'; }, 2000);
+            }
+        }).catch(e => console.error(e));
     }
 
     function startEdit(container) {
-        if (!container || container.classList.contains('editing')) return;
+        if (!container) return;
         container.classList.add('editing');
         const inp = container.querySelector('.qs-input');
-        if (inp) {
-            inp.focus();
-            inp.select();
-        }
+        if (inp) { inp.focus(); inp.select(); }
     }
 
     document.querySelectorAll('.qs-input').forEach(inp => {
         inp.addEventListener('blur', function () {
-            const container = this.closest('.editable-cell');
+            const container = this.closest('.editable-target');
             if (container) container.classList.remove('editing');
-
-            // Format for display but keep input value raw
             const val = this.value.trim();
             const raw = stripFmt(val);
             this.value = raw;
-
-            // Update display value (formatted)
-            if (container) {
-                const display = container.querySelector('.display-value');
-                if (display) display.textContent = fmtNumber(raw) || '—';
-            }
-
+            const display = container?.querySelector('.val-text');
+            if (display) display.textContent = fmtNumber(raw) || '—';
             qsSaveCell(this.dataset.def, this.dataset.quarter, this.dataset.year);
         });
         inp.addEventListener('keydown', function (e) {
             if (e.key === 'Enter') { e.preventDefault(); this.blur(); }
             if (e.key === 'Escape') {
-                const container = this.closest('.editable-cell');
+                const container = this.closest('.editable-target');
                 if (container) {
-                    const display = container.querySelector('.display-value');
+                    const display = container.querySelector('.val-text');
                     this.value = display.textContent === '—' ? '' : display.textContent;
                     container.classList.remove('editing');
                 }
             }
         });
     });
+
     function filterTbl(tblId, inputId) {
         const f = document.getElementById(inputId).value.toUpperCase();
         document.querySelectorAll('#' + tblId + ' tbody tr:not(.group-row)').forEach(r => {
