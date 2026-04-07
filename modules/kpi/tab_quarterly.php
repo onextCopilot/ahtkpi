@@ -85,6 +85,77 @@ function fmtDisplayTarget($val)
         border-radius: 4px;
         transition: width .5s ease;
     }
+
+    /* Editable cell styles */
+    .editable-cell {
+        position: relative;
+        cursor: default;
+        min-height: 24px;
+        display: flex;
+        align-items: center;
+        width: 100%;
+        border: 1px solid transparent;
+        border-radius: 4px;
+        padding: 2px 6px;
+        box-sizing: border-box;
+        transition: all 0.2s;
+        background: rgba(255, 255, 255, 0.5);
+    }
+
+    .editable-cell:hover {
+        background: #fff;
+        border-color: #D1D5DB;
+        box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+    }
+
+    .editable-cell .edit-icon {
+        opacity: 0;
+        margin-left: auto;
+        color: #9CA3AF;
+        transition: opacity 0.2s;
+        flex-shrink: 0;
+    }
+
+    .editable-cell:hover .edit-icon {
+        opacity: 1;
+    }
+
+    .editable-cell .display-value {
+        font-size: 11px;
+        font-weight: 700;
+        color: #111827;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    .editable-cell .qs-input {
+        display: none;
+        width: 100%;
+        padding: 2px 5px;
+        border: 1px solid #3B82F6 !important;
+        border-radius: 3px;
+        font-size: 11px;
+        background: #fff;
+        box-sizing: border-box;
+        outline: none;
+        box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.1);
+    }
+
+    .editable-cell.editing {
+        background: #fff;
+        border-color: #3B82F6;
+        padding: 0;
+    }
+
+    .editable-cell.editing .display-value,
+    .editable-cell.editing .edit-icon {
+        display: none;
+    }
+
+    .editable-cell.editing .qs-input {
+        display: block;
+    }
 </style>
 
 <div class="toolbar">
@@ -176,10 +247,19 @@ function fmtDisplayTarget($val)
 
                                 <!-- Target input -->
                                 <?php if ($is_kpi_admin || $_SESSION['user_id'] == $d['kpi_owner_id'] || $_SESSION['user_id'] == $d['dept_owner_id'] || $_SESSION['user_id'] == $d['dept_manager_id'] || in_array($d['department_id'], $viewable_depts)): ?>
-                                    <input type="text" class="qs-input" data-def="<?= $d['id'] ?>" data-quarter="<?= $qi ?>"
-                                        data-year="<?= $year ?>" placeholder="Nhập target Q<?= $qi ?>"
-                                        value="<?= htmlspecialchars(fmtDisplayTarget($qrow['target_value'] ?? '')) ?>"
-                                        style="width:100%;padding:2px 5px;border:1px solid #D1D5DB;border-radius:3px;font-size:11px;background:#fff;box-sizing:border-box">
+                                    <div class="editable-cell">
+                                        <span class="display-value"><?= htmlspecialchars(fmtDisplayTarget($qrow['target_value'] ?? '')) ?: '—' ?></span>
+                                        <svg class="edit-icon" width="12" height="12" viewBox="0 0 24 24" fill="none"
+                                            stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                                            stroke-linejoin="round" style="cursor:pointer"
+                                            onclick="startEdit(this.closest('.editable-cell'))">
+                                            <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+                                            <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+                                        </svg>
+                                        <input type="text" class="qs-input" data-def="<?= $d['id'] ?>" data-quarter="<?= $qi ?>"
+                                            data-year="<?= $year ?>" placeholder="Nhập target Q<?= $qi ?>"
+                                            value="<?= htmlspecialchars(stripThousands($qrow['target_value'] ?? '')) ?>">
+                                    </div>
                                 <?php else: ?>
                                     <div
                                         style="width:100%;padding:2px 5px;border:1px solid transparent;font-size:11px;box-sizing:border-box;color:#111827;font-weight:600">
@@ -274,9 +354,8 @@ function fmtDisplayTarget($val)
         if (!isErr) setTimeout(() => b.style.display = 'none', 1500);
     }
     function qsSaveCell(defId, quarter, year) {
-        const td = document.querySelector(`.qs-input[data-def="${defId}"][data-quarter="${quarter}"]`)?.closest('td');
-        if (!td) return;
-        const inp = td.querySelector('.qs-input');
+        const container = document.querySelector(`.qs-input[data-def="${defId}"][data-quarter="${quarter}"]`)?.closest('.editable-cell');
+        const inp = container ? container.querySelector('.qs-input') : document.querySelector(`.qs-input[data-def="${defId}"][data-quarter="${quarter}"]`);
         const rawVal = stripFmt(inp?.value ?? ''); // strip formatting before saving
         fetch('/api/kpi_quarterly_save.php', {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -284,14 +363,45 @@ function fmtDisplayTarget($val)
         }).then(r => r.json()).then(d => qsSaveBadge(defId, quarter, d.success ? '✓ Đã lưu' : '✗ Lỗi', !d.success))
             .catch(() => qsSaveBadge(defId, quarter, '✗ Lỗi kết nối', true));
     }
+
+    function startEdit(container) {
+        if (!container || container.classList.contains('editing')) return;
+        container.classList.add('editing');
+        const inp = container.querySelector('.qs-input');
+        if (inp) {
+            inp.focus();
+            inp.select();
+        }
+    }
+
     document.querySelectorAll('.qs-input').forEach(inp => {
         inp.addEventListener('blur', function () {
-            // Format number on blur; free text (e.g. "135 tỷ") left unchanged
-            if (this.value.trim()) this.value = fmtNumber(this.value);
+            const container = this.closest('.editable-cell');
+            if (container) container.classList.remove('editing');
+
+            // Format for display but keep input value raw
+            const val = this.value.trim();
+            const raw = stripFmt(val);
+            this.value = raw;
+
+            // Update display value (formatted)
+            if (container) {
+                const display = container.querySelector('.display-value');
+                if (display) display.textContent = fmtNumber(raw) || '—';
+            }
+
             qsSaveCell(this.dataset.def, this.dataset.quarter, this.dataset.year);
         });
         inp.addEventListener('keydown', function (e) {
             if (e.key === 'Enter') { e.preventDefault(); this.blur(); }
+            if (e.key === 'Escape') {
+                const container = this.closest('.editable-cell');
+                if (container) {
+                    const display = container.querySelector('.display-value');
+                    this.value = display.textContent === '—' ? '' : display.textContent;
+                    container.classList.remove('editing');
+                }
+            }
         });
     });
     function filterTbl(tblId, inputId) {

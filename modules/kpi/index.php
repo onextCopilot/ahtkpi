@@ -248,7 +248,7 @@ if ($r)
 
 // ── Fetch quarterly for year ──────────────────────
 $quarterly_map = []; // [def_id][quarter] => row
-if ($tab === 'quarterly') {
+if ($tab === 'quarterly' || $tab === 'definitions') {
     $r = $conn->query("SELECT * FROM kpi_quarterly WHERE year=$year");
     if ($r)
         while ($row = $r->fetch_assoc()) {
@@ -1222,7 +1222,6 @@ $status_map = ['draft' => ['#F1F5F9', '#64748B'], 'active' => ['#DBEAFE', '#1D4E
                         let select = document.getElementById('def_group');
                         let exists = false;
                         for (let j = 0; j < select.options.length; j++) {
-                            if (select.options[j].value === group) {
                                 exists = true;
                                 break;
                             }
