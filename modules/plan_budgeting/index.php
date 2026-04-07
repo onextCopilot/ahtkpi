@@ -357,8 +357,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
             exit();
         }
 
-        // Fetch all items owned by this person in the selected period
-        $stmt = $conn->prepare("SELECT * FROM budget_structure WHERE owner = ? AND year = ? AND quarter = ?");
+        // Fetch all items owned by this person in the selected period (only leaf items to avoid double-counting)
+        $stmt = $conn->prepare("SELECT * FROM budget_structure WHERE owner = ? AND year = ? AND quarter = ? AND type = 'item'");
         $stmt->bind_param("sii", $owner, $year, $quarter);
         $stmt->execute();
         $items = $stmt->get_result()->fetch_all(MYSQLI_ASSOC);
@@ -385,6 +385,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
             $item_list[] = [
                 'name' => $item['item_name'],
                 'division' => $item['division'],
+                'category' => $item['category'],
                 'rec' => ['good' => floatval($item['rec_rev_good']), 'avg' => floatval($item['rec_rev_avg']), 'bad' => floatval($item['rec_rev_bad'])],
                 'inv' => ['good' => floatval($item['inv_rev_good']), 'avg' => floatval($item['inv_rev_avg']), 'bad' => floatval($item['inv_rev_bad'])],
                 'salary' => $sal,
@@ -401,6 +402,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
             'item_count' => count($item_list),
             'summary' => ['rec_avg' => $total_rec_avg, 'inv_avg' => $total_inv_avg, 'salary' => $total_salary, 'other' => $total_other, 'total_expense' => $total_salary + $total_other],
             'items' => $item_list
+        ]);
+        exit();
+    }
+
+    if ($action === 'get_user_history_logs') {
+        $owner = $_POST['owner'] ?? '';
+        $offset = intval($_POST['offset'] ?? 0);
+        $limit = 5;
+
+        $stmt = $conn->prepare("SELECT * FROM budget_history WHERE user_name = ? ORDER BY id DESC LIMIT ? OFFSET ?");
+        $stmt->bind_param("sii", $owner, $limit, $offset);
+        $stmt->execute();
+        $logs = $stmt->get_result()->fetch_all(MYSQLI_ASSOC);
+
+        echo json_encode([
+            'success' => true,
+            'logs' => $logs,
+            'has_more' => (count($logs) === $limit)
         ]);
         exit();
     }
@@ -1647,6 +1666,15 @@ function get_rev_bg_color($val, $planned, $red, $yellow, $green) {
                     </table>
                 </div>
             </div>
+
+            <div class="drilldown-section" style="margin-top: 32px;">
+                <div class="drilldown-title" style="display: flex; justify-content: space-between; align-items: center;">
+                    <span>Lịch sử cập nhật</span>
+                    <i class="fas fa-history" style="color: #94a3b8; font-size: 14px;"></i>
+                </div>
+                <div id="os-logs-container" style="display: flex; flex-direction: column; gap: 12px; margin-top: 12px;"></div>
+                <button id="os-load-more" onclick="loadUserLogs()" style="width: 100%; margin-top: 16px; padding: 10px; background: #fff; border: 1px solid #e2e8f0; border-radius: 8px; font-size: 13px; font-weight: 600; color: #64748b; cursor: pointer; display: none;">Xem thêm lịch sử</button>
+            </div>
         </div>
     </div>
 
@@ -2278,13 +2306,23 @@ function get_rev_bg_color($val, $planned, $red, $yellow, $green) {
         }
 
         // --- OWNER SIDEBAR LOGIC ---
+        let currentOwnerOffset = 0;
+        let currentOwnerName = '';
+
         function openOwnerSidebar(owner, year, quarter) {
             if (!owner) return;
+            currentOwnerName = owner;
+            currentOwnerOffset = 0;
+
             const overlay = document.getElementById('drilldownOverlay');
             const sidebar = document.getElementById('ownerSidebar');
             
             overlay.style.display = 'block';
             sidebar.classList.add('open');
+
+            // Reset logs
+            document.getElementById('os-logs-container').innerHTML = '';
+            document.getElementById('os-load-more').style.display = 'none';
 
             const fd = new FormData();
             fd.append('action', 'get_owner_performance');
@@ -2297,14 +2335,90 @@ function get_rev_bg_color($val, $planned, $red, $yellow, $green) {
             .then(data => {
                 if (data.success) {
                     renderOwnerSidebarData(data);
+                    loadUserLogs(); // Initial load of logs
                 } else {
                     alert('Lỗi: ' + data.error);
                     closeDrilldownSidebar();
                 }
-            })
-            .catch(err => {
-                console.error(err);
-                closeDrilldownSidebar();
+            });
+        }
+
+        function loadUserLogs() {
+            const fd = new FormData();
+            fd.append('action', 'get_user_history_logs');
+            fd.append('owner', currentOwnerName);
+            fd.append('offset', currentOwnerOffset);
+
+            const btn = document.getElementById('os-load-more');
+            btn.innerText = 'Đang tải...';
+
+            fetch(location.href, { method: 'POST', body: fd })
+            .then(r => r.json())
+            .then(data => {
+                if (data.success) {
+                    renderUserLogs(data.logs);
+                    currentOwnerOffset += data.logs.length;
+                    btn.style.display = data.has_more ? 'block' : 'none';
+                    btn.innerText = 'Xem thêm lịch sử';
+                }
+            });
+        }
+
+        function renderUserLogs(logs) {
+            const container = document.getElementById('os-logs-container');
+            if (logs.length === 0 && currentOwnerOffset === 0) {
+                container.innerHTML = '<div style="font-size: 13px; color: #94a3b8; text-align: center; padding: 20px; background: #f8fafc; border-radius: 8px; border: 1px dashed #e2e8f0;">Chưa có lịch sử cập nhật.</div>';
+                return;
+            }
+
+            const fieldLabels = {
+                'rec_rev_good': 'Rec Rev (Good)',
+                'rec_rev_avg': 'Rec Rev (Avg)',
+                'rec_rev_bad': 'Rec Rev (Bad)',
+                'inv_rev_good': 'Inv Rev (Good)',
+                'inv_rev_avg': 'Inv Rev (Avg)',
+                'inv_rev_bad': 'Inv Rev (Bad)',
+                'actual_salary': 'Lương thực tế',
+                'actual_other': 'Chi phí khác'
+            };
+
+            logs.forEach(log => {
+                const item = document.createElement('div');
+                item.style.cssText = 'padding: 8px 0; border-bottom: 1px solid #f1f5f9; display: flex; gap: 12px; align-items: flex-start;';
+                
+                let icon = 'fa-edit';
+                let iconColor = '#3b82f6';
+                if (log.action_type === 'DELETE_ITEM') { icon = 'fa-trash-alt'; iconColor = '#ef4444'; }
+                if (log.action_type === 'ADD_ITEM') { icon = 'fa-plus-circle'; iconColor = '#10b981'; }
+
+                let displayDetails = log.details;
+                // Remove redundant words
+                displayDetails = displayDetails.replace('Updated ', '').replace('for month ', '• ');
+                Object.keys(fieldLabels).forEach(key => {
+                    displayDetails = displayDetails.replace(key, fieldLabels[key]);
+                });
+
+                // Format timestamp
+                const dt = new Date(log.created_at);
+                const timeStr = dt.getHours().toString().padStart(2, '0') + ':' + dt.getMinutes().toString().padStart(2, '0');
+                const dateStr = dt.getDate().toString().padStart(2, '0') + '/' + (dt.getMonth() + 1).toString().padStart(2, '0');
+
+                item.innerHTML = `
+                    <div style="width: 24px; height: 24px; background: ${iconColor}15; color: ${iconColor}; border-radius: 6px; display: flex; align-items: center; justify-content: center; font-size: 11px; flex-shrink: 0; margin-top: 2px;">
+                        <i class="fas ${icon}"></i>
+                    </div>
+                    <div style="flex: 1; display: flex; justify-content: space-between; gap: 10px;">
+                        <div>
+                            <div style="font-size: 12px; font-weight: 700; color: #1e293b;">${log.item_name}</div>
+                            <div style="font-size: 12px; color: #475569;">${displayDetails}</div>
+                        </div>
+                        <div style="text-align: right; flex-shrink: 0;">
+                            <div style="font-size: 11px; font-weight: 700; color: #1e293b;">${timeStr}</div>
+                            <div style="font-size: 10px; color: #94a3b8;">${dateStr}</div>
+                        </div>
+                    </div>
+                `;
+                container.appendChild(item);
             });
         }
 
@@ -2344,6 +2458,7 @@ function get_rev_bg_color($val, $planned, $red, $yellow, $green) {
                 tr.innerHTML = `
                     <td style="padding: 10px; border-bottom: 1px solid #f1f5f9; font-weight: 600; background: #f8fafc;">
                         <div style="font-size: 11px;">${it.name}</div>
+                        <div style="font-size: 9px; color: #64748b; font-weight: normal; margin-top: 1px;">${it.category}</div>
                     </td>
                     
                     <td style="padding: 4px; border-bottom: 1px solid #f1f5f9; text-align: right; color: #166534; background: #f0fdf4;">${formatVND(it.rec.good)}</td>
