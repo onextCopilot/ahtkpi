@@ -57,7 +57,7 @@ function fmtDisplayTarget($val) {
     }
 
     .toolbar {
-        padding: 24px 8px;
+        padding: 12px 8px; /* Compact toolbar */
         display: flex;
         align-items: center;
         justify-content: space-between;
@@ -65,19 +65,19 @@ function fmtDisplayTarget($val) {
 
     /* Professional Grid Layout */
     .sheet-wrap {
-        padding: 0 10px 40px 10px;
+        padding: 0 8px 12px 8px; /* Tighter container */
     }
 
     #qTable {
         width: 100%;
         border-collapse: separate;
-        border-spacing: 0 4px; /* Ultra-compact vertical gap */
+        border-spacing: 0 2px; /* Extreme compact vertical gap */
     }
 
     #qTable thead th {
         text-align: left;
-        padding: 12px 12px;
-        font-size: 12px;
+        padding: 8px 12px;
+        font-size: 11px;
         font-weight: 800;
         text-transform: uppercase;
         letter-spacing: 0.08em;
@@ -86,63 +86,62 @@ function fmtDisplayTarget($val) {
         border-bottom: 2px solid #E8E8ED;
     }
 
-    /* Group Headers */
+    /* Group Headers - Prominent Background */
     .group-row td {
-        padding: 16px 12px 4px 12px !important; /* Scaled down */
-        font-size: 16px !important;
-        font-weight: 700 !important;
+        padding: 8px 12px !important; 
+        font-size: 14px !important;
+        font-weight: 800 !important;
         color: var(--apple-text) !important;
-        letter-spacing: -0.02em !important;
-        background: transparent !important;
+        letter-spacing: -0.01em !important;
+        background: #E8E8ED !important;
         border: none !important;
     }
+    .group-row td:first-child { border-radius: 8px 0 0 8px; }
+    .group-row td:last-child { border-radius: 0 8px 8px 0; }
 
-    /* The "Airy" but Condensed Rows */
+    /* The "Airy" but Extremely Condensed Rows */
     #qTable tbody tr:not(.group-row) td {
         background: var(--apple-card);
-        padding: 8px 12px !important; /* Denser padding */
+        padding: 3px 12px !important; /* Extreme padding reduction */
         border: none;
-        box-shadow: 0 1px 2px rgba(0,0,0,0.02);
+        box-shadow: 0 1px 1px rgba(0,0,0,0.01);
         vertical-align: middle;
-        transition: background 0.15s, box-shadow 0.15s ease;
+        transition: background 0.1s;
     }
 
     /* Card Rounding */
-    #qTable tbody tr:not(.group-row) td:first-child { border-radius: 12px 0 0 12px; }
-    #qTable tbody tr:not(.group-row) td:last-child { border-radius: 0 12px 12px 0; }
+    #qTable tbody tr:not(.group-row) td:first-child { border-radius: 10px 0 0 10px; }
+    #qTable tbody tr:not(.group-row) td:last-child { border-radius: 0 10px 10px 0; }
 
     #qTable tbody tr:not(.group-row):hover td {
         background-color: #FAFAFB;
-        box-shadow: 0 4px 12px rgba(0,0,0,0.04);
-        z-index: 10;
-        position: relative;
+        box-shadow: 0 2px 6px rgba(0,0,0,0.03);
     }
 
     /* KPI Name Column */
     .kpi-name-cell {
-        font-size: 14px;
+        font-size: 13px;
         font-weight: 700;
         color: var(--apple-text);
-        letter-spacing: -0.01em;
-        line-height: 1.2;
+        line-height: 1.1;
     }
     .kpi-meta-badge {
         display: inline-flex;
-        padding: 2px 6px;
+        padding: 1px 5px;
         background: #F2F2F7;
-        border-radius: 4px;
-        font-size: 10px;
+        border-radius: 3px;
+        font-size: 9px;
         font-weight: 600;
         color: var(--apple-text-secondary);
-        margin-top: 4px;
-        gap: 5px;
+        margin-top: 2px;
+        gap: 4px;
     }
 
     /* Quarterly Info Section */
     .q-box {
         display: flex;
         flex-direction: column;
-        gap: 6px; /* Micro-gap */
+        gap: 4px; /* Extreme micro-gap */
     }
 
     .q-header-row {
@@ -152,7 +151,7 @@ function fmtDisplayTarget($val) {
     }
 
     .q-label-badge {
-        font-size: 9px;
+        font-size: 8px;
         font-weight: 800;
         text-transform: uppercase;
         color: var(--apple-text-secondary);
@@ -163,13 +162,13 @@ function fmtDisplayTarget($val) {
     .editable-target {
         display: flex;
         align-items: center;
-        gap: 5px;
+        gap: 4px;
     }
     .val-text {
-        font-size: 15px;
+        font-size: 14px;
         font-weight: 800;
         color: var(--apple-text);
-        letter-spacing: -0.03em;
+        letter-spacing: -0.02em;
     }
     .edit-trigger {
         opacity: 0;
@@ -239,9 +238,9 @@ function fmtDisplayTarget($val) {
 </style>
 
 <div class="toolbar">
-    <div style="font-size:28px; font-weight:800; letter-spacing:-0.04em;">Quarterly Performance</div>
+    <div style="font-size:20px; font-weight:800; letter-spacing:-0.03em;">Quarterly Performance</div>
     <input type="text" id="qSearch" placeholder="Search KPI..." onkeyup="filterTbl('qTable','qSearch')"
-        style="padding:12px 20px; border:none; border-radius:14px; background:#E8E8ED; font-size:15px; width:240px; outline:none; font-weight:500;">
+        style="padding:8px 16px; border:none; border-radius:10px; background:#E8E8ED; font-size:14px; width:200px; outline:none; font-weight:500;">
 </div>
 
 <div class="sheet-wrap">
@@ -296,7 +295,7 @@ function fmtDisplayTarget($val) {
                                     <div class="q-label-badge"><?= $ql ?> Goal</div>
                                     <div class="qs-badge" data-def="<?= $d['id'] ?>" data-quarter="<?= $qi ?>" style="display:none;">Saved ✓</div>
                                     <div class="edit-trigger" onclick="const box = this.closest('.q-box'); if(box) startEdit(box.querySelector('.editable-target'))">
-                                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
+                                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
                                     </div>
                                 </div>
 
