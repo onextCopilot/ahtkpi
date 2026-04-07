@@ -266,6 +266,16 @@ if (!empty($_GET['date_to'])) {
     $where_clauses[] = "d.invoice_date <= '$date_to'";
 }
 
+if (!empty($_GET['exp_pay_date_from'])) {
+    $exp_from = $conn->real_escape_string($_GET['exp_pay_date_from']);
+    $where_clauses[] = "d.expected_payment_date >= '$exp_from'";
+}
+
+if (!empty($_GET['exp_pay_date_to'])) {
+    $exp_to = $conn->real_escape_string($_GET['exp_pay_date_to']);
+    $where_clauses[] = "d.expected_payment_date <= '$exp_to'";
+}
+
 $selected_team = $_GET['team'] ?? 'dashboard'; // Default to dashboard as requested
 
 if (!$can_view_all_debts && !in_array($selected_team, ['dashboard', 'analytics'])) {
@@ -1390,8 +1400,10 @@ if ($res_am && $res_am->num_rows > 0) {
                             'quarter' => 'Quý',
                             'month' => 'Tháng',
                             'week' => 'Tuần',
-                            'date_from' => 'Từ',
-                            'date_to' => 'Đến',
+                            'date_from' => 'Ngày HĐ Từ',
+                            'date_to' => 'Ngày HĐ Đến',
+                            'exp_pay_date_from' => 'Exp. Pay Từ',
+                            'exp_pay_date_to' => 'Exp. Pay Đến',
                             'q' => 'Tìm kiếm'
                         ];
 
@@ -1416,7 +1428,7 @@ if ($res_am && $res_am->num_rows > 0) {
                                         $val_str = date('m', mktime(0, 0, 0, (int)$val, 1));
                                     } else if ($key === 'quarter') {
                                         $val_str = 'Q' . $val;
-                                    } else if ($key === 'date_from' || $key === 'date_to') {
+                                    } else if ($key === 'date_from' || $key === 'date_to' || $key === 'exp_pay_date_from' || $key === 'exp_pay_date_to') {
                                         $val_str = date('d/m/Y', strtotime($val));
                                     } else {
                                         $val_str = $val;
@@ -1448,7 +1460,7 @@ if ($res_am && $res_am->num_rows > 0) {
                             <span>Bộ lọc</span>
                             <?php 
                             $active_filters = 0;
-                            $filter_params = ['am', 'status', 'invoice_status_class', 'year', 'quarter', 'month', 'week', 'date_from', 'date_to', 'q']; 
+                            $filter_params = ['am', 'status', 'invoice_status_class', 'year', 'quarter', 'month', 'week', 'date_from', 'date_to', 'exp_pay_date_from', 'exp_pay_date_to', 'q']; 
                             foreach($filter_params as $p) {
                                 if(!empty($_GET[$p])) $active_filters++;
                             }
@@ -1515,6 +1527,18 @@ if ($res_am && $res_am->num_rows > 0) {
                                 <div style="display:flex; align-items:center; gap:8px; background:#f8fafc; border:1px solid #cbd5e1; border-radius:6px; padding:8px 10px;">
                                     <span style="font-size:12px; color:#94a3b8; width:30px;">Đến:</span>
                                     <input type="date" name="date_to" value="<?php echo htmlspecialchars($_GET['date_to'] ?? ''); ?>" style="border:none; background:transparent; font-size:13px; outline:none; flex:1;">
+                                </div>
+                            </div>
+
+                            <label class="filter-item-label">Exp. Pay Date (Ngày dự kiến)</label>
+                            <div style="display:flex; flex-direction:column; gap:8px; margin-bottom:20px;">
+                                <div style="display:flex; align-items:center; gap:8px; background:#f8fafc; border:1px solid #cbd5e1; border-radius:6px; padding:8px 10px;">
+                                    <span style="font-size:12px; color:#94a3b8; width:30px;">Từ:</span>
+                                    <input type="date" name="exp_pay_date_from" value="<?php echo htmlspecialchars($_GET['exp_pay_date_from'] ?? ''); ?>" style="border:none; background:transparent; font-size:13px; outline:none; flex:1;">
+                                </div>
+                                <div style="display:flex; align-items:center; gap:8px; background:#f8fafc; border:1px solid #cbd5e1; border-radius:6px; padding:8px 10px;">
+                                    <span style="font-size:12px; color:#94a3b8; width:30px;">Đến:</span>
+                                    <input type="date" name="exp_pay_date_to" value="<?php echo htmlspecialchars($_GET['exp_pay_date_to'] ?? ''); ?>" style="border:none; background:transparent; font-size:13px; outline:none; flex:1;">
                                 </div>
                             </div>
 
@@ -2989,6 +3013,8 @@ if ($res_am && $res_am->num_rows > 0) {
             const url = new URL(window.location.href);
             url.searchParams.delete('date_from');
             url.searchParams.delete('date_to');
+            url.searchParams.delete('exp_pay_date_from');
+            url.searchParams.delete('exp_pay_date_to');
             window.location.href = url.toString();
         }
 
