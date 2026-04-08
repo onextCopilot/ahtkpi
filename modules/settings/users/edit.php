@@ -102,15 +102,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 if ($check->get_result()->num_rows > 0) {
                     $error_message = "Email or Employee Code already exists.";
                 } else {
-                    $sql = "UPDATE users SET username=?, email=?, full_name=?, employee_code=?, job_title=?, level=?, department_id=?, status=?, join_date=?, is_am_bd=?, can_view_invoice=?, can_view_all_debts=?, role=?, sale_level_id=? WHERE id=?";
+                    $can_view_all_kpi = isset($_POST['can_view_all_kpi']) ? 1 : 0;
+                    $viewable_dept_ids = isset($_POST['viewable_dept_ids']) ? (is_array($_POST['viewable_dept_ids']) ? implode(',', $_POST['viewable_dept_ids']) : $_POST['viewable_dept_ids']) : '';
+
+                    $sql = "UPDATE users SET username=?, email=?, full_name=?, employee_code=?, job_title=?, level=?, department_id=?, status=?, join_date=?, is_am_bd=?, can_view_invoice=?, can_view_all_debts=?, can_view_all_kpi=?, viewable_department_ids=?, role=?, sale_level_id=? WHERE id=?";
                     $stmt = $conn->prepare($sql);
-                    $stmt->bind_param("ssssssissiiisii", $username, $email, $name, $emp_code, $job, $level, $dept_id, $status, $join_date, $is_am_bd, $can_view_invoice, $can_view_all_debts, $role_val, $sale_level_id, $id);
+                    $stmt->bind_param("ssssssissiiiisssi", $username, $email, $name, $emp_code, $job, $level, $dept_id, $status, $join_date, $is_am_bd, $can_view_invoice, $can_view_all_debts, $can_view_all_kpi, $viewable_dept_ids, $role_val, $sale_level_id, $id);
                     $stmt->execute();
 
                     // Update session if editing self
                     if ($id == $_SESSION['user_id']) {
                         $_SESSION['can_view_invoice'] = $can_view_invoice;
                         $_SESSION['can_view_all_debts'] = $can_view_all_debts;
+                        $_SESSION['role'] = $role_val;
                     }
 
                     // Update Teams

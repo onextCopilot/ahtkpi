@@ -235,7 +235,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 try {
                     $sql = "UPDATE users SET username=?, email=?, full_name=?, employee_code=?, job_title=?, level=?, department_id=?, status=?, join_date=?, can_view_invoice=?, can_view_all_debts=?, can_view_all_kpi=?, viewable_department_ids=?, is_am_bd=?, role=?, sale_level_id=? WHERE id=?";
                     $stmt = $conn->prepare($sql);
-                    $stmt->bind_param("ssssssissiiisiiii", $username, $email, $name, $emp_code, $job, $level, $dept_id, $status, $join_date, $can_view_invoice, $can_view_all_debts, $can_view_all_kpi, $viewable_dept_ids, $is_am_bd, $role_val, $sale_level_id, $id);
+                    $stmt->bind_param("ssssssissiiiisssi", $username, $email, $name, $emp_code, $job, $level, $dept_id, $status, $join_date, $can_view_invoice, $can_view_all_debts, $can_view_all_kpi, $viewable_dept_ids, $is_am_bd, $role_val, $sale_level_id, $id);
                     ;
                     $stmt->execute();
 
