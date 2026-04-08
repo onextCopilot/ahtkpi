@@ -12,6 +12,13 @@ function isMenuItemActive($path, $current_uri)
 }
 ?>
 <aside class="sidebar">
+    <div class="sidebar-toggle" onclick="toggleSidebar()" title="Toggle Sidebar">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:16px; height:16px;">
+            <rect width="18" height="18" x="3" y="3" rx="2" ry="2"/>
+            <path d="M9 3v18"/>
+            <path d="m14 15-3-3 3-3"/>
+        </svg>
+    </div>
     <div class="sidebar-header">
         <a href="/dashboard" class="logo">
             <img src="https://www.arrowhitech.com/wp-content/uploads/2025/06/Logo.svg" alt="ArrowHitech Logo"
@@ -234,6 +241,41 @@ function isMenuItemActive($path, $current_uri)
 </aside>
 
 <script>
+    function toggleSidebar() {
+        const sidebar = document.querySelector('.sidebar');
+        const mainContent = document.querySelector('.main-content');
+        const isCollapsed = sidebar.classList.toggle('collapsed');
+        
+        if (mainContent) mainContent.classList.toggle('collapsed');
+        
+        localStorage.setItem('sidebar-collapsed', isCollapsed);
+    }
+
+    // Initialize sidebar state on load
+    (function() {
+        const sidebar = document.querySelector('.sidebar');
+        const mainContent = document.querySelector('.main-content');
+        const isCollapsed = localStorage.getItem('sidebar-collapsed') === 'true';
+        
+        if (isCollapsed) {
+            if (sidebar) sidebar.classList.add('collapsed');
+            if (mainContent) mainContent.classList.add('collapsed');
+        }
+
+        // Expand sidebar on click if it's collapsed
+        const sidebarNav = document.querySelector('.sidebar-nav');
+        if (sidebarNav) {
+            sidebarNav.addEventListener('click', function(e) {
+                if (sidebar && sidebar.classList.contains('collapsed')) {
+                    const navItem = e.target.closest('.nav-item');
+                    if (navItem) {
+                        toggleSidebar();
+                    }
+                }
+            }, true); // Use capture phase to catch the click before navigation or submenu toggle
+        }
+    })();
+
     function toggleSubmenu(element) {
         const isOpening = !element.classList.contains('open');
 
