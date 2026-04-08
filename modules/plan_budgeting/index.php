@@ -1277,7 +1277,7 @@ function get_rev_bg_color($val, $planned, $red, $yellow, $green) {
                                     <th class="text-center col-month col-actual" data-sh="exp">Tháng <?php echo $months[0]; ?></th>
                                     <th class="text-center col-month col-actual" data-sh="exp">Tháng <?php echo $months[1]; ?></th>
                                     <th class="text-center col-month col-actual" data-sh="exp">Tháng <?php echo $months[2]; ?></th>
-                                    <th rowspan="2" class="text-center col-actual" width="100" style="min-width: 140px;" data-sh="exp">Thực chi</th>
+                                    <th rowspan="2" class="text-center col-actual" width="100" style="min-width: 140px;" data-sh="exp">Tổng Chi</th>
                                     <th rowspan="2" class="text-center actions-col" width="100" data-sh="exp">Thao tác</th>
                                 </tr>
                                 <tr>
