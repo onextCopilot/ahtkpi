@@ -3,7 +3,7 @@ require_once __DIR__ . '/../../config/config.php';
 
 // Module-specific Page Titles
 $page_title = "Plan & Budgeting";
-$page_subtitle = "Quản lý Kế hoạch & Ngân sách";
+$page_subtitle = "Quản lý Kế Hoạch & Ngân sách";
 
 if (!isset($_SESSION['user_id'])) {
     header("Location: /login");
@@ -155,6 +155,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
         }
         $stmt->bind_param("iiiisd", $item_id, $year, $quarter, $month, $type, $amount);
         if ($stmt->execute()) {
+            // If updating actual_salary (now used as total Thực chi), clear actual_other
+            if ($type === 'actual_salary') {
+                $conn->query("DELETE FROM budget_values WHERE item_id = $item_id AND year = $year AND quarter = $quarter AND month = $month AND value_type = 'actual_other'");
+            }
             // Fetch item name for better logging
             $item_res = $conn->query("SELECT item_name FROM budget_structure WHERE id = $item_id");
             $item_info = $item_res->fetch_assoc();
@@ -193,15 +197,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
     }
 
     if ($action === 'update_revenue_status') {
-        $section = $_POST['section']; // 'rec' or 'inv'
-        $status = intval($_POST['status']); // 1, 2, 3
-        $col = ($section === 'rec' ? 'rec_status' : 'inv_status');
+        $section = $_POST['section'] ?? '';
+        $status = intval($_POST['status'] ?? 0);
+        $col = '';
+        if ($section === 'rec') $col = 'rec_status';
+        elseif ($section === 'inv') $col = 'inv_status';
+        elseif ($section === 'plan') $col = 'plan_status';
         
-        $stmt = $conn->prepare("INSERT INTO budget_quarterly_status (year, quarter, $col) VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE $col = VALUES($col)");
-        $stmt->bind_param("iii", $current_year, $current_quarter, $status);
-        if ($stmt->execute()) echo json_encode(['success' => true]);
-        else echo json_encode(['success' => false, 'error' => $stmt->error]);
-        exit();
+        if ($col) {
+            $stmt = $conn->prepare("INSERT INTO budget_quarterly_status (year, quarter, $col) VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE $col = VALUES($col)");
+            $stmt->bind_param("iii", $current_year, $current_quarter, $status);
+            if ($stmt->execute()) echo json_encode(['success' => true]);
+            else echo json_encode(['success' => false, 'error' => $stmt->error]);
+            exit();
+        }
     }
 
     // SECURITY CHECK: Only admin can modify structure
@@ -486,6 +495,8 @@ $conn->query("CREATE TABLE IF NOT EXISTS system_settings (
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;");
 
+$conn->query("ALTER TABLE budget_values MODIFY COLUMN value_type VARCHAR(100)");
+
 $conn->query("SET @col_exists = (SELECT COUNT(*) FROM information_schema.columns WHERE table_name = 'budget_structure' AND table_schema = DATABASE() AND column_name = 'year');");
 $conn->query("SET @sql = IF(@col_exists = 0, 'ALTER TABLE budget_structure ADD COLUMN year INT DEFAULT 2026 AFTER id', 'SELECT 1');");
 $conn->query("PREPARE stmt FROM @sql;");
@@ -512,10 +523,10 @@ $conn->query("PREPARE stmt FROM @sql;");
 $conn->query("EXECUTE stmt;");
 
 // Quarterly Status table (Global scenario selection)
-$conn->query("CREATE TABLE IF NOT EXISTS budget_quarterly_status (year INT, quarter INT, rec_status INT DEFAULT 0, inv_status INT DEFAULT 0, PRIMARY KEY(year, quarter))");
+$conn->query("CREATE TABLE IF NOT EXISTS budget_quarterly_status (year INT, quarter INT, rec_status INT DEFAULT 0, inv_status INT DEFAULT 0, plan_status INT DEFAULT 0, PRIMARY KEY(year, quarter))");
 
 $q_status_res = $conn->query("SELECT * FROM budget_quarterly_status WHERE year = $current_year AND quarter = $current_quarter");
-$q_status = $q_status_res->fetch_assoc() ?: ['rec_status' => 0, 'inv_status' => 0];
+$q_status = $q_status_res->fetch_assoc() ?: ['rec_status' => 0, 'inv_status' => 0, 'plan_status' => 0];
 
 // Ensure V7 schema update (Status columns) if V6 was already run without them
 $conn->query("SET @col_exists = (SELECT COUNT(*) FROM information_schema.columns WHERE table_name = 'budget_structure' AND table_schema = DATABASE() AND column_name = 'rec_rev_status');");
@@ -729,7 +740,7 @@ foreach ($structure as $row) {
         if ($cat_name !== '') $cat_totals[$cid]['_rev_'][$rk] = ($cat_totals[$cid]['_rev_'][$rk] ?? 0) + $val;
     }
 
-    $keys = ['planned', 'actual_salary', 'actual_other'];
+    $keys = ['planned', 'actual_salary', 'actual_other', 'planned_good', 'planned_avg', 'planned_bad'];
     $item_ms = [0, $months[0], $months[1], $months[2]];
     
     foreach ($item_ms as $m) {
@@ -740,9 +751,8 @@ foreach ($structure as $row) {
             if ($did !== '') {
                 if (!isset($div_totals[$did][$m][$k])) $div_totals[$did][$m][$k] = 0;
                 $div_totals[$did][$m][$k] += $val;
-                if ($grand_total_blocks === null || in_array($did, $grand_total_blocks)) {
-                    $grand_totals[$m][$k] = ($grand_totals[$m][$k] ?? 0) + $val;
-                }
+                // For Expenses/Plans, always sum all rows for Grand Total
+                $grand_totals[$m][$k] = ($grand_totals[$m][$k] ?? 0) + $val;
             }
             if ($cat_name !== '') {
                 if (!isset($cat_totals[$cid][$m][$k])) $cat_totals[$cid][$m][$k] = 0;
@@ -1122,8 +1132,9 @@ function get_rev_bg_color($val, $planned, $red, $yellow, $green) {
                                 <label class="column-option"><input type="checkbox" checked onchange="toggleCol('col-owner', this.checked)"> Owner</label>
                                 <label class="column-option"><input type="checkbox" checked onchange="toggleCol('col-rec', this.checked)"> Recognised Revenue</label>
                                 <label class="column-option"><input type="checkbox" checked onchange="toggleCol('col-inv', this.checked)"> Invoiced Revenue</label>
-                                <label class="column-option"><input type="checkbox" checked onchange="toggleCol('col-plan', this.checked)"> Kế hoạch Q</label>
-                                <label class="column-option"><input type="checkbox" checked onchange="toggleCol('col-actual', this.checked)"> Thực tế chi</label>
+                                <label class="column-option"><input type="checkbox" checked onchange="toggleCol('col-plan', this.checked)"> Kế Hoạch Chi Quý</label>
+                                <label class="column-option"><input type="checkbox" checked onchange="toggleCol('col-plan', this.checked)"> Kế Hoạch Chi Quý</label>
+                                <label class="column-option"><input type="checkbox" checked onchange="toggleCol('col-actual', this.checked)"> Thực chi</label>
                             </div>
                         </div>
 
@@ -1252,7 +1263,7 @@ function get_rev_bg_color($val, $planned, $red, $yellow, $green) {
                                 <tr>
                                     <th id="sh-info" colspan="5" class="text-center" style="background:#1e3a8a!important; position: sticky; left: 0; z-index: 31; font-size: 14px; border-bottom: 1px dashed #ffffff !important;">Information</th>
                                     <th id="sh-income" colspan="6" class="text-center" style="background:#1e3a8a!important; font-size: 14px; border-bottom: 1px dashed #ffffff !important;">Income</th>
-                                    <th id="sh-exp" colspan="9" class="text-center" style="background:#1e3a8a!important; font-size: 14px; border-bottom: 1px dashed #ffffff !important;">Expenses</th>
+                                    <th id="sh-exp" colspan="11" class="text-center" style="background:#1e3a8a!important; font-size: 14px; border-bottom: 1px dashed #ffffff !important;">Expenses</th>
                                 </tr>
                                 <tr>
                                     <th rowspan="2" class="text-center col-stt" width="50" data-sh="info">STT</th>
@@ -1262,11 +1273,11 @@ function get_rev_bg_color($val, $planned, $red, $yellow, $green) {
                                     <th rowspan="2" class="col-owner" data-sh="info">Owner</th>
                                     <th colspan="3" class="text-center col-rec" data-sh="income">Recognised Revenue</th>
                                     <th colspan="3" class="text-center col-inv" data-sh="income">Invoiced Revenue</th>
-                                    <th rowspan="2" class="text-center col-plan" width="100" data-sh="exp">Kế hoạch Q<?php echo $current_quarter; ?></th>
-                                    <th colspan="2" class="text-center col-month col-actual" data-sh="exp">Tháng <?php echo $months[0]; ?></th>
-                                    <th colspan="2" class="text-center col-month col-actual" data-sh="exp">Tháng <?php echo $months[1]; ?></th>
-                                    <th colspan="2" class="text-center col-month col-actual" data-sh="exp">Tháng <?php echo $months[2]; ?></th>
-                                    <th rowspan="2" class="text-center col-actual" width="100" style="min-width: 140px;" data-sh="exp">Thực tế chi</th>
+                                    <th colspan="3" class="text-center col-plan" data-sh="exp">Kế Hoạch Chi Quý <?php echo $current_quarter; ?></th>
+                                    <th class="text-center col-month col-actual" data-sh="exp">Tháng <?php echo $months[0]; ?></th>
+                                    <th class="text-center col-month col-actual" data-sh="exp">Tháng <?php echo $months[1]; ?></th>
+                                    <th class="text-center col-month col-actual" data-sh="exp">Tháng <?php echo $months[2]; ?></th>
+                                    <th rowspan="2" class="text-center col-actual" width="100" style="min-width: 140px;" data-sh="exp">Thực chi</th>
                                     <th rowspan="2" class="text-center actions-col" width="100" data-sh="exp">Thao tác</th>
                                 </tr>
                                 <tr>
@@ -1288,9 +1299,18 @@ function get_rev_bg_color($val, $planned, $red, $yellow, $green) {
                                     <th class="text-center col-inv <?php echo ($q_status['inv_status'] == 3 ? 'active-scenario' : ''); ?>" style="font-size: 11px; width: 112px; min-width: 112px;">
                                         Xấu
                                     </th>
-                                    <th class="actual-col col-actual">Lương Gross</th><th class="actual-col col-actual">HĐ khác</th>
-                                    <th class="actual-col col-actual">Lương Gross</th><th class="actual-col col-actual">HĐ khác</th>
-                                    <th class="actual-col col-actual">Lương Gross</th><th class="actual-col col-actual">HĐ khác</th>
+                                    <th class="text-center col-plan <?php echo ($q_status['plan_status'] == 1 ? 'active-scenario' : ''); ?>" style="font-size: 11px; width: 112px; min-width: 112px;">
+                                        Tốt
+                                    </th>
+                                    <th class="text-center col-plan <?php echo ($q_status['plan_status'] == 2 ? 'active-scenario' : ''); ?>" style="font-size: 11px; width: 112px; min-width: 112px;">
+                                        Trung bình
+                                    </th>
+                                    <th class="text-center col-plan <?php echo ($q_status['plan_status'] == 3 ? 'active-scenario' : ''); ?>" style="font-size: 11px; width: 112px; min-width: 112px;">
+                                        Xấu
+                                    </th>
+                                    <th class="actual-col col-actual">Thực chi</th>
+                                    <th class="actual-col col-actual">Thực chi</th>
+                                    <th class="actual-col col-actual">Thực chi</th>
                                 </tr>
                             </thead>
                             <tbody id="budget-body">
@@ -1310,20 +1330,23 @@ function get_rev_bg_color($val, $planned, $red, $yellow, $green) {
                                     <td class="text-right col-inv" style="background: #1e3a8a !important; color: white !important;"><?php echo format_vnd($grand_totals['_rev_']['inv_rev_avg'] ?? 0); ?></td>
                                     <td class="text-right col-inv" style="background: #1e3a8a !important; color: white !important;"><?php echo format_vnd($grand_totals['_rev_']['inv_rev_bad'] ?? 0); ?></td>
                                     <?php 
-                                    $gt_planned = $grand_totals[0]['planned'] ?? 0;
+                                    $p_status = $q_status['plan_status'] ?? 2; 
+                                    if ($p_status == 0) $p_status = 2; // Default to Average
+                                    $p_key = ($p_status == 1 ? 'planned_good' : ($p_status == 3 ? 'planned_bad' : 'planned_avg'));
+                                    
+                                    $gt_planned = $grand_totals[0][$p_key] ?? 0;
                                     $gt_actual_m1 = ($grand_totals[$months[0]]['actual_salary'] ?? 0) + ($grand_totals[$months[0]]['actual_other'] ?? 0);
                                     $gt_actual_m2 = ($grand_totals[$months[1]]['actual_salary'] ?? 0) + ($grand_totals[$months[1]]['actual_other'] ?? 0);
                                     $gt_actual_m3 = ($grand_totals[$months[2]]['actual_salary'] ?? 0) + ($grand_totals[$months[2]]['actual_other'] ?? 0);
                                     $gt_total_actual = $gt_actual_m1 + $gt_actual_m2 + $gt_actual_m3;
                                     $gt_percent = ($gt_planned > 0) ? ($gt_total_actual / $gt_planned) * 100 : 0;
                                     ?>
-                                    <td class="text-right col-plan" data-month="0" data-type="planned" style="background: #1e3a8a !important; color: white !important; font-weight: 700;"><?php echo number_format($gt_planned, 0, ',', '.'); ?> đ</td>
-                                    <td class="text-right actual-col col-actual" data-month="<?php echo $months[0]; ?>" data-type="actual_salary" style="background: #1e3a8a !important; color: white !important;"><?php echo number_format($grand_totals[$months[0]]['actual_salary'] ?? 0, 0, ',', '.'); ?> đ</td>
-                                    <td class="text-right actual-col col-actual" data-month="<?php echo $months[0]; ?>" data-type="actual_other" style="background: #1e3a8a !important; color: white !important;"><?php echo number_format($grand_totals[$months[0]]['actual_other'] ?? 0, 0, ',', '.'); ?> đ</td>
-                                    <td class="text-right actual-col col-actual" data-month="<?php echo $months[1]; ?>" data-type="actual_salary" style="background: #1e3a8a !important; color: white !important;"><?php echo number_format($grand_totals[$months[1]]['actual_salary'] ?? 0, 0, ',', '.'); ?> đ</td>
-                                    <td class="text-right actual-col col-actual" data-month="<?php echo $months[1]; ?>" data-type="actual_other" style="background: #1e3a8a !important; color: white !important;"><?php echo number_format($grand_totals[$months[1]]['actual_other'] ?? 0, 0, ',', '.'); ?> đ</td>
-                                    <td class="text-right actual-col col-actual" data-month="<?php echo $months[2]; ?>" data-type="actual_salary" style="background: #1e3a8a !important; color: white !important;"><?php echo number_format($grand_totals[$months[2]]['actual_salary'] ?? 0, 0, ',', '.'); ?> đ</td>
-                                    <td class="text-right actual-col col-actual" data-month="<?php echo $months[2]; ?>" data-type="actual_other" style="background: #1e3a8a !important; color: white !important;"><?php echo number_format($grand_totals[$months[2]]['actual_other'] ?? 0, 0, ',', '.'); ?> đ</td>
+                                    <td class="text-right col-plan <?php echo ($q_status['plan_status'] == 1 ? 'active-scenario' : ''); ?>" data-month="0" data-type="planned_good" style="background: #1e3a8a !important; color: white !important; font-weight: 700;"><?php echo number_format($grand_totals[0]['planned_good'] ?? 0, 0, ',', '.'); ?> đ</td>
+                                    <td class="text-right col-plan <?php echo ($q_status['plan_status'] == 2 ? 'active-scenario' : ''); ?>" data-month="0" data-type="planned_avg" style="background: #1e3a8a !important; color: white !important; font-weight: 700;"><?php echo number_format($grand_totals[0]['planned_avg'] ?? 0, 0, ',', '.'); ?> đ</td>
+                                    <td class="text-right col-plan <?php echo ($q_status['plan_status'] == 3 ? 'active-scenario' : ''); ?>" data-month="0" data-type="planned_bad" style="background: #1e3a8a !important; color: white !important; font-weight: 700;"><?php echo number_format($grand_totals[0]['planned_bad'] ?? 0, 0, ',', '.'); ?> đ</td>
+                                    <td class="text-right actual-col col-actual" data-month="<?php echo $months[0]; ?>" style="background: #1e3a8a !important; color: white !important;"><?php echo number_format(($grand_totals[$months[0]]['actual_salary'] ?? 0) + ($grand_totals[$months[0]]['actual_other'] ?? 0), 0, ',', '.'); ?> đ</td>
+                                    <td class="text-right actual-col col-actual" data-month="<?php echo $months[1]; ?>" style="background: #1e3a8a !important; color: white !important;"><?php echo number_format(($grand_totals[$months[1]]['actual_salary'] ?? 0) + ($grand_totals[$months[1]]['actual_other'] ?? 0), 0, ',', '.'); ?> đ</td>
+                                    <td class="text-right actual-col col-actual" data-month="<?php echo $months[2]; ?>" style="background: #1e3a8a !important; color: white !important;"><?php echo number_format(($grand_totals[$months[2]]['actual_salary'] ?? 0) + ($grand_totals[$months[2]]['actual_other'] ?? 0), 0, ',', '.'); ?> đ</td>
                                     <td class="text-right col-actual" style="background: #1e3a8a !important; color: white !important; font-weight: 700;">
                                         <?php echo number_format($gt_total_actual, 0, ',', '.'); ?> đ
                                     </td>
@@ -1341,7 +1364,7 @@ function get_rev_bg_color($val, $planned, $red, $yellow, $green) {
                                      $p_cat = trim(str_replace(['-', '•'], '', $row['category'] ?? ''));
                                      $this_name = trim(str_replace(['-', '•'], '', $row['item_name'] ?? ''));
                                      
-                                     $planned = get_display_val($row, $values, $div_totals, $cat_totals, 0, 'planned');
+                                     $planned = get_display_val($row, $values, $div_totals, $cat_totals, 0, $p_key);
                                      $actual_m1 = get_display_val($row, $values, $div_totals, $cat_totals, $months[0], 'actual_salary') + get_display_val($row, $values, $div_totals, $cat_totals, $months[0], 'actual_other');
                                      $actual_m2 = get_display_val($row, $values, $div_totals, $cat_totals, $months[1], 'actual_salary') + get_display_val($row, $values, $div_totals, $cat_totals, $months[1], 'actual_other');
                                      $actual_m3 = get_display_val($row, $values, $div_totals, $cat_totals, $months[2], 'actual_salary') + get_display_val($row, $values, $div_totals, $cat_totals, $months[2], 'actual_other');
@@ -1424,29 +1447,27 @@ function get_rev_bg_color($val, $planned, $red, $yellow, $green) {
                                      
                                      <?php $is_editable = ($row['type'] === 'item' ? 'editable-cell' : ''); ?>
                                      
-                                     <td class="text-right <?php echo $is_editable; ?> col-plan" data-iid="<?php echo $iid; ?>" data-month="0" data-type="planned" style="font-weight:700; <?php echo ($row['type'] === 'division' ? '' : 'color:#0f172a;'); ?> <?php echo $data_bg; ?>">
-                                         <?php echo format_vnd($planned); ?>
+                                     <?php $p_good = get_display_val($row, $values, $div_totals, $cat_totals, 0, 'planned_good'); ?>
+                                     <td class="text-right <?php echo $is_editable; ?> col-plan <?php echo ($q_status['plan_status'] == 1 ? 'active-scenario' : ''); ?>" data-iid="<?php echo $iid; ?>" data-month="0" data-type="planned_good" style="font-weight:700; <?php echo ($row['type'] === 'division' ? '' : 'color:#0f172a;'); ?> <?php echo $data_bg; ?>">
+                                         <?php echo format_vnd($p_good); ?>
+                                     </td>
+                                     <?php $p_avg = get_display_val($row, $values, $div_totals, $cat_totals, 0, 'planned_avg'); ?>
+                                     <td class="text-right <?php echo $is_editable; ?> col-plan <?php echo ($q_status['plan_status'] == 2 ? 'active-scenario' : ''); ?>" data-iid="<?php echo $iid; ?>" data-month="0" data-type="planned_avg" style="font-weight:700; <?php echo ($row['type'] === 'division' ? '' : 'color:#0f172a;'); ?> <?php echo $data_bg; ?>">
+                                         <?php echo format_vnd($p_avg); ?>
+                                     </td>
+                                     <?php $p_bad = get_display_val($row, $values, $div_totals, $cat_totals, 0, 'planned_bad'); ?>
+                                     <td class="text-right <?php echo $is_editable; ?> col-plan <?php echo ($q_status['plan_status'] == 3 ? 'active-scenario' : ''); ?>" data-iid="<?php echo $iid; ?>" data-month="0" data-type="planned_bad" style="font-weight:700; <?php echo ($row['type'] === 'division' ? '' : 'color:#0f172a;'); ?> <?php echo $data_bg; ?>">
+                                         <?php echo format_vnd($p_bad); ?>
                                      </td>
                                      
                                      <td class="text-right <?php echo $is_editable; ?> actual-col col-actual" data-iid="<?php echo $iid; ?>" data-month="<?php echo $months[0]; ?>" data-type="actual_salary" style="<?php echo $data_bg; ?>">
-                                         <?php echo format_vnd(get_display_val($row, $values, $div_totals, $cat_totals, $months[0], 'actual_salary')); ?>
+                                         <?php echo format_vnd(get_display_val($row, $values, $div_totals, $cat_totals, $months[0], 'actual_salary') + get_display_val($row, $values, $div_totals, $cat_totals, $months[0], 'actual_other')); ?>
                                      </td>
-                                     <td class="text-right <?php echo $is_editable; ?> actual-col col-actual" data-iid="<?php echo $iid; ?>" data-month="<?php echo $months[0]; ?>" data-type="actual_other" style="<?php echo $data_bg; ?>">
-                                         <?php echo format_vnd(get_display_val($row, $values, $div_totals, $cat_totals, $months[0], 'actual_other')); ?>
-                                     </td>
- 
                                      <td class="text-right <?php echo $is_editable; ?> actual-col col-actual" data-iid="<?php echo $iid; ?>" data-month="<?php echo $months[1]; ?>" data-type="actual_salary" style="<?php echo $data_bg; ?>">
-                                         <?php echo format_vnd(get_display_val($row, $values, $div_totals, $cat_totals, $months[1], 'actual_salary')); ?>
+                                         <?php echo format_vnd(get_display_val($row, $values, $div_totals, $cat_totals, $months[1], 'actual_salary') + get_display_val($row, $values, $div_totals, $cat_totals, $months[1], 'actual_other')); ?>
                                      </td>
-                                     <td class="text-right <?php echo $is_editable; ?> actual-col col-actual" data-iid="<?php echo $iid; ?>" data-month="<?php echo $months[1]; ?>" data-type="actual_other" style="<?php echo $data_bg; ?>">
-                                         <?php echo format_vnd(get_display_val($row, $values, $div_totals, $cat_totals, $months[1], 'actual_other')); ?>
-                                     </td>
- 
                                      <td class="text-right <?php echo $is_editable; ?> actual-col col-actual" data-iid="<?php echo $iid; ?>" data-month="<?php echo $months[2]; ?>" data-type="actual_salary" style="<?php echo $data_bg; ?>">
-                                         <?php echo format_vnd(get_display_val($row, $values, $div_totals, $cat_totals, $months[2], 'actual_salary')); ?>
-                                     </td>
-                                     <td class="text-right <?php echo $is_editable; ?> actual-col col-actual" data-iid="<?php echo $iid; ?>" data-month="<?php echo $months[2]; ?>" data-type="actual_other" style="<?php echo $data_bg; ?>">
-                                         <?php echo format_vnd(get_display_val($row, $values, $div_totals, $cat_totals, $months[2], 'actual_other')); ?>
+                                         <?php echo format_vnd(get_display_val($row, $values, $div_totals, $cat_totals, $months[2], 'actual_salary') + get_display_val($row, $values, $div_totals, $cat_totals, $months[2], 'actual_other')); ?>
                                      </td>
                                      
                                      <td class="text-right actual-col col-actual" style="font-weight:700; width:120px; <?php echo $data_bg; ?>">
@@ -1850,7 +1871,7 @@ function get_rev_bg_color($val, $planned, $red, $yellow, $green) {
                 <button onclick="document.getElementById('costSettingsModal').style.display='none'" style="background:none; border:none; font-size:24px; cursor:pointer; color:#94a3b8;">&times;</button>
             </div>
             <form onsubmit="saveCostSettings(event)">
-                <p style="font-size: 13px; color: #64748b; margin-bottom: 15px;">Dựa trên tỷ lệ Thực tế / Kế hoạch (%).</p>
+                <p style="font-size: 13px; color: #64748b; margin-bottom: 15px;">Dựa trên tỷ lệ Thực chi / Kế Hoạch (%).</p>
                 <div style="margin-bottom:15px;">
                     <label style="display:block; font-size:13px; font-weight:600; margin-bottom:5px; color:#854d0e;">Màu Vàng (>= Y%)</label>
                     <input type="number" id="set_cost_yellow" value="<?php echo $cost_yellow; ?>" class="form-control" style="width:100%; padding:10px; border:1px solid #cbd5e1; border-radius:8px;">
@@ -2174,8 +2195,8 @@ function get_rev_bg_color($val, $planned, $red, $yellow, $green) {
                     cell.innerText = formatVND(amount);
                     if (type.startsWith('rec_rev') || type.startsWith('inv_rev')) {
                         const row = cell.closest('tr');
-                        const planCell = row.querySelector('.col-plan');
-                        const planVal = parseInt(planCell.innerText.replace(/[^\d]/g, '')) || 0;
+                        const planCell = row.querySelector('.col-plan.active-scenario') || row.querySelector('.col-plan');
+                        const planVal = parseInt((planCell ? planCell.innerText : '0').replace(/[^\d]/g, '')) || 0;
                         if (planVal > 0 && amount > 0) {
                             const pct = (amount / planVal) * 100;
                             cell.style.cssText = '';
@@ -2210,9 +2231,10 @@ function get_rev_bg_color($val, $planned, $red, $yellow, $green) {
                 const cell = gtRow.querySelector(`td[data-month="${month}"][data-type="${type}"]`);
                 if (cell) cell.innerText = formatVND(sum);
                 let total = 0;
-                gtRow.querySelectorAll('td[data-month]:not([data-type="planned"])').forEach(c => total += parseInt(c.innerText.replace(/[^\d]/g, '')) || 0);
+                gtRow.querySelectorAll('td[data-month]:not([data-type^="planned"])').forEach(c => total += parseInt(c.innerText.replace(/[^\d]/g, '')) || 0);
                 gtRow.cells[gtRow.cells.length - 2].innerText = formatVND(total);
-                const pl = parseInt(gtRow.querySelector('td[data-type="planned"]').innerText.replace(/[^\d]/g, '')) || 0;
+                const plCell = gtRow.querySelector('td[data-type^="planned"].active-scenario') || gtRow.querySelector('td[data-type^="planned"]');
+                const pl = parseInt((plCell ? plCell.innerText : '0').replace(/[^\d]/g, '')) || 0;
                 const perc = pl > 0 ? (total / pl) * 100 : 0;
                 const container = gtRow.querySelector('td.text-right:nth-last-child(2)');
                 if (container) container.innerText = formatVND(total);
@@ -2562,15 +2584,13 @@ function get_rev_bg_color($val, $planned, $red, $yellow, $green) {
                     <th style="padding: 10px; text-align: left; border-bottom: 2px solid #e2e8f0; width: 140px;">Hạng mục</th>
                     <th style="padding: 10px; text-align: center; border-bottom: 2px solid #e2e8f0; background: #f0fdf4;" colspan="3">Recognised Revenue (G/A/B)</th>
                     <th style="padding: 10px; text-align: center; border-bottom: 2px solid #e2e8f0; background: #fdf2f8;" colspan="3">Invoiced Revenue (G/A/B)</th>
-                    <th style="padding: 10px; text-align: right; border-bottom: 2px solid #e2e8f0; color: #3b82f6;">Lương</th>
-                    <th style="padding: 10px; text-align: right; border-bottom: 2px solid #e2e8f0; color: #f59e0b;">Khác</th>
-                    <th style="padding: 10px; text-align: right; border-bottom: 2px solid #e2e8f0; font-weight: 800;">Tổng chi</th>
+                    <th style="padding: 10px; text-align: right; border-bottom: 2px solid #e2e8f0; font-weight: 800;">Thực chi</th>
                 </tr>
             `;
 
             body.innerHTML = '';
             if (data.items.length === 0) {
-                body.innerHTML = '<tr><td colspan="10" style="padding: 20px; text-align: center; color: #64748b;">Không có dữ liệu hạng mục.</td></tr>';
+                body.innerHTML = '<tr><td colspan="8" style="padding: 20px; text-align: center; color: #64748b;">Không có dữ liệu hạng mục.</td></tr>';
                 return;
             }
 
@@ -2582,7 +2602,7 @@ function get_rev_bg_color($val, $planned, $red, $yellow, $green) {
                     const divRow = document.createElement('tr');
                     divRow.style.background = '#e2e8f0';
                     divRow.innerHTML = `
-                        <td colspan="10" style="padding: 10px 12px; font-weight: 800; color: #1e3a8a; font-size: 12px; text-transform: uppercase; border-bottom: 2px solid #cbd5e1; border-top: 15px solid #fff;">
+                        <td colspan="8" style="padding: 10px 12px; font-weight: 800; color: #1e3a8a; font-size: 12px; text-transform: uppercase; border-bottom: 2px solid #cbd5e1; border-top: 15px solid #fff;">
                             <i class="fas fa-sitemap" style="margin-right: 8px;"></i> KHỐI: ${it.division}
                         </td>
                     `;
@@ -2596,7 +2616,7 @@ function get_rev_bg_color($val, $planned, $red, $yellow, $green) {
                     const headerRow = document.createElement('tr');
                     headerRow.style.background = '#f1f5f9';
                     headerRow.innerHTML = `
-                        <td colspan="10" style="padding: 8px 12px 8px 30px; font-weight: 700; color: #475569; font-size: 11px; text-transform: uppercase; border-bottom: 1px solid #e2e8f0;">
+                        <td colspan="8" style="padding: 8px 12px 8px 30px; font-weight: 700; color: #475569; font-size: 11px; text-transform: uppercase; border-bottom: 1px solid #e2e8f0;">
                             <i class="fas fa-folder-open" style="margin-right: 6px; color: #94a3b8;"></i> ${it.category}
                         </td>
                     `;
@@ -2619,8 +2639,6 @@ function get_rev_bg_color($val, $planned, $red, $yellow, $green) {
                     <td style="padding: 4px; border-bottom: 1px solid #f1f5f9; text-align: right; color: #1e40af; background: #eff6ff;">${formatVND(it.inv.avg)}</td>
                     <td style="padding: 4px; border-bottom: 1px solid #f1f5f9; text-align: right; color: #991b1b; background: #fef2f2;">${formatVND(it.inv.bad)}</td>
                     
-                    <td style="padding: 10px; border-bottom: 1px solid #f1f5f9; text-align: right; color: #3b82f6;">${formatVND(it.salary)}</td>
-                    <td style="padding: 10px; border-bottom: 1px solid #f1f5f9; text-align: right; color: #f59e0b;">${formatVND(it.other)}</td>
                     <td style="padding: 10px; border-bottom: 1px solid #f1f5f9; text-align: right; font-weight: 800;">${formatVND(it.expense)}</td>
                 `;
                 body.appendChild(tr);
@@ -2665,9 +2683,7 @@ function get_rev_bg_color($val, $planned, $red, $yellow, $green) {
                 <th style="padding: 10px; text-align: left; border-bottom: 2px solid #e2e8f0; width: 70px;">Quý</th>
                 <th style="padding: 10px; text-align: center; border-bottom: 2px solid #e2e8f0; border-left: 1px solid #e263eb22; background: #f0f9ff; color: #0369a1; font-size: 10px;" colspan="3">Recognised Rev (G/A/B)</th>
                 <th style="padding: 10px; text-align: center; border-bottom: 2px solid #e2e8f0; border-left: 1px solid #e263eb22; background: #fdf2f8; color: #9d174d; font-size: 10px;" colspan="3">Invoiced Rev (G/A/B)</th>
-                <th style="padding: 10px; text-align: right; border-bottom: 2px solid #e2e8f0; color: #3b82f6;">Lương</th>
-                <th style="padding: 10px; text-align: right; border-bottom: 2px solid #e2e8f0; color: #f59e0b;">Khác</th>
-                <th style="padding: 10px; text-align: right; border-bottom: 2px solid #e2e8f0; font-weight: 800;">Tổng Chi</th>
+                <th style="padding: 10px; text-align: right; border-bottom: 2px solid #e2e8f0; font-weight: 800;">Thực chi</th>
             `;
 
             tableHistory.forEach(h => {
@@ -2683,8 +2699,6 @@ function get_rev_bg_color($val, $planned, $red, $yellow, $green) {
                     <td style="padding: 8px 4px; border-bottom: 1px solid #f1f5f9; text-align: right; font-size: 11px; color: #1e40af; background: #eff6ff;">${formatVND(h.inv.avg)}</td>
                     <td style="padding: 8px 4px; border-bottom: 1px solid #f1f5f9; text-align: right; font-size: 11px; color: #991b1b; background: #fef2f2;">${formatVND(h.inv.bad)}</td>
                     
-                    <td style="padding: 10px; border-bottom: 1px solid #f1f5f9; text-align: right; color: #3b82f6;">${formatVND(h.salary)}</td>
-                    <td style="padding: 10px; border-bottom: 1px solid #f1f5f9; text-align: right; color: #f59e0b;">${formatVND(h.other)}</td>
                     <td style="padding: 10px; border-bottom: 1px solid #f1f5f9; text-align: right; font-weight: 800;">${formatVND(h.total_expense)}</td>
                 `;
                 tableBody.appendChild(tr);
@@ -2740,16 +2754,15 @@ function get_rev_bg_color($val, $planned, $red, $yellow, $green) {
             if (expenseChart) expenseChart.destroy();
             expenseChart = new ApexCharts(document.querySelector("#dd-chart-expenses"), {
                 series: [
-                    { name: 'Lương (Salary)', data: history.map(h => h.salary) },
-                    { name: 'Khác (Other)', data: history.map(h => h.other) }
+                    { name: 'Thực chi', data: history.map(h => h.total_expense) }
                 ],
-                chart: { type: 'bar', height: 200, stacked: true, toolbar: { show: false } },
+                chart: { type: 'bar', height: 200, toolbar: { show: false } },
                 dataLabels: { 
                     enabled: true, 
                     formatter: v => (v/1000000).toFixed(1) + 'M',
                     style: { fontSize: '9px' }
                 },
-                colors: ['#3b82f6', '#f59e0b'],
+                colors: ['#3b82f6'],
                 xaxis: { categories: history.map(h => h.period) },
                 legend: { position: 'top', horizontalAlign: 'right' }
             });
