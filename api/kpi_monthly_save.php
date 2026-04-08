@@ -93,8 +93,8 @@ if ($r_old = $res_old->fetch_assoc()) {
 
 // 2. Prepare new values
 $actual = stripFormat($body['actual_value'] ?? '');
-$score = ($body['score'] !== null && $body['score'] !== '') ? floatval($body['score']) : null;
-$notes = trim($body['notes'] ?? '');
+$score = isset($body['score']) ? (($body['score'] !== null && $body['score'] !== '') ? floatval($body['score']) : null) : null;
+$notes = isset($body['notes']) ? trim($body['notes']) : null;
 
 // 3. Audit Logging
 function logChange($conn, $def_id, $kpi_name, $year, $month, $field, $old, $new, $uid) {
@@ -106,13 +106,13 @@ function logChange($conn, $def_id, $kpi_name, $year, $month, $field, $old, $new,
 
 if ($old_row) {
     logChange($conn, $def_id, $kpi_name, $year, $month, 'Giá trị thực tế', $old_row['actual_value'] ?? '', $actual, $uid);
-    logChange($conn, $def_id, $kpi_name, $year, $month, 'Điểm số', $old_row['score'] ?? '', $score ?? '', $uid);
-    // logChange($conn, $def_id, $kpi_name, $year, $month, 'Ghi chú', $old_row['notes'] ?? '', $notes, $uid);
+    if (isset($body['score'])) logChange($conn, $def_id, $kpi_name, $year, $month, 'Điểm số', $old_row['score'] ?? '', $score ?? '', $uid);
+    if (isset($body['notes'])) logChange($conn, $def_id, $kpi_name, $year, $month, 'Ghi chú', $old_row['notes'] ?? '', $notes ?? '', $uid);
 } else {
     // New Record
     if ($actual !== '') logChange($conn, $def_id, $kpi_name, $year, $month, 'Giá trị thực tế', '', $actual, $uid);
     if ($score !== null) logChange($conn, $def_id, $kpi_name, $year, $month, 'Điểm số', '', $score, $uid);
-    // if ($notes !== '') logChange($conn, $def_id, $kpi_name, $year, $month, 'Ghi chú', '', $notes, $uid);
+    if ($notes !== null) logChange($conn, $def_id, $kpi_name, $year, $month, 'Ghi chú', '', $notes, $uid);
 }
 
 $stmt = $conn->prepare("
@@ -120,8 +120,8 @@ $stmt = $conn->prepare("
     VALUES (?, ?, ?, ?, ?, ?, ?)
     ON DUPLICATE KEY UPDATE
         actual_value = VALUES(actual_value),
-        score        = VALUES(score),
-        notes        = VALUES(notes),
+        score        = " . (isset($body['score']) ? "VALUES(score)" : "score") . ",
+        notes        = " . (isset($body['notes']) ? "VALUES(notes)" : "notes") . ",
         updated_by   = VALUES(updated_by),
         updated_at   = CURRENT_TIMESTAMP
 ");

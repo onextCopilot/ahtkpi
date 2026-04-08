@@ -225,7 +225,7 @@ function fmtDisplay($val) {
         const badge = input.closest('.editable-target').querySelector('.qs-badge');
         fetch('/api/kpi_monthly_save.php', {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ kpi_def_id: +input.dataset.def, year: +input.dataset.year, month: +input.dataset.month, actual_value: stripFmt(input.value), score: null, notes: '' })
+            body: JSON.stringify({ kpi_def_id: +input.dataset.def, year: +input.dataset.year, month: +input.dataset.month, actual_value: stripFmt(input.value) })
         }).then(r => r.json()).then(d => {
             if (d.success && badge) {
                 badge.style.display = 'block';
