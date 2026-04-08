@@ -326,8 +326,10 @@ $COLS = 14; // STT+Nhóm+Tên+TargetNăm+CảNăm+Tỷtrọng+Q1+Q2+Q3+Q4+Owner+
                         ?>
                         <?php
                             $months_detail = [];
+                            $has_q_notes = false;
                             foreach ($q_months_def[$qi] as $m_num) {
                                 $m_row = $monthly_map[$d['id']][$m_num] ?? null;
+                                if (!empty($m_row['notes'])) $has_q_notes = true;
                                 $months_detail[$m_num] = [
                                     'val' => $m_row['actual_value'] ?? '—',
                                     'notes' => $m_row['notes'] ?? '',
@@ -350,8 +352,15 @@ $COLS = 14; // STT+Nhóm+Tên+TargetNăm+CảNăm+Tỷtrọng+Q1+Q2+Q3+Q4+Owner+
                             ], JSON_HEX_APOS | JSON_HEX_QUOT);
                         ?>
                         <td class="q-drilldown-cell" 
-                            style="padding:2px 4px;background:<?= $qc['bg'] ?>;vertical-align:top;cursor:pointer;"
+                            style="padding:5px 8px;background:<?= $qc['bg'] ?>;vertical-align:top;cursor:pointer;position:relative;"
                             onclick='openQDetailDraw(<?= $q_data_json ?>)'>
+                            
+                            <?php if ($has_q_notes): ?>
+                                <div style="position:absolute; top:4px; right:4px; color:#F59E0B; opacity:1;" title="Có nội dung giải trình">
+                                    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>
+                                </div>
+                            <?php endif; ?>
+
                             <?php if ($tot && !$tot['mixed']): ?>
                                 <div style="font-size:12px;font-weight:700;color:<?= $qc['head'] ?>;margin-bottom:3px">
                                     <?= $tot['fmt'] ?>
@@ -689,15 +698,62 @@ document.addEventListener('DOMContentLoaded', function() {
         </div>
         <div style="flex: 1; padding: 24px; display: flex; flex-direction: column; gap: 12px; min-height: 0;">
             <div id="quillExEditor" placeholder="Nhập nội dung giải trình cho tháng này..."></div>
-            <div style="display: flex; justify-content: flex-end; gap: 12px; padding-top: 8px;">
-                <button onclick="closeKPIExplanation()" class="btn" style="background: #fff; border: 1px solid #e2e8f0; color: #64748b; padding: 8px 16px;">Hủy</button>
-                <button onclick="saveKPIExplanation()" id="btnSaveEx" class="btn btn-primary" style="min-width: 120px; padding: 8px 24px; font-weight: 600;">Lưu giải trình</button>
+            <div style="display: flex; justify-content: space-between; align-items: center; padding-top: 8px;">
+                <button onclick="deleteKPIExplanation()" id="btnDeleteEx" class="btn" style="background: #fff; border: 1px solid #fee2e2; color: #ef4444; padding: 4px 12px; font-size: 11px; font-weight: 600;">Xóa giải trình</button>
+                <div style="display: flex; gap: 12px;">
+                    <button onclick="closeKPIExplanation()" class="btn" style="background: #fff; border: 1px solid #e2e8f0; color: #64748b; padding: 8px 16px;">Hủy</button>
+                    <button onclick="saveKPIExplanation()" id="btnSaveEx" class="btn btn-primary" style="min-width: 120px; padding: 8px 24px; font-weight: 600;">Lưu giải trình</button>
+                </div>
             </div>
         </div>
     </div>
 </div>
 
 <script>
+function deleteKPIExplanation() {
+    if (!confirm('Bạn có chắc chắn muốn xóa nội dung giải trình này?')) return;
+    
+    const btn = document.getElementById('btnDeleteEx');
+    const originalText = btn.textContent;
+    btn.disabled = true;
+    btn.textContent = 'Đang xóa...';
+
+    const payload = {
+        kpi_def_id: currentKPIData.def_id,
+        year: currentKPIData.year,
+        month: currentExMonth,
+        notes: '', // Clear the notes
+        actual_value: currentKPIData.months[currentExMonth]?.val || '',
+        score: null 
+    };
+
+    fetch('api/kpi_monthly_save.php', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+    })
+    .then(res => res.json())
+    .then(res => {
+        if (res.success) {
+            if(!currentKPIData.months[currentExMonth]) currentKPIData.months[currentExMonth] = {};
+            currentKPIData.months[currentExMonth].notes = '';
+            
+            if(currentKPIData.quarter) {
+                openQDetailDraw(currentKPIData);
+            } else {
+                openYearDetailDraw(currentKPIData);
+            }
+            closeKPIExplanation();
+        } else {
+            alert('Lỗi: ' + (res.error || 'Không rõ lỗi'));
+        }
+    })
+    .catch(err => alert('Lỗi kết nối: ' + err))
+    .finally(() => {
+        btn.disabled = false;
+        btn.textContent = originalText;
+    });
+}
 function fmtNum(val) {
     if (!val || val === '—') return '—';
     const s = String(val).trim().replace(/\./g, '');
@@ -1008,6 +1064,12 @@ function toggleKPIExplanation(month, event) {
     
     if (quillEx) {
         quillEx.root.innerHTML = notes;
+    }
+    
+    // Show/hide delete button based on content
+    const btnDel = document.getElementById('btnDeleteEx');
+    if (btnDel) {
+        btnDel.style.display = (notes && notes !== '<p><br></p>') ? 'block' : 'none';
     }
     
     // Expand Sidebar
