@@ -40,6 +40,14 @@ if ($team_res) {
         $all_teams[] = $tr;
 }
 
+// Fetch all users for AM/BD selection
+$all_users = [];
+$user_res = $conn->query("SELECT id, full_name, email FROM users ORDER BY full_name ASC");
+if ($user_res) {
+    while ($ur = $user_res->fetch_assoc())
+        $all_users[] = $ur;
+}
+
 // --- DB INIT ---
 $table_check = $conn->query("SHOW TABLES LIKE 'debts'");
 if ($table_check->num_rows == 0) {
@@ -83,21 +91,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     // ADD & EDIT
     if (isset($_POST['action']) && ($_POST['action'] === 'add' || $_POST['action'] === 'edit')) {
         $company = $_POST['company'] ?? 'AHT TECH';
-        $am = $_POST['am'];
-        $client = $_POST['client_name'];
-        $project = $_POST['project_name'];
-        $milestone = $_POST['payment_milestone'];
+        $am = $_POST['am'] ?? '';
+        $client = $_POST['client_name'] ?? '';
+        $project = $_POST['project_name'] ?? '';
+        $milestone = $_POST['payment_milestone'] ?? '';
         $prod_date = !empty($_POST['expected_prod_date']) ? $_POST['expected_prod_date'] : NULL;
         $pay_date = !empty($_POST['expected_payment_date']) ? $_POST['expected_payment_date'] : NULL;
-        $inv_class = $_POST['invoice_status_class'];
-        $amount = floatval($_POST['amount']);
-        $pl = $_POST['pl_class'];
+        $inv_class = $_POST['invoice_status_class'] ?? 'Khác';
+        $amount = floatval($_POST['amount'] ?? 0);
+        $pl = $_POST['pl_class'] ?? 'TB';
         $inv_stat = $_POST['invoice_status'] ?? '';
         $invoice_date_val = $_POST['invoice_date'] ?? null;
         if (empty($invoice_date_val))
             $invoice_date_val = null;
         $vat = $_POST['vat_invoice'] ?? '';
-        $pay_stat = $_POST['payment_status'];
+        $pay_stat = $_POST['payment_status'] ?? 'Not paid';
         $pay_month = $_POST['payment_month'] ?? '';
         $weekly = $_POST['weekly_update'] ?? '';
         $am_note = $_POST['am_notes'] ?? '';
@@ -118,16 +126,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
         }
 
-
-
         if ($_POST['action'] === 'add') {
-            $stmt = $conn->prepare("INSERT INTO debts (company, am, am_email,  sale_team_id, client_name, project_name, payment_milestone, expected_prod_date, expected_payment_date, invoice_status_class, amount, currency, invoice_status, vat_invoice, invoice_date, payment_status, payment_month, weekly_update, am_notes, delivery_notes, production_status, pl_class) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
-            $stmt->bind_param("ssissssssdsssssssssss", $company, $am, $sale_team_id, $client, $project, $milestone, $prod_date, $pay_date, $inv_class, $amount, $currency_val, $inv_stat, $vat, $invoice_date_val, $pay_stat, $pay_month, $weekly, $am_note, $del_note, $prod_stat, $pl);
+            $stmt = $conn->prepare("INSERT INTO debts (company, am, am_email, sale_team_id, client_name, project_name, payment_milestone, expected_prod_date, expected_payment_date, invoice_status_class, amount, currency, invoice_status, vat_invoice, invoice_date, payment_status, payment_month, weekly_update, am_notes, delivery_notes, production_status, pl_class) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+            $stmt->bind_param("sssissssssdsssssssssss", $company, $am, $am_email, $sale_team_id, $client, $project, $milestone, $prod_date, $pay_date, $inv_class, $amount, $currency_val, $inv_stat, $vat, $invoice_date_val, $pay_stat, $pay_month, $weekly, $am_note, $del_note, $prod_stat, $pl);
         } else {
             // Edit
             $id = intval($_POST['id']);
-            $stmt = $conn->prepare("UPDATE debts SET company=?, am=?, sale_team_id=?, client_name=?, project_name=?, payment_milestone=?, expected_prod_date=?, expected_payment_date=?, invoice_status_class=?, amount=?, currency=?, invoice_status=?, vat_invoice=?, invoice_date=?, payment_status=?, payment_month=?, weekly_update=?, am_notes=?, delivery_notes=?, production_status=?, pl_class=? WHERE id=?");
-            $stmt->bind_param("ssissssssdsssssssssssi", $company, $am, $am_email, $sale_team_id, $client, $project, $milestone, $prod_date, $pay_date, $inv_class, $amount, $currency_val, $inv_stat, $vat, $invoice_date_val, $pay_stat, $pay_month, $weekly, $am_note, $del_note, $prod_stat, $pl, $id);
+            $stmt = $conn->prepare("UPDATE debts SET company=?, am=?, am_email=?, sale_team_id=?, client_name=?, project_name=?, payment_milestone=?, expected_prod_date=?, expected_payment_date=?, invoice_status_class=?, amount=?, currency=?, invoice_status=?, vat_invoice=?, invoice_date=?, payment_status=?, payment_month=?, weekly_update=?, am_notes=?, delivery_notes=?, production_status=?, pl_class=? WHERE id=?");
+            $stmt->bind_param("sssissssssdsssssssssssi", $company, $am, $am_email, $sale_team_id, $client, $project, $milestone, $prod_date, $pay_date, $inv_class, $amount, $currency_val, $inv_stat, $vat, $invoice_date_val, $pay_stat, $pay_month, $weekly, $am_note, $del_note, $prod_stat, $pl, $id);
         }
 
         if ($stmt->execute()) {
@@ -2602,10 +2608,12 @@ if ($res_am && $res_am->num_rows > 0) {
                         <div class="form-group">
                             <label>AM</label>
                             <select name="am" id="am">
-                                <option>Emily</option>
-                                <option>Ryan</option>
-                                <option>Hyun</option>
-                                <option>Other</option>
+                                <option value="">- chọn AM -</option>
+                                <?php foreach ($all_users as $user): ?>
+                                    <option value="<?php echo htmlspecialchars($user['full_name']); ?>">
+                                        <?php echo htmlspecialchars($user['full_name']); ?>
+                                    </option>
+                                <?php endforeach; ?>
                             </select>
                         </div>
                         <div class="form-group">
@@ -3160,18 +3168,42 @@ if ($res_am && $res_am->num_rows > 0) {
                     const unpaidVnd = totalVnd - paidVnd;
                     const count = teamDebts.length;
 
-                    // Grouping Logic
                     const statusClassGroups = {};
                     const statusClassCounts = {};
                     const invoiceStatusGroups = {};
                     const quarterGroups = {};
                     const amGroups = {};
+                    const agingGroups = { 'Trong hạn': 0, '1-30 ngày': 0, '31-60 ngày': 0, '61-90 ngày': 0, '> 90 ngày': 0 };
+                    const expectedFlowGroups = {};
+                    const now = new Date();
+                    now.setHours(0,0,0,0);
 
                     teamDebts.forEach(d => {
                         const sClass = d.invoice_status_class || 'Khác';
                         const iStatus = d.invoice_status || 'Chưa xác định';
                         const am = d.am || 'N/A';
                         const amt = (parseFloat(d.amount) || 0);
+                        const expDateStr = d.expected_payment_date;
+                        const isPaid = d.payment_status === 'Paid';
+
+                        // Aging & Expected Flow Logic
+                        if (!isPaid && expDateStr) {
+                            const expDate = new Date(expDateStr);
+                            if (!isNaN(expDate.getTime())) {
+                                expDate.setHours(0,0,0,0);
+                                const diffDays = Math.floor((now - expDate) / (1000 * 60 * 60 * 24));
+
+                                if (diffDays <= 0) {
+                                    agingGroups['Trong hạn'] += amt;
+                                    // Future Expected Flow
+                                    const monthLabel = `Tháng ${(expDate.getMonth()+1)}/${expDate.getFullYear()}`;
+                                    expectedFlowGroups[monthLabel] = (expectedFlowGroups[monthLabel] || 0) + amt;
+                                } else if (diffDays <= 30) agingGroups['1-30 ngày'] += amt;
+                                else if (diffDays <= 60) agingGroups['31-60 ngày'] += amt;
+                                else if (diffDays <= 90) agingGroups['61-90 ngày'] += amt;
+                                else agingGroups['> 90 ngày'] += amt;
+                            }
+                        }
 
                         // Date / Quarter
                         const dObj = d.invoice_date ? new Date(d.invoice_date) : null;
@@ -3245,6 +3277,17 @@ if ($res_am && $res_am->num_rows > 0) {
                                     <h5 style="margin:0 0 15px 0; font-size:12px; color:#0f172a; font-weight:700; border-left:3px solid #10b981; padding-left:10px;">Tỷ lệ Trạng thái</h5>
                                     <div style="height:180px;"><canvas id="invoiceStatusPie"></canvas></div>
                                 </div>
+                            </div>
+                        </div>
+
+                        <div style="display:grid; grid-template-columns:1fr 1fr; gap:20px; margin-bottom:30px; background:#fff; padding:15px; border-radius:12px;">
+                            <div style="background:white; border-radius:12px;">
+                                <h5 style="margin:0 0 15px 0; font-size:12px; color:#e11d48; font-weight:700; border-left:3px solid #e11d48; padding-left:10px;">Phân tích Tuổi nợ (Aging Report)</h5>
+                                <div style="height:220px;"><canvas id="agingChart"></canvas></div>
+                            </div>
+                            <div style="background:white; border-radius:12px;">
+                                <h5 style="margin:0 0 15px 0; font-size:12px; color:#2563eb; font-weight:700; border-left:3px solid #2563eb; padding-left:10px;">Dòng tiền dự kiến về</h5>
+                                <div style="height:220px;"><canvas id="flowChart"></canvas></div>
                             </div>
                         </div>
 
@@ -3327,6 +3370,62 @@ if ($res_am && $res_am->num_rows > 0) {
                             }
                         }
                     });
+
+                    // 5. Aging Chart
+                    new Chart(document.getElementById('agingChart').getContext('2d'), {
+                        type: 'bar',
+                        plugins: [ChartDataLabels],
+                        data: {
+                            labels: Object.keys(agingGroups),
+                            datasets: [{
+                                label: 'VND',
+                                data: Object.values(agingGroups),
+                                backgroundColor: ['#10b981', '#fcd34d', '#fb923c', '#ef4444', '#991b1b'],
+                                borderRadius: 4
+                            }]
+                        },
+                        options: {
+                            responsive: true,
+                            maintainAspectRatio: false,
+                            plugins: { 
+                                legend: { display: false },
+                                datalabels: { ...commonDataLabels, color: '#000', anchor: 'end', align: 'top', offset: 0 }
+                            },
+                            scales: {
+                                y: { beginAtZero: true, display: false },
+                                x: { ticks: { font: { size: 9 } } }
+                            }
+                        }
+                    });
+
+                    // 6. Expected Flow Chart
+                    const sortedFlowKeys = Object.keys(expectedFlowGroups).sort();
+                    new Chart(document.getElementById('flowChart').getContext('2d'), {
+                        type: 'bar',
+                        plugins: [ChartDataLabels],
+                        data: {
+                            labels: sortedFlowKeys,
+                            datasets: [{
+                                label: 'VND',
+                                data: sortedFlowKeys.map(k => expectedFlowGroups[k]),
+                                backgroundColor: '#bfdbfe',
+                                borderRadius: 4
+                            }]
+                        },
+                        options: {
+                            responsive: true,
+                            maintainAspectRatio: false,
+                            plugins: { 
+                                legend: { display: false },
+                                datalabels: { ...commonDataLabels, color: '#1e40af', anchor: 'end', align: 'top', offset: 0 }
+                            },
+                            scales: {
+                                y: { beginAtZero: true, display: false },
+                                x: { ticks: { font: { size: 9 } } }
+                            }
+                        }
+                    });
+
 
                     // 3. Doanh thu theo Quý
                     const sortedQuarters = Object.keys(quarterGroups).sort((a, b) => {
