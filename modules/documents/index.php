@@ -34,10 +34,39 @@ $conn->query("CREATE TABLE IF NOT EXISTS document_categories (
     id INT AUTO_INCREMENT PRIMARY KEY,
     name VARCHAR(255) NOT NULL,
     parent_id INT DEFAULT NULL,
-    allowed_roles TEXT DEFAULT NULL, -- Comma separated roles
-    allowed_levels TEXT DEFAULT NULL, -- Comma separated levels (Member, Leader, etc)
+    allowed_roles TEXT DEFAULT NULL,
+    allowed_levels TEXT DEFAULT NULL,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (parent_id) REFERENCES document_categories(id) ON DELETE CASCADE
+)");
+
+$conn->query("CREATE TABLE IF NOT EXISTS documents (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    title VARCHAR(255) NOT NULL,
+    description TEXT,
+    category_id INT DEFAULT NULL,
+    label VARCHAR(50) DEFAULT NULL,
+    file_path VARCHAR(255) NOT NULL,
+    file_name VARCHAR(255) NOT NULL,
+    file_type VARCHAR(50),
+    file_size INT,
+    uploaded_by INT NOT NULL,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+)");
+
+$conn->query("CREATE TABLE IF NOT EXISTS document_tags (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    name VARCHAR(50) NOT NULL UNIQUE,
+    color VARCHAR(20) DEFAULT '#64748B',
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+)");
+
+$conn->query("CREATE TABLE IF NOT EXISTS document_tag_map (
+    doc_id INT NOT NULL,
+    tag_id INT NOT NULL,
+    PRIMARY KEY (doc_id, tag_id),
+    FOREIGN KEY (doc_id) REFERENCES documents(id) ON DELETE CASCADE,
+    FOREIGN KEY (tag_id) REFERENCES document_tags(id) ON DELETE CASCADE
 )");
 
 // Migration: Check columns
@@ -56,23 +85,6 @@ syncDocTagColumn($conn, 'bg_color', 'VARCHAR(20) DEFAULT NULL');
 syncDocTagColumn($conn, 'border_color', 'VARCHAR(20) DEFAULT NULL');
 syncDocTagColumn($conn, 'text_color', 'VARCHAR(20) DEFAULT NULL');
 syncDocTagColumn($conn, 'icon', 'VARCHAR(50) DEFAULT NULL');
-
-// Auto-migration: Create document_tags table
-$conn->query("CREATE TABLE IF NOT EXISTS document_tags (
-    id INT AUTO_INCREMENT PRIMARY KEY,
-    name VARCHAR(50) NOT NULL UNIQUE,
-    color VARCHAR(20) DEFAULT '#64748B',
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-)");
-
-// Auto-migration: Create document_tag_map table
-$conn->query("CREATE TABLE IF NOT EXISTS document_tag_map (
-    doc_id INT NOT NULL,
-    tag_id INT NOT NULL,
-    PRIMARY KEY (doc_id, tag_id),
-    FOREIGN KEY (doc_id) REFERENCES documents(id) ON DELETE CASCADE,
-    FOREIGN KEY (tag_id) REFERENCES document_tags(id) ON DELETE CASCADE
-)");
 
 // Pre-fill tags if empty
 $check_tags = $conn->query("SELECT count(*) as count FROM document_tags");
@@ -104,21 +116,6 @@ if ($check_cat && $check_cat->fetch_assoc()['count'] == 0) {
         ('Báo cáo CLO', NULL, 'admin', 'C-Level')
     ");
 }
-
-// Auto-migration: Create documents table if not exists
-$conn->query("CREATE TABLE IF NOT EXISTS documents (
-    id INT AUTO_INCREMENT PRIMARY KEY,
-    title VARCHAR(255) NOT NULL,
-    description TEXT,
-    category_id INT DEFAULT NULL,
-    label VARCHAR(50) DEFAULT NULL,
-    file_path VARCHAR(255) NOT NULL,
-    file_name VARCHAR(255) NOT NULL,
-    file_type VARCHAR(50),
-    file_size INT,
-    uploaded_by INT NOT NULL,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-)");
 
 // Handle POST APIs (Upload, Add Cat, Delete Cat, Move Doc, Update Perms)
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && $role === 'admin') {
