@@ -295,9 +295,11 @@ $available_tags = [];
 $tag_res = $conn->query("SELECT * FROM document_tags ORDER BY name ASC");
 if($tag_res) while($t = $tag_res->fetch_assoc()) $available_tags[] = $t;
 
-// Fetch current user level for precision filtering
-$u_res = $conn->query("SELECT level FROM users WHERE id = $user_id");
-$user_level = $u_res ? $u_res->fetch_assoc()['level'] : 'Member';
+// Fetch current user role and level for precision filtering
+$u_res = $conn->query("SELECT role, level FROM users WHERE id = $user_id");
+$u_data = $u_res ? $u_res->fetch_assoc() : null;
+$role = $u_data['role'] ?? 'user';
+$user_level = $u_data['level'] ?? 'Member';
 $available_levels = ['Member', 'Leader', 'Manager', 'Director', 'C-Level'];
 
 // Fetch all categories to build the structure
@@ -305,52 +307,51 @@ $all_cats = [];
 $cat_query = $conn->query("SELECT * FROM document_categories ORDER BY name ASC");
 if ($cat_query) while($r = $cat_query->fetch_assoc()) $all_cats[] = $r;
 
-$explicit_allowed_ids = [];
 $norm_role = strtolower(trim($role));
 $norm_level = strtolower(trim($user_level));
+$explicit_allowed_ids = [];
+
+// Calculate allowed categories using strict hierarchy (Must have access to all parents to see child)
+$explicit_allowed_ids = [];
+$visible_ids = [];
 
 foreach ($all_cats as $cat) {
-    if ($role === 'admin') {
+    if ($norm_role === 'admin') {
         $explicit_allowed_ids[] = (int)$cat['id'];
         continue;
     }
-    
-    // Convert allowed lists to lowercase and trim
-    $allowed_roles = !empty($cat['allowed_roles']) ? array_map(function($v) { return strtolower(trim($v)); }, explode(',', $cat['allowed_roles'])) : [];
-    $allowed_levels = !empty($cat['allowed_levels']) ? array_map(function($v) { return strtolower(trim($v)); }, explode(',', $cat['allowed_levels'])) : [];
-    
-    // Check if role and level are in the allowed lists (empty means allowed for all)
-    $role_match = empty($allowed_roles) || in_array($norm_role, $allowed_roles);
-    $level_match = empty($allowed_levels) || in_array($norm_level, $allowed_levels);
 
-    if ($role_match && $level_match) {
+    // Check ancestors chain
+    $is_forbidden = false;
+    $curr_check = $cat;
+    while ($curr_check !== null) {
+        $allowed_roles = !empty($curr_check['allowed_roles']) ? array_map(function($v) { return strtolower(trim($v)); }, explode(',', $curr_check['allowed_roles'])) : [];
+        $allowed_levels = !empty($curr_check['allowed_levels']) ? array_map(function($v) { return strtolower(trim($v)); }, explode(',', $curr_check['allowed_levels'])) : [];
+        
+        $role_match = empty($allowed_roles) || in_array($norm_role, $allowed_roles);
+        $level_match = empty($allowed_levels) || in_array($norm_level, $allowed_levels);
+        
+        if (!($role_match && $level_match)) {
+            $is_forbidden = true;
+            break;
+        }
+        
+        // Move up to parent
+        if ($curr_check['parent_id'] !== null) {
+            $next_p = null;
+            foreach($all_cats as $search_c) if((int)$search_c['id'] === (int)$curr_check['parent_id']) { $next_p = $search_c; break; }
+            $curr_check = $next_p;
+        } else {
+            $curr_check = null;
+        }
+    }
+    
+    if (!$is_forbidden) {
         $explicit_allowed_ids[] = (int)$cat['id'];
     }
 }
 
-// Build final list including all descendants of allowed cats AND all ancestors to root
-$visible_ids = [];
-foreach ($explicit_allowed_ids as $id) {
-    if (!in_array($id, $visible_ids)) $visible_ids[] = $id;
-    
-    // Add all children/descendants (Inheritance)
-    $desc_ids = getDescendantIds($all_cats, $id);
-    foreach($desc_ids as $did) if(!in_array($did, $visible_ids)) $visible_ids[] = $did;
-    
-    // Add all parents up to root (Hierarchy structural integrity)
-    $curr_id = $id;
-    while ($curr_id !== null) {
-        $parent_id = null;
-        foreach($all_cats as $c) if((int)$c['id'] === $curr_id) { $parent_id = $c['parent_id']; break; }
-        if ($parent_id !== null) {
-            $parent_id = (int)$parent_id;
-            if (!in_array($parent_id, $visible_ids)) $visible_ids[] = $parent_id;
-            $curr_id = $parent_id;
-        } else {
-            $curr_id = null;
-        }
-    }
-}
+$visible_ids = $explicit_allowed_ids; // Tree visibility is now identical to content visibility for strictness
 
 $categories = [];
 foreach ($all_cats as $cat) {
@@ -377,20 +378,32 @@ function getDescendantIds($cats, $pid) {
 $cat_filter = "";
 $current_cat_name = 'Tất cả tài liệu';
 if (isset($_GET['cat_id']) && is_numeric($_GET['cat_id'])) {
+    $target_cat_id = (int)$_GET['cat_id'];
+    
+    // Security check: is this category visible to the user?
+    if ($role !== 'admin' && !in_array($target_cat_id, $visible_ids)) {
+         die("<div style='padding:50px; text-align:center; font-family: sans-serif;'><h2>Truy cập bị từ chối</h2><p>Bạn không có quyền xem thư mục này.</p><a href='?'>Quay lại trang chủ</a></div>");
+    }
+
     foreach ($categories as $c) {
-        if ((int)$c['id'] === (int)$_GET['cat_id']) {
+        if ((int)$c['id'] === $target_cat_id) {
             $current_cat_name = $c['name'];
             break;
         }
     }
-    // Include the category itself plus all its descendants
-    $selected_cat_ids = array_merge([(int)$_GET['cat_id']], getDescendantIds($categories, (int)$_GET['cat_id']));
-    $cat_filter .= " AND d.category_id IN (" . implode(',', $selected_cat_ids) . ") ";
+    // Only show documents from categories the user is explicitly authorized to see content
+    $all_potential_ids = array_merge([$target_cat_id], getDescendantIds($categories, $target_cat_id));
+    $allowed_desc_ids = array_intersect($all_potential_ids, $explicit_allowed_ids);
+    
+    if (!empty($allowed_desc_ids)) {
+        $cat_filter .= " AND d.category_id IN (" . implode(',', $allowed_desc_ids) . ") ";
+    } else {
+        $cat_filter .= " AND 1=0 "; // No authorized sub-content
+    }
 } else if ($role !== 'admin') {
-    // If no category selected, limit to documents in categories current user can see
-    $visible_cat_ids = array_column($categories, 'id');
-    if (!empty($visible_cat_ids)) {
-        $cat_filter .= " AND (d.category_id IN (" . implode(',', $visible_cat_ids) . ") OR d.category_id IS NULL) ";
+    // If no category selected, limit to documents in categories current user has explicit access to
+    if (!empty($explicit_allowed_ids)) {
+        $cat_filter .= " AND (d.category_id IN (" . implode(',', $explicit_allowed_ids) . ") OR d.category_id IS NULL) ";
     } else {
         $cat_filter .= " AND d.category_id IS NULL ";
     }
@@ -2098,5 +2111,12 @@ function renderDocLabel($row) {
         // Removed redundant declarations causing SyntaxError
     </script>
     <style>@keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }</style>
+    <!-- 
+    PERM DEBUG:
+    User: <?= $full_name ?> | Role: <?= $role ?> (Norm: <?= $norm_role ?>) | Level: <?= $user_level ?>
+    Explicitly Allowed Categories: <?= implode(',', $explicit_allowed_ids) ?>
+    Visible Tree IDs: <?= implode(',', $visible_ids) ?>
+    Current Filter: <?= htmlspecialchars($cat_filter) ?>
+    -->
 </body>
 </html>
