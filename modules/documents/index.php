@@ -10,6 +10,15 @@ $user_id = $_SESSION['user_id'];
 $role = $_SESSION['role'] ?? 'user';
 $full_name = $_SESSION['full_name'] ?? '';
 
+function sanitize_filename($filename) {
+    // Convert to ASCII if possible or replace non-alphanumeric with underscores
+    $ext = pathinfo($filename, PATHINFO_EXTENSION);
+    $name = pathinfo($filename, PATHINFO_FILENAME);
+    $name = preg_replace('/[^\w\-\.]/u', '_', $name);
+    $name = preg_replace('/_+/', '_', $name);
+    return $name . '.' . $ext;
+}
+
 // Tính toán max filesize hệ thống
 function get_bytes($val) {
     if(empty($val)) return 0;
@@ -222,7 +231,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $role === 'admin') {
         $label = !empty($_POST['label']) ? "'" . $conn->real_escape_string($_POST['label']) . "'" : 'NULL';
         $target_dir = __DIR__ . "/../../public/uploads/documents/";
         if (!file_exists($target_dir)) mkdir($target_dir, 0777, true);
-        $file_name = time() . '_' . basename($_FILES["doc_file"]["name"]);
+        $safe_orig_name = sanitize_filename(basename($_FILES["doc_file"]["name"]));
+        $file_name = time() . '_' . $safe_orig_name;
         $target_file = $target_dir . $file_name;
         $file_type = strtolower(pathinfo($target_file, PATHINFO_EXTENSION));
         $file_size = $_FILES["doc_file"]["size"];
@@ -1890,12 +1900,14 @@ function renderDocLabel($row) {
         }
 
         async function handleView(path, title, ext) {
+            // Encode URI to handle spaces and special characters in paths
+            const safePath = encodeURI(path);
             if (ext === 'pdf') {
-                openBook(path, title);
+                openBook(safePath, title);
             } else if (ext === 'docx' || ext === 'doc') {
-                openDocx(path, title);
+                openDocx(safePath, title);
             } else {
-                window.open(path, '_blank');
+                window.open(safePath, '_blank');
             }
         }
 
