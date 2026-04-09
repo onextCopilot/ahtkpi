@@ -791,8 +791,8 @@ if ($res_am && $res_am->num_rows > 0) {
         /* Dashboard Specific Styles */
         .dashboard-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(600px, 1fr));
-            gap: 30px;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 24px;
             padding: 10px 0;
         }
 
@@ -1963,6 +1963,18 @@ if ($res_am && $res_am->num_rows > 0) {
                                 <?php endforeach; ?>
                             </div>
 
+                            <!-- Global Aging and Cash Flow Charts (Stacked by Team) -->
+                            <div style="display:grid; grid-template-columns: 1fr 1fr; gap:24px; margin-bottom:32px; margin-top:16px;">
+                                <div style="background: white; border: 1px solid #e8e8e8; border-radius: 8px; padding: 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.04);">
+                                    <h5 style="margin:0 0 16px 0; font-size:14px; color:#e11d48; font-weight:700; border-left:4px solid #e11d48; padding-left:12px; text-transform:uppercase; letter-spacing:0.5px;">Phân tích Tuổi nợ (Aging Report) - Theo Team</h5>
+                                    <div style="height:450px;"><canvas id="globalAgingChart"></canvas></div>
+                                </div>
+                                <div style="background: white; border: 1px solid #e8e8e8; border-radius: 8px; padding: 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.04);">
+                                    <h5 style="margin:0 0 16px 0; font-size:14px; color:#2563eb; font-weight:700; border-left:4px solid #2563eb; padding-left:12px; text-transform:uppercase; letter-spacing:0.5px;">Dòng tiền dự kiến về - Theo Team</h5>
+                                    <div style="height:450px;"><canvas id="globalFlowChart"></canvas></div>
+                                </div>
+                            </div>
+
                             <!-- Detailed Breakdown Table -->
                             <div
                                 style="background: #fff; border: 1px solid #e8e8e8; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.04); overflow: hidden;">
@@ -2109,45 +2121,69 @@ if ($res_am && $res_am->num_rows > 0) {
                             </div>
                         </div>
 
+
                         <!-- Team Cards Grid (Ant Design Enhanced) -->
-                        <?php if ($_SESSION['role'] === 'admin'): ?>
+                        <?php
+                        $teams_to_show = [];
+                        if ($_SESSION['role'] === 'admin') {
+                            $teams_to_show = array_map(function ($t) {
+                                return ['id' => $t['id'], 'name' => $t['name']];
+                            }, $all_teams);
+                            $teams_to_show[] = ['id' => 'undefined', 'name' => 'UNDEFINED TEAM'];
+                        } else {
+                            // For non-admins, show only their assigned teams
+                            foreach ($all_teams as $t) {
+                                if (in_array($t['id'], $user_teams)) {
+                                    $teams_to_show[] = ['id' => $t['id'], 'name' => $t['name']];
+                                }
+                            }
+                        }
+                        ?>
+
+                        <?php if (count($teams_to_show) > 0): ?>
                             <div class="dashboard-grid"
-                                style="display: grid; grid-template-columns: repeat(auto-fill, minmax(550px, 1fr)); gap: 24px;">
+                                style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px;">
                                 <?php
-                                $teams_to_show = array_map(function ($t) {
-                                    return ['id' => $t['id'], 'name' => $t['name']];
-                                }, $all_teams);
-                                $teams_to_show[] = ['id' => 'undefined', 'name' => 'UNDEFINED TEAM'];
                                 foreach ($teams_to_show as $teamInfo):
                                     $tid = $teamInfo['id'];
                                     $data = $dashboardData[$tid] ?? [];
                                     ?>
                                     <div style="background: #fff; border: 1px solid #e8e8e8; border-radius: 8px; transition: all 0.3s ease; display:flex; flex-direction:column;"
-                                        onmouseover="this.style.borderColor='#40a9ff'; this.style.boxShadow='0 4px 12px rgba(24, 144, 255, 0.15)'"
-                                        onmouseout="this.style.borderColor='#e8e8e8'; this.style.boxShadow='none'">
+                                        onmouseover="this.style.boxShadow='0 4px 12px rgba(0,0,0,0.08)'; this.style.borderColor='#91d5ff';"
+                                        onmouseout="this.style.boxShadow='none'; this.style.borderColor='#e8e8e8';">
                                         <div
                                             style="padding: 16px 20px; border-bottom: 1px solid #bae7ff; display: flex; justify-content: space-between; align-items: center; background: #e6f7ff; border-radius: 8px 8px 0 0;">
-                                            <span
-                                                style="font-weight: 700; color: #003a8c; font-size: 16px;"><?php echo htmlspecialchars($teamInfo['name']); ?></span>
+                                            <div style="display: flex; align-items: center; gap: 8px;">
+                                                <div style="width: 8px; height: 8px; border-radius: 50%; background: #1890ff;">
+                                                </div>
+                                                <span
+                                                    style="font-weight: 700; font-size: 14px; color: #002329; text-transform: uppercase;"><?php echo htmlspecialchars($teamInfo['name']); ?></span>
+                                            </div>
                                             <span
                                                 style="background: #fff; color: #0050b3; border: 1px solid #91d5ff; font-size: 11px; padding: 2px 10px; border-radius: 10px; font-weight: 600;">TEAM</span>
                                         </div>
-                                        <div style="flex:1;">
-                                            <table style="width: 100%; border-collapse: collapse; font-size: 13px;">
+                                        <div style="padding: 16px;">
+                                            <!-- Table Section -->
+                                            <div style="background: #fafafa; border-radius: 8px; padding: 12px; border: 1px solid #f0f0f0;">
+                                                <h6 style="margin:0 0 12px 0; color:#1e293b; font-size:12px; font-weight:700; text-transform:uppercase; display:flex; align-items:center; gap:8px;">
+                                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>
+                                                    Invoice Breakdown
+                                                </h6>
+                                                <table style="width: 100%; border-collapse: collapse; font-size: 12px; background:white;">
                                                 <thead>
                                                     <tr style="border-bottom: 1px solid #f0f0f0; background: #f0f5ff;">
                                                         <th
-                                                            style="text-align: left; padding: 12px 20px; color: #096dd9; font-weight: 600; font-size: 12px; text-transform: uppercase;">
+                                                            style="text-align: left; padding: 8px 10px; color: #475569; font-weight: 700; text-transform: uppercase; font-size: 10px; white-space: nowrap; width: 30%;">
                                                             Status</th>
                                                         <th
-                                                            style="text-align: right; padding: 12px 20px; color: #096dd9; font-weight: 600; font-size: 12px; text-transform: uppercase;">
-                                                            Pending <span style="text-transform:none;">(VND)</span></th>
+                                                            style="text-align: right; padding: 8px 10px; color: #475569; font-weight: 700; text-transform: uppercase; font-size: 10px; white-space: nowrap;">
+                                                            Pending (VND)</th>
                                                         <th
-                                                            style="text-align: right; padding: 12px 20px; color: #096dd9; font-weight: 600; font-size: 12px; text-transform: uppercase;">
-                                                            Paid <span style="text-transform:none;">(VND)</span></th>
+                                                            style="text-align: right; padding: 8px 10px; color: #475569; font-weight: 700; text-transform: uppercase; font-size: 10px; white-space: nowrap;">
+                                                            Paid (VND)</th>
                                                         <th
-                                                            style="text-align: right; padding: 12px 20px; color: #096dd9; font-weight: 600; font-size: 12px; text-transform: uppercase;">
-                                                            Total <span style="text-transform:none;">(VND)</span></th>
+                                                            style="text-align: right; padding: 8px 10px; color: #475569; font-weight: 700; text-transform: uppercase; font-size: 10px; white-space: nowrap;">
+                                                            Total (VND)</th>
                                                     </tr>
                                                 </thead>
                                                 <tbody>
@@ -2173,23 +2209,24 @@ if ($res_am && $res_am->num_rows > 0) {
                                                         elseif ($st === 'PP')
                                                             $dColor = '#faad14';
                                                         ?>
-                                                        <tr style="border-bottom: 1px solid #f9f9f9;">
-                                                            <td style="padding: 10px 20px; color: #262626;">
-                                                                <span
-                                                                    style="width:6px; height:6px; background:<?php echo $dColor; ?>; display:inline-block; border-radius:50%; margin-right:8px;"></span>
-                                                                <?php echo $st; ?>
+                                                        <tr style="border-bottom: 1px solid #f1f5f9; transition: background 0.2s;" onmouseover="this.style.background='#f8fafc'" onmouseout="this.style.background='white'">
+                                                            <td style="padding: 10px 16px; display: flex; align-items: center; white-space: nowrap;">
+                                                                <div
+                                                                    style="width: 8px; height: 8px; border-radius: 50%; background: <?php echo $dColor; ?>; margin-right: 12px; flex-shrink:0;">
+                                                                </div>
+                                                                <span style="font-weight: 500; color: #334155;"><?php echo $st; ?></span>
                                                             </td>
                                                             <td
-                                                                style="padding: 10px 20px; text-align: right; color: <?php echo $np > 0 ? '#cf1322' : '#bfbfbf'; ?>; font-weight:<?php echo $np > 0 ? '600' : '400'; ?>;">
-                                                                <?php echo $np > 0 ? number_format($np, 0, ',', '.') : '-'; ?>
+                                                                style="padding: 10px 16px; text-align: right; color: <?php echo $np > 0 ? '#ef4444' : '#94a3b8'; ?>; font-weight: 600;">
+                                                                <?php echo $np > 0 ? number_format($np, 0, '.', '.') : '-'; ?>
                                                             </td>
                                                             <td
-                                                                style="padding: 10px 20px; text-align: right; color: <?php echo $p > 0 ? '#389e0d' : '#bfbfbf'; ?>;">
-                                                                <?php echo $p > 0 ? number_format($p, 0, ',', '.') : '-'; ?>
+                                                                style="padding: 10px 16px; text-align: right; color: <?php echo $p > 0 ? '#10b981' : '#94a3b8'; ?>; font-weight: 600;">
+                                                                <?php echo $p > 0 ? number_format($p, 0, '.', '.') : '-'; ?>
                                                             </td>
                                                             <td
-                                                                style="padding: 10px 20px; text-align: right; color: #262626; font-weight: 600;">
-                                                                <?php echo $row_t > 0 ? number_format($row_t, 0, ',', '.') : '-'; ?>
+                                                                style="padding: 10px 16px; text-align: right; font-weight: 700; color: #1e293b;">
+                                                                <?php echo $row_t > 0 ? number_format($row_t, 0, '.', '.') : '-'; ?>
                                                             </td>
                                                         </tr>
                                                     <?php endforeach; ?>
@@ -2212,10 +2249,11 @@ if ($res_am && $res_am->num_rows > 0) {
                                                     </tr>
                                                 </tbody>
                                             </table>
-                                        </div>
-                                    </div>
+                                            </div> <!-- End of Table Container -->
+                                        </div> <!-- End of padding: 16px (Body) -->
+                                    </div> <!-- End of Card -->
                                 <?php endforeach; ?>
-                            </div>
+                            </div> <!-- End of Grid -->
                         <?php endif; ?>
 
                     <?php elseif ($selected_team === 'analytics'): ?>
@@ -3103,6 +3141,159 @@ if ($res_am && $res_am->num_rows > 0) {
                         });
                 }
             });
+        });
+
+        // Initialize Dashboard Charts
+        document.addEventListener('DOMContentLoaded', function() {
+            if ("<?php echo $selected_team; ?>" === "dashboard") {
+                const teamsToShow = <?php echo json_encode($teams_to_show); ?>;
+                const agingCategories = ['Trong hạn', '1-30 ngày', '31-60 ngày', '61-90 ngày', '> 90 ngày', 'Chưa có ngày HT'];
+                const expectedFlowMap = {}; // Will store Month -> {TeamID -> Amount}
+                const agingMap = {}; // Will store Category -> {TeamID -> Amount}
+                
+                // Initialize maps
+                agingCategories.forEach(cat => agingMap[cat] = {});
+                
+                const now = new Date();
+                now.setHours(0,0,0,0);
+
+                allFilteredDebts.forEach(d => {
+                    const tid = d.sale_team_id || 'undefined';
+                    const amt = (parseFloat(d.amount) || 0);
+                    const expDateStr = d.expected_payment_date;
+                    const payStat = d.payment_status || '';
+                    const internalStat = (d.invoice_status || '').toLowerCase();
+                    const isPaid = payStat === 'Paid';
+                    const isDraft = internalStat === 'draft';
+
+                    if (!isPaid && !isDraft) {
+                        if (expDateStr) {
+                            const expDate = new Date(expDateStr);
+                            if (!isNaN(expDate.getTime())) {
+                                expDate.setHours(0,0,0,0);
+                                const diffDays = Math.floor((now - expDate) / (1000 * 60 * 60 * 24));
+
+                                if (diffDays <= 0) {
+                                    agingMap['Trong hạn'][tid] = (agingMap['Trong hạn'][tid] || 0) + amt;
+                                    const monthLabel = `${(expDate.getMonth()+1)}/${expDate.getFullYear()}`;
+                                    if (!expectedFlowMap[monthLabel]) expectedFlowMap[monthLabel] = {};
+                                    expectedFlowMap[monthLabel][tid] = (expectedFlowMap[monthLabel][tid] || 0) + amt;
+                                } else if (diffDays <= 30) agingMap['1-30 ngày'][tid] = (agingMap['1-30 ngày'][tid] || 0) + amt;
+                                else if (diffDays <= 60) agingMap['31-60 ngày'][tid] = (agingMap['31-60 ngày'][tid] || 0) + amt;
+                                else if (diffDays <= 90) agingMap['61-90 ngày'][tid] = (agingMap['61-90 ngày'][tid] || 0) + amt;
+                                else agingMap['> 90 ngày'][tid] = (agingMap['> 90 ngày'][tid] || 0) + amt;
+                            } else agingMap['Chưa có ngày HT'][tid] = (agingMap['Chưa có ngày HT'][tid] || 0) + amt;
+                        } else agingMap['Chưa có ngày HT'][tid] = (agingMap['Chưa có ngày HT'][tid] || 0) + amt;
+                    }
+                });
+
+                const teamColors = ['#1890ff', '#13c2c2', '#52c41a', '#fadb14', '#fa8c16', '#eb2f96', '#722ed1', '#2f54eb', '#fa541c', '#a0d911', '#595959', '#391085'];
+                
+                const formatVndShort = (val) => {
+                    if (val >= 1000000000) return (val / 1000000000).toFixed(1) + ' tỷ';
+                    if (val >= 1000000) return (val / 1000000).toFixed(0) + ' tr';
+                    return val.toLocaleString();
+                };
+
+                const commonDataLabels = {
+                    display: (ctx) => ctx.dataset.data[ctx.dataIndex] > (ctx.chart.scales.y.max * 0.08),
+                    formatter: (val, ctx) => {
+                        const teamName = ctx.dataset.label;
+                        return [teamName, formatVndShort(val)];
+                    },
+                    color: '#fff',
+                    font: { weight: '700', size: 8, lineHeight: 1.2 },
+                    anchor: 'center',
+                    align: 'center',
+                    textAlign: 'center',
+                    textStrokeColor: 'rgba(0,0,0,0.6)',
+                    textStrokeWidth: 1.5,
+                    clip: true
+                };
+                
+                const flowDataLabels = {
+                    display: (ctx) => ctx.dataset.data[ctx.dataIndex] > (ctx.chart.scales.y.max * 0.08),
+                    formatter: (val, ctx) => {
+                        const teamName = ctx.dataset.label;
+                        return [teamName, formatVndShort(val)];
+                    },
+                    color: '#fff',
+                    font: { weight: '700', size: 8, lineHeight: 1.2 },
+                    anchor: 'center',
+                    align: 'center',
+                    textAlign: 'center',
+                    textStrokeColor: 'rgba(0,0,0,0.6)',
+                    textStrokeWidth: 1.5,
+                    clip: true
+                };
+
+                // Prepare Datasets for Aging
+                const agingDatasets = teamsToShow.map((team, idx) => ({
+                    label: team.name,
+                    data: agingCategories.map(cat => agingMap[cat][team.id] || 0),
+                    backgroundColor: teamColors[idx % teamColors.length],
+                    borderRadius: 4
+                }));
+
+                // Prepare Datasets for Flow
+                const sortedFlowKeys = Object.keys(expectedFlowMap).sort((a,b) => {
+                    const [ma, ya] = a.split('/');
+                    const [mb, yb] = b.split('/');
+                    return ya === yb ? ma - mb : ya - yb;
+                });
+                const flowDatasets = teamsToShow.map((team, idx) => ({
+                    label: team.name,
+                    data: sortedFlowKeys.map(k => expectedFlowMap[k][team.id] || 0),
+                    backgroundColor: teamColors[idx % teamColors.length],
+                    borderRadius: 4
+                }));
+
+                // Render Global Aging Chart
+                new Chart(document.getElementById('globalAgingChart').getContext('2d'), {
+                    type: 'bar',
+                    plugins: [ChartDataLabels],
+                    data: {
+                        labels: agingCategories,
+                        datasets: agingDatasets
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: {
+                            legend: { position: 'bottom', labels: { boxWidth: 12, font: { size: 10 } } },
+                            tooltip: { callbacks: { label: (ctx) => `${ctx.dataset.label}: ${formatVndShort(ctx.raw)}` } },
+                            datalabels: commonDataLabels
+                        },
+                        scales: {
+                            x: { stacked: true, ticks: { font: { size: 10, weight: '600' } } },
+                            y: { stacked: true, beginAtZero: true, ticks: { callback: (val) => formatVndShort(val), font: { size: 10 } } }
+                        }
+                    }
+                });
+
+                // Render Global Flow Chart
+                new Chart(document.getElementById('globalFlowChart').getContext('2d'), {
+                    type: 'bar',
+                    plugins: [ChartDataLabels],
+                    data: {
+                        labels: sortedFlowKeys,
+                        datasets: flowDatasets
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: {
+                            legend: { position: 'bottom', labels: { boxWidth: 12, font: { size: 10 } } },
+                            tooltip: { callbacks: { label: (ctx) => `${ctx.dataset.label}: ${formatVndShort(ctx.raw)}` } },
+                            datalabels: flowDataLabels
+                        },
+                        scales: {
+                            x: { stacked: true, ticks: { font: { size: 10, weight: '600' } } },
+                            y: { stacked: true, beginAtZero: true, ticks: { callback: (val) => formatVndShort(val), font: { size: 10 } } }
+                        }
+                    }
+                });
+            }
         });
     </script>
     <script>
