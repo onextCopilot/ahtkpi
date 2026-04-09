@@ -528,6 +528,8 @@ if ($res_am && $res_am->num_rows > 0) {
     <!-- Tom Select -->
     <link href="https://cdn.jsdelivr.net/npm/tom-select@2.3.1/dist/css/tom-select.css" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/tom-select@2.3.1/dist/js/tom-select.complete.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.0.0"></script>
     <style>
         /* Prevent horizontal scroll on page */
         body {
@@ -689,6 +691,85 @@ if ($res_am && $res_am->num_rows > 0) {
             background: #e2e8f0;
             color: #0f172a;
             font-weight: 600;
+        }
+
+        .btn-team-detail {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 20px;
+            height: 20px;
+            border-radius: 4px;
+            background: rgba(148, 163, 184, 0.1);
+            color: #64748b;
+            font-size: 10px;
+            transition: all 0.2s;
+            cursor: pointer;
+            border: 1px solid transparent;
+            margin-left: 2px;
+        }
+
+        .team-tab.active .btn-team-detail {
+            background: #f1f5f9;
+            color: #2563eb;
+            border-color: #cbd5e1;
+        }
+
+        .btn-team-detail:hover {
+            background: #2563eb !important;
+            color: white !important;
+        }
+
+        /* Detail Sidebar (Team Info) */
+        .detail-sidebar-overlay {
+            display: none;
+            position: fixed;
+            inset: 0;
+            background: rgba(0, 0, 0, 0.4);
+            backdrop-filter: blur(2px);
+            z-index: 3000;
+        }
+
+        .detail-sidebar {
+            position: fixed;
+            top: 0;
+            right: -720px;
+            width: 720px;
+            height: 100%;
+            background: white;
+            z-index: 3001;
+            box-shadow: -10px 0 30px rgba(0, 0, 0, 0.15);
+            display: flex;
+            flex-direction: column;
+            transition: right 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        .detail-sidebar.open {
+            right: 0;
+        }
+
+        .detail-sidebar-header {
+            padding: 1.5rem;
+            border-bottom: 1px solid #f1f5f9;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: linear-gradient(to right, #f8fafc, #ffffff);
+        }
+
+        .detail-sidebar-title {
+            font-size: 1.1rem;
+            font-weight: 700;
+            color: #0f172a;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .detail-sidebar-body {
+            flex: 1;
+            overflow-y: auto;
+            padding: 1.5rem;
         }
 
         /* Scrollbar for Tabs */
@@ -1704,6 +1785,12 @@ if ($res_am && $res_am->num_rows > 0) {
                             <?php echo htmlspecialchars($tab['label']); ?>
                             <?php if ($tab['count'] !== null): ?>
                                 <span class="tab-count"><?php echo $tab['count']; ?></span>
+                            <?php endif; ?>
+                            
+                            <?php if (!in_array($tab['id'], ['dashboard', 'analytics', 'all'])): ?>
+                            <div class="btn-team-detail" title="Xem chi tiết Team" onclick="toggleTeamDetail(event, '<?php echo $tab['id']; ?>', '<?php echo htmlspecialchars($tab['label']); ?>')">
+                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18z"></path><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>
+                            </div>
                             <?php endif; ?>
                         </a>
                     <?php endforeach; ?>
@@ -2813,6 +2900,8 @@ if ($res_am && $res_am->num_rows > 0) {
             }
         }
 
+        const allFilteredDebts = <?php echo json_encode($debts); ?>;
+
         // Jira Tooltip Logic
         document.addEventListener('DOMContentLoaded', function () {
             const tooltip = document.createElement('div');
@@ -3033,7 +3122,327 @@ if ($res_am && $res_am->num_rows > 0) {
                 document.body.style.overflow = 'hidden';
             }
         }
+
+        function toggleTeamDetail(e, teamId, teamName) {
+            if (e) {
+                e.preventDefault();
+                e.stopPropagation();
+            }
+            
+            const sidebar = document.getElementById('teamDetailSidebar');
+            const overlay = document.getElementById('teamDetailOverlay');
+            const title = document.getElementById('teamDetailTitle');
+            const body = document.getElementById('teamDetailBody');
+            
+            const isOpen = sidebar.classList.contains('open');
+            
+            if (isOpen) {
+                sidebar.classList.remove('open');
+                overlay.style.display = 'none';
+                document.body.style.overflow = '';
+            } else {
+                title.innerText = teamName + ' - Báo cáo & Phân tích';
+                body.innerHTML = '<div style="text-align:center; padding:50px; color:#94a3b8;"><div class="spinner" style="margin-bottom:10px;"></div>Đang tổng hợp báo cáo...</div>';
+                
+                sidebar.classList.add('open');
+                overlay.style.display = 'block';
+                document.body.style.overflow = 'hidden';
+                
+                setTimeout(() => {
+                    // Filter data for this team
+                    const teamDebts = allFilteredDebts.filter(d => 
+                        (teamId === 'all') ? true :
+                        (teamId === 'undefined' ? (!d.sale_team_id) : (d.sale_team_id == teamId))
+                    );
+
+                    const totalVnd = teamDebts.reduce((acc, d) => acc + (parseFloat(d.amount) || 0), 0);
+                    const paidVnd = teamDebts.reduce((acc, d) => acc + (d.payment_status === 'Paid' ? (parseFloat(d.amount) || 0) : 0), 0);
+                    const unpaidVnd = totalVnd - paidVnd;
+                    const count = teamDebts.length;
+
+                    // Grouping Logic
+                    const statusClassGroups = {};
+                    const statusClassCounts = {};
+                    const invoiceStatusGroups = {};
+                    const quarterGroups = {};
+                    const amGroups = {};
+
+                    teamDebts.forEach(d => {
+                        const sClass = d.invoice_status_class || 'Khác';
+                        const iStatus = d.invoice_status || 'Chưa xác định';
+                        const am = d.am || 'N/A';
+                        const amt = (parseFloat(d.amount) || 0);
+
+                        // Date / Quarter
+                        const dObj = d.invoice_date ? new Date(d.invoice_date) : null;
+                        if (dObj && !isNaN(dObj.getTime())) {
+                            const year = dObj.getFullYear();
+                            const quarter = Math.floor(dObj.getMonth() / 3) + 1;
+                            const qKey = `Q${quarter} ${year}`;
+                            quarterGroups[qKey] = (quarterGroups[qKey] || 0) + amt;
+                        }
+
+                        // Phân loại
+                        statusClassGroups[sClass] = (statusClassGroups[sClass] || 0) + amt;
+                        statusClassCounts[sClass] = (statusClassCounts[sClass] || 0) + 1;
+
+                        // Trạng thái (Draft, Paid, Unpaid)
+                        let statusKey = 'Unpaid';
+                        const internalStat = (d.invoice_status || '').toLowerCase();
+                        const payStat = (d.payment_status || '');
+
+                        if (internalStat === 'draft') {
+                            statusKey = 'Draft';
+                        } else if (payStat === 'Paid') {
+                            statusKey = 'Paid';
+                        } else {
+                            statusKey = 'Unpaid';
+                        }
+                        
+                        invoiceStatusGroups[statusKey] = (invoiceStatusGroups[statusKey] || 0) + amt;
+
+                        // AM
+                        amGroups[am] = (amGroups[am] || 0) + amt;
+                    });
+
+                    const formatVndShort = (val) => {
+                        if (val >= 1000000000) return (val / 1000000000).toFixed(2) + ' tỷ';
+                        if (val >= 1000000) return (val / 1000000).toFixed(1) + ' tr';
+                        return val.toLocaleString();
+                    };
+
+                    body.innerHTML = `
+                        <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:24px;">
+                            <div style="background:#f8fafc; padding:16px; border-radius:12px; border:1px solid #e2e8f0; text-align:center;">
+                                <div style="font-size:11px; color:#64748b; text-transform:uppercase; margin-bottom:4px; font-weight:600;">Tổng doanh thu</div>
+                                <div style="font-size:20px; font-weight:800; color:#0f172a;">${formatVndShort(totalVnd)}</div>
+                            </div>
+                            <div style="background:#f8fafc; padding:16px; border-radius:12px; border:1px solid #e2e8f0; text-align:center;">
+                                <div style="font-size:11px; color:#64748b; text-transform:uppercase; margin-bottom:4px; font-weight:600;">Số lượng khoản</div>
+                                <div style="font-size:20px; font-weight:800; color:#0f172a;">${count}</div>
+                            </div>
+                        </div>
+
+                        <div style="margin-bottom:24px; background:white; border:1px solid #f1f5f9; border-radius:12px; padding:16px;">
+                            <h5 style="margin:0 0 15px 0; font-size:13px; color:#475569;">Tỷ lệ Thanh toán (VND)</h5>
+                            <div style="height:12px; background:#f1f5f9; border-radius:6px; overflow:hidden; display:flex; margin-bottom:10px;">
+                                <div style="width:${(paidVnd/totalVnd*100)||0}%; background:#10b981;" title="Đã thu"></div>
+                                <div style="width:${(unpaidVnd/totalVnd*100)||0}%; background:#ef4444;" title="Chưa thu"></div>
+                            </div>
+                            <div style="display:flex; justify-content:space-between; font-size:11px; font-weight:500;">
+                                <span style="color:#059669;">● Đã thu: ${formatVndShort(paidVnd)}</span>
+                                <span style="color:#dc2626;">● Còn nợ: ${formatVndShort(unpaidVnd)}</span>
+                            </div>
+                        </div>
+
+                        <div style="margin-bottom:30px; background:#fcfcfc; padding:15px; border-radius:12px;">
+                            <div style="display:flex; gap:10px; height:240px;">
+                                <div style="flex:1;">
+                                    <h5 style="margin:0 0 15px 0; font-size:12px; color:#0f172a; font-weight:700; border-left:3px solid #3b82f6; padding-left:10px;">Phân loại Invoice</h5>
+                                    <div style="height:180px;"><canvas id="statusClassChartV"></canvas></div>
+                                </div>
+                                <div style="flex:1;">
+                                    <h5 style="margin:0 0 15px 0; font-size:12px; color:#0f172a; font-weight:700; border-left:3px solid #10b981; padding-left:10px;">Tỷ lệ Trạng thái</h5>
+                                    <div style="height:180px;"><canvas id="invoiceStatusPie"></canvas></div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div style="margin-bottom:30px;">
+                            <h5 style="margin:0 0 15px 0; font-size:13px; color:#475569; font-weight:700;">Doanh thu theo Quý</h5>
+                            <div style="height:220px;"><canvas id="quarterChart"></canvas></div>
+                        </div>
+
+                        <div style="margin-bottom:30px;">
+                            <h5 style="margin:0 0 15px 0; font-size:13px; color:#475569; font-weight:700;">Doanh thu theo AM</h5>
+                            <div style="height:250px;"><canvas id="amChart"></canvas></div>
+                        </div>
+                    `;
+
+                    const chartColors = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#06b6d4', '#ec4899', '#64748b'];
+                    
+                    const commonDataLabels = {
+                        color: '#fff',
+                        font: { weight: 'bold', size: 10 },
+                        formatter: (val) => val > 0 ? formatVndShort(val) : '',
+                        anchor: 'center',
+                        align: 'center',
+                        offset: 0
+                    };
+
+                    // 1. Phân loại (Giá trị)
+                    new Chart(document.getElementById('statusClassChartV').getContext('2d'), {
+                        type: 'doughnut',
+                        plugins: [ChartDataLabels],
+                        data: {
+                            labels: Object.keys(statusClassGroups),
+                            datasets: [{
+                                label: 'Phân loại',
+                                data: Object.values(statusClassGroups),
+                                backgroundColor: chartColors,
+                                borderWidth: 0
+                            }]
+                        },
+                        options: {
+                            responsive: true,
+                            maintainAspectRatio: false,
+                            plugins: { 
+                                legend: { 
+                                    display: true, 
+                                    position: 'bottom',
+                                    labels: { boxWidth: 10, font: { size: 9 } }
+                                },
+                                datalabels: commonDataLabels
+                            }
+                        }
+                    });
+
+                    // 2. Trạng thái (Pie Ratio)
+                    const statusLabels = ['Draft', 'Paid', 'Unpaid'];
+                    const statusData = statusLabels.map(label => invoiceStatusGroups[label] || 0);
+                    const statusColors = ['#94a3b8', '#10b981', '#ef4444'];
+
+                    new Chart(document.getElementById('invoiceStatusPie').getContext('2d'), {
+                        type: 'pie',
+                        plugins: [ChartDataLabels],
+                        data: {
+                            labels: statusLabels,
+                            datasets: [{
+                                label: 'Trạng thái',
+                                data: statusData,
+                                backgroundColor: statusColors,
+                                borderWidth: 0
+                            }]
+                        },
+                        options: {
+                            responsive: true,
+                            maintainAspectRatio: false,
+                            plugins: { 
+                                legend: { 
+                                    display: true, 
+                                    position: 'bottom',
+                                    labels: { boxWidth: 10, font: { size: 9 } }
+                                },
+                                datalabels: commonDataLabels
+                            }
+                        }
+                    });
+
+                    // 3. Doanh thu theo Quý
+                    const sortedQuarters = Object.keys(quarterGroups).sort((a, b) => {
+                        const [qa, ya] = a.split(' ');
+                        const [qb, yb] = b.split(' ');
+                        if (ya !== yb) return ya - yb;
+                        return qa.localeCompare(qb);
+                    });
+
+                    new Chart(document.getElementById('quarterChart').getContext('2d'), {
+                        type: 'line',
+                        plugins: [ChartDataLabels],
+                        data: {
+                            labels: sortedQuarters,
+                            datasets: [{
+                                label: 'Doanh thu',
+                                data: sortedQuarters.map(q => quarterGroups[q]),
+                                borderColor: '#f59e0b',
+                                backgroundColor: 'rgba(245, 158, 11, 0.1)',
+                                fill: true,
+                                tension: 0.4,
+                                pointRadius: 5,
+                                pointBackgroundColor: '#f59e0b',
+                                borderWidth: 3
+                            }]
+                        },
+                        options: {
+                            responsive: true,
+                            maintainAspectRatio: false,
+                            plugins: { 
+                                legend: { 
+                                    display: true, 
+                                    position: 'top',
+                                    align: 'end',
+                                    labels: { boxWidth: 10, font: { size: 10 } }
+                                },
+                                datalabels: {
+                                    ...commonDataLabels,
+                                    color: '#b45309',
+                                    anchor: 'end',
+                                    align: 'top',
+                                    offset: 8
+                                }
+                            },
+                            scales: {
+                                y: { 
+                                    beginAtZero: true, 
+                                    display: true, 
+                                    grid: { display: false },
+                                    ticks: { display: false }
+                                },
+                                x: { 
+                                    grid: { display: true, color: '#f1f5f9' }, 
+                                    ticks: { font: { size: 10, weight: '600' } } 
+                                }
+                            }
+                        }
+                    });
+
+                    // 4. AM Chart
+                    const sortedAmKeys = Object.keys(amGroups).sort((a, b) => amGroups[b] - amGroups[a]);
+
+                    new Chart(document.getElementById('amChart').getContext('2d'), {
+                        type: 'bar',
+                        plugins: [ChartDataLabels],
+                        data: {
+                            labels: sortedAmKeys,
+                            datasets: [{
+                                label: 'Doanh thu',
+                                data: sortedAmKeys.map(k => amGroups[k]),
+                                backgroundColor: '#93c5fd',
+                                hoverBackgroundColor: '#3b82f6',
+                                borderRadius: 4
+                            }]
+                        },
+                        options: {
+                            indexAxis: 'y',
+                            responsive: true,
+                            maintainAspectRatio: false,
+                            plugins: { 
+                                legend: { 
+                                    display: true, 
+                                    position: 'top',
+                                    align: 'end',
+                                    labels: { boxWidth: 10, font: { size: 10 } }
+                                },
+                                datalabels: {
+                                    ...commonDataLabels,
+                                    color: '#1e40af',
+                                    anchor: 'end',
+                                    align: 'right',
+                                    offset: 4
+                                }
+                            },
+                            scales: {
+                                x: { display: false },
+                                y: { grid: { display: false }, ticks: { font: { size: 10, weight: '500' } } }
+                            }
+                        }
+                    });
+
+                }, 400);
+            }
+        }
     </script>
+    
+    <div class="detail-sidebar-overlay" id="teamDetailOverlay" onclick="toggleTeamDetail(event)"></div>
+    <div class="detail-sidebar" id="teamDetailSidebar">
+        <div class="detail-sidebar-header">
+            <div class="detail-sidebar-title" id="teamDetailTitle">Chi tiết Team</div>
+            <button class="btn-edit-row" onclick="toggleTeamDetail(event)" style="width:32px; height:32px; display:flex; align-items:center; justify-content:center;">&times;</button>
+        </div>
+        <div class="detail-sidebar-body" id="teamDetailBody">
+            <!-- Content loaded via JS -->
+        </div>
+    </div>
 </body>
 
 </html>
