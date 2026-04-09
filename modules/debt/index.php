@@ -3173,7 +3173,7 @@ if ($res_am && $res_am->num_rows > 0) {
                     const invoiceStatusGroups = {};
                     const quarterGroups = {};
                     const amGroups = {};
-                    const agingGroups = { 'Trong hạn': 0, '1-30 ngày': 0, '31-60 ngày': 0, '61-90 ngày': 0, '> 90 ngày': 0 };
+                    const agingGroups = { 'Trong hạn': 0, '1-30 ngày': 0, '31-60 ngày': 0, '61-90 ngày': 0, '> 90 ngày': 0, 'Chưa có ngày HT': 0 };
                     const expectedFlowGroups = {};
                     const now = new Date();
                     now.setHours(0,0,0,0);
@@ -3184,24 +3184,33 @@ if ($res_am && $res_am->num_rows > 0) {
                         const am = d.am || 'N/A';
                         const amt = (parseFloat(d.amount) || 0);
                         const expDateStr = d.expected_payment_date;
-                        const isPaid = d.payment_status === 'Paid';
+                        const payStat = d.payment_status || '';
+                        const internalStat = (d.invoice_status || '').toLowerCase();
+                        const isPaid = payStat === 'Paid';
+                        const isDraft = internalStat === 'draft';
 
                         // Aging & Expected Flow Logic
-                        if (!isPaid && expDateStr) {
-                            const expDate = new Date(expDateStr);
-                            if (!isNaN(expDate.getTime())) {
-                                expDate.setHours(0,0,0,0);
-                                const diffDays = Math.floor((now - expDate) / (1000 * 60 * 60 * 24));
+                        if (!isPaid && !isDraft) {
+                            if (expDateStr) {
+                                const expDate = new Date(expDateStr);
+                                if (!isNaN(expDate.getTime())) {
+                                    expDate.setHours(0,0,0,0);
+                                    const diffDays = Math.floor((now - expDate) / (1000 * 60 * 60 * 24));
 
-                                if (diffDays <= 0) {
-                                    agingGroups['Trong hạn'] += amt;
-                                    // Future Expected Flow
-                                    const monthLabel = `Tháng ${(expDate.getMonth()+1)}/${expDate.getFullYear()}`;
-                                    expectedFlowGroups[monthLabel] = (expectedFlowGroups[monthLabel] || 0) + amt;
-                                } else if (diffDays <= 30) agingGroups['1-30 ngày'] += amt;
-                                else if (diffDays <= 60) agingGroups['31-60 ngày'] += amt;
-                                else if (diffDays <= 90) agingGroups['61-90 ngày'] += amt;
-                                else agingGroups['> 90 ngày'] += amt;
+                                    if (diffDays <= 0) {
+                                        agingGroups['Trong hạn'] += amt;
+                                        // Future Expected Flow
+                                        const monthLabel = `Tháng ${(expDate.getMonth()+1)}/${expDate.getFullYear()}`;
+                                        expectedFlowGroups[monthLabel] = (expectedFlowGroups[monthLabel] || 0) + amt;
+                                    } else if (diffDays <= 30) agingGroups['1-30 ngày'] += amt;
+                                    else if (diffDays <= 60) agingGroups['31-60 ngày'] += amt;
+                                    else if (diffDays <= 90) agingGroups['61-90 ngày'] += amt;
+                                    else agingGroups['> 90 ngày'] += amt;
+                                } else {
+                                    agingGroups['Chưa có ngày HT'] += amt;
+                                }
+                            } else {
+                                agingGroups['Chưa có ngày HT'] += amt;
                             }
                         }
 
@@ -3380,7 +3389,7 @@ if ($res_am && $res_am->num_rows > 0) {
                             datasets: [{
                                 label: 'VND',
                                 data: Object.values(agingGroups),
-                                backgroundColor: ['#10b981', '#fcd34d', '#fb923c', '#ef4444', '#991b1b'],
+                                backgroundColor: ['#10b981', '#fcd34d', '#fb923c', '#ef4444', '#991b1b', '#64748b'],
                                 borderRadius: 4
                             }]
                         },
