@@ -3229,8 +3229,6 @@ if ($res_am && $res_am->num_rows > 0) {
 
                         // Trạng thái (Draft, Paid, Unpaid)
                         let statusKey = 'Unpaid';
-                        const internalStat = (d.invoice_status || '').toLowerCase();
-                        const payStat = (d.payment_status || '');
 
                         if (internalStat === 'draft') {
                             statusKey = 'Draft';
@@ -3396,13 +3394,23 @@ if ($res_am && $res_am->num_rows > 0) {
                         options: {
                             responsive: true,
                             maintainAspectRatio: false,
+                            layout: {
+                                padding: { top: 35, bottom: 10 }
+                            },
                             plugins: { 
                                 legend: { display: false },
                                 datalabels: { ...commonDataLabels, color: '#000', anchor: 'end', align: 'top', offset: 0 }
                             },
                             scales: {
                                 y: { beginAtZero: true, display: false },
-                                x: { ticks: { font: { size: 9 } } }
+                                x: { 
+                                    ticks: { 
+                                        font: { size: 9 },
+                                        autoSkip: false,
+                                        maxRotation: 45,
+                                        minRotation: 45
+                                    } 
+                                }
                             }
                         }
                     });
