@@ -1967,11 +1967,11 @@ if ($res_am && $res_am->num_rows > 0) {
                             <div style="display:grid; grid-template-columns: 1fr 1fr; gap:24px; margin-bottom:32px; margin-top:16px;">
                                 <div style="background: white; border: 1px solid #e8e8e8; border-radius: 8px; padding: 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.04);">
                                     <h5 style="margin:0 0 16px 0; font-size:14px; color:#e11d48; font-weight:700; border-left:4px solid #e11d48; padding-left:12px; text-transform:uppercase; letter-spacing:0.5px;">Phân tích Tuổi nợ (Aging Report) - Theo Team</h5>
-                                    <div style="height:450px;"><canvas id="globalAgingChart"></canvas></div>
+                                    <div style="height:380px;"><canvas id="globalAgingChart"></canvas></div>
                                 </div>
                                 <div style="background: white; border: 1px solid #e8e8e8; border-radius: 8px; padding: 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.04);">
                                     <h5 style="margin:0 0 16px 0; font-size:14px; color:#2563eb; font-weight:700; border-left:4px solid #2563eb; padding-left:12px; text-transform:uppercase; letter-spacing:0.5px;">Dòng tiền dự kiến về - Theo Team</h5>
-                                    <div style="height:450px;"><canvas id="globalFlowChart"></canvas></div>
+                                    <div style="height:380px;"><canvas id="globalFlowChart"></canvas></div>
                                 </div>
                             </div>
 
