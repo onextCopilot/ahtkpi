@@ -99,6 +99,7 @@ $routes = [
     '/core-key-kpi' => 'modules/core_kpi/index.php',
     '/plan-budgeting' => 'modules/plan_budgeting/index.php',
     '/plan-budgeting/report' => 'modules/plan_budgeting/report.php',
+    '/documents' => 'modules/documents/index.php',
 ];
 
 // Check if route exists in our mapping
