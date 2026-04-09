@@ -284,6 +284,22 @@ if (!empty($_GET['exp_pay_date_to'])) {
 
 $selected_team = $_GET['team'] ?? 'dashboard'; // Default to dashboard as requested
 
+// Define teams_to_show globally for JS and PHP tabs
+$teams_to_show = [];
+if ($_SESSION['role'] === 'admin') {
+    $teams_to_show = array_map(function ($t) {
+        return ['id' => $t['id'], 'name' => $t['name']];
+    }, $all_teams);
+    $teams_to_show[] = ['id' => 'undefined', 'name' => 'UNDEFINED TEAM'];
+} else {
+    // For non-admins, show only their assigned teams
+    foreach ($all_teams as $t) {
+        if (in_array($t['id'], $user_teams)) {
+            $teams_to_show[] = ['id' => $t['id'], 'name' => $t['name']];
+        }
+    }
+}
+
 if (!$can_view_all_debts && !in_array($selected_team, ['dashboard', 'analytics'])) {
     if (!in_array($selected_team, $user_teams)) {
         $selected_team = 'dashboard';
@@ -2123,22 +2139,6 @@ if ($res_am && $res_am->num_rows > 0) {
 
 
                         <!-- Team Cards Grid (Ant Design Enhanced) -->
-                        <?php
-                        $teams_to_show = [];
-                        if ($_SESSION['role'] === 'admin') {
-                            $teams_to_show = array_map(function ($t) {
-                                return ['id' => $t['id'], 'name' => $t['name']];
-                            }, $all_teams);
-                            $teams_to_show[] = ['id' => 'undefined', 'name' => 'UNDEFINED TEAM'];
-                        } else {
-                            // For non-admins, show only their assigned teams
-                            foreach ($all_teams as $t) {
-                                if (in_array($t['id'], $user_teams)) {
-                                    $teams_to_show[] = ['id' => $t['id'], 'name' => $t['name']];
-                                }
-                            }
-                        }
-                        ?>
 
                         <?php if (count($teams_to_show) > 0): ?>
                             <div class="dashboard-grid"
@@ -2946,7 +2946,6 @@ if ($res_am && $res_am->num_rows > 0) {
             }
         }
 
-        const allFilteredDebts = <?php echo json_encode($debts); ?>;
 
         // Jira Tooltip Logic
         document.addEventListener('DOMContentLoaded', function () {
@@ -3157,7 +3156,7 @@ if ($res_am && $res_am->num_rows > 0) {
                 const now = new Date();
                 now.setHours(0,0,0,0);
 
-                allFilteredDebts.forEach(d => {
+                debtsData.forEach(d => {
                     const tid = d.sale_team_id || 'undefined';
                     const amt = (parseFloat(d.amount) || 0);
                     const expDateStr = d.expected_payment_date;
@@ -3349,7 +3348,7 @@ if ($res_am && $res_am->num_rows > 0) {
                 
                 setTimeout(() => {
                     // Filter data for this team
-                    const teamDebts = allFilteredDebts.filter(d => 
+                    const teamDebts = debtsData.filter(d => 
                         (teamId === 'all') ? true :
                         (teamId === 'undefined' ? (!d.sale_team_id) : (d.sale_team_id == teamId))
                     );
