@@ -34,34 +34,44 @@ if (!$is_admin) {
     }
 }
 
-$year = isset($_GET['year']) ? (int) $_GET['year'] : date('Y');
-$month = isset($_GET['month']) ? (int) $_GET['month'] : 0; // 0 = all
-$quarter = isset($_GET['quarter']) ? (int) $_GET['quarter'] : 0; // 0 = all
-$bc_filter = isset($_GET['bc']) ? $_GET['bc'] : '';
+$years = isset($_GET['year']) ? array_filter(explode(',', $_GET['year'])) : [];
+$months = isset($_GET['month']) ? array_filter(explode(',', $_GET['month'])) : [];
+$quarters = isset($_GET['quarter']) ? array_filter(explode(',', $_GET['quarter'])) : [];
+$payment_filter = isset($_GET['payment_state']) ? array_filter(explode(',', $_GET['payment_state'])) : [];
+$bc_filter = isset($_GET['bc']) ? array_filter(explode(',', $_GET['bc'])) : [];
+$state_filter = isset($_GET['state']) ? array_filter(explode(',', $_GET['state'])) : [];
+$search = isset($_GET['search']) ? trim($_GET['search']) : '';
 
 $api = new OdooAPI();
 
 try {
     // 1. Fetch move lines that have a BC branch
-    // Because we might have a lot of lines, we should perhaps filter by year in Odoo?
-    // Move lines have date `date` matching the invoice `date` (accounting date) or `move_id.invoice_date`?
-    // Let's just fetch all lines that match 'BC' and 'out_invoice'. Since there might be thousands, 
-    // maybe it's better to fetch by year.
     $domain = [
         ['move_id.move_type', '=', 'out_invoice'],
         ['branch_id.name', 'ilike', 'bc']
     ];
 
-    if ($year) {
-        // filter by date in year
-        // invoice_date or date ? usually `date`
-        $start_date = "$year-01-01";
-        $end_date = "$year-12-31";
+    if (!empty($bc_filter)) {
+        $branch_domain = ['|'];
+        foreach ($bc_filter as $b) {
+            $branch_domain[] = ['branch_id.name', '=', $b];
+        }
+        if (count($bc_filter) > 1) {
+            // Add more ORs if needed, actually 'in' operator is better
+            $domain[] = ['branch_id.name', 'in', $bc_filter];
+        } else {
+            $domain[] = ['branch_id.name', '=', $bc_filter[0]];
+        }
+    }
+
+    if (!empty($years)) {
+        $min_year = min($years);
+        $max_year = max($years);
+        $start_date = "$min_year-01-01";
+        $end_date = "$max_year-12-31";
         $domain[] = ['date', '>=', $start_date];
         $domain[] = ['date', '<=', $end_date];
     }
-
-    // if ($month) { ... could filter here, but we can do it in memory easily }
 
     $fields = ['move_id', 'branch_id'];
     $lines = $api->searchRead('account.move.line', $domain, $fields, 0, 0);
@@ -85,9 +95,11 @@ try {
     // Fetch actual invoice data directly from Odoo for freshness
     $invoices = [];
     if (!empty($move_ids)) {
-        $invoices = $api->searchRead('account.move', [
-            ['id', 'in', $move_ids]
-        ], ['id', 'name', 'invoice_date', 'date', 'partner_id', 'amount_total', 'amount_total_signed', 'currency_id', 'state', 'payment_state', 'x_studio_invoice_type_1'], 0, 0);
+        $inv_domain = [['id', 'in', $move_ids]];
+        if (!empty($search)) {
+            $inv_domain[] = ['|', ['name', 'ilike', $search], ['partner_id.name', 'ilike', $search]];
+        }
+        $invoices = $api->searchRead('account.move', $inv_domain, ['id', 'name', 'invoice_date', 'date', 'partner_id', 'amount_total', 'amount_total_signed', 'currency_id', 'state', 'payment_state', 'x_studio_invoice_type_1'], 0, 0);
     }
 
     $allInvoices = [];
@@ -106,22 +118,14 @@ try {
         }
         $inv = $allInvoices[$move_id];
 
-        // We will include internal invoices as well, as requested.
-        /*
-        $isInternal = false;
-        if (!empty($inv['x_studio_invoice_type_1'])) {
-            $typeStr = is_array($inv['x_studio_invoice_type_1']) ? $inv['x_studio_invoice_type_1'][1] : $inv['x_studio_invoice_type_1'];
-            if (stripos($typeStr, 'internal') !== false) {
-                $isInternal = true;
-            }
-        }
-        if ($isInternal)
-            continue;
-        */
-
         $state = $inv['state'] ?? '';
         if ($state === 'cancel')
             continue;
+
+        // Apply State Filter
+        if (!empty($state_filter) && !in_array($state, $state_filter)) {
+            continue;
+        }
 
         // Apply Month/Quarter Filters
         $inv_date_str = $inv['invoice_date'] ?: ($inv['date'] ?: '');
@@ -133,21 +137,22 @@ try {
         $inv_month = (int) date('m', $inv_time);
         $inv_quarter = (int) ceil($inv_month / 3);
 
-        if ($year && $inv_year !== $year)
+        if (!empty($years) && !in_array($inv_year, $years))
             continue;
-        if ($month && $inv_month !== $month)
+        if (!empty($months) && !in_array($inv_month, $months))
             continue;
-        if ($quarter && $inv_quarter !== $quarter)
+        if (!empty($quarters) && !in_array($inv_quarter, $quarters))
             continue;
 
-        $payment_filter = isset($_GET['payment_state']) ? $_GET['payment_state'] : '';
-        if ($payment_filter && $payment_filter !== 'all') {
+        if (!empty($payment_filter) && !in_array('all', $payment_filter)) {
             $current_payment_state = $inv['payment_state'] ?? '';
-            if ($payment_filter === 'paid' && !in_array($current_payment_state, ['paid', 'in_payment'])) {
-                continue;
-            } elseif ($payment_filter === 'not_paid' && in_array($current_payment_state, ['paid', 'in_payment'])) {
-                continue;
-            }
+            $is_paid = in_array($current_payment_state, ['paid', 'in_payment']);
+            
+            $match_payment = false;
+            if (in_array('paid', $payment_filter) && $is_paid) $match_payment = true;
+            if (in_array('not_paid', $payment_filter) && !$is_paid) $match_payment = true;
+            
+            if (!$match_payment) continue;
         }
 
         // Calculate VND amount
@@ -162,7 +167,7 @@ try {
         // We assign the entire invoice amount to this BC branch
         foreach ($branches as $b) {
             // Check specific BC filter if any
-            if ($bc_filter && stripos($b, $bc_filter) === false) {
+            if (!empty($bc_filter) && !in_array($b, $bc_filter)) {
                 continue;
             }
 
