@@ -295,8 +295,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
         }
 
         if ($type === 'metric') {
-            $target = floatval($_POST['target']);
-            $unit = $_POST['unit'] ?? '';
+            $target = 100; // Default target to 100 for percentage-based tracking
+            $unit = '%'; // Default unit to %
             $stmt = $conn->prepare("INSERT INTO okr_results (objective_id, metric_name, target_value, unit, owner_name, owner_avatar, priority, weight) VALUES (?, ?, ?, ?, ?, ?, ?, ?)");
             $stmt->bind_param("isdssssi", $oid, $name, $target, $unit, $owner_name, $owner_avatar, $priority, $weight);
             $stmt->execute();
