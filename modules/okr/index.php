@@ -1,10 +1,56 @@
 <?php
 require_once __DIR__ . '/../../config/config.php';
 
-// Auto-migration (Loud error reporting for debugging)
+// Helper: Safe Column Addition for Production Resilience
+function addColIfNotExists($conn, $table, $col, $def) {
+    try {
+        $check = $conn->query("SHOW COLUMNS FROM `$table` LIKE '$col'");
+        if ($check && $check->num_rows == 0) {
+            return $conn->query("ALTER TABLE `$table` ADD COLUMN `$col` $def");
+        }
+    } catch (Exception $e) { return false; }
+    return true;
+}
+
+// Ensure Core Tables Exist
+$conn->query("CREATE TABLE IF NOT EXISTS okr_objectives (id INT AUTO_INCREMENT PRIMARY KEY, title VARCHAR(255) NOT NULL, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;");
+$conn->query("CREATE TABLE IF NOT EXISTS okr_key_activities (id INT AUTO_INCREMENT PRIMARY KEY, objective_id INT, activity_name VARCHAR(255), progress DECIMAL(5,2) DEFAULT 0, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;");
+$conn->query("CREATE TABLE IF NOT EXISTS okr_results (id INT AUTO_INCREMENT PRIMARY KEY, objective_id INT, metric_name VARCHAR(255), current_value DECIMAL(15,2) DEFAULT 0, target_value DECIMAL(15,2) DEFAULT 0, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;");
+
+// Synchronize Structural Requirements (Migration Block)
+try {
+    // Objectives Table Enhancements
+    addColIfNotExists($conn, 'okr_objectives', 'team', 'VARCHAR(100) DEFAULT "Sales & Marketing"');
+    addColIfNotExists($conn, 'okr_objectives', 'owner', 'VARCHAR(255)');
+    addColIfNotExists($conn, 'okr_objectives', 'owner_id', 'INT DEFAULT 0');
+    addColIfNotExists($conn, 'okr_objectives', 'progress', 'DECIMAL(5,2) DEFAULT 0');
+    addColIfNotExists($conn, 'okr_objectives', 'status', 'VARCHAR(100) DEFAULT "on_track"');
+    addColIfNotExists($conn, 'okr_objectives', 'quarter', 'INT DEFAULT 1');
+    addColIfNotExists($conn, 'okr_objectives', 'year', 'INT DEFAULT 2026');
+    addColIfNotExists($conn, 'okr_objectives', 'cycle_id', 'INT DEFAULT 1');
+    addColIfNotExists($conn, 'okr_objectives', 'sort_order', 'INT DEFAULT 0');
+    addColIfNotExists($conn, 'okr_objectives', 'is_company_okr', 'TINYINT DEFAULT 0');
+    
+    // Key Results Table Enhancements
+    addColIfNotExists($conn, 'okr_results', 'unit', 'VARCHAR(50) DEFAULT "%"');
+    addColIfNotExists($conn, 'okr_results', 'status', 'VARCHAR(50) DEFAULT "pending"');
+    addColIfNotExists($conn, 'okr_results', 'priority', 'VARCHAR(20) DEFAULT "medium"');
+    addColIfNotExists($conn, 'okr_results', 'weight', 'INT DEFAULT 0');
+    addColIfNotExists($conn, 'okr_results', 'owner_name', 'VARCHAR(255)');
+    addColIfNotExists($conn, 'okr_results', 'owner_avatar', 'VARCHAR(10)');
+    
+    // Key Activities Table Enhancements
+    addColIfNotExists($conn, 'okr_key_activities', 'status', 'VARCHAR(50) DEFAULT "pending"');
+    addColIfNotExists($conn, 'okr_key_activities', 'priority', 'VARCHAR(20) DEFAULT "medium"');
+    addColIfNotExists($conn, 'okr_key_activities', 'weight', 'INT DEFAULT 0');
+    addColIfNotExists($conn, 'okr_key_activities', 'owner_name', 'VARCHAR(255)');
+    addColIfNotExists($conn, 'okr_key_activities', 'owner_avatar', 'VARCHAR(10)');
+} catch (Throwable $e) { /* Resilient against schema locks */ }
+
+// Auto-migration for Explanations
 $check_table = $conn->query("SHOW TABLES LIKE 'okr_explanations'");
 if ($check_table->num_rows == 0) {
-    $create_sql = "CREATE TABLE `okr_explanations` (
+    $conn->query("CREATE TABLE `okr_explanations` (
         `id` INT AUTO_INCREMENT PRIMARY KEY,
         `item_id` INT NOT NULL,
         `item_type` ENUM('metric', 'activity') NOT NULL,
@@ -12,22 +58,8 @@ if ($check_table->num_rows == 0) {
         `user_id` INT NOT NULL,
         `user_name` VARCHAR(255) NOT NULL,
         `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4";
-    if (!$conn->query($create_sql)) {
-        // If it fails, we want to know why
-        error_log("Migration Failed: " . $conn->error);
-    }
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
 }
-
-// Ensure columns exist on results/activities (Compatibility fix for older MySQL)
-try {
-    addColIfNotExists($conn, 'okr_results', 'priority', 'VARCHAR(20) DEFAULT "medium"');
-    addColIfNotExists($conn, 'okr_results', 'weight', 'INT DEFAULT 0');
-    addColIfNotExists($conn, 'okr_key_activities', 'priority', 'VARCHAR(20) DEFAULT "medium"');
-    addColIfNotExists($conn, 'okr_key_activities', 'weight', 'INT DEFAULT 0');
-    @$conn->query("ALTER TABLE `okr_objectives` MODIFY COLUMN `cycle_id` INT DEFAULT 1");
-    @$conn->query("ALTER TABLE `okr_objectives` MODIFY COLUMN `status` VARCHAR(100) DEFAULT 'on_track'");
-} catch (Throwable $e) { /* Silent catch for duplicate columns */ }
 
 // Module-specific Page Titles
 $page_title = "OKR Management";
@@ -45,81 +77,18 @@ $current_full_name = $_SESSION['full_name'] ?? 'System / Anonymous';
 $current_quarter = intval($_GET['quarter'] ?? ceil(date('n') / 3));
 $current_year = intval($_GET['year'] ?? date('Y'));
 
-// Ensure tables exist and column additions
-$conn->query("CREATE TABLE IF NOT EXISTS okr_objectives (
-    id INT AUTO_INCREMENT PRIMARY KEY,
-    title VARCHAR(255) NOT NULL,
-    team VARCHAR(100) DEFAULT 'Sales & Marketing',
-    owner VARCHAR(255),
-    progress DECIMAL(5,2) DEFAULT 0,
-    status VARCHAR(50) DEFAULT 'on_track',
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;");
-
-$conn->query("CREATE TABLE IF NOT EXISTS okr_key_activities (
-    id INT AUTO_INCREMENT PRIMARY KEY,
-    objective_id INT NOT NULL,
-    activity_name VARCHAR(255) NOT NULL,
-    status VARCHAR(50) DEFAULT 'pending',
-    progress DECIMAL(5,2) DEFAULT 0,
-    owner_avatar VARCHAR(10) DEFAULT 'AD',
-    owner_name VARCHAR(100) DEFAULT 'Ads Team',
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;");
-
-$conn->query("CREATE TABLE IF NOT EXISTS okr_results (
-    id INT AUTO_INCREMENT PRIMARY KEY,
-    objective_id INT NOT NULL,
-    metric_name VARCHAR(255) NOT NULL,
-    target_value DECIMAL(10,2) DEFAULT 0,
-    current_value DECIMAL(10,2) DEFAULT 0,
-    unit VARCHAR(50),
-    status VARCHAR(50) DEFAULT 'on_track',
-    owner_avatar VARCHAR(10) DEFAULT 'SL',
-    owner_name VARCHAR(100) DEFAULT 'Sales Lead',
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;");
-
-// Update columns if they don't exist (Quick Add)
-function addColIfNotExists($conn, $table, $col, $def) {
-    if ($conn->query("SHOW COLUMNS FROM `$table` LIKE '$col'")->num_rows == 0) {
-        $conn->query("ALTER TABLE `$table` ADD COLUMN `$col` $def");
-    }
-}
-addColIfNotExists($conn, 'okr_key_activities', 'progress', 'DECIMAL(5,2) DEFAULT 0');
-addColIfNotExists($conn, 'okr_key_activities', 'status', 'VARCHAR(50) DEFAULT "pending"');
-addColIfNotExists($conn, 'okr_key_activities', 'owner_avatar', 'VARCHAR(10) DEFAULT "U"');
-addColIfNotExists($conn, 'okr_key_activities', 'owner_name', 'VARCHAR(100) DEFAULT "User"');
-addColIfNotExists($conn, 'okr_results', 'status', 'VARCHAR(50) DEFAULT "on_track"');
-addColIfNotExists($conn, 'okr_results', 'owner_avatar', 'VARCHAR(10) DEFAULT "U"');
-addColIfNotExists($conn, 'okr_results', 'owner_name', 'VARCHAR(100) DEFAULT "User"');
-addColIfNotExists($conn, 'okr_objectives', 'team', 'VARCHAR(100) DEFAULT "Sales & Marketing"');
-addColIfNotExists($conn, 'okr_objectives', 'owner', 'VARCHAR(100) DEFAULT "User"');
-addColIfNotExists($conn, 'okr_objectives', 'owner_id', 'INT DEFAULT 0');
-addColIfNotExists($conn, 'okr_objectives', 'sort_order', 'INT DEFAULT 0');
-addColIfNotExists($conn, 'okr_objectives', 'quarter', 'INT DEFAULT 1');
-addColIfNotExists($conn, 'okr_objectives', 'year', 'INT DEFAULT 2026');
+// Global Variable for Hide Flag
 addColIfNotExists($conn, 'users', 'hide_from_okr', 'TINYINT(1) DEFAULT 0');
-addColIfNotExists($conn, 'okr_objectives', 'priority', 'VARCHAR(20) DEFAULT "medium"');
 
-// Fix activity_name if it was created under a different name previously
+// Handle naming inconsistencies across versions
 if ($conn->query("SHOW COLUMNS FROM okr_key_activities LIKE 'activity_name'")->num_rows == 0) {
-    if ($conn->query("SHOW COLUMNS FROM okr_key_activities LIKE 'title'")->num_rows > 0) {
-        $conn->query("ALTER TABLE okr_key_activities CHANGE title activity_name VARCHAR(255)");
-    } elseif ($conn->query("SHOW COLUMNS FROM okr_key_activities LIKE 'name'")->num_rows > 0) {
+    if ($conn->query("SHOW COLUMNS FROM okr_key_activities LIKE 'name'")->num_rows > 0) {
         $conn->query("ALTER TABLE okr_key_activities CHANGE name activity_name VARCHAR(255)");
-    } else {
-        $conn->query("ALTER TABLE okr_key_activities ADD COLUMN activity_name VARCHAR(255) AFTER objective_id");
     }
 }
-// Fix metric_name if it was created under a different name
 if ($conn->query("SHOW COLUMNS FROM okr_results LIKE 'metric_name'")->num_rows == 0) {
-    if ($conn->query("SHOW COLUMNS FROM okr_results LIKE 'title'")->num_rows > 0) {
-        $conn->query("ALTER TABLE okr_results CHANGE title metric_name VARCHAR(255)");
-    } elseif ($conn->query("SHOW COLUMNS FROM okr_results LIKE 'name'")->num_rows > 0) {
+    if ($conn->query("SHOW COLUMNS FROM okr_results LIKE 'name'")->num_rows > 0) {
         $conn->query("ALTER TABLE okr_results CHANGE name metric_name VARCHAR(255)");
-    } else {
-        $conn->query("ALTER TABLE okr_results ADD COLUMN metric_name VARCHAR(255) AFTER objective_id");
     }
 }
 
