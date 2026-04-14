@@ -1450,18 +1450,22 @@ function getBadgeHtml($status) {
             document.getElementById('updateItemWeight').value = weight || 0;
             quill.root.innerHTML = ''; // Clear Editor
 
-            // Handle Target and Unit for metrics
+            // Handle Target and Unit visibility: always show progress, only show target+unit for metrics
+            const valLabel = document.querySelector('label[for="updateItemVal"]') || document.getElementById('updateItemVal').closest('.modal-control').querySelector('label');
             const targetField = document.getElementById('updateItemTarget');
-            if (targetField && targetField.parentElement) {
-                const targetContainer = targetField.parentElement;
-                if (type === 'metric') {
-                    targetContainer.style.display = 'flex';
-                    targetField.value = targetValue || 0;
-                    const unitStr = $('#td-val-metric-' + id).next('.val-unit').text().replace('/', '').trim();
-                    document.getElementById('updateItemUnit').value = unitStr || '%';
-                } else {
-                    targetContainer.style.display = 'none';
-                }
+            const unitField = document.getElementById('updateItemUnit');
+            if (type === 'metric') {
+                if (valLabel) valLabel.textContent = 'Current Value / Target / Unit';
+                targetField.value = targetValue || 0;
+                targetField.style.display = '';
+                unitField.style.display = '';
+                const unitStr = $('#td-val-metric-' + id).siblings('.val-unit').text().replace('/', '').trim();
+                unitField.value = unitStr || '%';
+            } else {
+                if (valLabel) valLabel.textContent = 'Progress (%)';
+                targetField.style.display = 'none';
+                unitField.style.display = 'none';
+                document.getElementById('updateItemVal').max = 100;
             }
             document.getElementById('updateItemHistory').innerHTML = '<p style="font-size:11px; color:#94a3b8; text-align:center;">Đang tải lịch sử...</p>';
             $.post('/modules/okr/index.php', {
