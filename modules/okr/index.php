@@ -165,10 +165,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
         }
 
         if ($type === 'metric') {
-            $target = floatval($_POST['target'] ?? 0);
-            $unit = $_POST['unit'] ?? '';
-            $stmt = $conn->prepare("UPDATE okr_results SET metric_name = ?, current_value = ?, target_value = ?, unit = ?, status = ?, priority = ?, weight = ?, owner_name = ?, owner_avatar = ? WHERE id = ?");
-            $stmt->bind_param("sddsssissi", $name, $val, $target, $unit, $status, $priority, $weight, $owner_name, $avatar, $id);
+            // val is now progress % — compute current_value proportionally, keep target_value intact
+            $stmt = $conn->prepare("UPDATE okr_results SET metric_name = ?, current_value = ROUND((? / 100.0) * target_value, 2), status = ?, priority = ?, weight = ?, owner_name = ?, owner_avatar = ? WHERE id = ?");
+            $stmt->bind_param("sdssissi", $name, $val, $status, $priority, $weight, $owner_name, $avatar, $id);
         } else {
             $stmt = $conn->prepare("UPDATE okr_key_activities SET activity_name = ?, progress = ?, status = ?, priority = ?, weight = ?, owner_name = ?, owner_avatar = ? WHERE id = ?");
             $stmt->bind_param("sdssissi", $name, $val, $status, $priority, $weight, $owner_name, $avatar, $id);
@@ -1143,7 +1142,7 @@ function getBadgeHtml($status) {
                                             </td>
                                             <td class="col-action">
                                                 <div style="display:flex; align-items:center;">
-                                                    <button class="btn-edit-row" onclick="openUpdateModal('<?php echo addslashes($r['metric_name'] ?? ''); ?>', 'metric', <?php echo $r['id']; ?>, <?php echo floatval($r['current_value'] ?? 0); ?>, <?php echo floatval($r['target_value'] ?? 0); ?>, '<?php echo $r['status'] ?? 'pending'; ?>', '<?php echo addslashes($r['owner_name'] ?? ''); ?>', '<?php echo $r['priority'] ?? 'medium'; ?>', <?php echo intval($r['weight'] ?? 0); ?>)"><i class="fas fa-pen"></i></button>
+                                                    <button class="btn-edit-row" onclick="openUpdateModal('<?php echo addslashes($r['metric_name'] ?? ''); ?>', 'metric', <?php echo $r['id']; ?>, <?php echo round($progress_pct, 1); ?>, 100, '<?php echo $r['status'] ?? 'pending'; ?>', '<?php echo addslashes($r['owner_name'] ?? ''); ?>', '<?php echo $r['priority'] ?? 'medium'; ?>', <?php echo intval($r['weight'] ?? 0); ?>)"><i class="fas fa-pen"></i></button>
                                                     <button class="btn-delete-row" title="Delete KR" onclick="deleteOkrItem(<?php echo $r['id']; ?>, 'metric')"><i class="fas fa-trash-alt"></i></button>
                                                 </div>
                                             </td>
@@ -1178,12 +1177,8 @@ function getBadgeHtml($status) {
                 </div>
 
                 <div class="modal-control">
-                    <label>Current Value / Target / Unit</label>
-                    <div style="display:flex; gap:10px;">
-                        <input type="number" id="updateItemVal" value="0" style="flex:1;" title="Current Value">
-                        <input type="number" id="updateItemTarget" value="0" style="flex:1;" title="Target Value">
-                        <input type="text" id="updateItemUnit" value="" style="width:70px;" placeholder="Unit">
-                    </div>
+                    <label>Progress (%)</label>
+                    <input type="number" id="updateItemVal" value="0" min="0" max="100" placeholder="0-100" style="width:100%;">
                 </div>
 
                 <div class="modal-control">
@@ -1450,23 +1445,8 @@ function getBadgeHtml($status) {
             document.getElementById('updateItemWeight').value = weight || 0;
             quill.root.innerHTML = ''; // Clear Editor
 
-            // Handle Target and Unit visibility: always show progress, only show target+unit for metrics
-            const valLabel = document.querySelector('label[for="updateItemVal"]') || document.getElementById('updateItemVal').closest('.modal-control').querySelector('label');
-            const targetField = document.getElementById('updateItemTarget');
-            const unitField = document.getElementById('updateItemUnit');
-            if (type === 'metric') {
-                if (valLabel) valLabel.textContent = 'Current Value / Target / Unit';
-                targetField.value = targetValue || 0;
-                targetField.style.display = '';
-                unitField.style.display = '';
-                const unitStr = $('#td-val-metric-' + id).siblings('.val-unit').text().replace('/', '').trim();
-                unitField.value = unitStr || '%';
-            } else {
-                if (valLabel) valLabel.textContent = 'Progress (%)';
-                targetField.style.display = 'none';
-                unitField.style.display = 'none';
-                document.getElementById('updateItemVal').max = 100;
-            }
+            // Both KA and KR use progress % (0-100)
+            document.getElementById('updateItemVal').value = currentValue;
             document.getElementById('updateItemHistory').innerHTML = '<p style="font-size:11px; color:#94a3b8; text-align:center;">Đang tải lịch sử...</p>';
             $.post('/modules/okr/index.php', {
                 action: 'fetch_explanation_history',
