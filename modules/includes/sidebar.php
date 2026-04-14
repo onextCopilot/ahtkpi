@@ -198,7 +198,17 @@ function isMenuItemActive($path, $current_uri)
             </a>
         </div>
 
-        <!-- 7. Documents -->
+        <!-- 7. OKR Management -->
+        <a href="/modules/okr" class="nav-item <?php echo isMenuItemActive('/modules/okr', $current_uri); ?>">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="12" cy="12" r="10"></circle>
+                <circle cx="12" cy="12" r="6"></circle>
+                <circle cx="12" cy="12" r="2"></circle>
+            </svg>
+            <span>OKR Management</span>
+        </a>
+
+        <!-- 8. Documents -->
         <a href="/documents" class="nav-item <?php echo isMenuItemActive('/documents', $current_uri); ?>">
             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
                 stroke-linecap="round" stroke-linejoin="round">
