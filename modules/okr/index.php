@@ -1128,16 +1128,14 @@ function getBadgeHtml($status) {
                                             <td class="col-owner" title="Owner"><div class="user-avatar avatar-purple" title="<?php echo htmlspecialchars($r['owner_name'] ?? ''); ?>"><?php echo $r['owner_avatar'] ?? ''; ?></div></td>
                                             <td class="col-weight" title="Weight (%)" style="font-size:12px; font-weight:700; color:#1d1d1f;"><?php echo intval($r['weight'] ?? 0); ?>%</td>
                                             <td class="col-status" title="Status" id="td-status-metric-<?php echo $r['id']; ?>"><?php echo getBadgeHtml($r['status']); ?></td>
-                                            <td class="col-progress" title="Current Value / Target Value">
+                                            <td class="col-progress" title="Progress (%)">
                                                 <?php 
                                                     $progress_pct = ($r['target_value'] > 0) ? ($r['current_value'] / $r['target_value']) * 100 : 0;
-                                                    $progress_pct = min(100, $progress_pct);
+                                                    $progress_pct = min(100, round($progress_pct, 1));
                                                 ?>
-                                                <div style="display:flex; flex-direction:column; gap:4px;">
-                                                    <div style="display:flex; justify-content:space-between; align-items:center;">
-                                                        <span class="val-target"><span id="td-val-metric-<?php echo $r['id']; ?>"><?php echo floatval($r['current_value']); ?></span><span class="val-unit">/<?php echo floatval($r['target_value']).' '.$r['unit']; ?></span></span>
-                                                    </div>
-                                                    <div class="progress-tiny" style="width: 100%;"><div class="progress-bar" id="td-bar-metric-<?php echo $r['id']; ?>" style="width: <?php echo $progress_pct; ?>%; height:100%; background:#34c759;"></div></div>
+                                                <div style="display:flex; align-items:center; gap:6px;">
+                                                    <span style="font-weight:600; min-width:32px;"><span id="td-val-metric-<?php echo $r['id']; ?>"><?php echo $progress_pct; ?></span>%</span>
+                                                    <div class="progress-tiny"><div class="progress-bar" id="td-bar-metric-<?php echo $r['id']; ?>" style="width: <?php echo $progress_pct; ?>%; height:100%; background:#34c759;"></div></div>
                                                 </div>
                                             </td>
                                             <td class="col-action">
@@ -1256,16 +1254,6 @@ function getBadgeHtml($status) {
                     </select>
                 </div>
 
-                <div class="modal-row" id="addModalMetricConfig" style="display:none; gap:16px; margin-top:16px;">
-                    <div class="modal-control" style="flex: 2;">
-                        <label>Target Value</label>
-                        <input type="number" id="addModalTarget" value="0">
-                    </div>
-                    <div class="modal-control" style="flex: 1;">
-                        <label>Unit</label>
-                        <input type="text" id="addModalUnit" value="%">
-                    </div>
-                </div>
 
                 <div class="modal-control">
                     <label>Priority & Weight (%)</label>
@@ -1617,8 +1605,6 @@ function getBadgeHtml($status) {
             const type = document.getElementById('addModalType').value;
             const name = document.getElementById('addModalName').value;
             const owner = document.getElementById('addModalOwner').value;
-            const target = document.getElementById('addModalTarget').value;
-            const unit = document.getElementById('addModalUnit').value;
             const priority = document.getElementById('addItemPriority').value;
             const weight = document.getElementById('addItemWeight').value;
 
@@ -1632,8 +1618,6 @@ function getBadgeHtml($status) {
                 type: type,
                 name: name,
                 owner_name: owner,
-                target: target,
-                unit: unit,
                 priority: priority,
                 weight: weight
             }, function(res) {
