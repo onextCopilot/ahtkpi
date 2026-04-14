@@ -1503,8 +1503,7 @@ function getBadgeHtml($status) {
             const priority = document.getElementById('updateItemPriority').value;
             const weight = document.getElementById('updateItemWeight').value;
             const explanation = quill.root.innerHTML;
-            const targetVal = type === 'metric' ? document.getElementById('updateItemTarget').value : 100;
-            const unitVal = type === 'metric' ? document.getElementById('updateItemUnit').value : '';
+            // Both KA and KR now use simple progress %, no separate target/unit fields
             
             if (quill.getText().trim().length === 0) {
                  // Option: don't save if empty, or just let it pass
@@ -1518,8 +1517,6 @@ function getBadgeHtml($status) {
                 type: type,
                 name: name,
                 val: val,
-                target: targetVal,
-                unit: unitVal,
                 status: status,
                 owner: owner,
                 priority: priority,
