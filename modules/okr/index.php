@@ -1195,6 +1195,15 @@ function getBadgeHtml($status) {
                 </div>
 
                 <div class="modal-control">
+                    <label>Current Value / Target / Unit</label>
+                    <div style="display:flex; gap:10px;">
+                        <input type="number" id="updateItemVal" value="0" style="flex:1;" title="Current Value">
+                        <input type="number" id="updateItemTarget" value="0" style="flex:1;" title="Target Value">
+                        <input type="text" id="updateItemUnit" value="" style="width:70px;" placeholder="Unit">
+                    </div>
+                </div>
+
+                <div class="modal-control">
                     <label>Owner (Assignee)</label>
                     <select id="updateItemOwner">
                         <option value="">-- Chọn User (Lấy từ Setting) --</option>
