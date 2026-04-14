@@ -1582,11 +1582,9 @@ function getBadgeHtml($status) {
             if (type === 'metric') {
                 document.getElementById('addModalTitle').innerText = 'Add Target Result (Metric)';
                 document.getElementById('addModalNameLbl').innerText = 'Metric Description';
-                document.getElementById('addModalMetricConfig').style.display = 'flex';
             } else {
                 document.getElementById('addModalTitle').innerText = 'Add Key Activity';
                 document.getElementById('addModalNameLbl').innerText = 'Activity Description';
-                document.getElementById('addModalMetricConfig').style.display = 'none';
             }
 
             let modal = document.getElementById('addModalOverlay');
