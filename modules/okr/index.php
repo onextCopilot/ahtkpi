@@ -45,6 +45,10 @@ try {
     addColIfNotExists($conn, 'okr_key_activities', 'weight', 'INT DEFAULT 0');
     addColIfNotExists($conn, 'okr_key_activities', 'owner_name', 'VARCHAR(255)');
     addColIfNotExists($conn, 'okr_key_activities', 'owner_avatar', 'VARCHAR(10)');
+
+    // Expand numeric columns to support large values (e.g. billions/trillions in revenue targets)
+    @$conn->query("ALTER TABLE `okr_results` MODIFY COLUMN `target_value` DECIMAL(20,2) DEFAULT 0");
+    @$conn->query("ALTER TABLE `okr_results` MODIFY COLUMN `current_value` DECIMAL(20,2) DEFAULT 0");
 } catch (Throwable $e) { /* Resilient against schema locks */ }
 
 // Auto-migration for Explanations
@@ -1193,16 +1197,6 @@ function getBadgeHtml($status) {
                         <option value="completed">Completed</option>
                     </select>
                 </div>
-
-                <div class="modal-control">
-                    <label>Current Value / Target / Unit</label>
-                    <div style="display:flex; gap:10px;">
-                        <input type="number" id="updateItemVal" value="0" style="flex:1;" title="Current Value">
-                        <input type="number" id="updateItemTarget" value="0" style="flex:1;" title="Target Value">
-                        <input type="text" id="updateItemUnit" value="" style="width:70px;" placeholder="Unit">
-                    </div>
-                </div>
-
                 <div class="modal-control">
                     <label>Owner (Assignee)</label>
                     <select id="updateItemOwner">
