@@ -64,6 +64,10 @@ if ($check_table->num_rows == 0) {
         `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
 }
+addColIfNotExists($conn, 'okr_explanations', 'week_num', 'INT DEFAULT 0');
+addColIfNotExists($conn, 'okr_explanations', 'progress_value', 'DECIMAL(5,2) DEFAULT 0');
+addColIfNotExists($conn, 'okr_explanations', 'quarter', 'INT DEFAULT 0');
+addColIfNotExists($conn, 'okr_explanations', 'year', 'INT DEFAULT 0');
 
 // Module-specific Page Titles
 $page_title = "OKR Management";
@@ -80,6 +84,15 @@ $current_full_name = $_SESSION['full_name'] ?? 'System / Anonymous';
 // Time Context (Moved up for consistent AJAX scope)
 $current_quarter = intval($_GET['quarter'] ?? ceil(date('n') / 3));
 $current_year = intval($_GET['year'] ?? date('Y'));
+
+// Calculate current week of the 13-week quarter
+$q_start_month = ($current_quarter - 1) * 3 + 1;
+$q_start_dt = new DateTime("$current_year-$q_start_month-01");
+$now_dt = new DateTime();
+$interval = $q_start_dt->diff($now_dt);
+$days_passed = $interval->days;
+if ($now_dt < $q_start_dt) $days_passed = 0;
+$current_week_num = min(13, max(1, floor($days_passed / 7) + 1));
 
 // Global Variable for Hide Flag
 addColIfNotExists($conn, 'users', 'hide_from_okr', 'TINYINT(1) DEFAULT 0');
@@ -138,11 +151,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
         // Find Objective ID
         $oid = 0;
         if($type === 'metric') {
-            $check = $conn->query("SELECT objective_id FROM okr_results WHERE id = $id");
-            if($c = $check->fetch_assoc()) $oid = $c['objective_id'];
+            $check = $conn->query("SELECT objective_id, quarter, year FROM okr_results r JOIN okr_objectives o ON r.objective_id = o.id WHERE r.id = $id");
+            if($c = $check->fetch_assoc()) {
+                $oid = $c['objective_id'];
+                $item_q = $c['quarter'];
+                $item_y = $c['year'];
+            }
         } else {
-            $check = $conn->query("SELECT objective_id FROM okr_key_activities WHERE id = $id");
-            if($c = $check->fetch_assoc()) $oid = $c['objective_id'];
+            $check = $conn->query("SELECT objective_id, quarter, year FROM okr_key_activities k JOIN okr_objectives o ON k.objective_id = o.id WHERE k.id = $id");
+            if($c = $check->fetch_assoc()) {
+                $oid = $c['objective_id'];
+                $item_q = $c['quarter'];
+                $item_y = $c['year'];
+            }
         }
 
         // Weight check
@@ -174,13 +195,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
         }
         $stmt->execute();
         
-        // Save explanation only if it has real content (not just empty Quill tags)
+        // Save explanation & Weekly Progress
         $clean_explanation = trim(strip_tags($explanation));
-        if ($explanation && !empty($clean_explanation)) {
+        if (($explanation && !empty($clean_explanation)) || isset($_POST['week_num'])) {
             $u_id = $_SESSION['user_id'] ?? 0;
             $u_name = $_SESSION['user_full_name'] ?? ($_SESSION['name'] ?? 'System');
-            $stmt_exp = $conn->prepare("INSERT INTO okr_explanations (item_id, item_type, content, user_id, user_name) VALUES (?, ?, ?, ?, ?)");
-            $stmt_exp->bind_param("issis", $id, $type, $explanation, $u_id, $u_name);
+            $week_num = intval($_POST['week_num'] ?? $current_week_num);
+            
+            // Use item's quarter/year if not provided
+            $save_q = intval($_POST['save_quarter'] ?? $item_q);
+            $save_y = intval($_POST['save_year'] ?? $item_y);
+
+            // Insert into explanations with progress and week
+            $stmt_exp = $conn->prepare("INSERT INTO okr_explanations (item_id, item_type, content, user_id, user_name, week_num, progress_value, quarter, year) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)");
+            $stmt_exp->bind_param("issisddii", $id, $type, $explanation, $u_id, $u_name, $week_num, $val, $save_q, $save_y);
             $stmt_exp->execute();
         }
         
@@ -262,6 +290,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
     if ($_POST['action'] === 'fetch_explanation_history') {
         $id = intval($_POST['id']);
         $type = $_POST['type'];
+        $q = intval($_POST['quarter'] ?? $current_quarter);
+        $y = intval($_POST['year'] ?? $current_year);
+        
         $history = [];
         $res = $conn->query("SELECT * FROM okr_explanations WHERE item_id = $id AND item_type = '$type' ORDER BY created_at DESC");
         if ($res) {
@@ -270,7 +301,26 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
                 $history[] = $row;
             }
         }
-        echo json_encode(['success' => true, 'history' => $history]);
+        
+        // Fetch specific weekly progress for current quarter
+        $weekly = [];
+        // We want the LATEST entry for each week to show in the grid
+        $w_res = $conn->query("SELECT e1.week_num, e1.progress_value 
+                               FROM okr_explanations e1
+                               INNER JOIN (
+                                   SELECT week_num, MAX(id) as max_id
+                                   FROM okr_explanations
+                                   WHERE item_id = $id AND item_type = '$type' AND quarter = $q AND year = $y
+                                   GROUP BY week_num
+                               ) e2 ON e1.id = e2.max_id
+                               ORDER BY e1.week_num ASC");
+        while($w = $w_res->fetch_assoc()) {
+            $weekly[$w['week_num']] = [
+                'progress' => (float)$w['progress_value']
+            ];
+        }
+
+        echo json_encode(['success' => true, 'history' => $history, 'weekly' => (object)$weekly]);
         exit();
     }
 
@@ -832,6 +882,15 @@ function getBadgeHtml($status) {
         
         #loadingSpinner, #addLoadingSpinner { display: none; margin-left: 8px; animation: spin 1s linear infinite; }
         @keyframes spin { 100% { transform: rotate(360deg); } }
+
+        /* Weekly Progress Styles */
+        .week-pill { padding: 8px 4px; background: #f5f5f7; border: 1px solid #d2d2d7; border-radius: 10px; text-align: center; cursor: pointer; transition: all 0.2s; display: flex; flex-direction: column; gap: 2px; position:relative; }
+        .week-pill:hover { background: #e5e5ea; transform: translateY(-1px); }
+        .week-pill.active { background: #1d1d1f !important; color: white !important; border-color: #1d1d1f !important; box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
+        .week-pill .w-label { font-size: 9px; font-weight: 700; opacity: 0.7; text-transform: uppercase; }
+        .week-pill .w-val { font-size: 11px; font-weight: 800; }
+        .week-pill.has-data { border-color: #34c759; color: #166534; background: #f0fdf4; }
+        .week-pill.is-current::after { content: ''; position: absolute; top: -3px; right: -3px; width: 8px; height: 8px; background: #ff3b30; border-radius: 50%; border: 2px solid white; }
     </style>
 </head>
 <body>
@@ -1075,7 +1134,7 @@ function getBadgeHtml($status) {
                                             </td>
                                             <td class="col-action">
                                                 <div style="display:flex; align-items:center;">
-                                                    <button class="btn-edit-row" onclick="openUpdateModal('<?php echo addslashes($a['activity_name'] ?? ''); ?>', 'activity', <?php echo $a['id']; ?>, <?php echo floatval($a['progress'] ?? 0); ?>, 100, '<?php echo $a['status'] ?? 'pending'; ?>', '<?php echo addslashes($a['owner_name'] ?? ''); ?>', '<?php echo $a['priority'] ?? 'medium'; ?>', <?php echo intval($a['weight'] ?? 0); ?>)"><i class="fas fa-pen"></i></button>
+                                                    <button class="btn-edit-row" onclick="openUpdateModal('<?php echo addslashes($a['activity_name'] ?? ''); ?>', 'activity', <?php echo $a['id']; ?>, <?php echo floatval($a['progress'] ?? 0); ?>, 100, '<?php echo $a['status'] ?? 'pending'; ?>', '<?php echo addslashes($a['owner_name'] ?? ''); ?>', '<?php echo $a['priority'] ?? 'medium'; ?>', <?php echo intval($a['weight'] ?? 0); ?>)"><i class="fas fa-history"></i></button>
                                                     <button class="btn-delete-row" title="Delete Activity" onclick="deleteOkrItem(<?php echo $a['id']; ?>, 'activity')"><i class="fas fa-trash-alt"></i></button>
                                                 </div>
                                             </td>
@@ -1140,7 +1199,7 @@ function getBadgeHtml($status) {
                                             </td>
                                             <td class="col-action">
                                                 <div style="display:flex; align-items:center;">
-                                                    <button class="btn-edit-row" onclick="openUpdateModal('<?php echo addslashes($r['metric_name'] ?? ''); ?>', 'metric', <?php echo $r['id']; ?>, <?php echo round($progress_pct, 1); ?>, 100, '<?php echo $r['status'] ?? 'pending'; ?>', '<?php echo addslashes($r['owner_name'] ?? ''); ?>', '<?php echo $r['priority'] ?? 'medium'; ?>', <?php echo intval($r['weight'] ?? 0); ?>)"><i class="fas fa-pen"></i></button>
+                                                    <button class="btn-edit-row" onclick="openUpdateModal('<?php echo addslashes($r['metric_name'] ?? ''); ?>', 'metric', <?php echo $r['id']; ?>, <?php echo round($progress_pct, 1); ?>, 100, '<?php echo $r['status'] ?? 'pending'; ?>', '<?php echo addslashes($r['owner_name'] ?? ''); ?>', '<?php echo $r['priority'] ?? 'medium'; ?>', <?php echo intval($r['weight'] ?? 0); ?>)"><i class="fas fa-history"></i></button>
                                                     <button class="btn-delete-row" title="Delete KR" onclick="deleteOkrItem(<?php echo $r['id']; ?>, 'metric')"><i class="fas fa-trash-alt"></i></button>
                                                 </div>
                                             </td>
@@ -1175,8 +1234,21 @@ function getBadgeHtml($status) {
                 </div>
 
                 <div class="modal-control">
-                    <label>Progress (%)</label>
-                    <input type="number" id="updateItemVal" value="0" min="0" max="100" placeholder="0-100" style="width:100%;">
+                    <label>Progress (%) & Weekly Tracking (Q<?php echo $current_quarter; ?>)</label>
+                    <div id="weeklyProgressGrid" style="display: grid; grid-template-columns: repeat(7, 1fr); gap: 8px; margin-bottom: 16px;">
+                        <!-- Weeks 1-13 generated by JS -->
+                    </div>
+                    <div style="display:flex; align-items:center; gap:12px;">
+                        <div style="flex:1;">
+                            <label style="font-size:11px; margin-bottom:4px;">Selected Week Progress</label>
+                            <input type="number" id="updateItemVal" value="0" min="0" max="100" placeholder="0-100">
+                        </div>
+                        <div style="width:120px;">
+                            <label style="font-size:11px; margin-bottom:4px;">Target</label>
+                            <input type="text" value="100%" disabled style="background:#eee; text-align:center;">
+                        </div>
+                    </div>
+                    <input type="hidden" id="updateItemWeek" value="<?php echo $current_week_num; ?>">
                 </div>
 
                 <div class="modal-control">
@@ -1431,16 +1503,41 @@ function getBadgeHtml($status) {
             document.getElementById('updateItemOwner').value = ownerName || '';
             document.getElementById('updateItemPriority').value = priority || 'medium';
             document.getElementById('updateItemWeight').value = weight || 0;
+            document.getElementById('updateItemWeek').value = <?php echo $current_week_num; ?>;
             quill.root.innerHTML = ''; // Clear Editor
 
             // Both KA and KR use progress % (0-100)
             document.getElementById('updateItemVal').value = currentValue;
-            document.getElementById('updateItemHistory').innerHTML = '<p style="font-size:11px; color:#94a3b8; text-align:center;">Đang tải lịch sử...</p>';
+            // Fetch Weekly Data & History
             $.post('/modules/okr/index.php', {
                 action: 'fetch_explanation_history',
                 id: id,
-                type: type
+                type: type,
+                quarter: <?php echo $current_quarter; ?>,
+                year: <?php echo $current_year; ?>
             }, function(res) {
+                // Populate Weekly Grid
+                let gridHtml = '';
+                const currentWeek = <?php echo $current_week_num; ?>;
+                const selectedWeek = document.getElementById('updateItemWeek').value || currentWeek;
+                
+                for (let w = 1; w <= 13; w++) {
+                    const weekData = res.weekly && res.weekly[w] ? res.weekly[w] : null;
+                    const hasData = weekData !== null;
+                    const progress = hasData ? weekData.progress : '-';
+                    const activeClass = (w == selectedWeek) ? 'active' : '';
+                    const dataClass = hasData ? 'has-data' : '';
+                    const currentClass = (w == currentWeek) ? 'is-current' : '';
+                    
+                    gridHtml += `
+                        <div class="week-pill ${activeClass} ${dataClass} ${currentClass}" onclick="selectWeekForUpdate(${w}, ${progress === '-' ? 0 : progress})">
+                            <span class="w-label">W${w}</span>
+                            <span class="w-val">${progress}${hasData ? '%' : ''}</span>
+                        </div>
+                    `;
+                }
+                document.getElementById('weeklyProgressGrid').innerHTML = gridHtml;
+
                 if(res.success && res.history.length > 0) {
                     let html = '<label style="font-size:11px; color:#475569; font-weight:800; text-transform:uppercase; margin-bottom:10px; display:block;">Lịch sử giải trình</label>';
                     res.history.forEach(h => {
@@ -1473,6 +1570,16 @@ function getBadgeHtml($status) {
             let modal = document.getElementById('updateModalOverlay');
             modal.style.display = 'flex';
             setTimeout(function() { document.getElementById('updateModalContent').classList.add('active'); }, 10);
+        }
+
+        function selectWeekForUpdate(week, val) {
+            document.getElementById('updateItemWeek').value = week;
+            document.getElementById('updateItemVal').value = val;
+            
+            // UI Update: Toggle active class
+            document.querySelectorAll('.week-pill').forEach(p => p.classList.remove('active'));
+            const pills = document.querySelectorAll('.week-pill');
+            if (pills[week-1]) pills[week-1].classList.add('active');
         }
 
         function closeUpdateModal() {
@@ -1509,7 +1616,10 @@ function getBadgeHtml($status) {
                 owner: owner,
                 priority: priority,
                 weight: weight,
-                explanation: explanation
+                explanation: explanation,
+                week_num: document.getElementById('updateItemWeek').value,
+                save_quarter: <?php echo $current_quarter; ?>,
+                save_year: <?php echo $current_year; ?>
             }, function(res) {
                 document.getElementById('loadingSpinner').style.display = 'none';
                 if(res.success) {
