@@ -699,6 +699,12 @@ $avatar = $_SESSION['avatar'] ?? '';
                                 <option value="2025">Năm 2025</option>
                                 <option value="2024">Năm 2024</option>
                             </select>
+                            <select id="usdStatsBcFilter" onchange="renderUsdRevenueStats()" class="filter-select" style="margin-right: 12px;">
+                                <option value="">Tất cả BC</option>
+                                <?php for($i=1; $i<=10; $i++): ?>
+                                    <option value="BC<?php echo $i; ?>">BC<?php echo $i; ?></option>
+                                <?php endfor; ?>
+                            </select>
                             <div class="search-box" style="min-width: 250px;">
                                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
                                     stroke-width="2">
@@ -1522,7 +1528,7 @@ $avatar = $_SESSION['avatar'] ?? '';
             header.innerHTML = headerHtml;
 
             const amId = document.getElementById('statsAmFilter') ? document.getElementById('statsAmFilter').value : '';
-            const bc = document.getElementById('statsBcFilter') ? document.getElementById('statsBcFilter').value : '';
+            const bc = document.getElementById('usdStatsBcFilter') ? document.getElementById('usdStatsBcFilter').value : '';
 
             // Filter data based on search and AM/BC
             let filteredData = currentStatsData.filter(c => c.name.toLowerCase().includes(search));
