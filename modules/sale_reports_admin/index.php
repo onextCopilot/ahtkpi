@@ -140,6 +140,9 @@ foreach ($all_invoices_year as $inv) {
         continue;
     }
 
+    $inv['amount_vnd_custom'] = $amount_vnd;
+    $odoo_map[$inv['id']] = $inv;
+
     // Only Invoiced Revenue from current year invoices
     $iy = (int) date('Y', strtotime($date));
     if ($iy == $current_year) {
@@ -167,7 +170,7 @@ foreach ($all_orders_year as $order) {
     // Convert SO amount to VND intelligently based on original currency
     $currencyCode = is_array($order['currency_id'] ?? null) ? $order['currency_id'][1] : 'VND';
     $odoo_total = (float) ($order['amount_total'] ?? 0);
-    
+
     $amount_vnd = $odoo_total;
     if ($currencyCode !== 'VND' && $odoo_total > 0) {
         $rateSource = $odoo->getRate($currencyCode, $date) ?: 1.0;
@@ -277,7 +280,7 @@ foreach ($all_ams as $am_name) {
     $am_invoices = $odoo_invoices_by_am[$am_name] ?? [];
 
     for ($q = 1; $q <= 4; $q++) {
-        $am_commissions[$am_name]["Q$q"] = ['com1' => 0, 'com2' => 0, 'total' => 0, 'kpi_pct' => 0];
+        $am_commissions[$am_name]["Q$q"] = ['com1' => 0, 'com1_vnd' => 0, 'com2' => 0, 'total' => 0, 'total_vnd' => 0, 'kpi_pct' => 0];
 
         // 1. KPI Achievement Percentage
         $actual = $am_invoiced[$am_name]["Q$q"] ?? 0;
@@ -300,7 +303,7 @@ foreach ($all_ams as $am_name) {
         $start_m = ($q - 1) * 3 + 1;
         $end_m = $q * 3;
         $q_start_date = "$current_year-" . str_pad($start_m, 2, '0', STR_PAD_LEFT) . "-01";
-        $q_end_date = date('Y-m-d', strtotime("$current_year-" . str_pad($end_m, 2, '0', STR_PAD_LEFT) . "-01 +3 month -1 day"));
+        $q_end_date = "";
 
         if ($q == 1)
             $q_end_date = "$current_year-03-31";
@@ -310,6 +313,11 @@ foreach ($all_ams as $am_name) {
             $q_end_date = "$current_year-09-30";
         elseif ($q == 4)
             $q_end_date = "$current_year-12-31";
+
+        $q_com1_usd = 0;
+        $q_com1_vnd = 0;
+        $q_com2_usd = 0;
+        $q_com2_vnd = 0;
 
         foreach ($am_invoices as $inv) {
             $oid = $inv['id'];
@@ -350,26 +358,40 @@ foreach ($all_ams as $am_name) {
                 $com1_pct = (float) str_replace(['%', ','], '', $l['com_1'] ?? '0');
                 $com2_pct = (float) str_replace(['%', ','], '', $l['com_2'] ?? '0');
 
-                $currency_code = is_array($inv['currency_id']) ? $inv['currency_id'][1] : 'VND';
-                $rateSource = $odoo->getRate($currency_code, $inv_date_str) ?: 1.0;
+                $amt_total_odoo = (float) ($inv['amount_total'] ?? 0);
+                $amount_vnd_odoo = (float) ($inv['amount_vnd_custom'] ?? 0);
+
+                $currencyCode = is_array($inv['currency_id'] ?? null) ? $inv['currency_id'][1] : 'VND';
+                $rateSource = $odoo->getRate($currencyCode, $inv_date_str) ?: 1.0;
                 $rateUsd = $odoo->getRate('USD', $inv_date_str) ?: 1.0;
+
                 $ratio_usd = $rateSource > 0 ? ($rateUsd / $rateSource) : 1;
+                $ratio_vnd = $amt_total_odoo > 0 ? ($amount_vnd_odoo / $amt_total_odoo) : 1;
 
                 $giaingan_usd = $giaingan_origin * $ratio_usd;
+                $giaingan_vnd = $giaingan_origin * $ratio_vnd;
 
                 // Bonus logic (10% of Net profit)
                 $is_bonus_yes = ($l['bonus_license_trading'] ?? 'No') === 'Yes';
                 $net_profit_f = (float) str_replace(['$', ','], '', $l['net_profit'] ?? '0');
                 $bonus_extra = ($is_bonus_yes && $net_profit_f > 0) ? ($net_profit_f * 0.1) : 0;
 
-                $q_com1 += ($giaingan_usd * ($com1_pct / 100)) + $bonus_extra;
-                $q_com2 += ($giaingan_usd * ($com2_pct / 100));
+                $com1_val_usd = ($giaingan_usd * ($com1_pct / 100)) + $bonus_extra;
+                // For VND, convert bonus_extra (USD) to VND using the same ratio as the rest of the invoice
+                $bonus_extra_vnd = $bonus_extra * $ratio_vnd / ($ratio_usd ?: 1);
+                $com1_val_vnd = ($giaingan_vnd * ($com1_pct / 100)) + $bonus_extra_vnd;
+
+                $q_com1_usd += $com1_val_usd;
+                $q_com1_vnd += $com1_val_vnd;
+                $q_com2_usd += ($giaingan_usd * ($com2_pct / 100));
+                $q_com2_vnd += ($giaingan_vnd * ($com2_pct / 100));
             }
         }
 
-        $am_commissions[$am_name]["Q$q"]['com1'] = $q_com1 * $payout_ratio;
-        $am_commissions[$am_name]["Q$q"]['com2'] = $q_com2 * $payout_ratio;
-        $am_commissions[$am_name]["Q$q"]['total'] = ($am_commissions[$am_name]["Q$q"]['com1'] + $am_commissions[$am_name]["Q$q"]['com2']);
+        $am_commissions[$am_name]["Q$q"]['com1'] = $q_com1_usd * $payout_ratio;
+        $am_commissions[$am_name]["Q$q"]['com1_vnd'] = $q_com1_vnd * $payout_ratio;
+        $am_commissions[$am_name]["Q$q"]['total'] = $am_commissions[$am_name]["Q$q"]['com1'];
+        $am_commissions[$am_name]["Q$q"]['total_vnd'] = $am_commissions[$am_name]["Q$q"]['com1_vnd'];
     }
 }
 
@@ -378,7 +400,9 @@ function formatMoney($val)
 {
     if ($val == 0)
         return '-';
-    return number_format($val, 0, '.', ',');
+    // Use 2 decimals if it has a fractional part, otherwise 0
+    $decimals = (floor($val) != $val) ? 2 : 0;
+    return number_format($val, $decimals, '.', ',');
 }
 
 function calcPercent($actual, $budget)
@@ -1003,19 +1027,19 @@ $budget_placeholder = 0;
                                 <thead>
                                     <tr>
                                         <th rowspan="2" class="sticky-col">AM BD</th>
-                                        <th colspan="4"
+                                        <th colspan="3"
                                             style="background: #eff6ff; border-bottom: 3px solid #3b82f6; color: #1d4ed8;">
                                             QUÝ 1
                                             (USD)</th>
-                                        <th colspan="4"
+                                        <th colspan="3"
                                             style="background: #f0fdf4; border-bottom: 3px solid #10b981; color: #059669;">
                                             QUÝ 2
                                             (USD)</th>
-                                        <th colspan="4"
+                                        <th colspan="3"
                                             style="background: #fffbeb; border-bottom: 3px solid #f59e0b; color: #b45309;">
                                             QUÝ 3
                                             (USD)</th>
-                                        <th colspan="4"
+                                        <th colspan="3"
                                             style="background: #fdf2f8; border-bottom: 3px solid #db2777; color: #9d174d;">
                                             QUÝ 4
                                             (USD)</th>
@@ -1026,8 +1050,7 @@ $budget_placeholder = 0;
                                     <tr style="background: #f8fafc;">
                                         <?php for ($i = 1; $i <= 4; $i++): ?>
                                             <th>% KPI</th>
-                                            <th>Com 1</th>
-                                            <th>Com 2</th>
+                                            <th>Commission</th>
                                             <th style="border-right: 2px solid #cbd5e1; color: #1e293b; background: #f1f5f9;">
                                                 Tổng
                                             </th>
@@ -1037,11 +1060,12 @@ $budget_placeholder = 0;
                                 <tbody>
                                     <?php
                                     $grand_total_year = 0;
+                                    $grand_total_year_vnd = 0;
                                     $q_totals = [
-                                        1 => ['com1' => 0, 'com2' => 0, 'total' => 0],
-                                        2 => ['com1' => 0, 'com2' => 0, 'total' => 0],
-                                        3 => ['com1' => 0, 'com2' => 0, 'total' => 0],
-                                        4 => ['com1' => 0, 'com2' => 0, 'total' => 0]
+                                        1 => ['com1' => 0, 'com1_vnd' => 0, 'com2' => 0, 'total' => 0, 'total_vnd' => 0],
+                                        2 => ['com1' => 0, 'com1_vnd' => 0, 'com2' => 0, 'total' => 0, 'total_vnd' => 0],
+                                        3 => ['com1' => 0, 'com1_vnd' => 0, 'com2' => 0, 'total' => 0, 'total_vnd' => 0],
+                                        4 => ['com1' => 0, 'com1_vnd' => 0, 'com2' => 0, 'total' => 0, 'total_vnd' => 0]
                                     ];
 
                                     foreach ($all_ams as $am):
@@ -1052,12 +1076,16 @@ $budget_placeholder = 0;
                                             continue;
 
                                         $am_year_total = $c['Q1']['total'] + $c['Q2']['total'] + $c['Q3']['total'] + $c['Q4']['total'];
+                                        $am_year_total_vnd = $c['Q1']['total_vnd'] + $c['Q2']['total_vnd'] + $c['Q3']['total_vnd'] + $c['Q4']['total_vnd'];
                                         $grand_total_year += $am_year_total;
+                                        $grand_total_year_vnd += $am_year_total_vnd;
 
                                         for ($i = 1; $i <= 4; $i++) {
                                             $q_totals[$i]['com1'] += $c["Q$i"]['com1'];
+                                            $q_totals[$i]['com1_vnd'] += $c["Q$i"]['com1_vnd'];
                                             $q_totals[$i]['com2'] += $c["Q$i"]['com2'];
                                             $q_totals[$i]['total'] += $c["Q$i"]['total'];
+                                            $q_totals[$i]['total_vnd'] += $c["Q$i"]['total_vnd'];
                                         }
                                         ?>
                                         <tr style="cursor: pointer;"
@@ -1099,23 +1127,34 @@ $budget_placeholder = 0;
                                                     </div>
                                                 </td>
                                                 <td class="text-right"
-                                                    onclick="event.stopPropagation(); viewReport(<?= (int) ($c['uid'] ?? 0) ?>, 'Q<?= $i ?>_<?= $current_year ?>')">
-                                                    <?= formatUSD($c[$qi]['com1'] ?? 0) ?>
-                                                </td>
-                                                <td class="text-right"
-                                                    onclick="event.stopPropagation(); viewReport(<?= (int) ($c['uid'] ?? 0) ?>, 'Q<?= $i ?>_<?= $current_year ?>')">
-                                                    <?= formatUSD($c[$qi]['com2'] ?? 0) ?>
+                                                    onclick="event.stopPropagation(); viewReport(<?= (int) ($c['uid'] ?? 0) ?>, 'Q<?= $i ?>_<?= $current_year ?>')"
+                                                    style="font-size: 11px;">
+                                                    <?php if (($c[$qi]['com1'] ?? 0) == 0): ?>
+                                                        -
+                                                    <?php else: ?>
+                                                        <div><?= formatMoney($c[$qi]['com1_vnd'] ?? 0) ?> VND</div>
+                                                        <div style="font-size: 10px; opacity: 0.7; font-weight: 400;">
+                                                            (<?= formatUSD($c[$qi]['com1'] ?? 0) ?>)</div>
+                                                    <?php endif; ?>
                                                 </td>
                                                 <td class="text-right"
                                                     onclick="event.stopPropagation(); viewReport(<?= (int) ($c['uid'] ?? 0) ?>, 'Q<?= $i ?>_<?= $current_year ?>')"
-                                                    style="font-weight: 700; border-right: 2px solid #cbd5e1; background: #f8fafc; color: #0f172a;">
-                                                    <?= formatUSD($c[$qi]['total'] ?? 0) ?>
+                                                    style="font-weight: 700; border-right: 2px solid #cbd5e1; background: #f8fafc; color: #0f172a; font-size: 11px;">
+                                                    <?php if (($c[$qi]['total'] ?? 0) == 0): ?>
+                                                        -
+                                                    <?php else: ?>
+                                                        <div><?= formatMoney($c[$qi]['total_vnd'] ?? 0) ?> VND</div>
+                                                        <div style="font-size: 10px; opacity: 0.7; font-weight: 400;">
+                                                            (<?= formatUSD($c[$qi]['total'] ?? 0) ?>)</div>
+                                                    <?php endif; ?>
                                                 </td>
                                             <?php endfor; ?>
 
                                             <td class="text-right year-total"
-                                                style="background: #1e293b; color: #fff; font-weight: 700;">
-                                                <?= formatUSD($am_year_total) ?>
+                                                style="background: #1e293b; color: #fff; font-weight: 700; font-size: 11px;">
+                                                <div><?= formatMoney($am_year_total_vnd) ?> VND</div>
+                                                <div style="font-size: 10px; opacity: 0.8; font-weight: 400;">
+                                                    (<?= formatUSD($am_year_total) ?>)</div>
                                             </td>
                                         </tr>
                                     <?php endforeach; ?>
@@ -1125,17 +1164,36 @@ $budget_placeholder = 0;
                                         <td class="sticky-col">TỔNG CỘNG</td>
                                         <?php for ($i = 1; $i <= 4; $i++): ?>
                                             <td></td>
-                                            <td class="text-right"><?= formatUSD($q_totals[$i]['com1']) ?></td>
-                                            <td class="text-right"><?= formatUSD($q_totals[$i]['com2']) ?></td>
+                                            <td class="text-right" style="font-size: 11px;">
+                                                <?php if (($q_totals[$i]['com1'] ?? 0) == 0): ?>
+                                                    -
+                                                <?php else: ?>
+                                                    <div><?= formatMoney($q_totals[$i]['com1_vnd']) ?> VND</div>
+                                                    <div style="font-size: 10px; opacity: 0.7; font-weight: 400;">
+                                                        (<?= formatUSD($q_totals[$i]['com1']) ?>)</div>
+                                                <?php endif; ?>
+                                            </td>
                                             <td class="text-right"
-                                                style="border-right: 2px solid #cbd5e1; background: #f1f5f9; color: #1e293b;">
-                                                <?= formatUSD($q_totals[$i]['total']) ?>
+                                                style="border-right: 2px solid #cbd5e1; background: #f1f5f9; color: #1e293b; font-size: 11px;">
+                                                <?php if (($q_totals[$i]['total'] ?? 0) == 0): ?>
+                                                    -
+                                                <?php else: ?>
+                                                    <div><?= formatMoney($q_totals[$i]['total_vnd']) ?> VND</div>
+                                                    <div style="font-size: 10px; opacity: 0.7; font-weight: 400;">
+                                                        (<?= formatUSD($q_totals[$i]['total']) ?>)</div>
+                                                <?php endif; ?>
                                             </td>
                                         <?php endfor; ?>
 
                                         <td class="text-right year-total"
-                                            style="background: #0f172a; color: #fff; font-size: 14px; border: none;">
-                                            <?= formatUSD($grand_total_year) ?>
+                                            style="background: #0f172a; color: #fff; font-size: 12px; border: none;">
+                                            <?php if ($grand_total_year == 0): ?>
+                                                -
+                                            <?php else: ?>
+                                                <div><?= formatMoney($grand_total_year_vnd) ?> VND</div>
+                                                <div style="font-size: 10px; opacity: 0.8; font-weight: 400;">
+                                                    (<?= formatUSD($grand_total_year) ?>)</div>
+                                            <?php endif; ?>
                                         </td>
                                     </tr>
                                 </tfoot>
