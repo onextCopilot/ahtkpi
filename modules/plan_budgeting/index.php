@@ -718,8 +718,8 @@ $grand_total_blocks = $settings_map['budget_grand_total_blocks'] ?? null;
 foreach ($structure as $row) {
     if ($row['type'] !== 'item') continue;
     
-    $did = trim($row['division'] ?? '');
-    $cat_name = trim($row['category'] ?? '');
+    $did = clean_key($row['division'] ?? '');
+    $cat_name = clean_key($row['category'] ?? '');
     $cid = $did . ' > ' . $cat_name;
     
     $iid = $row['id'];
@@ -764,13 +764,13 @@ foreach ($structure as $row) {
 
 function get_rev_val($row, $div_totals, $cat_totals, $type) {
     if ($row['type'] === 'item') return floatval($row[$type] ?? 0);
-    $did = trim($row['division'] ?? '');
+    $did = clean_key($row['division'] ?? '');
     if ($row['type'] === 'division') {
-        $d_name = trim($row['item_name'] ?? '');
+        $d_name = clean_key($row['item_name'] ?? '');
         return $div_totals[$d_name]['_rev_'][$type] ?? 0;
     }
     if ($row['type'] === 'category') {
-        $c_name = trim($row['item_name'] ?? '');
+        $c_name = clean_key($row['item_name'] ?? '');
         $cid = $did . ' > ' . $c_name;
         return $cat_totals[$cid]['_rev_'][$type] ?? 0;
     }
@@ -783,12 +783,12 @@ function get_display_val($row, $values, $div_totals, $cat_totals, $month, $type)
     }
     
     // Parent rows often have display prefixes like '-'
-    $name = trim(str_replace(['-', '•'], '', $row['item_name'] ?? ''));
+    $name = clean_key($row['item_name'] ?? '');
     if ($row['type'] === 'division') {
         return $div_totals[$name][$month][$type] ?? 0;
     }
     if ($row['type'] === 'category') {
-        $did = trim($row['division'] ?? '');
+        $did = clean_key($row['division'] ?? '');
         $cid = $did . ' > ' . $name;
         return $cat_totals[$cid][$month][$type] ?? 0;
     }
@@ -888,6 +888,15 @@ function get_rev_bg_color($val, $planned, $red, $yellow, $green) {
             border-right: 1px dashed #ffffff !important; 
             border-bottom: 1px dashed #ffffff !important; 
             box-sizing: border-box;
+            font-weight: 800 !important;
+            position: sticky !important;
+            top: 119px !important; /* Sticks directly below the 3 header rows */
+            z-index: 18 !important;
+        }
+        table.budget-table .row-total td.col-stt,
+        table.budget-table .row-total td.col-block,
+        table.budget-table .row-total td.col-dept {
+            z-index: 19 !important; /* Elevate intersection above normal data cells */
         }
         
         /* Sticky Columns - Highest priority for the first two columns */
@@ -952,6 +961,11 @@ function get_rev_bg_color($val, $planned, $red, $yellow, $green) {
         .row-division td { color: #000000; font-weight: 700; }
         .row-category td { color: #000000; font-weight: 600; }
         .type-division td:first-child { background: #1e3a8a !important; color: white !important; }
+        
+        /* Level 3 Row Hover */
+        table.budget-table tbody tr.item-row:hover td {
+            background-color: #ffedd5 !important; /* Slightly deeper peach for hover */
+        }
         
         .editable-cell { cursor: pointer; transition: all 0.2s; min-width: 100px; }
         .editable-cell:hover { background: #eff6ff !important; outline: 1px solid #3b82f6; }
@@ -1236,6 +1250,67 @@ function get_rev_bg_color($val, $planned, $red, $yellow, $green) {
                         border-radius: 50%;
                         background: currentColor;
                     }
+                    /* Editable Cell Highlight & Edit Icon */
+                    .editable-cell {
+                        position: relative;
+                        transition: outline 0.1s;
+                        padding-right: 30px !important;
+                        cursor: default !important;
+                    }
+                    .editable-cell:hover {
+                        outline: 2px dashed #94a3b8;
+                        outline-offset: -2px;
+                    }
+                    .editable-cell::after {
+                        content: '\270E'; /* Pencil Icon */
+                        position: absolute;
+                        right: 4px;
+                        top: 50%;
+                        transform: translateY(-50%);
+                        font-size: 14px;
+                        color: #64748b;
+                        padding: 4px;
+                        opacity: 0;
+                        transition: all 0.2s;
+                        pointer-events: auto;
+                        cursor: pointer !important;
+                    }
+                    .editable-cell:hover::after {
+                        opacity: 1;
+                    }
+                    .editable-cell::after:hover {
+                        color: #2563eb;
+                        transform: translateY(-50%) scale(1.1);
+                    }
+
+                    /* 
+                       =================================================
+                       FIX: EXACT Z-INDEX LAYERING FOR STICKY ROWS/COLS
+                       Ensure STT, Khối, Dept stay above normal columns
+                       =================================================
+                    */
+                    /* 1. Header (Top Row) */
+                    table.budget-table thead th { z-index: 20 !important; }
+                    table.budget-table thead th.col-stt, 
+                    table.budget-table thead th.col-block, 
+                    table.budget-table thead th.col-dept { z-index: 30 !important; }
+                    
+                    /* 2. Grand Total Row */
+                    table.budget-table .row-total td { 
+                        position: sticky !important;
+                        top: 119px !important; 
+                        z-index: 18 !important; 
+                    }
+                    table.budget-table .row-total td.col-stt, 
+                    table.budget-table .row-total td.col-block, 
+                    table.budget-table .row-total td.col-dept { 
+                        z-index: 19 !important; 
+                    }
+                    
+                    /* 3. Normal Rows (Left Columns only) */
+                    table.budget-table tbody td.col-stt, 
+                    table.budget-table tbody td.col-block { z-index: 10 !important; }
+                    table.budget-table tbody td.col-dept { z-index: 9 !important; }
                 </style>
 
                 <div class="card">
@@ -1373,19 +1448,23 @@ function get_rev_bg_color($val, $planned, $red, $yellow, $green) {
                                      $percent = ($planned > 0) ? ($total_actual / $planned) * 100 : 0;
                                      $row_bg = '';
                                      $data_bg = '';
+                                     $row_fw = '500';
                                      if ($row['type'] === 'division') {
                                          // Level 1: Sky Blue BG / Black Text (always)
-                                         $row_bg = 'background-color: #bfdbfe !important; color: #000000 !important; font-weight: 800; border-bottom: 2px solid #93c5fd;'; 
+                                         $row_bg = 'background-color: #bfdbfe !important; color: #000000 !important; font-weight: 900; border-bottom: 2px solid #93c5fd; cursor: default;'; 
+                                         $row_fw = '900';
                                          if ($percent >= $cost_red) { $row_bg .= ' border-left: 6px solid #ef4444;'; $data_bg = 'background-color: #ffcccc !important;'; }
                                          elseif ($percent >= $cost_yellow) { $row_bg .= ' border-left: 6px solid #f59e0b;'; $data_bg = 'background-color: #fde047 !important;'; }
                                      } elseif ($row['type'] === 'category') {
-                                         // Level 2: Slate BG / Black Text (always)
-                                         $row_bg = 'background-color: #f8fafc !important; color: #000000 !important; font-weight: 600; border-bottom: 1px dashed #cbd5e1;';
+                                         // Level 2: Distinct Slate BG / Bold Black Text
+                                         $row_bg = 'background-color: #e2e8f0 !important; color: #0f172a !important; font-weight: 800; border-bottom: 2px solid #cbd5e1; cursor: default;';
+                                         $row_fw = '800';
                                          if ($percent >= $cost_red) { $data_bg = 'background-color: #ffcccc !important;'; }
                                          elseif ($percent >= $cost_yellow) { $data_bg = 'background-color: #fde047 !important;'; }
                                      } else {
                                          // Level 3: Item (Peach BG) / Black Text (always)
                                          $row_bg = 'background-color: #fff7ed !important; color: #000000 !important; border-bottom: 1px dashed #fed7aa;'; 
+                                         $row_fw = '500';
                                          if ($percent >= $cost_red) $data_bg = 'background-color: #ffcccc !important;'; 
                                          elseif ($percent >= $cost_yellow) $data_bg = 'background-color: #fde047 !important;';
                                      }
@@ -1398,10 +1477,10 @@ function get_rev_bg_color($val, $planned, $red, $yellow, $green) {
                                      <?php $cell_style = ''; // Removed transparent background hack which broke sticky layering ?>
                                      
                                      <td class="text-center col-stt" style="<?php echo $cell_style; ?>"><?php echo ($row['type'] === 'division' ? $idx : ''); ?></td>
-                                     <td class="col-block" style="font-weight: 600; <?php echo $cell_style; ?>">
+                                     <td class="col-block" style="font-weight: <?php echo ($row['type'] === 'division' ? '900' : '600'); ?>; <?php echo $cell_style; ?>">
                                          <?php echo ($row['type'] !== 'division' ? htmlspecialchars($p_div) : ''); ?>
                                      </td>
-                                     <td class="col-dept" style="padding-left: <?php echo ($row['type'] === 'category' ? '25px' : ($row['type'] === 'item' ? '45px' : '8px')); ?>; font-weight: 700; <?php echo $cell_style; ?>">
+                                     <td class="col-dept" style="padding-left: <?php echo ($row['type'] === 'category' ? '25px' : ($row['type'] === 'item' ? '45px' : '8px')); ?>; font-weight: <?php echo $row_fw; ?>; <?php echo $cell_style; ?>">
                                          <?php 
                                             if ($row['type'] === 'division') {
                                                 echo htmlspecialchars($row['item_name']);
@@ -2266,7 +2345,10 @@ function get_rev_bg_color($val, $planned, $red, $yellow, $green) {
         }
 
         document.querySelectorAll('.editable-cell').forEach(cell => {
-            cell.addEventListener('click', function() {
+            cell.addEventListener('click', function(e) {
+                // Ensure click is on the pencil icon (the right-most 28px)
+                if (e.offsetX < this.offsetWidth - 28) return;
+                
                 if (this.querySelector('input')) return;
                 const originalValue = this.innerText.replace(/[^\d]/g, '').trim() || 0;
                 const originalPadding = this.style.padding;
