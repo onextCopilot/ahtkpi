@@ -588,6 +588,67 @@ if (!$is_admin) {
     $raw = $filtered_raw;
 }
 
+// --- GET AND APPLY DIVISION FILTER ---
+$available_divisions = [];
+foreach ($raw as $r) {
+    if ($r['type'] === 'division') {
+        $dn = clean_key($r['item_name']);
+        if ($dn) $available_divisions[$dn] = $dn;
+    }
+}
+ksort($available_divisions);
+
+$selected_division_filter = $_GET['div_filter'] ?? '';
+
+if ($selected_division_filter !== '') {
+    $temp_raw = [];
+    foreach ($raw as $r) {
+        $r_div = ($r['type'] === 'division') ? clean_key($r['item_name']) : clean_key($r['division']);
+        if ($r_div === $selected_division_filter) {
+            $temp_raw[] = $r;
+        }
+    }
+    $raw = $temp_raw;
+}
+
+// --- GET AND APPLY CATEGORY FILTER ---
+$available_categories = [];
+foreach ($raw as $r) {
+    // Only fetch from the (potentially division-filtered) raw list
+    if ($r['type'] === 'category') {
+        $cn = clean_key($r['item_name']);
+        if ($cn) $available_categories[$cn] = $cn;
+    }
+}
+ksort($available_categories);
+
+$selected_category_filter = $_GET['cat_filter'] ?? '';
+
+if ($selected_category_filter !== '') {
+    $temp_raw = [];
+    $allowed_divisions = [];
+    
+    // Pass 1: Find which divisions own this category so we don't accidentally hide the parent headers
+    foreach ($raw as $r) {
+        if ($r['type'] === 'category' && clean_key($r['item_name']) === $selected_category_filter) {
+            $allowed_divisions[clean_key($r['division'])] = true;
+        }
+    }
+    
+    // Pass 2: Keep only relevant rows
+    foreach ($raw as $r) {
+        if ($r['type'] === 'division') {
+            if (isset($allowed_divisions[clean_key($r['item_name'])])) $temp_raw[] = $r;
+        } elseif ($r['type'] === 'category') {
+            if (clean_key($r['item_name']) === $selected_category_filter) $temp_raw[] = $r;
+        } else {
+            // item type
+            if (clean_key($r['category']) === $selected_category_filter) $temp_raw[] = $r;
+        }
+    }
+    $raw = $temp_raw;
+}
+
 // 1. Pass: Build Division dictionary
 $div_nodes = [];
 foreach ($raw as $row) {
@@ -806,10 +867,10 @@ $cost_red = $settings_map['budget_cost_red'] ?? 100;
 function get_rev_bg_color($val, $planned, $red, $yellow, $green) {
     if ($val == 0 || $planned == 0) return '';
     $pct = ($val / $planned) * 100;
-    if ($pct > $green) return 'background-color: #f3e8ff !important; color: #6b21a8 !important; font-weight: bold; border: 1px dashed #d8b4fe !important; outline: 1px solid #d8b4fe;'; // Purple
-    if ($pct > $yellow) return 'background-color: #dcfce7 !important; color: #166534 !important; font-weight: bold; border: 1px dashed #bbf7d0 !important; outline: 1px solid #bbf7d0;'; // Green
-    if ($pct > $red) return 'background-color: #fef08a !important; color: #854d0e !important; font-weight: bold; border: 1px dashed #fde047 !important; outline: 1px solid #fde047;'; // Yellow
-    return 'background-color: #fee2e2 !important; color: #991b1b !important; font-weight: bold; border: 1px dashed #fecaca !important; outline: 1px solid #fecaca;'; // Red
+    if ($pct > $green) return 'background-color: #f3e8ff !important; color: #6b21a8 !important; font-weight: bold;'; // Purple
+    if ($pct > $yellow) return 'background-color: #dcfce7 !important; color: #166534 !important; font-weight: bold;'; // Green
+    if ($pct > $red) return 'background-color: #fef08a !important; color: #854d0e !important; font-weight: bold;'; // Yellow
+    return 'background-color: #fee2e2 !important; color: #991b1b !important; font-weight: bold;'; // Red
 }
 ?>
 <!DOCTYPE html>
@@ -1094,7 +1155,7 @@ function get_rev_bg_color($val, $planned, $red, $yellow, $green) {
                     <!-- Left: Filter Controls -->
                     <div style="display: flex; align-items: center; gap: 8px;">
                         <span style="font-size: 11px; font-weight: 700; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.05em; white-space: nowrap;">Xem dữ liệu:</span>
-                        <select class="filter-select" style="font-size:13px; padding:6px 10px;" onchange="location.href='?year=' + this.value + '&quarter=<?php echo $current_quarter; ?>'">
+                        <select class="filter-select" style="font-size:13px; padding:6px 10px;" onchange="location.href='?year=' + this.value + '&quarter=<?php echo $current_quarter; ?>' + '<?php echo $selected_division_filter ? '&div_filter='.urlencode($selected_division_filter) : ''; ?>' + '<?php echo $selected_category_filter ? '&cat_filter='.urlencode($selected_category_filter) : ''; ?>'">
                             <?php 
                             $start_year = 2024;
                             $end_year = date('Y') + 1;
@@ -1103,11 +1164,23 @@ function get_rev_bg_color($val, $planned, $red, $yellow, $green) {
                                 <option value="<?php echo $y; ?>" <?php if($current_year == $y) echo 'selected'; ?>>Năm <?php echo $y; ?></option>
                             <?php endfor; ?>
                         </select>
-                        <select class="filter-select" style="font-size:13px; padding:6px 10px;" onchange="location.href='?year=<?php echo $current_year; ?>&quarter=' + this.value">
+                        <select class="filter-select" style="font-size:13px; padding:6px 10px;" onchange="location.href='?year=<?php echo $current_year; ?>&quarter=' + this.value + '<?php echo $selected_division_filter ? '&div_filter='.urlencode($selected_division_filter) : ''; ?>' + '<?php echo $selected_category_filter ? '&cat_filter='.urlencode($selected_category_filter) : ''; ?>'">
                             <option value="1" <?php if($current_quarter == 1) echo 'selected'; ?>>Quý 1</option>
                             <option value="2" <?php if($current_quarter == 2) echo 'selected'; ?>>Quý 2</option>
                             <option value="3" <?php if($current_quarter == 3) echo 'selected'; ?>>Quý 3</option>
                             <option value="4" <?php if($current_quarter == 4) echo 'selected'; ?>>Quý 4</option>
+                        </select>
+                        <select class="filter-select" style="font-size:13px; padding:6px 10px; max-width: 150px; text-overflow: ellipsis; outline: none;" onchange="location.href='?year=<?php echo $current_year; ?>&quarter=<?php echo $current_quarter; ?>&div_filter=' + encodeURIComponent(this.value)">
+                            <option value="">-- Tất cả Khối --</option>
+                            <?php foreach($available_divisions as $dname): ?>
+                                <option value="<?php echo htmlspecialchars($dname); ?>" <?php if($selected_division_filter === $dname) echo 'selected'; ?>><?php echo htmlspecialchars($dname); ?></option>
+                            <?php endforeach; ?>
+                        </select>
+                        <select class="filter-select" style="font-size:13px; padding:6px 10px; max-width: 200px; text-overflow: ellipsis; outline: none;" onchange="location.href='?year=<?php echo $current_year; ?>&quarter=<?php echo $current_quarter; ?>' + '<?php echo $selected_division_filter ? '&div_filter='.urlencode($selected_division_filter) : ''; ?>' + '&cat_filter=' + encodeURIComponent(this.value)">
+                            <option value="">-- Tất cả Bộ phận (Lv2) --</option>
+                            <?php foreach($available_categories as $cname): ?>
+                                <option value="<?php echo htmlspecialchars($cname); ?>" <?php if($selected_category_filter === $cname) echo 'selected'; ?>><?php echo htmlspecialchars($cname); ?></option>
+                            <?php endforeach; ?>
                         </select>
                     </div>
 
