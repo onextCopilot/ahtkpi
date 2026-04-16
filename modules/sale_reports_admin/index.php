@@ -15,6 +15,15 @@ if ($_SESSION['role'] !== 'admin') {
 require_once __DIR__ . '/../../libs/OdooAPI.php';
 
 $current_year = isset($_GET['year']) ? (int) $_GET['year'] : (int) date('Y');
+
+// Handle AM Exclusion Toggle
+if (isset($_GET['toggle_exclude_am'])) {
+    $am_id = (int) $_GET['toggle_exclude_am'];
+    $val = (int) $_GET['val'];
+    $conn->query("UPDATE users SET exclude_from_report = $val WHERE id = $am_id");
+    header("Location: /sale-reports-admin?year=" . $current_year);
+    exit;
+}
 $years = [$current_year + 1, $current_year, $current_year - 1, $current_year - 2];
 
 // Helper: Convert to VND
@@ -62,9 +71,15 @@ if ($res_sr) {
     }
 }
 
-// Fetch all AMs from DB for mapping
+// Add column if not exists (Safe check for MySQL compatibility)
+$check_col = $conn->query("SHOW COLUMNS FROM `users` LIKE 'exclude_from_report'");
+if ($check_col && $check_col->num_rows == 0) {
+    $conn->query("ALTER TABLE `users` ADD COLUMN `exclude_from_report` TINYINT(1) DEFAULT 0");
+}
+
+// Fetch all AMs from DB for mapping (excluding hidden ones)
 $all_ams_data = [];
-$res_am_all = $conn->query("SELECT id, full_name, email, sale_level_id FROM users WHERE is_am_bd = 1 ORDER BY full_name ASC");
+$res_am_all = $conn->query("SELECT id, full_name, email, sale_level_id FROM users WHERE is_am_bd = 1 AND (exclude_from_report = 0 OR exclude_from_report IS NULL) ORDER BY full_name ASC");
 if ($res_am_all) {
     while ($r = $res_am_all->fetch_assoc()) {
         $all_ams_data[] = $r;
@@ -435,8 +450,10 @@ $budget_placeholder = 0;
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <style>
         body {
-            font-family: 'Inter', sans-serif;
-            overflow-x: hidden;
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            background-color: #f8fafc;
+            color: #0f172a;
+            line-height: 1.5;
         }
 
         .report-page-container {
@@ -476,7 +493,9 @@ $budget_placeholder = 0;
             border-collapse: separate;
             border-spacing: 0;
             white-space: nowrap;
-            font-size: 13px;
+            font-size: 11.5px;
+            letter-spacing: -0.01em;
+            color: #0f172a;
         }
 
         table.revenue-table thead {
@@ -490,13 +509,16 @@ $budget_placeholder = 0;
         table.revenue-table thead th {
             position: sticky;
             top: 0;
-            background-color: #004b75;
-            color: white;
+            background-color: #0f172a;
+            color: #f8fafc;
             font-weight: 600;
-            padding: 10px 12px;
+            padding: 5px 6px;
             text-align: center;
-            border-bottom: 2px solid #003655;
+            border-bottom: 1px solid #1e293b;
             z-index: 10;
+            text-transform: uppercase;
+            font-size: 10px;
+            letter-spacing: 0.05em;
         }
 
         table.revenue-table thead th:not(:last-child) {
@@ -504,7 +526,7 @@ $budget_placeholder = 0;
         }
 
         table.revenue-table thead tr:nth-child(2) th {
-            top: 38px;
+
             /* Safe overlap */
             box-shadow: 0 -2px 0 0 #004b75;
             /* Cover any potential gaps */
@@ -513,11 +535,12 @@ $budget_placeholder = 0;
         }
 
         table.revenue-table tbody td {
-            padding: 8px 10px;
-            border-bottom: 1px solid #e0e0e0;
-            border-right: 1px solid #f0f0f0;
+            padding: 3px 6px;
+            border-bottom: 1px solid #cbd5e1;
+            border-right: 1px solid #e2e8f0;
             vertical-align: middle;
-            color: #333;
+            color: #0f172a;
+            font-weight: 500;
         }
 
         table.revenue-table tbody tr.section-header td,
@@ -599,11 +622,11 @@ $budget_placeholder = 0;
 
         .card-title {
             margin: 0;
-            font-size: 1.125rem;
-            font-weight: 800;
-            color: #1e293b;
+            font-size: 1rem;
+            font-weight: 700;
+            color: #0f172a;
             text-transform: uppercase;
-            letter-spacing: 0.025em;
+            letter-spacing: 0.05em;
         }
 
         .report-table-container {
@@ -616,12 +639,14 @@ $budget_placeholder = 0;
             width: 100%;
             border-collapse: separate;
             border-spacing: 0;
-            font-size: 12px;
+            font-size: 10.5px;
             white-space: nowrap;
+            letter-spacing: -0.01em;
+            color: #0f172a;
         }
 
         table.report-table th {
-            padding: 14px 12px;
+            padding: 3px 5px;
             text-align: center;
             font-weight: 700;
             border-bottom: 1px solid #cbd5e1;
@@ -630,15 +655,16 @@ $budget_placeholder = 0;
         }
 
         table.report-table td {
-            padding: 8px 10px;
-            border-bottom: 1px solid #f1f5f9;
-            border-right: 1px solid #f1f5f9;
-            color: #475569;
+            padding: 1px 5px;
+            border-bottom: 1px solid #cbd5e1;
+            border-right: 1px solid #e2e8f0;
+            color: #0f172a;
             vertical-align: middle;
+            font-weight: 500;
         }
 
         table.report-table thead tr:first-child th {
-            font-size: 11px;
+            font-size: 10.5px;
             text-transform: uppercase;
             letter-spacing: 0.075em;
             background-color: #f8fafc;
@@ -687,10 +713,10 @@ $budget_placeholder = 0;
 
         .kpi-badge {
             display: inline-block;
-            padding: 2px 6px;
+            padding: 3px 8px;
             border-radius: 4px;
             font-weight: 700;
-            font-size: 11px;
+            font-size: 13px;
         }
 
         .kpi-high {
@@ -778,6 +804,53 @@ $budget_placeholder = 0;
                             <?php endforeach; ?>
                         </select>
                     </form>
+
+                    <div class="am-visibility-settings" style="margin-left: auto; position: relative;">
+                        <button onclick="document.getElementById('am-settings-menu').classList.toggle('show')"
+                            style="background: #f1f5f9; border: 1px solid #cbd5e1; padding: 6px 12px; border-radius: 6px; cursor: pointer; display: flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 500;">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24"
+                                fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                                stroke-linejoin="round">
+                                <path
+                                    d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.1a2 2 0 0 1-1-1.72v-.51a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z">
+                                </path>
+                                <circle cx="12" cy="12" r="3"></circle>
+                            </svg>
+                            Ẩn/Hiện AM/Sales
+                        </button>
+                        <div id="am-settings-menu" class="dropdown-menu shadow-lg"
+                            style="display: none; position: absolute; right: 0; top: 100%; margin-top: 8px; background: white; border: 1px solid #e2e8f0; border-radius: 8px; z-index: 1000; min-width: 240px; max-height: 400px; overflow-y: auto; padding: 12px;">
+                            <h4
+                                style="margin: 0 0 10px 0; font-size: 13px; color: #64748b; border-bottom: 1px solid #f1f5f9; padding-bottom: 8px;">
+                                Danh sách AM/Sales</h4>
+                            <?php
+                            $all_db_ams = $conn->query("SELECT id, full_name, exclude_from_report FROM users WHERE is_am_bd = 1 ORDER BY full_name ASC");
+                            while ($am_row = $all_db_ams->fetch_assoc()):
+                                $is_excluded = (int) $am_row['exclude_from_report'];
+                                ?>
+                                <label
+                                    style="display: flex; align-items: center; gap: 8px; padding: 6px 4px; cursor: pointer; font-size: 13px; border-radius: 4px;"
+                                    onmouseover="this.style.background='#f8fafc'"
+                                    onmouseout="this.style.background='transparent'">
+                                    <input type="checkbox" <?= $is_excluded ? '' : 'checked' ?>
+                                        onchange="window.location.href='/sale-reports-admin?year=<?= $current_year ?>&toggle_exclude_am=<?= $am_row['id'] ?>&val='+(this.checked ? 0 : 1)">
+                                    <span
+                                        style="<?= $is_excluded ? 'color: #94a3b8; text-decoration: line-through;' : 'color: #1e293b;' ?>">
+                                        <?= htmlspecialchars($am_row['full_name']) ?>
+                                    </span>
+                                </label>
+                            <?php endwhile; ?>
+                        </div>
+                    </div>
+                    <style>
+                        #am-settings-menu.show {
+                            display: block !important;
+                        }
+
+                        .dropdown-menu {
+                            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+                        }
+                    </style>
                 </div>
 
                 <?php if (!empty($all_ams)): ?>
@@ -1128,32 +1201,32 @@ $budget_placeholder = 0;
                                                 </td>
                                                 <td class="text-right"
                                                     onclick="event.stopPropagation(); viewReport(<?= (int) ($c['uid'] ?? 0) ?>, 'Q<?= $i ?>_<?= $current_year ?>')"
-                                                    style="font-size: 11px;">
+                                                    style="font-size: 11.5px;">
                                                     <?php if (($c[$qi]['com1'] ?? 0) == 0): ?>
                                                         -
                                                     <?php else: ?>
                                                         <div><?= formatMoney($c[$qi]['com1_vnd'] ?? 0) ?> VND</div>
-                                                        <div style="font-size: 10px; opacity: 0.7; font-weight: 400;">
+                                                        <div style="font-size: 10px; opacity: 0.9; font-weight: 500;">
                                                             (<?= formatUSD($c[$qi]['com1'] ?? 0) ?>)</div>
                                                     <?php endif; ?>
                                                 </td>
                                                 <td class="text-right"
                                                     onclick="event.stopPropagation(); viewReport(<?= (int) ($c['uid'] ?? 0) ?>, 'Q<?= $i ?>_<?= $current_year ?>')"
-                                                    style="font-weight: 700; border-right: 2px solid #cbd5e1; background: #f8fafc; color: #0f172a; font-size: 11px;">
+                                                    style="font-weight: 700; border-right: 2px solid #cbd5e1; background: #f8fafc; color: #0f172a; font-size: 11.5px;">
                                                     <?php if (($c[$qi]['total'] ?? 0) == 0): ?>
                                                         -
                                                     <?php else: ?>
                                                         <div><?= formatMoney($c[$qi]['total_vnd'] ?? 0) ?> VND</div>
-                                                        <div style="font-size: 10px; opacity: 0.7; font-weight: 400;">
+                                                        <div style="font-size: 10px; opacity: 0.9; font-weight: 500;">
                                                             (<?= formatUSD($c[$qi]['total'] ?? 0) ?>)</div>
                                                     <?php endif; ?>
                                                 </td>
                                             <?php endfor; ?>
 
                                             <td class="text-right year-total"
-                                                style="background: #1e293b; color: #fff; font-weight: 700; font-size: 11px;">
+                                                style="background: #1e293b; color: #fff; font-weight: 700; font-size: 13px;">
                                                 <div><?= formatMoney($am_year_total_vnd) ?> VND</div>
-                                                <div style="font-size: 10px; opacity: 0.8; font-weight: 400;">
+                                                <div style="font-size: 10.5px; opacity: 0.95; font-weight: 500;">
                                                     (<?= formatUSD($am_year_total) ?>)</div>
                                             </td>
                                         </tr>
@@ -1164,22 +1237,22 @@ $budget_placeholder = 0;
                                         <td class="sticky-col">TỔNG CỘNG</td>
                                         <?php for ($i = 1; $i <= 4; $i++): ?>
                                             <td></td>
-                                            <td class="text-right" style="font-size: 11px;">
+                                            <td class="text-right" style="font-size: 11.5px;">
                                                 <?php if (($q_totals[$i]['com1'] ?? 0) == 0): ?>
                                                     -
                                                 <?php else: ?>
                                                     <div><?= formatMoney($q_totals[$i]['com1_vnd']) ?> VND</div>
-                                                    <div style="font-size: 10px; opacity: 0.7; font-weight: 400;">
+                                                    <div style="font-size: 10px; font-weight: 500;">
                                                         (<?= formatUSD($q_totals[$i]['com1']) ?>)</div>
                                                 <?php endif; ?>
                                             </td>
                                             <td class="text-right"
-                                                style="border-right: 2px solid #cbd5e1; background: #f1f5f9; color: #1e293b; font-size: 11px;">
+                                                style="border-right: 2px solid #cbd5e1; background: #f1f5f9; color: #1e293b; font-size: 11.5px;">
                                                 <?php if (($q_totals[$i]['total'] ?? 0) == 0): ?>
                                                     -
                                                 <?php else: ?>
                                                     <div><?= formatMoney($q_totals[$i]['total_vnd']) ?> VND</div>
-                                                    <div style="font-size: 10px; opacity: 0.7; font-weight: 400;">
+                                                    <div style="font-size: 10px; font-weight: 500;">
                                                         (<?= formatUSD($q_totals[$i]['total']) ?>)</div>
                                                 <?php endif; ?>
                                             </td>
@@ -1191,7 +1264,7 @@ $budget_placeholder = 0;
                                                 -
                                             <?php else: ?>
                                                 <div><?= formatMoney($grand_total_year_vnd) ?> VND</div>
-                                                <div style="font-size: 10px; opacity: 0.8; font-weight: 400;">
+                                                <div style="font-size: 10px; font-weight: 500;">
                                                     (<?= formatUSD($grand_total_year) ?>)</div>
                                             <?php endif; ?>
                                         </td>
