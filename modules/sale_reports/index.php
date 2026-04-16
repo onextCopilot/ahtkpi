@@ -1946,6 +1946,7 @@ function formatMoney($amount, $currency_code)
                                             <th style="width: 90px;">% Com 2</th>
                                             <th style="width: 100px;">License/trading</th>
                                             <th style="width: 130px; text-align:right;">Commission (USD)</th>
+                                            <th style="width: 130px; text-align:right;">Commission (VND)</th>
                                             <th style="width:130px;text-align:right;">Com giữ lại (USD)</th>
                                             <th style="min-width:180px;">Note</th>
                                         </tr>
@@ -1954,7 +1955,9 @@ function formatMoney($amount, $currency_code)
                                         <?php $pstt = 1;
                                         $quarter_total_giaingan_usd = 0;
                                         $quarter_total_comm1_usd = 0;
+                                        $quarter_total_comm1_vnd = 0;
                                         $quarter_total_comm2_usd = 0;
+                                        $quarter_total_comm2_vnd = 0;
                                         foreach ($paid_invoices_grouped as $month_key => $month_invs):
                                             if ($month_key === 'ZZZ_PAST') {
                                                 $display_group = 'HÓA ĐƠN QUÝ TRƯỚC ĐƯỢC TT';
@@ -1964,10 +1967,12 @@ function formatMoney($amount, $currency_code)
                                             $month_sub = 0;
                                             $month_giaingan_usd = 0;
                                             $month_comm1_usd = 0;
+                                            $month_comm1_vnd = 0;
                                             $month_comm2_usd = 0;
+                                            $month_comm2_vnd = 0;
                                             ?>
                                             <tr class="month-group-header">
-                                                <td colspan="27"><?= $display_group ?></td>
+                                                <td colspan="28"><?= $display_group ?></td>
                                             </tr>
                                             <?php foreach ($month_invs as $inv):
                                                 $oid = $inv['id'];
@@ -1999,15 +2004,21 @@ function formatMoney($amount, $currency_code)
                                                 $bonus_extra = ($is_bonus_yes && $net_profit_f > 0) ? ($net_profit_f * 0.1) : 0;
 
                                                 $comm1_val_usd = ($giaingan_usd * ($com1_p / 100)) + $bonus_extra;
+                                                $comm1_val_vnd = $giaingan_vnd_converted * ($com1_p / 100);
                                                 $comm2_val_usd = $giaingan_usd * ($com2_p / 100);
+                                                $comm2_val_vnd = $giaingan_vnd_converted * ($com2_p / 100);
 
                                                 $month_giaingan_usd += $giaingan_usd;
                                                 $month_comm1_usd += $comm1_val_usd;
+                                                $month_comm1_vnd += $comm1_val_vnd;
                                                 $month_comm2_usd += $comm2_val_usd;
+                                                $month_comm2_vnd += $comm2_val_vnd;
 
                                                 $quarter_total_giaingan_usd += $giaingan_usd;
                                                 $quarter_total_comm1_usd += $comm1_val_usd;
+                                                $quarter_total_comm1_vnd += $comm1_val_vnd;
                                                 $quarter_total_comm2_usd += $comm2_val_usd;
+                                                $quarter_total_comm2_vnd += $comm2_val_vnd;
 
                                                 $vat_amount = (float) ($inv['amount_total'] ?? 0);
                                                 $odoo_link = $odoo_url . '/web#id=' . $oid . '&model=account.move&view_type=form';
@@ -2081,6 +2092,9 @@ function formatMoney($amount, $currency_code)
                                                         <?= $comm1_val_usd > 0 ? formatMoney($comm1_val_usd, 'USD') : '<span style="color:#d1d5db">—</span>' ?>
                                                     </td>
                                                     <td style="text-align:right;font-family:monospace;color:#b91c1c;font-weight:600;">
+                                                        <?= $comm1_val_vnd > 0 ? formatMoney($comm1_val_vnd, 'VND') : '<span style="color:#d1d5db">—</span>' ?>
+                                                    </td>
+                                                    <td style="text-align:right;font-family:monospace;color:#b91c1c;font-weight:600;">
                                                         <?= $comm2_val_usd > 0 ? formatMoney($comm2_val_usd, 'USD') : '<span style="color:#d1d5db">—</span>' ?>
                                                     </td>
                                                     <td><?= htmlspecialchars($l['note'] ?? '') ?></td>
@@ -2099,6 +2113,9 @@ function formatMoney($amount, $currency_code)
                                                     <?= formatMoney($month_comm1_usd, 'USD') ?>
                                                 </td>
                                                 <td style="text-align:right;font-weight:700;color:#b91c1c;">
+                                                    <?= formatMoney($month_comm1_vnd, 'VND') ?>
+                                                </td>
+                                                <td style="text-align:right;font-weight:700;color:#b91c1c;">
                                                     <?= formatMoney($month_comm2_usd, 'USD') ?>
                                                 </td>
                                                 <td></td>
@@ -2113,6 +2130,9 @@ function formatMoney($amount, $currency_code)
                                             <td colspan="8"></td>
                                             <td style="text-align:right;color:#b91c1c;font-size:14px;padding: 1rem 0.75rem;">
                                                 <?= formatMoney($quarter_total_comm1_usd, 'USD') ?>
+                                            </td>
+                                            <td style="text-align:right;color:#b91c1c;font-size:14px;padding: 1rem 0.75rem;">
+                                                <?= formatMoney($quarter_total_comm1_vnd, 'VND') ?>
                                             </td>
                                             <td style="text-align:right;color:#b91c1c;font-size:14px;padding: 1rem 0.75rem;">
                                                 <?= formatMoney($quarter_total_comm2_usd, 'USD') ?>
@@ -2138,8 +2158,11 @@ function formatMoney($amount, $currency_code)
                                 }
 
                                 $final_comm1_usd = $quarter_total_comm1_usd * $payout_ratio;
+                                $final_comm1_vnd = $quarter_total_comm1_vnd * $payout_ratio;
                                 $final_comm2_usd = $quarter_total_comm2_usd * $payout_ratio;
+                                $final_comm2_vnd = $quarter_total_comm2_vnd * $payout_ratio;
                                 $total_com_usd = $final_comm1_usd + $final_comm2_usd;
+                                $total_com_vnd = $final_comm1_vnd + $final_comm2_vnd;
                                 ?>
                                 <div
                                     style="margin-top: 2rem; background: #fff; border: 1px solid #e2e8f0; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.05); padding: 1.5rem; max-width: 600px;">
@@ -2174,25 +2197,30 @@ function formatMoney($amount, $currency_code)
                                         style="display: flex; justify-content: space-between; margin-bottom: 0.5rem; color: #475569; font-size: 14px;">
                                         <span>Tổng Commission (Com 1) x <?= $payout_ratio * 100 ?>%:</span>
                                         <span
-                                            style="font-weight: 600; font-family: monospace; color: #b91c1c; font-size: 15px;">
-                                            <?= formatMoney($final_comm1_usd, 'USD') ?>
+                                            style="font-weight: 600; font-family: monospace; color: #b91c1c; font-size: 14px;">
+                                            <?= formatMoney($final_comm1_vnd, 'VND') ?> <span style="font-size: 12px; font-weight: 400; color: #64748b;">(<?= formatMoney($final_comm1_usd, 'USD') ?>)</span>
                                         </span>
                                     </div>
                                     <div
                                         style="display: flex; justify-content: space-between; margin-bottom: 1rem; color: #475569; font-size: 14px;">
                                         <span>Tổng Com giữ lại (Com 2) x <?= $payout_ratio * 100 ?>%:</span>
                                         <span
-                                            style="font-weight: 600; font-family: monospace; color: #b91c1c; font-size: 15px;">
-                                            <?= formatMoney($final_comm2_usd, 'USD') ?>
+                                            style="font-weight: 600; font-family: monospace; color: #b91c1c; font-size: 14px;">
+                                            <?= formatMoney($final_comm2_vnd, 'VND') ?> <span style="font-size: 12px; font-weight: 400; color: #64748b;">(<?= formatMoney($final_comm2_usd, 'USD') ?>)</span>
                                         </span>
                                     </div>
 
                                     <div
                                         style="display: flex; justify-content: space-between; align-items: center; background: #fbbf24; color: #78350f; padding: 1rem; border-radius: 6px; font-weight: bold; font-size: 16px;">
                                         <span>THỰC NHẬN KỲ NÀY:</span>
-                                        <span style="font-family: monospace; font-size: 20px;">
-                                            <?= formatMoney($total_com_usd, 'USD') ?>
-                                        </span>
+                                        <div style="text-align: right;">
+                                            <div style="font-family: monospace; font-size: 18px;">
+                                                <?= formatMoney($total_com_vnd, 'VND') ?>
+                                            </div>
+                                            <div style="font-family: monospace; font-size: 14px; opacity: 0.9; font-weight: 500;">
+                                                (<?= formatMoney($total_com_usd, 'USD') ?>)
+                                            </div>
+                                        </div>
                                     </div>
                                     <div
                                         style="text-align:right; font-size: 12px; color: #94a3b8; margin-top: 0.5rem; font-style: italic; margin-bottom: 1.5rem;">
