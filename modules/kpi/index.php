@@ -971,8 +971,12 @@ $status_map = ['draft' => ['#F1F5F9', '#64748B'], 'active' => ['#DBEAFE', '#1D4E
                     </div>
                     <div style="margin-left:auto;display:flex;gap:16px;align-items:center;font-size:13px">
                         <div class="sp">📋 <?= count($defs) ?> KPI</div>
-                        <?php $wc = (abs($total_weight - 100) < .01) ? 'w-ok' : 'w-warn'; ?>
-                        <div class="sp">Tỷ trọng: <span class="<?= $wc ?>"><?= number_format($total_weight, 1) ?>%
+                        <?php 
+                            $dec_w = (floor($total_weight) == $total_weight) ? 0 : 2;
+                            $fmt_w = number_format($total_weight, $dec_w, ',', '.');
+                            if($dec_w > 0) $fmt_w = rtrim(rtrim($fmt_w, '0'), ',');
+                        ?>
+                        <div class="sp">Tỷ trọng: <span class="<?= $wc ?>"><?= $fmt_w ?>%
                                 <?= (abs($total_weight - 100) < .01) ? '✓' : '⚠' ?></span></div>
                     </div>
                 </div>
@@ -1013,7 +1017,7 @@ $status_map = ['draft' => ['#F1F5F9', '#64748B'], 'active' => ['#DBEAFE', '#1D4E
                     <?php foreach ($kpi_templates as $tpl): ?>
                         <option value="<?= htmlspecialchars($tpl['name']) ?>"
                             data-group="<?= htmlspecialchars($tpl['kpi_group'] ?? '') ?>">
-                        <?php endforeach; ?>
+                    <?php endforeach; ?>
                 </datalist>
 
                 <?php if ($tab === 'definitions'): include __DIR__ . '/tab_definitions.php';

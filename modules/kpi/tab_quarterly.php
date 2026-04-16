@@ -26,13 +26,22 @@ function quarterTotal($monthly_map, $def_id, $qmonths, $calc_method = 'sum') {
     }
     if ($count === 0) return null;
     $display = ($calc_method === 'avg' && !$mixed && $count > 0) ? $sum / $count : $sum;
-    return ['sum' => $display, 'fmt' => number_format($display, 0, ',', '.'), 'count' => $count, 'mixed' => $mixed];
+    $dec = (floor($display) == $display) ? 0 : 2;
+    $fmt = number_format($display, $dec, ',', '.');
+    if ($dec > 0) $fmt = rtrim(rtrim($fmt, '0'), ',');
+    return ['sum' => $display, 'fmt' => $fmt, 'count' => $count, 'mixed' => $mixed];
 }
 
 function fmtDisplayTarget($val) {
     if ($val === null || $val === '') return '';
     $s = stripThousands(trim($val));
-    if (is_numeric($s) && $s !== '') return number_format((float)$s, 0, ',', '.');
+    if (is_numeric($s) && $s !== '') {
+        $f = (float)$s;
+        $dec = (floor($f) == $f) ? 0 : 2;
+        $res = number_format($f, $dec, ',', '.');
+        if ($dec > 0) $res = rtrim(rtrim($res, '0'), ',');
+        return $res;
+    }
     return $val;
 }
 ?>
@@ -269,7 +278,8 @@ function fmtDisplayTarget($val) {
                         <div><?= htmlspecialchars($d['kpi_name']) ?></div>
                         <div class="kpi-meta-badge">
                             <?php if ($d['is_condition']): ?><span>Condition Only</span><?php endif; ?>
-                            <span>Weight: <?= number_format($d['weight'], 1) ?>%</span>
+                            <?php $dec_w = (floor($d['weight']) == $d['weight']) ? 0 : 1; ?>
+                            <span>Weight: <?= number_format($d['weight'], $dec_w, ',', '.') ?>%</span>
                             <span>Target: <?= htmlspecialchars($d['target_base'] ?? '—') ?></span>
                         </div>
                     </td>

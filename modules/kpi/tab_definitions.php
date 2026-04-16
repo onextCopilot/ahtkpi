@@ -31,7 +31,10 @@ if (!function_exists('qTotalForDef')) {
         if ($count === 0)
             return null;
         $display = ($calc_method === 'avg' && !$mixed && $count > 0) ? $sum / $count : $sum;
-        return ['sum' => $display, 'fmt' => number_format($display, 0, ',', '.'), 'count' => $count, 'mixed' => $mixed, 'raw_sum' => $sum];
+        $dec = (floor($display) == $display) ? 0 : 2;
+        $fmt = number_format($display, $dec, ',', '.');
+        if ($dec > 0) $fmt = rtrim(rtrim($fmt, '0'), ',');
+        return ['sum' => $display, 'fmt' => $fmt, 'count' => $count, 'mixed' => $mixed, 'raw_sum' => $sum];
     }
 }
 
@@ -48,8 +51,13 @@ function fmtTargetBase($val)
     if ($val === null || $val === '')
         return '—';
     $s = stripThousands(trim($val));
-    if (is_numeric($s) && $s !== '')
-        return number_format((float) $s, 0, ',', '.');
+    if (is_numeric($s) && $s !== '') {
+        $f = (float)$s;
+        $dec = (floor($f) == $f) ? 0 : 2;
+        $res = number_format($f, $dec, ',', '.');
+        if ($dec > 0) $res = rtrim(rtrim($res, '0'), ',');
+        return $res;
+    }
     return htmlspecialchars($val);
 }
 
@@ -97,7 +105,10 @@ foreach ($defs as $d) {
             else $allMixed = true;
         }
         $yrDisplay = ($method === 'avg' && !$allMixed && $allMonthCount > 0) ? $allSum / $allMonthCount : $allSum;
-        $def_yr_totals[$d['id']] = ['sum' => $yrDisplay, 'fmt' => number_format($yrDisplay, 0, ',', '.'), 'count' => $allMonthCount, 'mixed' => $yrMixed];
+        $dec_yr = (floor($yrDisplay) == $yrDisplay) ? 0 : 2;
+        $fmt_yr = number_format($yrDisplay, $dec_yr, ',', '.');
+        if ($dec_yr > 0) $fmt_yr = rtrim(rtrim($fmt_yr, '0'), ',');
+        $def_yr_totals[$d['id']] = ['sum' => $yrDisplay, 'fmt' => $fmt_yr, 'count' => $allMonthCount, 'mixed' => $yrMixed];
        
       //  $def_yr_totals[$d['id']] = ['sum' => $yrDisplay, 'fmt' => number_format($yrDisplay, 0, ',', '.'), 'count' => $allMonthCount, 'mixed' => $allMixed];
 
@@ -212,9 +223,12 @@ $COLS = 14; // STT+Nhóm+Tên+TargetNăm+CảNăm+Tỷtrọng+Q1+Q2+Q3+Q4+Owner+
                 $yr_months_detail = [];
                 for ($m_num = 1; $m_num <= 12; $m_num++) {
                     $m_row = $monthly_map[$d['id']][$m_num] ?? null;
+                    $m_val_raw = $m_row ? stripThousands($m_row['actual_value']) : null;
+                    $m_val_num = (is_numeric($m_val_raw) && $m_val_raw !== '') ? (float)$m_val_raw : null;
+
                     $yr_months_detail[$m_num] = [
-                        'val' => $m_row ? (is_numeric(stripThousands($m_row['actual_value'])) ? (float)stripThousands($m_row['actual_value']) : 0) : null,
-                        'fmt' => $m_row ? $m_row['actual_value'] : '—',
+                        'val' => $m_val_num,
+                        'fmt' => ($m_val_num !== null) ? number_format($m_val_num, 0, ',', '.') : ($m_row ? $m_row['actual_value'] : '—'),
                         'notes' => $m_row['notes'] ?? '',
                         'by' => $m_row['updater_name'] ?? ($m_row ? 'User' : '—'),
                         'at' => ($m_row && !empty($m_row['updated_at'])) ? date('H:i d/m', strtotime($m_row['updated_at'])) : ''
@@ -305,7 +319,10 @@ $COLS = 14; // STT+Nhóm+Tên+TargetNăm+CảNăm+Tỷtrọng+Q1+Q2+Q3+Q4+Owner+
                     </td>
 
                     <!-- Tỷ trọng -->
-                    <td style="text-align:right;font-weight:600"><?= number_format($d['weight'], 1) ?>%</td>
+                    <?php 
+                        $dec_w = (floor($d['weight']) == $d['weight']) ? 0 : 1;
+                    ?>
+                    <td style="text-align:right;font-weight:600"><?= number_format($d['weight'], $dec_w, ',', '.') ?>%</td>
 
                     <!-- Q1–Q4 actual + progress -->
                     <?php foreach ($q_colors_def as $qi => $qc):
@@ -330,8 +347,10 @@ $COLS = 14; // STT+Nhóm+Tên+TargetNăm+CảNăm+Tỷtrọng+Q1+Q2+Q3+Q4+Owner+
                             foreach ($q_months_def[$qi] as $m_num) {
                                 $m_row = $monthly_map[$d['id']][$m_num] ?? null;
                                 if (!empty($m_row['notes'])) $has_q_notes = true;
+                                $m_val_raw = $m_row ? stripThousands($m_row['actual_value']) : null;
+                                $m_val_num = (is_numeric($m_val_raw) && $m_val_raw !== '') ? (float)$m_val_raw : null;
                                 $months_detail[$m_num] = [
-                                    'val' => $m_row['actual_value'] ?? '—',
+                                    'val' => ($m_val_num !== null) ? number_format($m_val_num, 0, ',', '.') : ($m_row ? $m_row['actual_value'] : '—'),
                                     'notes' => $m_row['notes'] ?? '',
                                     'by' => $m_row['updater_name'] ?? ($m_row ? 'User' : '—'),
                                     'at' => ($m_row && !empty($m_row['updated_at'])) ? date('H:i d/m', strtotime($m_row['updated_at'])) : ''
@@ -438,9 +457,12 @@ $COLS = 14; // STT+Nhóm+Tên+TargetNăm+CảNăm+Tỷtrọng+Q1+Q2+Q3+Q4+Owner+
                 <td style="background:#EFF6FF;border-left:2px solid #BFDBFE;border-right:2px solid #BFDBFE"></td>
 
                 <!-- Tỷ trọng total -->
-                <?php $wcolor = (abs($total_weight - 100) < .01) ? '#059669' : '#D97706'; ?>
+                <?php 
+                    $wcolor = (abs($total_weight - 100) < .01) ? '#059669' : '#D97706'; 
+                    $dec_tw = (floor($total_weight) == $total_weight) ? 0 : 1;
+                ?>
                 <td style="text-align:right;color:<?= $wcolor ?>;font-weight:700">
-                    <?= number_format($total_weight, 1) ?>%</td>
+                    <?= number_format($total_weight, $dec_tw, ',', '.') ?>%</td>
 
                 <!-- Q totals footer -->
                 <?php foreach ($q_colors_def as $qi => $qc):

@@ -11,7 +11,13 @@ function stripThousands($val) {
 function fmtDisplay($val) {
     if ($val === null || $val === '') return '';
     $s = stripThousands(trim($val));
-    if (is_numeric($s) && $s !== '') return number_format((float)$s, 0, ',', '.');
+    if (is_numeric($s) && $s !== '') {
+        $f = (float)$s;
+        $dec = (floor($f) == $f) ? 0 : 2;
+        $res = number_format($f, $dec, ',', '.');
+        if ($dec > 0) $res = rtrim(rtrim($res, '0'), ',');
+        return $res;
+    }
     return htmlspecialchars($val);
 }
 ?>
@@ -178,7 +184,8 @@ function fmtDisplay($val) {
                 <tr>
                     <td style="text-align:center; font-weight:700; color:#AEAEB2;"><?= sprintf('%02d', $stt++) ?></td>
                     <td class="kpi-name-cell"><?= htmlspecialchars($d['kpi_name']) ?></td>
-                    <td style="text-align:right; font-weight:700; opacity:0.6; font-size:12px;"><?= number_format($d['weight'], 1) ?>%</td>
+                    <?php $dec_w = (floor($d['weight']) == $d['weight']) ? 0 : 1; ?>
+                    <td style="text-align:right; font-weight:700; opacity:0.6; font-size:12px;"><?= number_format($d['weight'], $dec_w, ',', '.') ?>%</td>
 
                     <?php for ($m = 1; $m <= 12; $m++):
                         $mrow = $monthly_map[$d['id']][$m] ?? null;
