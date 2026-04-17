@@ -38,6 +38,7 @@ try {
     addColIfNotExists($conn, 'okr_results', 'weight', 'INT DEFAULT 0');
     addColIfNotExists($conn, 'okr_results', 'owner_name', 'VARCHAR(255)');
     addColIfNotExists($conn, 'okr_results', 'owner_avatar', 'VARCHAR(10)');
+    addColIfNotExists($conn, 'okr_results', 'activity_id', 'INT DEFAULT 0');
     
     // Key Activities Table Enhancements
     addColIfNotExists($conn, 'okr_key_activities', 'status', 'VARCHAR(50) DEFAULT "pending"');
@@ -45,6 +46,7 @@ try {
     addColIfNotExists($conn, 'okr_key_activities', 'weight', 'INT DEFAULT 0');
     addColIfNotExists($conn, 'okr_key_activities', 'owner_name', 'VARCHAR(255)');
     addColIfNotExists($conn, 'okr_key_activities', 'owner_avatar', 'VARCHAR(10)');
+    addColIfNotExists($conn, 'okr_key_activities', 'kr_id', 'INT DEFAULT 0');
 
     // Expand numeric columns to support large values (e.g. billions/trillions in revenue targets)
     @$conn->query("ALTER TABLE `okr_results` MODIFY COLUMN `target_value` DECIMAL(20,2) DEFAULT 0");
@@ -150,11 +152,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
     if ($_POST['action'] === 'update_okr_item') {
         $id = intval($_POST['id']);
         $type = $_POST['type'];
-        $val = floatval($_POST['val']);
-        $status = $_POST['status'];
-        $priority = $_POST['priority'];
-        $weight = intval($_POST['weight']);
+        $is_partial = isset($_POST['partial_update']);
+
+        // Default values from DB if partial, else from POST
+        $table = ($type === 'metric') ? 'okr_results' : 'okr_key_activities';
+        $curr_q = $conn->query("SELECT * FROM $table WHERE id = $id");
+        $curr_data = $curr_q->fetch_assoc();
+
+        $val = $is_partial ? 0 : floatval($_POST['val'] ?? 0);
+        $status = $is_partial ? ($curr_data['status'] ?? 'pending') : ($_POST['status'] ?? 'pending');
+        $priority = $is_partial ? ($curr_data['priority'] ?? 'medium') : ($_POST['priority'] ?? 'medium');
+        $weight = $is_partial ? intval($curr_data['weight'] ?? 0) : intval($_POST['weight'] ?? 0);
+        $name = $is_partial ? ($type==='metric' ? $curr_data['metric_name'] : $curr_data['activity_name']) : trim($_POST['name'] ?? '');
+        $owner_name = $is_partial ? ($curr_data['owner_name'] ?? '') : trim($_POST['owner'] ?? '');
         $explanation = trim($_POST['explanation'] ?? '');
+        
+        if ($is_partial) {
+            $val = ($type === 'metric') ? ($curr_data['target_value'] > 0 ? ($curr_data['current_value']/$curr_data['target_value'])*100 : 0) : $curr_data['progress'];
+        }
         
         // Find Objective ID
         $oid = 0;
@@ -183,25 +198,26 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
             exit();
         }
 
-        $name = trim($_POST['name'] ?? '');
-        $owner_name = trim($_POST['owner'] ?? '');
-        
-        // Recalculate avatar initials for the new owner
+        $activity_id = ($type === 'metric') ? intval($_POST['activity_id'] ?? ($curr_data['activity_id'] ?? 0)) : 0;
+
+        // Recalculate avatar initials for the owner
         $avatar = '';
         if(!empty($owner_name)) {
             $parts = explode(' ', $owner_name);
             $avatar = mb_substr(end($parts), 0, 1, "UTF-8");
         }
 
-        if ($type === 'metric') {
-            // val is now progress % — compute current_value proportionally, keep target_value intact
-            $stmt = $conn->prepare("UPDATE okr_results SET metric_name = ?, current_value = ROUND((? / 100.0) * target_value, 2), status = ?, priority = ?, weight = ?, owner_name = ?, owner_avatar = ? WHERE id = ?");
-            $stmt->bind_param("sdssissi", $name, $val, $status, $priority, $weight, $owner_name, $avatar, $id);
-        } else {
-            $stmt = $conn->prepare("UPDATE okr_key_activities SET activity_name = ?, progress = ?, status = ?, priority = ?, weight = ?, owner_name = ?, owner_avatar = ? WHERE id = ?");
-            $stmt->bind_param("sdssissi", $name, $val, $status, $priority, $weight, $owner_name, $avatar, $id);
+        if (!$is_partial) {
+            if ($type === 'metric') {
+                // val is now progress % — compute current_value proportionally, keep target_value intact
+                $stmt = $conn->prepare("UPDATE okr_results SET metric_name = ?, current_value = ROUND((? / 100.0) * target_value, 2), status = ?, priority = ?, weight = ?, owner_name = ?, owner_avatar = ?, activity_id = ? WHERE id = ?");
+                $stmt->bind_param("sdssissii", $name, $val, $status, $priority, $weight, $owner_name, $avatar, $activity_id, $id);
+            } else {
+                $stmt = $conn->prepare("UPDATE okr_key_activities SET activity_name = ?, progress = ?, status = ?, priority = ?, weight = ?, owner_name = ?, owner_avatar = ? WHERE id = ?");
+                $stmt->bind_param("sdssissi", $name, $val, $status, $priority, $weight, $owner_name, $avatar, $id);
+            }
+            $stmt->execute();
         }
-        $stmt->execute();
         
         // Save explanation & Weekly Progress
         $clean_explanation = trim(strip_tags($explanation));
@@ -220,14 +236,29 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
             $stmt_exp->execute();
         }
         
-        // Auto Update Objective Progress based on Key Results (Metric/KR)
+        // Auto Update Progress for Parent KA and Objective
         if ($type === 'metric') {
-            $obj_id_q = $conn->query("SELECT objective_id FROM okr_results WHERE id = $id");
+            $obj_id_q = $conn->query("SELECT objective_id, activity_id FROM okr_results WHERE id = $id");
             if ($obj_id_row = $obj_id_q->fetch_assoc()) {
                 $oid = $obj_id_row['objective_id'];
-                // Use simple average of progress % (Current / Target * 100)
-                // Weighted Progress Calculation:
-                // If sum of weights > 0, use weighted average. Otherwise use simple avg.
+                $aid = $obj_id_row['activity_id'];
+
+                // 1. Recalculate Parent Key Activity Progress
+                if ($aid > 0) {
+                    $conn->query("UPDATE okr_key_activities ka 
+                                  SET progress = (
+                                      SELECT 
+                                        CASE 
+                                            WHEN SUM(weight) > 0 THEN SUM(LEAST((current_value / NULLIF(target_value,0)) * 100, 100) * weight) / SUM(weight)
+                                            ELSE AVG(LEAST((current_value / NULLIF(target_value,0)) * 100, 100))
+                                        END
+                                      FROM okr_results 
+                                      WHERE activity_id = ka.id
+                                  )
+                                  WHERE ka.id = $aid");
+                }
+
+                // 2. Recalculate Objective Progress
                 $conn->query("UPDATE okr_objectives o 
                               SET o.progress = (
                                   SELECT 
@@ -257,8 +288,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
         $item_type = ($type === 'metric') ? 'metric' : 'activity';
         $conn->query("DELETE FROM okr_explanations WHERE item_id = $id AND item_type = '$item_type'");
         
-        // Recalculate Objective Progress if a KR was deleted
+        // Recalculate Progress for Parent KA and Objective
         if ($type === 'metric') {
+            // We'd need to know the objective_id and activity_id before deletion or from remaining records
+            // For simplicity, update all affected Objectives and KAs
+            $conn->query("UPDATE okr_key_activities ka 
+                          SET progress = (
+                              SELECT 
+                                CASE 
+                                    WHEN SUM(weight) > 0 THEN SUM(LEAST((current_value / NULLIF(target_value,0)) * 100, 100) * weight) / SUM(weight)
+                                    ELSE AVG(LEAST((current_value / NULLIF(target_value,0)) * 100, 100))
+                                END
+                              FROM okr_results 
+                              WHERE activity_id = ka.id
+                          )
+                          WHERE ka.id IN (SELECT DISTINCT activity_id FROM okr_results WHERE activity_id > 0)");
+
             $conn->query("UPDATE okr_objectives o 
                           SET o.progress = (
                               SELECT 
@@ -355,8 +400,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
         if ($type === 'metric') {
             $target = 100; // Default target to 100 for percentage-based tracking
             $unit = '%'; // Default unit to %
-            $stmt = $conn->prepare("INSERT INTO okr_results (objective_id, metric_name, target_value, unit, owner_name, owner_avatar, priority, weight) VALUES (?, ?, ?, ?, ?, ?, ?, ?)");
-            $stmt->bind_param("isdssssi", $oid, $name, $target, $unit, $owner_name, $owner_avatar, $priority, $weight);
+            $activity_id = intval($_POST['activity_id'] ?? 0);
+            $stmt = $conn->prepare("INSERT INTO okr_results (objective_id, metric_name, target_value, unit, owner_name, owner_avatar, priority, weight, activity_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)");
+            $stmt->bind_param("isdssssii", $oid, $name, $target, $unit, $owner_name, $owner_avatar, $priority, $weight, $activity_id);
             $stmt->execute();
         } else {
             $stmt = $conn->prepare("INSERT INTO okr_key_activities (objective_id, activity_name, owner_name, owner_avatar, priority, weight) VALUES (?, ?, ?, ?, ?, ?)");
@@ -653,16 +699,84 @@ $sql_o = "SELECT o.*,
 
 $res_o = $conn->query($sql_o);
 while ($o = $res_o->fetch_assoc()) {
-    $o['results'] = [];
-    $o['activities'] = [];
+    $oid = $o['id'];
     
-    $r_res = $conn->query("SELECT r.*, (SELECT content FROM okr_explanations WHERE item_id = r.id AND item_type = 'metric' ORDER BY created_at DESC LIMIT 1) as latest_explanation FROM okr_results r WHERE r.objective_id = " . $o['id'] . " ORDER BY FIELD(priority, 'high', 'medium', 'low') ASC, id DESC");
-    while($r = $r_res->fetch_assoc()) $o['results'][] = $r;
+    // Fetch Activities first to build a parent map
+    $activities = [];
+    $a_res = $conn->query("SELECT a.*, (SELECT content FROM okr_explanations WHERE item_id = a.id AND item_type = 'activity' ORDER BY created_at DESC LIMIT 1) as latest_explanation FROM okr_key_activities a WHERE a.objective_id = $oid ORDER BY FIELD(priority, 'high', 'medium', 'low') ASC, id DESC");
+    if ($a_res) {
+        while($a = $a_res->fetch_assoc()) {
+            $a['results'] = []; // Placeholder for child KRs
+            $activities[$a['id']] = $a;
+        }
+    }
     
-    $a_res = $conn->query("SELECT a.*, (SELECT content FROM okr_explanations WHERE item_id = a.id AND item_type = 'activity' ORDER BY created_at DESC LIMIT 1) as latest_explanation FROM okr_key_activities a WHERE a.objective_id = " . $o['id'] . " ORDER BY FIELD(priority, 'high', 'medium', 'low') ASC, id DESC");
-    while($a = $a_res->fetch_assoc()) $o['activities'][] = $a;
+    // Fetch KRs (Results) and assign to their parent Activity if available
+    $unlinked_results = [];
+    $r_res = $conn->query("SELECT r.*, (SELECT content FROM okr_explanations WHERE item_id = r.id AND item_type = 'metric' ORDER BY created_at DESC LIMIT 1) as latest_explanation FROM okr_results r WHERE r.objective_id = $oid ORDER BY FIELD(priority, 'high', 'medium', 'low') ASC, id DESC");
+    if ($r_res) {
+        while($r = $r_res->fetch_assoc()) {
+            if ($r['activity_id'] > 0 && isset($activities[$r['activity_id']])) {
+                $activities[$r['activity_id']]['results'][] = $r;
+            } else {
+                $unlinked_results[] = $r;
+            }
+        }
+    }
     
+    // 1. Sync KA progress if child KRs exist (Hierarchy integrity)
+    if (!empty($activities)) {
+        foreach($activities as &$act) {
+            $act_id = $act['id'];
+            $kr_calc = $conn->query("SELECT 
+                                        CASE 
+                                            WHEN SUM(weight) > 0 THEN SUM(LEAST((current_value / NULLIF(target_value,0)) * 100, 100) * weight) / SUM(weight)
+                                            ELSE AVG(LEAST((current_value / NULLIF(target_value,0)) * 100, 100))
+                                        END as actual_progress
+                                      FROM okr_results 
+                                      WHERE activity_id = $act_id");
+            if ($krc = $kr_calc->fetch_assoc()) {
+                if ($krc['actual_progress'] !== null) {
+                    $act['progress'] = $krc['actual_progress'];
+                    // Update DB to be sure
+                    $conn->query("UPDATE okr_key_activities SET progress = " . floatval($act['progress']) . " WHERE id = $act_id");
+                }
+            }
+        }
+    }
+    
+    $o['activities'] = $activities;
+    $o['unlinked_results'] = $unlinked_results;
     $objectives[] = $o;
+}
+
+// Fetch Weekly Progress Map for all items to avoid N+1
+$weekly_tracking_map = ['metric' => [], 'activity' => []];
+$sql_w = "SELECT e1.item_id, e1.item_type, e1.week_num, e1.progress_value 
+          FROM okr_explanations e1
+          INNER JOIN (
+              SELECT MAX(id) as max_id
+              FROM okr_explanations
+              WHERE quarter = $current_quarter AND year = $current_year
+              GROUP BY week_num, item_id, item_type
+          ) e2 ON e1.id = e2.max_id";
+$res_w = $conn->query($sql_w);
+if ($res_w) {
+    while($w = $res_w->fetch_assoc()) {
+        $weekly_tracking_map[$w['item_type']][$w['item_id']][$w['week_num']] = $w['progress_value'];
+    }
+}
+
+// Fetch explanation counts (only count those with actual content)
+$expl_counts = ['metric' => [], 'activity' => []];
+$res_c = $conn->query("SELECT item_id, item_type, COUNT(*) as c 
+                       FROM okr_explanations 
+                       WHERE content IS NOT NULL 
+                         AND TRIM(content) != '' 
+                         AND TRIM(REPLACE(REPLACE(REPLACE(content, '<p>', ''), '</p>', ''), '<br>', '')) != ''
+                       GROUP BY item_id, item_type");
+if($res_c) {
+    while($rc = $res_c->fetch_assoc()) $expl_counts[$rc['item_type']][$rc['item_id']] = $rc['c'];
 }
 
 // Group objectives by team
@@ -675,15 +789,51 @@ foreach ($objectives as $obj) {
 
 // Helper to get Status Badge Style
 function getBadgeHtml($status) {
+    $status = strtolower($status);
+    $lbl = str_replace('_', ' ', ucwords($status));
+    
     if ($status === 'on_track' || $status === 'in_progress' || $status === 'completed') {
-        $lbl = str_replace('_', ' ', ucwords($status));
-        return '<span class="status-badge st-ontrack">'.$lbl.'</span>';
+        return '<span class="status-badge st-ontrack">' . $lbl . '</span>';
     }
     if ($status === 'at_risk' || $status === 'delayed') {
-        $lbl = str_replace('_', ' ', ucwords($status));
-        return '<span class="status-badge st-atrisk">'.$lbl.'</span>';
+        return '<span class="status-badge st-atrisk">' . $lbl . '</span>';
     }
-    return '<span class="status-badge st-pending">Pending</span>';
+    return '<span class="status-badge st-pending">' . ($lbl ?: 'Pending') . '</span>';
+}
+
+function renderWeeklyTrackingDots($id, $type, $tracking_map, $current_week, $live_val = null) {
+    $dots = '';
+    for ($w = 1; $w <= 13; $w++) {
+        $val = $tracking_map[$type][$id][$w] ?? null;
+        
+        // If it's the current week, prioritize the live value for visual consistency
+        if ($w == $current_week && $live_val !== null) {
+            $val = (float)$live_val;
+        }
+
+        $class = 'w-dot';
+        if ($val !== null) {
+            if ($val >= 90) $class .= ' st-high';
+            else if ($val >= 70) $class .= ' st-mid';
+            else $class .= ' st-low';
+        }
+        if ($w == $current_week) $class .= ' is-current';
+        
+        $title = "Week $w" . ($val !== null ? ": " . round((float)$val, 1) . "%" : ": No data");
+        $dots .= "<span class='$class' title='$title'></span>";
+    }
+    return '<div class="weekly-mini-grid">' . $dots . '</div>';
+}
+
+function getLatestWeeklyProgress($id, $type, $map, $current_week, $live_fallback) {
+    // Search all 13 weeks to find the absolute latest recorded progress 
+    // This handles future entries (like 12% in W5/W6) as requested by the user
+    for ($w = 13; $w >= 1; $w--) {
+        if (isset($map[$type][$id][$w])) {
+            return (float)$map[$type][$id][$w];
+        }
+    }
+    return (float)$live_fallback;
 }
 ?>
 <!DOCTYPE html>
@@ -709,173 +859,139 @@ function getBadgeHtml($status) {
         .okr-page-header { display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 32px; }
         .okr-title-group h2 { font-size: 32px; font-weight: 700; letter-spacing: -0.015em; color: #1d1d1f; margin: 0 0 4px 0; }
         .okr-title-group p { font-size: 15px; color: #86868b; margin: 0; font-weight: 400; }
-        .btn-apple { background-color: #0071e3; color: white; border-radius: 980px; padding: 10px 20px; font-size: 14px; font-weight: 600; border: none; cursor: pointer; display: flex; align-items: center; gap: 8px; transition: background 0.2s; }
-        .btn-apple:hover { background-color: #0077ed; }
-        .btn-secondary { background-color: #f5f5f7; color: #1d1d1f; border-radius: 980px; padding: 8px 16px; font-size: 13px; font-weight: 600; border: 1px solid #d2d2d7; cursor: pointer; transition: all 0.2s; }
-        .btn-secondary:hover { background-color: #e5e5ea; }
+        
+        /* Modern Buttons */
+        .btn-apple { background-color: #0071e3; color: white; border-radius: 980px; padding: 10px 24px; font-size: 14px; font-weight: 600; border: none; cursor: pointer; display: flex; align-items: center; gap: 8px; transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1); box-shadow: 0 4px 12px rgba(0, 113, 227, 0.24); }
+        .btn-apple:hover { background-color: #0077ed; transform: translateY(-1px); box-shadow: 0 6px 16px rgba(0, 113, 227, 0.32); }
+        .btn-apple:active { transform: translateY(0); }
+        
+        .btn-secondary { background-color: #ffffff; color: #1d1d1f; border-radius: 980px; padding: 10px 20px; font-size: 14px; font-weight: 600; border: 1px solid #d2d2d7; cursor: pointer; transition: all 0.2s; box-shadow: 0 1px 2px rgba(0,0,0,0.05); }
+        .btn-secondary:hover { background-color: #f5f5f7; border-color: #86868b; }
 
-        .okr-tabs { margin-bottom: 32px; display: flex; gap: 8px; border-bottom: 1px solid #e5e5ea; padding-bottom: 16px; }
-        .tab-item { padding: 8px 16px; border-radius: 980px; background: transparent; color: #515154; font-size: 14px; font-weight: 600; text-decoration: none; transition: all 0.2s; border: 1px solid transparent; }
-        .tab-item:hover { background: #e5e5ea; color: #1d1d1f; }
-        .tab-item.active { background: #1d1d1f; color: #ffffff; }
-
+        .okr-tabs { margin-bottom: 32px; display: flex; gap: 4px; border-bottom: 1px solid #e5e5ea; padding-bottom: 2px; }
+        .tab-item { padding: 10px 20px; border-radius: 12px 12px 0 0; background: transparent; color: #86868b; font-size: 14px; font-weight: 600; text-decoration: none; transition: all 0.2s; border-bottom: 2px solid transparent; }
+        .tab-item:hover { color: #1d1d1f; background: #f5f5f7; }
+        .tab-item.active { color: #0071e3; border-bottom: 2px solid #0071e3; }
+        
+        /* Member Ribbon & Time Filters */
         .member-ribbon { display: flex; gap: 12px; margin-bottom: 32px; flex-wrap: wrap; align-items: center; padding: 4px; }
-        .member-item { display: flex; align-items: center; gap: 10px; padding: 6px 16px; background: #ffffff; border: 1px solid #e5e5ea; border-radius: 980px; text-decoration: none; color: #515154; font-size: 13px; font-weight: 500; transition: all 0.15s ease; box-shadow: 0 1px 2px rgba(0,0,0,0.02); }
+        .member-item { display: flex; align-items: center; gap: 10px; padding: 6px 16px; background: #ffffff; border: 1px solid #e5e5ea; border-radius: 980px; text-decoration: none; color: #515154; font-size: 13px; font-weight: 500; transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1); box-shadow: 0 1px 2px rgba(0,0,0,0.02); }
         .member-item:hover { background: #f5f5f7; border-color: #d2d2d7; transform: translateY(-1px); }
         .member-item.active { background: #ffffff; color: #0071e3; border-color: #0071e3; box-shadow: 0 4px 12px rgba(0,113,227,0.12); }
-        .member-avatar { width: 22px; height: 22px; border-radius: 50%; background: #f5f5f7; display: flex; align-items: center; justify-content: center; font-size: 9px; font-weight: 700; color: #515154; border: 1px solid #e5e5ea; }
+        
+        .member-avatar { width: 22px; height: 22px; border-radius: 50%; background: #f2f2f7; display: flex; align-items: center; justify-content: center; font-size: 9px; font-weight: 700; color: #515154; border: 1px solid #e5e5ea; }
         .member-item.active .member-avatar { background: #0071e3; color: #ffffff; border-color: #0071e3; }
+        
         .btn-view-annual { margin-left: 6px; padding: 4px; font-size: 11px; color: #86868b; cursor: pointer; border: none; background: transparent; transition: all 0.2s; border-radius: 4px; display: flex; align-items: center; justify-content: center; }
         .btn-view-annual:hover { color: #0071e3; background: #f2f2f7; }
-        .member-item.active .btn-view-annual { color: #0071e3; opacity: 0.8; }
-        .member-item.active .btn-view-annual:hover { opacity: 1; background: #ffffff; }
 
-        .time-filter-group { display: flex; gap: 8px; background: #f5f5f7; padding: 4px; border-radius: 980px; align-items: center; border: 1px solid #e5e5ea; }
-        .time-pill { padding: 4px 12px; border-radius: 980px; font-size: 12px; font-weight: 600; text-decoration: none; color: #86868b; transition: all 0.2s; }
-        .time-pill:hover { background: #e5e5ea; color: #1d1d1f; }
-        .time-pill.active { background: #ffffff; color: #1d1d1f; box-shadow: 0 2px 4px rgba(0,0,0,0.08); }
+        .time-filter-group { display: flex; gap: 4px; background: #f2f2f7; padding: 4px; border-radius: 980px; align-items: center; border: 1px solid #e5e5ea; }
+        .time-pill { padding: 4px 14px; border-radius: 980px; font-size: 12px; font-weight: 700; text-decoration: none; color: #86868b; transition: all 0.2s; }
+        .time-pill:hover { color: #1d1d1f; }
+        .time-pill.active { background: #ffffff; color: #0071e3; box-shadow: 0 2px 8px rgba(0,0,0,0.08); }
         .year-select { background: transparent; border: none; font-size: 12px; font-weight: 700; color: #1d1d1f; cursor: pointer; outline: none; padding: 0 8px; }
-        .okr-card { background: #ffffff; border-radius: 20px; box-shadow: 0 8px 30px rgba(0,0,0,0.04); border: 1px solid #f2f2f7; margin-bottom: 40px; overflow: hidden; padding: 12px; }
-        .okr-card-header { padding: 16px 24px; background: #f5f5f7; border-radius: 14px; border-bottom: none; display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
-        .obj-left { display: flex; align-items: center; gap: 20px; flex: 1; }
-        .obj-title-group { display: flex; flex-direction: column; gap: 2px; }
-        .obj-left h3 { font-size: 19px; font-weight: 700; color: #1d1d1f; margin: 0; display: flex; align-items: center; gap: 10px; letter-spacing: -0.015em; }
-        .obj-meta-row { display: flex; gap: 20px; align-items: center; color: #86868b; font-size: 13px; }
-        .meta-divider { height: 16px; width: 1px; background: #d2d2d7; }
+
+        /* Dashboard Analytics Cards */
+        .apple-card { background: #ffffff; border-radius: 20px; box-shadow: 0 8px 30px rgba(0,0,0,0.04); border: 1px solid #f2f2f7; }
+
+        .okr-card { background: #ffffff; border-radius: 24px; box-shadow: 0 4px 20px rgba(0,0,0,0.03); border: 1px solid #f2f2f7; margin-bottom: 40px; overflow: hidden; }
+        .okr-card-header { padding: 32px; background: linear-gradient(to bottom, #ffffff, #fbfbfd); border-bottom: 1px solid #f2f2f7; display: flex; justify-content: space-between; align-items: flex-start; }
         
-        .okr-body-split { display: flex; background: transparent; gap: 12px; }
-        .okr-col { flex: 1; background: #ffffff; border-radius: 0; border: none; }
+        .obj-left h3 { font-size: 24px; font-weight: 800; color: #1d1d1f; margin: 0; display: flex; align-items: center; gap: 16px; letter-spacing: -0.03em; line-height: 1.2; }
+        .obj-left h3 i { color: #0071e3; font-size: 20px; text-shadow: 0 0 20px rgba(0, 113, 227, 0.15); }
         
-        .section-label { padding: 12px 16px; background: #fbfbfd; border-radius: 10px; font-size: 11px; font-weight: 700; color: #86868b; text-transform: uppercase; letter-spacing: 0.08em; display: flex; align-items: center; gap: 8px; margin-bottom: 8px; border: 1px solid #f2f2f7; }
-        .section-label i { color: #0071e3; font-size: 12px; }
-        .section-label i { color: #6366f1; font-size: 13px; }
+        .obj-meta-row { margin-top: 14px; display: flex; gap: 12px; align-items: center; }
+        .obj-meta-item { background: #f2f2f7; color: #515154; padding: 4px 12px; border-radius: 980px; font-size: 13px; font-weight: 500; display: flex; align-items: center; gap: 8px; border: 1px solid #e5e5ea; transition: all 0.2s; }
+        .obj-meta-item:hover { background: #ffffff; border-color: #0071e3; color: #0071e3; box-shadow: 0 4px 12px rgba(0,0,0,0.05); }
+        .obj-meta-item i { font-size: 12px; opacity: 0.6; }
+        .obj-meta-item strong { color: #1d1d1f; }
+        .obj-meta-item:hover strong { color: #0071e3; }
+        
         .okr-table { width: 100%; border-collapse: collapse; }
-        .okr-table td { padding: 10px 16px; font-size: 12px; border: none; border-bottom: 1px solid #f8fafc; color: #334155; }
+        .okr-table thead th { padding: 12px 20px; border-bottom: 1.5px solid #f2f2f7; font-weight: 700; color: #86868b; text-transform: uppercase; font-size: 11px; letter-spacing: 0.05em; background: #fbfbfd; }
+        .okr-table td { padding: 16px 20px; font-size: 14px; border-bottom: 1px solid #f8f8fa; }
         .okr-table tr:last-child td { border-bottom: none; }
-        .okr-table tr:hover td { background-color: #fcfdfe; }
-        .row-prio-high td { background-color: #fff1f2 !important; }
-        .row-prio-high:hover td { background-color: #ffe4e6 !important; }
-        .row-prio-medium td { background-color: #f0f9ff !important; }
-        .row-prio-medium:hover td { background-color: #e0f2fe !important; }
-        .row-prio-low td { background-color: #f8fafc !important; }
-        .row-prio-low:hover td { background-color: #f1f5f9 !important; }
         
-        /* Celebration Animation for Completed Items */
-        @keyframes celebrate-bg {
-            0% { background-position: 0% 50%; }
-            50% { background-position: 100% 50%; }
-            100% { background-position: 0% 50%; }
+        /* Activity vs KR distinction */
+        .activity-header { background: rgba(52, 199, 89, 0.03) !important; border-top: 1px solid rgba(52, 199, 89, 0.08); }
+        .activity-header .item-main-title { font-size: 16px; font-weight: 700; color: #1d1d1f; letter-spacing: -0.01em; margin: 0; }
+        .item-header-row { display: flex; align-items: center; gap: 12px; }
+        
+        .row-kr-sub { 
+            background-color: #ffffff; 
+            transition: background-color 0.2s ease;
         }
-        @keyframes celebrate-particles {
-            0% { background-position: 0 0, 15px 15px; opacity: 0; }
-            50% { opacity: 0.3; }
-            100% { background-position: 100px 100px, 120px 120px; opacity: 0; }
+        .row-kr-sub:hover { 
+            background-color: #f5f5f7 !important; 
         }
-        .row-completed {
-            background: linear-gradient(-45deg, #f0fdf4, #dcfce7, #fdf4ff, #ecfdf5) !important;
-            background-size: 400% 400% !important;
-            animation: celebrate-bg 5s ease infinite !important;
-            position: relative;
-            z-index: 1;
-        }
-        .row-completed td { background: transparent !important; color: #166534 !important; }
-        .row-completed::after {
+        .row-kr-sub.row-completed { background-color: #f2fdf5 !important; }
+        .row-kr-sub.row-at-risk { background-color: #fff1f2 !important; }
+        .row-kr-sub.row-completed:hover { background-color: #e8f5e9 !important; }
+        .row-kr-sub.row-at-risk:hover { background-color: #ffe4e6 !important; }
+        .row-at-risk { background-color: #fff1f2 !important; }
+        .row-at-risk:hover { background-color: #ffe4e6 !important; }
+        .row-kr-sub td { padding: 12px 20px !important; }
+        .row-kr-sub .col-name { padding-left: 78px !important; position: relative; }
+        .row-kr-sub .col-name::before {
             content: '';
             position: absolute;
-            top: 0; left: 0; right: 0; bottom: 0;
-            pointer-events: none;
-            background-image: 
-                radial-gradient(circle, #22c55e 1.5px, transparent 1.5px),
-                radial-gradient(circle, #f59e0b 1.5px, transparent 1.5px),
-                radial-gradient(circle, #ef4444 1px, transparent 1px),
-                radial-gradient(circle, #6366f1 1.5px, transparent 1.5px);
-            background-size: 60px 60px, 80px 80px, 100px 100px, 70px 70px;
-            background-position: 0 0, 20px 20px, 40px 40px, 60px 60px;
-            animation: celebrate-particles 3s linear infinite;
-            z-index: -1;
+            left: 46px;
+            top: -12px;
+            bottom: 50%;
+            width: 24px;
+            border-left: 1.5px solid #e5e5ea;
+            border-bottom: 1.5px solid #e5e5ea;
+            border-bottom-left-radius: 10px;
         }
-        
-        .col-name { width: 50%; vertical-align: top; padding: 12px 16px !important; }
-        .col-owner { width: 40px; }
-        .col-weight { width: 50px; text-align: center; }
-        .col-status { width: 80px; }
-        .col-progress { width: 100px; }
-        .col-action { width: 30px; text-align: right; }
-        
-        .user-avatar { width: 20px; height: 20px; font-size: 8px; background: #e2e8f0; color: #334155; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 700; border: 1px solid #cbd5e1; }
-        .avatar-blue { background: #e0f2fe; color: #0284c7; border-color: #bae6fd; }
-        .avatar-purple { background: #f3e8ff; color: #7e22ce; border-color: #e9d5ff; }
+        .row-kr-sub .item-main-title { font-size: 13.5px !important; color: #48484a !important; font-weight: 500 !important; display: flex; align-items: center; gap: 8px; }
+        .row-kr-sub .item-main-title::before { content: ''; width: 6px; height: 6px; background: #d2d2d7; border-radius: 50%; flex-shrink: 0; }
 
-        .progress-tiny { width: 60px; height: 3px; background: #eee; border-radius: 2px; }
-        .progress-bar { height: 100%; background-color: #34c759; border-radius: 4px; transition: width 0.3s ease; }
+        /* Modern Progress Bars */
+        .progress-tiny { width: 100%; height: 6px; background: #f2f2f7; border-radius: 10px; overflow: hidden; position: relative; }
+        .progress-bar { height: 100%; border-radius: 10px; transition: width 0.8s cubic-bezier(0.65, 0, 0.35, 1); }
+        .progress-bar[style*="width: 100%"] { background: linear-gradient(90deg, #34c759, #30d158); box-shadow: 0 0 8px rgba(52, 199, 89, 0.3); }
 
-        .status-badge { padding: 3px 10px; border-radius: 999px; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; display: inline-flex; align-items: center; gap: 5px; box-shadow: inset 0 0 0 1px rgba(0,0,0,0.05); }
-        .status-badge::before { content: ''; width: 5px; height: 5px; border-radius: 50%; }
-        .st-ontrack { background: #ecfdf5; color: #059669; }
-        .history-box { margin-top: 20px; border-top: 1px solid #f1f5f9; padding-top: 16px; max-height: 300px; overflow-y: auto; text-align: left; }
-        textarea { width: 100%; border: 1px solid #e2e8f0; border-radius: 8px; padding: 10px; font-size: 12px; color: #1e293b; background: #f8fafc; resize: vertical; margin-top: 5px; }
-        textarea:focus { outline: none; border-color: #3b82f6; background: #fff; }
-        .st-ontrack::before { background: #10b981; }
-        .st-atrisk { background: #fffbeb; color: #d97706; }
-        .st-atrisk::before { background: #f59e0b; }
-        .st-pending { background: #f8fafc; color: #64748b; }
-        .st-pending::before { background: #94a3b8; }
+        /* Avatars & Badges */
+        .user-avatar { width: 32px; height: 32px; font-size: 11px; background: #f2f2f7; color: #1d1d1f; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 700; border: 2px solid #ffffff; box-shadow: 0 4px 8px rgba(0,0,0,0.06); }
+        .avatar-purple { background: #f5f0ff; color: #af52de; }
         
-        .prio-badge { font-size: 9px; font-weight: 800; padding: 1px 4px; border-radius: 3px; text-transform: uppercase; margin-right: 4px; display: inline-flex; align-items: center; gap: 3px; }
-        .prio-high { background: #fee2e2; color: #ef4444; border: 1px solid #fecaca; }
-        .prio-medium { background: #e0f2fe; color: #0284c7; border: 1px solid #bae6fd; }
-        .prio-low { background: #f1f5f9; color: #64748b; border: 1px solid #e2e8f0; }
+        .status-badge { padding: 4px 12px; border-radius: 980px; font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.06em; display: inline-flex; align-items: center; gap: 8px; box-shadow: 0 1px 2px rgba(0,0,0,0.03); }
+        .status-badge::before { content: ''; width: 6px; height: 6px; border-radius: 50%; }
+        .st-ontrack { background: #e3f9e5; color: #248a3d; }
+        .st-ontrack::before { background: #34c759; box-shadow: 0 0 6px #34c759; }
+        .st-atrisk { background: #fff4e5; color: #b25e09; }
+        .st-atrisk::before { background: #ff9500; box-shadow: 0 0 6px #ff9500; }
+        .st-pending { background: #f2f2f7; color: #86868b; }
+        .st-pending::before { background: #86868b; }
 
-        .val-target { font-size: 12px; font-weight: 600; }
-        .val-unit { font-size: 10px; color: #888; }
-        .btn-add-inline { border: none; background: transparent; color: #0071e3; font-size: 10px; font-weight: 600; cursor: pointer; padding: 0; }
-        .btn-add-inline:hover { text-decoration: underline; }
+        .btn-add-inline { color: #0071e3; font-size: 12px; font-weight: 700; cursor: pointer; text-decoration: none; padding: 6px 12px; border-radius: 980px; transition: all 0.2s; background: rgba(0, 113, 227, 0.05); border: 1px solid transparent; }
+        .btn-add-inline:hover { background: rgba(0, 113, 227, 0.12); border-color: rgba(0, 113, 227, 0.2); }
         
-        .btn-edit-row { opacity: 0; transition: opacity 0.2s; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; background: none; border: none; padding: 4px; color: #94a3b8; border-radius: 4px; }
-        .btn-edit-row:hover { background: #f1f5f9; color: #6366f1; }
-        .okr-card-header:hover .btn-edit-row, 
-        .okr-card-header:hover .btn-delete-row,
-        .okr-table tr:hover .btn-edit-row,
-        .okr-table tr:hover .btn-delete-row { opacity: 1; }
+        .btn-edit-row, .btn-delete-row { opacity: 0; padding: 8px; border-radius: 10px; transition: all 0.2s; background: transparent; border: none; cursor: pointer; color: #8e8e93; }
+        .okr-table tr:hover .btn-edit-row, .okr-table tr:hover .btn-delete-row { opacity: 1; }
+        .btn-edit-row:hover { background: #f2f2f7; color: #0071e3; }
+        .btn-delete-row:hover { background: #fff1f0; color: #ff3b30; }
 
-        .btn-delete-row { opacity: 0; background: none; border: none; color: #94a3b8; cursor: pointer; font-size: 13px; padding: 4px; transition: all 0.2s; margin-left:8px; display: inline-flex; align-items: center; justify-content: center; }
-        .btn-delete-row:hover { color: #ef4444; }
+        .item-number-circle { width: 26px; height: 26px; background: #ffffff; color: #1d1d1f; border-radius: 10px; font-size: 12px; font-weight: 800; display: flex; align-items: center; justify-content: center; border: 1px solid #e5e5ea; box-shadow: 0 2px 4px rgba(0,0,0,0.02); }
+        
+        /* Sidebar Drawer */
+        .apple-modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.15); backdrop-filter: saturate(180%) blur(20px); z-index: 9999; display: none; justify-content: flex-end; }
+        .apple-modal { background: rgba(255,255,255,0.92); width: 480px; height: 100%; box-shadow: -20px 0 60px rgba(0,0,0,0.05); transform: translateX(100%); transition: transform 0.6s cubic-bezier(0.16, 1, 0.3, 1); display: flex; flex-direction: column; border-left: 1px solid rgba(0,0,0,0.05); }
+        
+        
+        /* Celebration row */
+        .row-completed { background-color: #f2fdf5 !important; }
 
-        .item-header-row { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
-        .item-number-circle { width: 22px; height: 22px; background: #f2f2f7; color: #86868b; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 700; flex-shrink: 0; }
-        .obj-number-circle { width: 30px; height: 30px; background: #ffffff; color: #1d1d1f; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 14px; font-weight: 800; flex-shrink: 0; box-shadow: 0 4px 10px rgba(0,0,0,0.05); }
-        .item-main-title { font-weight: 700; color: #475569; margin: 0; font-size: 14px; letter-spacing: -0.01em; }
-        .prio-badge { margin: 0; }
-        
-        /* Full-Width Borderless Callout Boxes for Latest Feedback */
-        .latest-comment { margin-top: 8px; font-size: 11px; padding: 10px 14px; border-radius: 8px; display: flex; align-items: flex-start; gap: 8px; width: 100%; box-sizing: border-box; white-space: normal; line-height: 1.5; border: none; position: relative; }
-        .latest-comment i { font-size: 11px; margin-top: 3px; flex-shrink: 0; }
-        
-        .rich-preview-inline { flex: 1; }
-        .rich-preview-inline p { margin: 0; padding: 0; display: inline; }
-        .rich-preview-inline strong, .rich-preview-inline b { font-weight: 700; }
-        .rich-preview-inline i, .rich-preview-inline em { font-style: italic; }
-        
-        .callout-success { background: #dcfce7; color: #166534; }
-        .callout-warning { background: #fef3c7; color: #92400e; }
-        .callout-danger  { background: #fee2e2; color: #991b1b; }
-        .callout-info    { background: #e0f2fe; color: #075985; }
-        .callout-pending { background: #f1f5f9; color: #475569; }
+        /* Weekly Mini Grid */
+        .weekly-mini-grid { display: flex; gap: 4px; margin-top: 8px; align-items: center; }
+        .w-dot { width: 7px; height: 7px; background: #e5e5ea; border-radius: 50%; transition: all 0.2s; position: relative; }
+        .w-dot.st-high { background: #34c759; box-shadow: 0 0 4px rgba(52, 199, 89, 0.2); }
+        .w-dot.st-mid { background: #ffcc00; box-shadow: 0 0 4px rgba(255, 204, 0, 0.2); }
+        .w-dot.st-low { background: #ff3b30; box-shadow: 0 0 4px rgba(255, 59, 48, 0.2); }
+        .w-dot.is-current { width: 9px; height: 9px; border: 1.5px solid #1d1d1f; box-shadow: 0 0 0 1.5px #fff; z-index: 1; }
+        .w-dot:hover { transform: scale(1.6); z-index: 10; cursor: help; }
+        .row-completed .item-main-title { color: #248a3d !important; text-decoration: line-through; opacity: 0.6; }
 
-        .history-box { margin-top: 24px; border-top: 1px solid #f1f5f9; padding-top: 20px; text-align: left; }
-        .history-item { margin-bottom: 16px; display: flex; flex-direction: column; align-items: flex-start; }
-        .history-bubble { background: #f1f5f9; padding: 10px 14px; border-radius: 14px 14px 14px 2px; border: 1px solid #e2e8f0; max-width: 85%; position: relative; }
-        .history-meta { font-size: 10px; color: #94a3b8; margin-bottom: 4px; padding-left: 2px; display: flex; gap: 8px; }
-        .history-content { font-size: 12px; color: #1e293b; line-height: 1.5; }
-        
-        /* Message styles for 'me' or system could be added here if needed */
-        .history-item.me { align-items: flex-end; }
-        .history-item.me .history-bubble { background: #e0f2fe; border-color: #bae6fd; border-radius: 14px 14px 2px 14px; }
-        .history-item.me .history-meta { flex-direction: row-reverse; padding-right: 2px; }
-
-        /* Sidebar Drawer Styles */
-        .apple-modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.3); backdrop-filter: blur(4px); z-index: 9999; display: none; justify-content: flex-end; }
-        .apple-modal { background: #ffffff; width: 450px; height: 100%; box-shadow: -10px 0 30px rgba(0,0,0,0.1); transform: translateX(100%); transition: transform 0.4s cubic-bezier(0.16, 1, 0.3, 1); display: flex; flex-direction: column; }
         .apple-modal.active { transform: translateX(0); }
         
         .modal-body { flex: 1; overflow-y: auto; padding: 40px 32px; }
@@ -911,6 +1027,109 @@ function getBadgeHtml($status) {
         .week-pill.st-low .w-val { color: #991b1b; }
 
         .week-pill.is-current::before { content: 'NOW'; position: absolute; top: -8px; left: 50%; transform: translateX(-50%); background: #ff3b30; color: white; font-size: 7px; font-weight: 900; padding: 2px 6px; border-radius: 4px; border: 2px solid white; letter-spacing: 0.05em; }
+
+    /* Accordion Styles Refined */
+    .okr-card-header { cursor: pointer; position: relative; transition: background 0.2s; display: flex; align-items: center; }
+    .okr-card-header:hover { background: #fbfbfd; }
+    .chevron-icon { 
+        font-size: 14px; 
+        color: #1d1d1f; /* Black */
+        transition: transform 0.4s cubic-bezier(0.16, 1, 0.3, 1); 
+        margin-left: auto; /* Push to right */
+        padding: 0 10px;
+    }
+    .okr-card-body-wrapper {
+        display: grid;
+        grid-template-rows: 1fr;
+        transition: grid-template-rows 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+        overflow: hidden;
+    }
+    .okr-card.collapsed .okr-card-body-wrapper {
+        grid-template-rows: 0fr;
+    }
+    .okr-card.collapsed { margin-bottom: 8px; }
+    .okr-card.collapsed .chevron-icon { transform: rotate(-180deg); }
+
+    
+    /* Premium Explanation Sidebar Drawer */
+    .explanation-sidebar {
+        position: fixed;
+        top: 0;
+        right: -500px;
+        width: 500px;
+        height: 100%;
+        background: #ffffff;
+        box-shadow: -10px 0 40px rgba(0,0,0,0.1);
+        z-index: 10001;
+        transition: right 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+        display: flex;
+        flex-direction: column;
+        border-left: 1px solid #e5e5e7;
+    }
+    .explanation-sidebar.active { right: 0; }
+    .explanation-sidebar .sidebar-header {
+        padding: 24px;
+        border-bottom: 1px solid #f2f2f7;
+        background: rgba(255,255,255,0.8);
+        backdrop-filter: blur(10px);
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        position: sticky; top:0; z-index: 10002;
+    }
+    .explanation-sidebar .sidebar-body {
+        padding: 20px;
+        flex: 1;
+        overflow-y: auto;
+        background-color: #fbfbfd;
+        display: flex;
+        flex-direction: column;
+        gap: 16px;
+    }
+    .explanation-sidebar .sidebar-footer {
+        padding: 24px;
+        border-top: 1px solid #f2f2f7;
+        background: #ffffff;
+    }
+    
+    .history-card {
+        background: #ffffff;
+        border-radius: 12px;
+        padding: 16px;
+        border: 1px solid #e5e5e7;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.02);
+    }
+    .history-card-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 8px;
+        border-bottom: 1px solid #f2f2f7;
+        padding-bottom: 6px;
+    }
+    .history-user { font-size: 13px; font-weight: 700; color: #1d1d1f; display: flex; align-items: center; gap: 8px; }
+    .history-date { font-size: 11px; color: #86868b; }
+    .history-text { font-size: 14px; color: #424245; line-height: 1.5; }
+    .history-avatar { width: 24px; height: 24px; background: #f2f2f7; border-radius: 50%; font-size: 10px; font-weight: 700; display: flex; align-items: center; justify-content: center; color: #0071e3; border: 1px solid #0071e3; }
+
+    .has-explanation-icon {
+        color: #ff9500; /* Apple Warning Amber */
+        font-size: 14px;
+        margin-left: 8px;
+        cursor: pointer;
+        opacity: 0.8;
+        vertical-align: middle;
+    }
+    .has-explanation-icon:hover { opacity: 1; transform: scale(1.2); color: #ff3b30; }
+    
+    .sidebar-overlay {
+        position: fixed;
+        top:0; left:0; width:100%; height:100%;
+        background: rgba(0,0,0,0.1);
+        z-index: 10000;
+        display: none;
+        backdrop-filter: blur(2px);
+    }
     </style>
 </head>
 <body>
@@ -1058,177 +1277,198 @@ function getBadgeHtml($status) {
                         </div>
 
                         <?php foreach ($objs_in_team as $obj): ?>
-                        <div class="okr-card" id="obj-<?php echo $obj['id']; ?>">
-                        <div class="okr-card-header">
-                        <div class="obj-left">
-                            <div class="obj-title-group">
-                                <h3 title="<?php echo htmlspecialchars($obj['title']); ?>">
-                                    <i class="fas fa-bullseye" style="color:#6366f1; font-size:14px;"></i>
+                        <div class="okr-card <?php echo (count($objs_in_team) > 3) ? 'collapsed' : ''; ?>" id="obj-<?php echo $obj['id']; ?>">
+                        <div class="okr-card-header" onclick="toggleObjectiveAccordion(this)">
+                            <div class="obj-left">
+                                <h3 title="<?php echo htmlspecialchars($obj['title']); ?>" style="display:flex; align-items:center;">
+                                    <i class="fas fa-bullseye" style="color:#6366f1; margin-right:8px;"></i>
+                                    <span style="color:#6366f1; opacity:0.8; font-weight:800; margin-right:4px;">OBJ <?php echo $global_obj_idx++; ?> :</span>
                                     <?php echo htmlspecialchars($obj['title']); ?>
-                                    <button class="btn-edit-row btn-edit-objective" 
-                                            title="Edit Objective" 
-                                            data-id="<?php echo $obj['id']; ?>"
-                                            data-title="<?php echo htmlspecialchars($obj['title']); ?>"
-                                            data-team="<?php echo htmlspecialchars($obj['team']); ?>"
-                                            data-owner="<?php echo htmlspecialchars($obj['owner']); ?>"
-                                            data-owner-id="<?php echo intval($obj['owner_id'] ?? 0); ?>"
-                                            data-status="<?php echo htmlspecialchars($obj['status']); ?>"
-                                            data-sort-order="<?php echo intval($obj['sort_order'] ?? 0); ?>"
-                                            data-quarter="<?php echo intval($obj['quarter'] ?? 1); ?>"
-                                            data-year="<?php echo intval($obj['year'] ?? 2026); ?>">
-                                        <i class="fas fa-edit"></i>
-                                    </button>
-                                    <button class="btn-delete-row" style="margin-left: 0;" onclick="deleteObjective(<?php echo $obj['id']; ?>)" title="Delete Objective">
-                                        <i class="fas fa-trash-alt"></i>
-                                    </button>
                                 </h3>
-                                <div class="obj-meta-row">
-                                    <div class="meta-group">
-                                        <i class="fas fa-user-circle" style="font-size:11px; opacity:0.7;"></i>
-                                        <span class="meta-lbl">Owner:</span>
-                                        <span style="font-weight:600; color:#334155;"><?php echo htmlspecialchars($obj['owner'] ?? 'User'); ?></span>
+                                <div class="obj-meta-row" onclick="event.stopPropagation()">
+                                    <div class="obj-meta-item">
+                                        <i class="fas fa-user-circle"></i>
+                                        Owner: <strong><?php echo htmlspecialchars($obj['owner']); ?></strong>
                                     </div>
-                                    <div class="meta-divider"></div>
-                                    <div class="meta-group">
-                                        <i class="fas fa-chart-line" style="font-size:11px; opacity:0.7;"></i>
-                                        <span class="meta-lbl">Progress:</span>
-                                        <span style="font-weight:800; color:#0f172a; min-width:30px;"><?php echo intval($obj['progress']); ?>%</span>
-                                        <div class="progress-tiny" style="width:120px; background:#f1f5f9;"><div class="progress-bar" id="obj-progress-bar-<?php echo $obj['id']; ?>" style="width: <?php echo $obj['progress']; ?>%; height:100%; background:#10b981; border-radius:2px;"></div></div>
+                                    <div class="obj-meta-item">
+                                        <i class="fas fa-chart-line"></i>
+                                        Progress: <strong><?php echo round($obj['progress'], 1); ?>%</strong>
+                                    </div>
+                                    <div style="display:flex; align-items:center; gap:4px; margin-left:8px;">
+                                        <button class="btn-edit-row btn-edit-objective" style="opacity:1;"
+                                                data-id="<?php echo $obj['id']; ?>"
+                                                data-title="<?php echo htmlspecialchars($obj['title']); ?>"
+                                                data-team="<?php echo htmlspecialchars($obj['team']); ?>"
+                                                data-owner="<?php echo htmlspecialchars($obj['owner']); ?>"
+                                                data-owner-id="<?php echo intval($obj['owner_id'] ?? 0); ?>"
+                                                data-status="<?php echo htmlspecialchars($obj['status']); ?>"
+                                                data-sort-order="<?php echo intval($obj['sort_order'] ?? 0); ?>"
+                                                data-quarter="<?php echo intval($obj['quarter'] ?? 1); ?>"
+                                                data-year="<?php echo intval($obj['year'] ?? 2026); ?>">
+                                            <i class="fas fa-pen"></i>
+                                        </button>
+                                        <button class="btn-delete-row" style="opacity:1;" onclick="deleteObjective(<?php echo $obj['id']; ?>)">
+                                            <i class="fas fa-trash-alt"></i>
+                                        </button>
+                                        <button class="btn-apple" style="padding: 6px 14px; font-size: 11px; height: 30px; margin-left:12px; box-shadow:none;" onclick="openAddModal(<?php echo $obj['id']; ?>, 'activity')">
+                                            <i class="fas fa-plus"></i> Add KA
+                                        </button>
                                     </div>
                                 </div>
                             </div>
-                        </div>
-                        <div class="obj-right">
-                            <?php echo getBadgeHtml($obj['status']); ?>
-                        </div>
-                    </div>
-
-                    <div class="okr-body-split">
-                        <!-- Key Activities Column (LEFT) -->
-                        <div class="okr-col">
-                            <div class="section-label">
-                                <span><i class="fas fa-tasks"></i> Key Activities</span>
-                                <button class="btn-add-inline" onclick="openAddModal(<?php echo $obj['id']; ?>, 'activity')">+ Add KA</button>
+                            <div class="obj-right">
+                                <?php echo getBadgeHtml($obj['status']); ?>
+                                <i class="fas fa-chevron-down chevron-icon"></i>
                             </div>
-                            <table class="okr-table">
-                                <tbody>
-                                    <?php if(empty($obj['activities'])): ?>
-                                        <tr><td colspan="6" style="color:#b2b2b6; font-style:italic; text-align:center; padding:12px;">No activities</td></tr>
-                                    <?php else: ?>
-                                        <?php $a_idx = 1; foreach ($obj['activities'] as $a): 
-                                            $row_class = 'row-prio-' . ($a['priority'] ?? 'medium');
-                                            if(($a['status'] ?? '') === 'completed') $row_class .= ' row-completed';
-                                        ?>
-                                        <tr class="<?php echo $row_class; ?>">
-                                            <td class="col-name" title="<?php echo htmlspecialchars($a['activity_name'] ?? ''); ?>">
+                        </div>
+
+                    <div class="okr-card-body-wrapper">
+                    <div class="okr-card-body" style="padding: 0 12px 12px 12px; min-height:0;">
+                        <table class="okr-table">
+                            <thead>
+                                <tr style="background: #fbfbfd; border-bottom: 1px solid #f2f2f7;">
+                                    <th style="padding: 12px 16px; text-align: left; font-size: 11px; color: #86868b; text-transform: uppercase;">Key Activity / Result</th>
+                                    <th style="width: 60px; text-align: center; font-size: 11px; color: #86868b; text-transform: uppercase;">Owner</th>
+                                    <th style="width: 60px; text-align: center; font-size: 11px; color: #86868b; text-transform: uppercase;">Weight</th>
+                                    <th style="width: 100px; text-align: left; font-size: 11px; color: #86868b; text-transform: uppercase;">Status</th>
+                                    <th style="width: 180px; text-align: left; font-size: 11px; color: #86868b; text-transform: uppercase;">Progress (%) & Weekly Tracking</th>
+                                    <th style="width: 40px;"></th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <?php if(empty($obj['activities']) && empty($obj['unlinked_results'])): ?>
+                                    <tr>
+                                        <td colspan="6" style="text-align:center; padding:60px 40px; color:#86868b;">
+                                            <div style="font-size:14px; margin-bottom:12px; font-style:italic;">No data found. Start by adding a Key Activity.</div>
+                                            <button class="btn-apple" style="margin:0 auto; box-shadow:0 4px 12px rgba(0,113,227,0.1);" onclick="openAddModal(<?php echo $obj['id']; ?>, 'activity')">
+                                                <i class="fas fa-plus-circle"></i> Add First Key Activity
+                                            </button>
+                                        </td>
+                                    </tr>
+                                <?php else: ?>
+                                    <!-- Activities and their nested Results -->
+                                    <?php 
+                                    $a_idx = 1; 
+                                    foreach ($obj['activities'] as $a): 
+                                        $row_class = 'activity-header row-prio-' . ($a['priority'] ?? 'medium');
+                                        if(($a['status'] ?? '') === 'completed') $row_class .= ' row-completed';
+                                    ?>
+                                        <tr class="<?php echo $row_class; ?> activity-row-for-obj-<?php echo $obj['id']; ?>" data-id="<?php echo $a['id']; ?>" data-name="<?php echo htmlspecialchars($a['activity_name']); ?>">
+                                            <td class="col-name">
                                                 <div class="item-header-row">
                                                     <span class="item-number-circle"><?php echo $a_idx++; ?></span>
-                                                    <?php if(($a['priority'] ?? 'medium') === 'high'): ?><span class="prio-badge prio-high"><i class="fas fa-fire"></i> High</span><?php endif; ?>
-                                                    <?php if(($a['priority'] ?? 'medium') === 'medium'): ?><span class="prio-badge prio-medium"><i class="fas fa-minus"></i> Med</span><?php endif; ?>
-                                                    <?php if(($a['priority'] ?? 'medium') === 'low'): ?><span class="prio-badge prio-low"><i class="fas fa-arrow-down"></i> Low</span><?php endif; ?>
-                                                    
-                                                    <h4 class="item-main-title"><i class="fas fa-walking" style="margin-right:6px; font-size:12px; opacity:0.6;"></i><?php echo htmlspecialchars($a['activity_name'] ?? ''); ?></h4>
+                                                    <h4 class="item-main-title">
+                                                        <span style="color:#0071e3; font-weight:800; margin-right:4px;">KA <?php echo ($a_idx - 1); ?> :</span>
+                                                        <?php echo htmlspecialchars($a['activity_name'] ?? ''); ?>
+                                                        <?php if(($expl_counts['activity'][$a['id']] ?? 0) > 0): ?>
+                                                            <i class="fas fa-exclamation-circle has-explanation-icon" onclick="openExplanationSidebar(<?php echo $a['id']; ?>, 'activity', '<?php echo addslashes($a['activity_name'] ?? ''); ?>')" title="Xem giải trình/lưu ý"></i>
+                                                        <?php endif; ?>
+                                                    </h4>
+                                                    <button class="btn-add-inline" title="Add result to this activity" onclick="openAddModal(<?php echo $obj['id']; ?>, 'metric', <?php echo $a['id']; ?>)" style="margin-left:8px;"><i class="fas fa-plus-circle"></i> Add KR</button>
                                                 </div>
-                                                
-                                                <?php if(!empty($a['latest_explanation'])): 
-                                                    $c_class = 'callout-pending'; $c_icon = 'fa-clock';
-                                                    if($a['status'] === 'on_track') { $c_class = 'callout-success'; $c_icon = 'fa-check-circle'; }
-                                                    if($a['status'] === 'completed') { $c_class = 'callout-success'; $c_icon = 'fa-trophy'; }
-                                                    if($a['status'] === 'delayed') { $c_class = 'callout-warning'; $c_icon = 'fa-hourglass-half'; }
-                                                    if($a['status'] === 'at_risk') { $c_class = 'callout-danger'; $c_icon = 'fa-exclamation-circle'; }
-                                                    if($a['status'] === 'in_progress') { $c_class = 'callout-info'; $c_icon = 'fa-spinner fa-spin'; }
-                                                ?>
-                                                    <div class="latest-comment <?php echo $c_class; ?>" title="Giải trình gần nhất">
-                                                        <i class="fas <?php echo $c_icon; ?>"></i> <div class="rich-preview-inline"><?php echo $a['latest_explanation']; ?></div>
-                                                    </div>
-                                                <?php endif; ?>
                                             </td>
-                                            <td class="col-owner" title="Owner"><div class="user-avatar" title="<?php echo htmlspecialchars($a['owner_name'] ?? ''); ?>"><?php echo $a['owner_avatar'] ?? ''; ?></div></td>
-                                            <td class="col-weight" title="Weight (%)" style="font-size:12px; font-weight:700; color:#1d1d1f;"><?php echo intval($a['weight'] ?? 0); ?>%</td>
-                                            <td class="col-status" title="Status" id="td-status-activity-<?php echo $a['id']; ?>"><?php echo getBadgeHtml($a['status'] ?? 'pending'); ?></td>
-                                            <td class="col-progress" title="Progress (%)">
-                                                <div style="display:flex; align-items:center; gap:6px;">
-                                                    <span style="font-weight:600; min-width:26px;"><span id="td-val-activity-<?php echo $a['id']; ?>"><?php echo intval($a['progress']); ?></span>%</span>
-                                                    <div class="progress-tiny"><div class="progress-bar" id="td-bar-activity-<?php echo $a['id']; ?>" style="width: <?php echo $a['progress']; ?>%; height:100%; background:#34c759;"></div></div>
+                                            <td class="col-owner" style="text-align:center;"><div class="user-avatar" style="margin:0 auto;" title="<?php echo htmlspecialchars($a['owner_name'] ?? ''); ?>"><?php echo $a['owner_avatar'] ?? '??'; ?></div></td>
+                                            <td class="col-weight" style="text-align:center; font-weight:600; color:#1d1d1f;"><?php echo intval($a['weight'] ?? 0); ?>%</td>
+                                            <td class="col-status"><?php echo getBadgeHtml($a['status'] ?? 'pending'); ?></td>
+                                            <td class="col-progress">
+                                                <?php 
+                                                    $display_prog = getLatestWeeklyProgress($a['id'], 'activity', $weekly_tracking_map, $current_week_num, $a['progress']); 
+                                                ?>
+                                                <div style="display:flex; align-items:center; gap:8px;">
+                                                    <span style="font-weight:700; font-size:12px; min-width:32px;"><span id="td-val-activity-<?php echo $a['id']; ?>"><?php echo intval($display_prog); ?></span>%</span>
+                                                    <div class="progress-tiny"><div class="progress-bar" id="td-bar-activity-<?php echo $a['id']; ?>" style="width: <?php echo $display_prog; ?>%; background:#34c759;"></div></div>
                                                 </div>
+                                                <?php echo renderWeeklyTrackingDots($a['id'], 'activity', $weekly_tracking_map, $current_week_num, $a['progress']); ?>
                                             </td>
                                             <td class="col-action">
-                                                <div style="display:flex; align-items:center;">
-                                                    <button class="btn-edit-row" onclick="openUpdateModal('<?php echo addslashes($a['activity_name'] ?? ''); ?>', 'activity', <?php echo $a['id']; ?>, <?php echo floatval($a['progress'] ?? 0); ?>, 100, '<?php echo $a['status'] ?? 'pending'; ?>', '<?php echo addslashes($a['owner_name'] ?? ''); ?>', '<?php echo $a['priority'] ?? 'medium'; ?>', <?php echo intval($a['weight'] ?? 0); ?>)"><i class="fas fa-history"></i></button>
+                                                <div style="display:flex; align-items:center; gap:4px;">
+                                                    <button class="btn-edit-row" onclick="openUpdateModal('<?php echo addslashes($a['activity_name'] ?? ''); ?>', 'activity', <?php echo $a['id']; ?>, <?php echo floatval($a['progress'] ?? 0); ?>, 100, '<?php echo $a['status'] ?? 'pending'; ?>', '<?php echo addslashes($a['owner_name'] ?? ''); ?>', '<?php echo $a['priority'] ?? 'medium'; ?>', <?php echo intval($a['weight'] ?? 0); ?>, <?php echo $obj['id']; ?>, 0)"><i class="fas fa-history"></i></button>
                                                     <button class="btn-delete-row" title="Delete Activity" onclick="deleteOkrItem(<?php echo $a['id']; ?>, 'activity')"><i class="fas fa-trash-alt"></i></button>
                                                 </div>
                                             </td>
                                         </tr>
-                                        <?php endforeach; ?>
-                                    <?php endif; ?>
-                                </tbody>
-                            </table>
-                        </div>
 
-                        <!-- Key Results Column (RIGHT) -->
-                        <div class="okr-col">
-                            <div class="section-label">
-                                <span><i class="fas fa-bullseye"></i> Key Results</span>
-                                <button class="btn-add-inline" onclick="openAddModal(<?php echo $obj['id']; ?>, 'metric')">+ Add KR</button>
-                            </div>
-                            <table class="okr-table">
-                                <tbody>
-                                    <?php if(empty($obj['results'])): ?>
-                                        <tr><td colspan="6" style="color:#b2b2b6; font-style:italic; text-align:center; padding:12px;">No results</td></tr>
-                                    <?php else: ?>
-                                        <?php $r_idx = 1; foreach ($obj['results'] as $r): 
-                                            $row_class = 'row-prio-' . ($r['priority'] ?? 'medium');
-                                            if(($r['status'] ?? '') === 'completed') $row_class .= ' row-completed';
+                                        <!-- Nested Results for this Activity -->
+                                        <?php if (!empty($a['results'])): $kr_idx = 1; foreach ($a['results'] as $r): 
+                                            $progress_pct = ($r['target_value'] > 0) ? ($r['current_value'] / $r['target_value']) * 100 : 0;
+                                            $progress_pct = min(100, round($progress_pct, 1));
                                         ?>
-                                        <tr class="<?php echo $row_class; ?>">
-                                            <td class="col-name" title="<?php echo htmlspecialchars($r['metric_name'] ?? ''); ?>">
-                                                <div class="item-header-row">
-                                                    <span class="item-number-circle"><?php echo $r_idx++; ?></span>
-                                                    <?php if(($r['priority'] ?? 'medium') === 'high'): ?><span class="prio-badge prio-high"><i class="fas fa-fire"></i> High</span><?php endif; ?>
-                                                    <?php if(($r['priority'] ?? 'medium') === 'medium'): ?><span class="prio-badge prio-medium"><i class="fas fa-minus"></i> Med</span><?php endif; ?>
-                                                    <?php if(($r['priority'] ?? 'medium') === 'low'): ?><span class="prio-badge prio-low"><i class="fas fa-arrow-down"></i> Low</span><?php endif; ?>
-                                                    
-                                                    <h4 class="item-main-title"><i class="fas fa-crosshairs" style="margin-right:6px; font-size:12px; opacity:0.6;"></i><?php echo htmlspecialchars($r['metric_name'] ?? ''); ?></h4>
-                                                </div>
-                                                
-                                                <?php if(!empty($r['latest_explanation'])): 
-                                                    $c_class = 'callout-pending'; $c_icon = 'fa-clock';
-                                                    if($r['status'] === 'on_track') { $c_class = 'callout-success'; $c_icon = 'fa-check-circle'; }
-                                                    if($r['status'] === 'completed') { $c_class = 'callout-success'; $c_icon = 'fa-trophy'; }
-                                                    if($r['status'] === 'delayed') { $c_class = 'callout-warning'; $c_icon = 'fa-hourglass-half'; }
-                                                    if($r['status'] === 'at_risk') { $c_class = 'callout-danger'; $c_icon = 'fa-exclamation-circle'; }
-                                                    if($r['status'] === 'in_progress') { $c_class = 'callout-info'; $c_icon = 'fa-spinner fa-spin'; }
-                                                ?>
-                                                    <div class="latest-comment <?php echo $c_class; ?>" title="Giải trình gần nhất">
-                                                        <i class="fas <?php echo $c_icon; ?>"></i> <div class="rich-preview-inline"><?php echo $r['latest_explanation']; ?></div>
+                                            <?php 
+                                            $row_class = 'row-kr-sub';
+                                            if (($r['status'] ?? '') === 'completed') $row_class .= ' row-completed';
+                                            if (($r['status'] ?? '') === 'at_risk' || ($r['status'] ?? '') === 'delayed') $row_class .= ' row-at-risk';
+                                            ?>
+                                            <tr class="<?php echo $row_class; ?>">
+                                                <td class="col-name">
+                                                    <h4 class="item-main-title">
+                                                        <span style="color:#64748b; font-weight:700; margin-right:4px;">KR <?php echo $kr_idx++; ?> :</span>
+                                                        <?php echo htmlspecialchars($r['metric_name'] ?? ''); ?>
+                                                        <?php if(($expl_counts['metric'][$r['id']] ?? 0) > 0): ?>
+                                                            <i class="fas fa-exclamation-circle has-explanation-icon" onclick="openExplanationSidebar(<?php echo $r['id']; ?>, 'metric', '<?php echo addslashes($r['metric_name'] ?? ''); ?>')" title="Xem giải trình/lưu ý"></i>
+                                                        <?php endif; ?>
+                                                    </h4>
+                                                </td>
+                                                <td class="col-owner" style="text-align:center;"><div class="user-avatar avatar-purple" style="margin:0 auto;" title="<?php echo htmlspecialchars($r['owner_name'] ?? ''); ?>"><?php echo $r['owner_avatar'] ?? ''; ?></div></td>
+                                                <td class="col-weight" style="text-align:center; color:#86868b; font-weight:500;"><?php echo intval($r['weight'] ?? 0); ?>%</td>
+                                                <td class="col-status"><?php echo getBadgeHtml($r['status']); ?></td>
+                                                <td class="col-progress">
+                                                    <div style="display:flex; align-items:center; gap:8px;">
+                                                        <?php $display_prog = getLatestWeeklyProgress($r['id'], 'metric', $weekly_tracking_map, $current_week_num, $progress_pct); ?>
+                                                        <span style="font-weight:700; font-size:11px; color:#8e8e93; min-width:32px;"><span id="td-val-metric-<?php echo $r['id']; ?>"><?php echo $display_prog; ?></span>%</span>
+                                                        <div class="progress-tiny"><div class="progress-bar" id="td-bar-metric-<?php echo $r['id']; ?>" style="width: <?php echo $display_prog; ?>%; background:#0071e3;"></div></div>
                                                     </div>
-                                                <?php endif; ?>
-                                            </td>
-                                            <td class="col-owner" title="Owner"><div class="user-avatar avatar-purple" title="<?php echo htmlspecialchars($r['owner_name'] ?? ''); ?>"><?php echo $r['owner_avatar'] ?? ''; ?></div></td>
-                                            <td class="col-weight" title="Weight (%)" style="font-size:12px; font-weight:700; color:#1d1d1f;"><?php echo intval($r['weight'] ?? 0); ?>%</td>
-                                            <td class="col-status" title="Status" id="td-status-metric-<?php echo $r['id']; ?>"><?php echo getBadgeHtml($r['status']); ?></td>
-                                            <td class="col-progress" title="Progress (%)">
-                                                <?php 
-                                                    $progress_pct = ($r['target_value'] > 0) ? ($r['current_value'] / $r['target_value']) * 100 : 0;
-                                                    $progress_pct = min(100, round($progress_pct, 1));
-                                                ?>
-                                                <div style="display:flex; align-items:center; gap:6px;">
-                                                    <span style="font-weight:600; min-width:32px;"><span id="td-val-metric-<?php echo $r['id']; ?>"><?php echo $progress_pct; ?></span>%</span>
-                                                    <div class="progress-tiny"><div class="progress-bar" id="td-bar-metric-<?php echo $r['id']; ?>" style="width: <?php echo $progress_pct; ?>%; height:100%; background:#34c759;"></div></div>
-                                                </div>
-                                            </td>
-                                            <td class="col-action">
-                                                <div style="display:flex; align-items:center;">
-                                                    <button class="btn-edit-row" onclick="openUpdateModal('<?php echo addslashes($r['metric_name'] ?? ''); ?>', 'metric', <?php echo $r['id']; ?>, <?php echo round($progress_pct, 1); ?>, 100, '<?php echo $r['status'] ?? 'pending'; ?>', '<?php echo addslashes($r['owner_name'] ?? ''); ?>', '<?php echo $r['priority'] ?? 'medium'; ?>', <?php echo intval($r['weight'] ?? 0); ?>)"><i class="fas fa-history"></i></button>
-                                                    <button class="btn-delete-row" title="Delete KR" onclick="deleteOkrItem(<?php echo $r['id']; ?>, 'metric')"><i class="fas fa-trash-alt"></i></button>
-                                                </div>
-                                            </td>
-                                        </tr>
+                                                    <?php echo renderWeeklyTrackingDots($r['id'], 'metric', $weekly_tracking_map, $current_week_num, $progress_pct); ?>
+                                                </td>
+                                                <td class="col-action">
+                                                    <div style="display:flex; align-items:center; gap:4px;">
+                                                        <button class="btn-edit-row" onclick="openUpdateModal('<?php echo addslashes($r['metric_name'] ?? ''); ?>', 'metric', <?php echo $r['id']; ?>, <?php echo round($progress_pct, 1); ?>, 100, '<?php echo $r['status'] ?? 'pending'; ?>', '<?php echo addslashes($r['owner_name'] ?? ''); ?>', '<?php echo $r['priority'] ?? 'medium'; ?>', <?php echo intval($r['weight'] ?? 0); ?>, <?php echo $obj['id']; ?>, <?php echo $a['id']; ?>)"><i class="fas fa-history"></i></button>
+                                                        <button class="btn-delete-row" title="Delete KR" onclick="deleteOkrItem(<?php echo $r['id']; ?>, 'metric')"><i class="fas fa-trash-alt"></i></button>
+                                                    </div>
+                                                </td>
+                                            </tr>
+                                        <?php endforeach; endif; ?>
+                                    <?php endforeach; ?>
+
+                                    <!-- Unlinked Results -->
+                                    <?php if (!empty($obj['unlinked_results'])): ?>
+                                        <tr style="background:#fbfbfd;"><td colspan="6" style="font-size:10px; font-weight:700; color:#86868b; text-transform:uppercase; letter-spacing:0.05em; padding:12px 20px; border-top:1px solid #f2f2f7;">Other Results (Unlinked) <button class="btn-add-inline" onclick="openAddModal(<?php echo $obj['id']; ?>, 'metric')" style="margin-left:8px;">+ Add KR</button></td></tr>
+                                        <?php foreach ($obj['unlinked_results'] as $r): 
+                                            $progress_pct = ($r['target_value'] > 0) ? ($r['current_value'] / $r['target_value']) * 100 : 0;
+                                            $progress_pct = min(100, round($progress_pct, 1));
+                                        ?>
+                                            <?php 
+                                            $row_class = '';
+                                            if (($r['status'] ?? '') === 'completed') $row_class = 'row-completed';
+                                            if (($r['status'] ?? '') === 'at_risk' || ($r['status'] ?? '') === 'delayed') $row_class = 'row-at-risk';
+                                            ?>
+                                            <tr class="<?php echo $row_class; ?>">
+                                                <td class="col-name" style="padding-left:20px !important;">
+                                                    <h4 class="item-main-title"><?php echo htmlspecialchars($r['metric_name'] ?? ''); ?></h4>
+                                                </td>
+                                                <td class="col-owner" style="text-align:center;"><div class="user-avatar avatar-purple" style="margin:0 auto;" title="<?php echo htmlspecialchars($r['owner_name'] ?? ''); ?>"><?php echo $r['owner_avatar'] ?? ''; ?></div></td>
+                                                <td class="col-weight" style="text-align:center; color:#86868b; font-weight:500;"><?php echo intval($r['weight'] ?? 0); ?>%</td>
+                                                <td class="col-status"><?php echo getBadgeHtml($r['status']); ?></td>
+                                                <td class="col-progress">
+                                                    <div style="display:flex; align-items:center; gap:8px;">
+                                                        <?php $display_prog = getLatestWeeklyProgress($r['id'], 'metric', $weekly_tracking_map, $current_week_num, $progress_pct); ?>
+                                                        <span style="font-weight:700; font-size:11px; color:#8e8e93; min-width:32px;"><span id="td-val-metric-<?php echo $r['id']; ?>"><?php echo $display_prog; ?></span>%</span>
+                                                        <div class="progress-tiny"><div class="progress-bar" id="td-bar-metric-<?php echo $r['id']; ?>" style="width: <?php echo $display_prog; ?>%; background:#0071e3;"></div></div>
+                                                    </div>
+                                                    <?php echo renderWeeklyTrackingDots($r['id'], 'metric', $weekly_tracking_map, $current_week_num, $progress_pct); ?>
+                                                </td>
+                                                <td class="col-action">
+                                                    <div style="display:flex; align-items:center; gap:4px;">
+                                                        <button class="btn-edit-row" onclick="openUpdateModal('<?php echo addslashes($r['metric_name'] ?? ''); ?>', 'metric', <?php echo $r['id']; ?>, <?php echo round($progress_pct, 1); ?>, 100, '<?php echo $r['status'] ?? 'pending'; ?>', '<?php echo addslashes($r['owner_name'] ?? ''); ?>', '<?php echo $r['priority'] ?? 'medium'; ?>', <?php echo intval($r['weight'] ?? 0); ?>, <?php echo $obj['id']; ?>, 0)"><i class="fas fa-history"></i></button>
+                                                        <button class="btn-delete-row" title="Delete KR" onclick="deleteOkrItem(<?php echo $r['id']; ?>, 'metric')"><i class="fas fa-trash-alt"></i></button>
+                                                    </div>
+                                                </td>
+                                            </tr>
                                         <?php endforeach; ?>
                                     <?php endif; ?>
-                                </tbody>
-                            </table>
-                        </div>
+                                <?php endif; ?>
+                            </tbody>
+                        </table>
+                    </div>
                     </div>
                     </div>
                     <?php endforeach; ?>
@@ -1308,6 +1548,12 @@ function getBadgeHtml($status) {
                     <input type="hidden" id="updateItemExplanation">
                 </div>
 
+                <div class="modal-control" id="updateItemParentActivityControl" style="display:none;">
+                    <label>Liên kết với Key Activity (Công việc)</label>
+                    <select id="updateItemActivity">
+                        <option value="0">-- Không liên kết --</option>
+                    </select>
+                </div>
                 <div class="history-box" id="updateItemHistory">
                     <p style="font-size:11px; color:#94a3b8; text-align:center;">Đang tải lịch sử giải trình...</p>
                 </div>
@@ -1347,6 +1593,7 @@ function getBadgeHtml($status) {
                 </div>
 
 
+                <input type="hidden" id="addModalActivityId" value="0">
                 <div class="modal-control">
                     <label>Priority & Weight (%)</label>
                     <div style="display:flex; gap:10px;">
@@ -1493,6 +1740,33 @@ function getBadgeHtml($status) {
         </div>
     </div>
 
+    <!-- EXPLANATION SIDEBAR -->
+    <div class="sidebar-overlay" id="sidebarOverlay" onclick="closeExplanationSidebar()"></div>
+    <div class="explanation-sidebar" id="explanationSidebar">
+        <div class="sidebar-header">
+            <div>
+                <h3 style="margin:0; font-size:18px; font-weight:700;">Explanations</h3>
+                <span id="sidebarItemName" style="font-size:12px; color:#86868b;">Item Name</span>
+            </div>
+            <button class="btn-delete-row" style="opacity:1; background:none;" onclick="closeExplanationSidebar()">
+                <i class="fas fa-times" style="font-size:20px;"></i>
+            </button>
+        </div>
+        <div class="sidebar-body" id="sidebarHistoryContent">
+            <!-- Loaded via AJAX -->
+        </div>
+        <div class="sidebar-footer">
+            <input type="hidden" id="sidebarItemId">
+            <input type="hidden" id="sidebarItemType">
+            <label style="font-size:11px; font-weight:700; color:#86868b; text-transform:uppercase; margin-bottom:8px; display:block;">Quick Explanation (Current Week)</label>
+            <div id="sidebarQuillEditor" style="height: 100px; background: #fff; border-radius: 8px; border: 1px solid #d2d2d7; margin-bottom:12px;"></div>
+            <button class="btn-apple" style="width:100%;" onclick="saveSidebarExplanation(this)">
+                Add Note <i class="fas fa-paper-plane" style="margin-left:8px;"></i>
+                <i class="fas fa-spinner" id="sidebarLoading" style="display:none; margin-left:8px; animation:spin 1s linear infinite;"></i>
+            </button>
+        </div>
+    </div>
+
     <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
     <script src="https://cdn.quilljs.com/1.3.6/quill.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.5.1/dist/confetti.browser.min.js"></script>
@@ -1511,8 +1785,100 @@ function getBadgeHtml($status) {
             }
         });
 
+        /* SIDEBAR EXPLANATION */
+        const sidebarQuill = new Quill('#sidebarQuillEditor', {
+            theme: 'snow',
+            placeholder: 'Viết giải trình nhanh tại đây...',
+            modules: { toolbar: [['bold', 'italic', 'underline'], ['clean']] }
+        });
+
+        function openExplanationSidebar(id, type, name) {
+            document.getElementById('sidebarItemId').value = id;
+            document.getElementById('sidebarItemType').value = type;
+            document.getElementById('sidebarItemName').innerText = name;
+            sidebarQuill.root.innerHTML = '';
+            
+            document.getElementById('sidebarHistoryContent').innerHTML = '<p style="font-size:12px; color:#86868b; text-align:center;">Loading history...</p>';
+            document.getElementById('sidebarOverlay').style.display = 'block';
+            document.getElementById('explanationSidebar').classList.add('active');
+
+            $.post('/modules/okr/index.php', {
+                action: 'fetch_explanation_history',
+                id: id,
+                type: type,
+                quarter: <?php echo $current_quarter; ?>,
+                year: <?php echo $current_year; ?>
+            }, function(res) {
+                if(res.success) {
+                    // Filter history to show only non-empty explanations
+                    const visibleHistory = res.history.filter(h => {
+                        if (!h.content) return false;
+                        const text = h.content.replace(/<[^>]*>/g, '').trim();
+                        return text.length > 0;
+                    });
+
+                    if (visibleHistory.length > 0) {
+                        let html = '';
+                        visibleHistory.forEach(h => {
+                            const avatarInitials = h.user_name.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase();
+                            html += `
+                                <div class="history-card">
+                                    <div class="history-card-header">
+                                        <div class="history-user">
+                                            <div class="history-avatar">${avatarInitials}</div>
+                                            <span>${h.user_name}</span>
+                                        </div>
+                                        <span class="history-date">${h.formatted_date}</span>
+                                    </div>
+                                    <div class="history-text">${h.content}</div>
+                                </div>
+                            `;
+                        });
+                        document.getElementById('sidebarHistoryContent').innerHTML = html;
+                    } else {
+                        document.getElementById('sidebarHistoryContent').innerHTML = '<p style="font-size:12px; color:#86868b; text-align:center; padding:40px;">Chưa có nội dung giải trình nào được ghi lại.</p>';
+                    }
+                }
+            }, 'json');
+        }
+
+        function closeExplanationSidebar() {
+            document.getElementById('explanationSidebar').classList.remove('active');
+            document.getElementById('sidebarOverlay').style.display = 'none';
+        }
+
+        function saveSidebarExplanation(btn) {
+            const id = document.getElementById('sidebarItemId').value;
+            const type = document.getElementById('sidebarItemType').value;
+            const content = sidebarQuill.root.innerHTML;
+            if(sidebarQuill.getText().trim() === '') return alert('Vui lòng nhập nội dung giải trình!');
+
+            document.getElementById('sidebarLoading').style.display = 'inline-block';
+            $.post('/modules/okr/index.php', {
+                action: 'update_okr_item',
+                id: id,
+                type: type,
+                explanation: content,
+                name: document.getElementById('sidebarItemName').innerText, // just to satisfy the handler
+                week_num: <?php echo $current_week_num; ?>,
+                save_quarter: <?php echo $current_quarter; ?>,
+                save_year: <?php echo $current_year; ?>,
+                partial_update: 1 // flag to indicate we only update explanation
+            }, function(res) {
+                document.getElementById('sidebarLoading').style.display = 'none';
+                if(res.success) {
+                    openExplanationSidebar(id, type, document.getElementById('sidebarItemName').innerText);
+                }
+            }, 'json');
+        }
+
         /* UPDATE MODAL */
-        function openUpdateModal(itemName, type, id, currentValue, targetValue, status, ownerName, priority, weight) {
+        function toggleObjectiveAccordion(header) {
+        const card = header.closest('.okr-card');
+        card.classList.toggle('collapsed');
+    }
+
+    function openUpdateModal(itemName, type, id, currentValue, targetValue, status, ownerName, priority, weight, objId, activityId) {
             document.getElementById('updateModalTitle').innerText = 'Update ' + (type === 'metric' ? 'Key Result' : 'Activity');
             document.getElementById('updateItemId').value = id;
             document.getElementById('updateItemType').value = type;
@@ -1525,6 +1891,27 @@ function getBadgeHtml($status) {
             document.getElementById('updateItemWeight').value = weight || 0;
             document.getElementById('updateItemWeek').value = <?php echo $current_week_num; ?>;
             quill.root.innerHTML = ''; // Clear Editor
+
+            // Handle parent Activity linking UI for Key Results
+            const activityControl = document.getElementById('updateItemParentActivityControl');
+            const activitySelect = document.getElementById('updateItemActivity');
+            if (type === 'metric') {
+                activityControl.style.display = 'block';
+                activitySelect.innerHTML = '<option value="0">-- Không liên kết --</option>';
+                // Populate Activity list for this objective from the page
+                const activityElements = document.querySelectorAll(`.activity-row-for-obj-${objId}`);
+                activityElements.forEach(el => {
+                    const a_id = el.getAttribute('data-id');
+                    const a_name = el.getAttribute('data-name');
+                    const opt = document.createElement('option');
+                    opt.value = a_id;
+                    opt.innerText = a_name;
+                    if (parseInt(a_id) === parseInt(activityId)) opt.selected = true;
+                    activitySelect.appendChild(opt);
+                });
+            } else {
+                activityControl.style.display = 'none';
+            }
 
             // Both KA and KR use progress % (0-100)
             document.getElementById('updateItemVal').value = currentValue;
@@ -1669,6 +2056,7 @@ function getBadgeHtml($status) {
                 weight: weight,
                 explanation: explanation,
                 week_num: document.getElementById('updateItemWeek').value,
+                activity_id: (type === 'metric') ? document.getElementById('updateItemActivity').value : 0,
                 save_quarter: <?php echo $current_quarter; ?>,
                 save_year: <?php echo $current_year; ?>
             }, function(res) {
@@ -1734,9 +2122,10 @@ function getBadgeHtml($status) {
         }
 
         /* ADD MODAL */
-        function openAddModal(obj_id, type) {
+        function openAddModal(obj_id, type, activity_id = 0) {
             document.getElementById('addModalObjId').value = obj_id;
             document.getElementById('addModalType').value = type;
+            document.getElementById('addModalActivityId').value = activity_id;
             document.getElementById('addModalName').value = '';
             document.getElementById('addModalOwner').value = '';
 
@@ -1778,7 +2167,8 @@ function getBadgeHtml($status) {
                 name: name,
                 owner_name: owner,
                 priority: priority,
-                weight: weight
+                weight: weight,
+                activity_id: document.getElementById('addModalActivityId').value
             }, function(res) {
                 document.getElementById('addLoadingSpinner').style.display = 'none';
                 if(res.success) {
