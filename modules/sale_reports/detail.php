@@ -386,8 +386,9 @@ foreach ($invoices as &$inv) {
                     $amountVnd = isset($inv['amount_total_signed']) ? (float) $inv['amount_total_signed'] : 0;
                     if ($amountVnd == 0 && $inv['amount_total'] > 0) {
                         $currencyCode = is_array($inv['currency_id']) ? $inv['currency_id'][1] : 'VND';
-                        $rateSource = $odoo->getRate($currencyCode, $inv_date_str) ?: 1.0;
-                        $rateVnd = $odoo->getRate('VND', $inv_date_str) ?: 1.0;
+                        $compName = is_array($inv['company_id'] ?? null) ? $inv['company_id'][1] : null;
+                        $rateSource = $odoo->getRate($currencyCode, $inv_date_str, $compName) ?: 1.0;
+                        $rateVnd = $odoo->getRate('VND', $inv_date_str, $compName) ?: 1.0;
                         $amountVnd = $inv['amount_total'] * ($rateVnd / $rateSource);
                     }
                     $inv['calc_amount_vnd'] = $amountVnd;
@@ -406,8 +407,9 @@ foreach ($invoices as &$inv) {
     // Fallback if missing
     if ($amountVnd == 0 && $inv['amount_total'] > 0) {
         $currencyCode = is_array($inv['currency_id']) ? $inv['currency_id'][1] : 'VND';
-        $rateSource = $odoo->getRate($currencyCode, $inv_date_str) ?: 1.0;
-        $rateVnd = $odoo->getRate('VND', $inv_date_str) ?: 1.0;
+        $compName = is_array($inv['company_id'] ?? null) ? $inv['company_id'][1] : null;
+        $rateSource = $odoo->getRate($currencyCode, $inv_date_str, $compName) ?: 1.0;
+        $rateVnd = $odoo->getRate('VND', $inv_date_str, $compName) ?: 1.0;
         $amountVnd = $inv['amount_total'] * ($rateVnd / $rateSource);
     }
 
@@ -1938,8 +1940,9 @@ function formatMoney($amount, $currency_code)
 
                                                 $currency_code = is_array($inv['currency_id']) ? $inv['currency_id'][1] : 'VND';
 
-                                                $rateSource = $odoo->getRate($currency_code, $inv_date_str) ?: 1.0;
-                                                $rateUsd = $odoo->getRate('USD', $inv_date_str) ?: 1.0;
+                                                $compName = is_array($inv['company_id'] ?? null) ? $inv['company_id'][1] : null;
+                                                $rateSource = $odoo->getRate($currency_code, $inv_date_str, $compName) ?: 1.0;
+                                                $rateUsd = $odoo->getRate('USD', $inv_date_str, $compName) ?: 1.0;
                                                 $ratioUsd = $rateSource > 0 ? ($rateUsd / $rateSource) : 1;
 
                                                 // Convert disbursed amount to USD FIRST before multiplying by commission
