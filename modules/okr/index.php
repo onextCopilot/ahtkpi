@@ -1278,14 +1278,14 @@ function getLatestWeeklyProgress($id, $type, $map, $current_week, $live_fallback
 
                         <?php foreach ($objs_in_team as $obj): ?>
                         <div class="okr-card <?php echo (count($objs_in_team) > 3) ? 'collapsed' : ''; ?>" id="obj-<?php echo $obj['id']; ?>">
-                        <div class="okr-card-header" onclick="toggleObjectiveAccordion(this)">
+                        <div class="okr-card-header" onclick="toggleObjectiveAccordion(this, event)">
                             <div class="obj-left">
                                 <h3 title="<?php echo htmlspecialchars($obj['title']); ?>" style="display:flex; align-items:center;">
                                     <i class="fas fa-bullseye" style="color:#6366f1; margin-right:8px;"></i>
                                     <span style="color:#6366f1; opacity:0.8; font-weight:800; margin-right:4px;">OBJ <?php echo $global_obj_idx++; ?> :</span>
                                     <?php echo htmlspecialchars($obj['title']); ?>
                                 </h3>
-                                <div class="obj-meta-row" onclick="event.stopPropagation()">
+                                <div class="obj-meta-row">
                                     <div class="obj-meta-item">
                                         <i class="fas fa-user-circle"></i>
                                         Owner: <strong><?php echo htmlspecialchars($obj['owner']); ?></strong>
@@ -1873,10 +1873,13 @@ function getLatestWeeklyProgress($id, $type, $map, $current_week, $live_fallback
         }
 
         /* UPDATE MODAL */
-        function toggleObjectiveAccordion(header) {
-        const card = header.closest('.okr-card');
-        card.classList.toggle('collapsed');
-    }
+        function toggleObjectiveAccordion(header, event) {
+            if (event.target.closest('button') || event.target.closest('.obj-meta-row') || event.target.closest('.obj-right')) {
+                return;
+            }
+            const card = header.closest('.okr-card');
+            card.classList.toggle('collapsed');
+        }
 
     function openUpdateModal(itemName, type, id, currentValue, targetValue, status, ownerName, priority, weight, objId, activityId) {
             document.getElementById('updateModalTitle').innerText = 'Update ' + (type === 'metric' ? 'Key Result' : 'Activity');
