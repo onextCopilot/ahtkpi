@@ -9,7 +9,10 @@ class BackupManager {
         $this->backupDir = __DIR__ . '/../backups/';
         
         if (!is_dir($this->backupDir)) {
-            mkdir($this->backupDir, 0755, true);
+            mkdir($this->backupDir, 0777, true);
+        } else {
+            // Try to fix permissions if already exists
+            @chmod($this->backupDir, 0777);
         }
     }
 
@@ -18,6 +21,13 @@ class BackupManager {
      * @return array [success => bool, message => string, filename => string]
      */
     public function createBackup() {
+        if (!is_writable($this->backupDir)) {
+            return [
+                'success' => false,
+                'message' => 'Backup directory is not writable. Please check folder permissions (chmod 775 or 777 backups).'
+            ];
+        }
+
         $dbName = DB_NAME;
         $timestamp = date('Y-m-d_H-i-s');
         $filename = "backup_{$dbName}_{$timestamp}.sql";
