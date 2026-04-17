@@ -351,6 +351,30 @@ if ($res) {
                             </svg>
                         </div>
                     </a>
+
+                    <!-- Odoo Currency Rates Module -->
+                    <a href="/settings/odoo-rates" class="setting-card">
+                        <div class="setting-icon">
+                            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <circle cx="12" cy="12" r="10"></circle>
+                                <line x1="12" y1="8" x2="12" y2="12"></line>
+                                <line x1="12" y1="16" x2="12.01" y2="16"></line>
+                            </svg>
+                        </div>
+                        <div class="setting-info">
+                            <h3>Odoo Currency Rates</h3>
+                            <p>View and synchronize exchange rates directly from Odoo ERP.</p>
+                        </div>
+                        <div class="setting-arrow">
+                            View Rates
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <line x1="5" y1="12" x2="19" y2="12"></line>
+                                <polyline points="12 5 19 12 12 19"></polyline>
+                            </svg>
+                        </div>
+                    </a>
                 </div>
 
                 <!-- Online Users Block -->

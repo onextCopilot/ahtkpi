@@ -75,6 +75,7 @@ $routes = [
     '/settings/jira' => 'modules/settings/jira/index.php',
     '/settings/teams' => 'modules/settings/teams/index.php',
     '/settings/sale-levels' => 'modules/settings/sale-levels/index.php',
+    '/settings/odoo-rates' => 'modules/settings/odoo_rates/index.php',
     '/settings/backup' => 'modules/settings/backup/index.php',
     '/debt' => 'modules/debt/index.php',
     '/my-debt' => 'modules/my_debt/index.php',

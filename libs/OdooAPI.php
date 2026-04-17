@@ -487,7 +487,7 @@ class OdooAPI
     public function refreshCurrencyRates()
     {
         try {
-            $fields = ['currency_id', 'name', 'rate'];
+            $fields = ['currency_id', 'name', 'rate', 'company_id'];
             // Fetch all rates, ordered by date descending
             $ratesVal = $this->searchRead('res.currency.rate', [], $fields, 0, 0); // Limit 0 for all
 
@@ -495,9 +495,12 @@ class OdooAPI
             foreach ($ratesVal as $r) {
                 // currency_id is [id, Name]
                 $currencyName = $r['currency_id'][1];
+                $company = is_array($r['company_id']) ? $r['company_id'][1] : 'Global';
+                
                 $ratesByCurrency[$currencyName][] = [
                     'date' => $r['name'],
-                    'rate' => $r['rate']
+                    'rate' => $r['rate'],
+                    'company' => $company
                 ];
             }
 
@@ -522,7 +525,7 @@ class OdooAPI
         }
     }
 
-    public function getRate($currencyName, $date)
+    public function getRate($currencyName, $date, $companyName = null)
     {
         // Load cache
         static $ratesCache = null;
@@ -549,14 +552,26 @@ class OdooAPI
 
         if ($ratesCache === null || !isset($ratesCache[$currencyName])) {
             error_log("Currency rate for {$currencyName} not found in cache and Odoo sync failed/unavailable.");
-            return 1.0; // Return 1.0 as a safe numeric fallback if everything fails, but log error
+            return 1.0;
         }
 
         // Find applicable rate (first one where rate_date <= date)
-        // Cache is sorted DESC.
+        // Filter by company if provided
         foreach ($ratesCache[$currencyName] as $entry) {
             if ($entry['date'] <= $date) {
+                if ($companyName && ($entry['company'] ?? 'Global') !== $companyName) {
+                    continue;
+                }
                 return (float)$entry['rate'];
+            }
+        }
+
+        // Fallback: if no match for specific company, search without company filter
+        if ($companyName) {
+            foreach ($ratesCache[$currencyName] as $entry) {
+                if ($entry['date'] <= $date) {
+                    return (float)$entry['rate'];
+                }
             }
         }
 
