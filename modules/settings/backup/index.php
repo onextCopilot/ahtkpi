@@ -112,6 +112,33 @@ if (isset($_POST['action']) && $_POST['action'] === 'save_settings') {
     $success_message = "Backup settings updated successfully.";
 }
 
+// Handle Upload & Restore
+if (isset($_POST['action']) && $_POST['action'] === 'upload_restore' && isset($_FILES['backup_file'])) {
+    $file = $_FILES['backup_file'];
+    $ext = strtolower(pathinfo($file['name'], PATHINFO_EXTENSION));
+    
+    if ($ext !== 'sql') {
+        $error_message = "Only .sql files are allowed.";
+    } elseif ($file['error'] !== UPLOAD_ERR_OK) {
+        $error_message = "File upload failed with error code: " . $file['error'];
+    } else {
+        $timestamp = date('Y-m-d_H-i-s');
+        $filename = "uploaded_restore_" . $timestamp . ".sql";
+        $targetPath = __DIR__ . '/../../../backups/' . $filename;
+        
+        if (move_uploaded_file($file['tmp_name'], $targetPath)) {
+            $result = $backupManager->restoreBackup($filename);
+            if ($result['success']) {
+                $success_message = "Successfully uploaded and restored database: " . $filename;
+            } else {
+                $error_message = $result['message'];
+            }
+        } else {
+            $error_message = "Failed to move uploaded file.";
+        }
+    }
+}
+
 // Fetch Current Settings
 $current_settings = [];
 $res = $conn->query("SELECT setting_key, setting_value FROM system_settings WHERE setting_key LIKE 'backup_%'");
@@ -417,6 +444,24 @@ $backups = $backupManager->listBackups();
                                         <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"></path>
                                     </svg>
                                     Run Backup Now
+                                </button>
+                            </form>
+                        </div>
+
+                        <!-- Upload & Restore -->
+                        <div class="settings-card">
+                            <h3 style="font-size:1.1rem; margin-bottom:1rem;">Upload & Restore</h3>
+                            <p style="font-size:0.9rem; color:var(--text-secondary); margin-bottom:1.5rem;">Restore from an external SQL file.</p>
+                            <form method="POST" enctype="multipart/form-data" style="width:100%;" onsubmit="return confirm('WARNING: Uploading and restoring will overwrite the CURRENT database. Continue?')">
+                                <input type="hidden" name="action" value="upload_restore">
+                                <div class="form-group">
+                                    <input type="file" name="backup_file" accept=".sql" required style="font-size:0.8rem; padding:0.5rem; border: 1px dashed var(--border-color); width:100%;">
+                                </div>
+                                <button type="submit" class="btn btn-warning" style="width:100%; justify-content:center;">
+                                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12"></path>
+                                    </svg>
+                                    Upload & Restore
                                 </button>
                             </form>
                         </div>

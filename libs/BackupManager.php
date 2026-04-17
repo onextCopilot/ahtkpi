@@ -156,6 +156,10 @@ class BackupManager {
         try {
             $sql = file_get_contents($filePath);
             
+            // Fix collation compatibility (MySQL 8.0 to 5.7)
+            $sql = str_replace('utf8mb4_0900_ai_ci', 'utf8mb4_unicode_ci', $sql);
+            $sql = str_replace('utf8mb4_general_ci', 'utf8mb4_unicode_ci', $sql);
+
             // Temporary disable foreign key checks
             $this->conn->query("SET FOREIGN_KEY_CHECKS=0");
 
