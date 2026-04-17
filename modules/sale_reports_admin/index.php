@@ -37,7 +37,7 @@ $domain_inv = [
     ['state', '=', 'posted'],
     ['invoice_date', '>=', $start_date_fetch]
 ];
-$fields_inv = ['invoice_user_id', 'amount_total_signed', 'invoice_date', 'id', 'state', 'amount_total', 'currency_id', 'invoice_payments_widget', 'date'];
+$fields_inv = ['invoice_user_id', 'amount_total_signed', 'invoice_date', 'id', 'state', 'amount_total', 'currency_id', 'invoice_payments_widget', 'date', 'company_id', 'x_studio_invoice_type_1'];
 $all_invoices_year = [];
 try {
     $all_invoices_year = $odoo->searchRead('account.move', $domain_inv, $fields_inv, 0, 0);
@@ -51,7 +51,7 @@ $domain_so = [
     ['date_order', '>=', "$current_year-01-01"],
     ['date_order', '<=', "$current_year-12-31"]
 ];
-$fields_so = ['user_id', 'amount_total', 'date_order', 'currency_id', 'id'];
+$fields_so = ['user_id', 'amount_total', 'date_order', 'currency_id', 'id', 'company_id'];
 $all_orders_year = [];
 try {
     $all_orders_year = $odoo->searchRead('sale.order', $domain_so, $fields_so, 0, 0);
@@ -128,7 +128,8 @@ foreach ($all_invoices_year as $inv) {
     $currencyCode = is_array($inv['currency_id'] ?? null) ? $inv['currency_id'][1] : 'VND';
     $odoo_total = (float) ($inv['amount_total'] ?? 0);
     $odoo_signed = abs((float) ($inv['amount_total_signed'] ?? 0));
-    $vnd_multiplier = $odoo->getRate('VND', $date) ?: 1.0;
+    $compName = is_array($inv['company_id'] ?? null) ? $inv['company_id'][1] : null;
+    $vnd_multiplier = $odoo->getRate('VND', $date, $compName) ?: 1.0;
 
     $amount_vnd = 0;
     if ($currencyCode === 'VND') {
@@ -146,7 +147,7 @@ foreach ($all_invoices_year as $inv) {
 
     // Fallback
     if ($amount_vnd == 0 && $odoo_total > 0) {
-        $rateSource = $odoo->getRate($currencyCode, $date) ?: 1.0;
+        $rateSource = $odoo->getRate($currencyCode, $date, $compName) ?: 1.0;
         $amount_vnd = ($rateSource > 0) ? (($odoo_total / $rateSource) * $vnd_multiplier) : $odoo_total;
     }
 
@@ -187,9 +188,10 @@ foreach ($all_orders_year as $order) {
     $odoo_total = (float) ($order['amount_total'] ?? 0);
 
     $amount_vnd = $odoo_total;
+    $compName = is_array($order['company_id'] ?? null) ? $order['company_id'][1] : null;
     if ($currencyCode !== 'VND' && $odoo_total > 0) {
-        $rateSource = $odoo->getRate($currencyCode, $date) ?: 1.0;
-        $rateVnd = $odoo->getRate('VND', $date) ?: 1.0;
+        $rateSource = $odoo->getRate($currencyCode, $date, $compName) ?: 1.0;
+        $rateVnd = $odoo->getRate('VND', $date, $compName) ?: 1.0;
         if ($rateSource > 0) {
             $amount_vnd = ($odoo_total / $rateSource) * $rateVnd;
         }
@@ -377,8 +379,9 @@ foreach ($all_ams as $am_name) {
                 $amount_vnd_odoo = (float) ($inv['amount_vnd_custom'] ?? 0);
 
                 $currencyCode = is_array($inv['currency_id'] ?? null) ? $inv['currency_id'][1] : 'VND';
-                $rateSource = $odoo->getRate($currencyCode, $inv_date_str) ?: 1.0;
-                $rateUsd = $odoo->getRate('USD', $inv_date_str) ?: 1.0;
+                $compName = is_array($inv['company_id'] ?? null) ? $inv['company_id'][1] : null;
+                $rateSource = $odoo->getRate($currencyCode, $inv_date_str, $compName) ?: 1.0;
+                $rateUsd = $odoo->getRate('USD', $inv_date_str, $compName) ?: 1.0;
 
                 $ratio_usd = $rateSource > 0 ? ($rateUsd / $rateSource) : 1;
                 $ratio_vnd = $amt_total_odoo > 0 ? ($amount_vnd_odoo / $amt_total_odoo) : 1;
