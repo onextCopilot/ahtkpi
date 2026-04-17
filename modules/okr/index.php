@@ -39,6 +39,7 @@ try {
     addColIfNotExists($conn, 'okr_results', 'owner_name', 'VARCHAR(255)');
     addColIfNotExists($conn, 'okr_results', 'owner_avatar', 'VARCHAR(10)');
     addColIfNotExists($conn, 'okr_results', 'activity_id', 'INT DEFAULT 0');
+    addColIfNotExists($conn, 'okr_results', 'sort_order', 'INT DEFAULT 0');
     
     // Key Activities Table Enhancements
     addColIfNotExists($conn, 'okr_key_activities', 'status', 'VARCHAR(50) DEFAULT "pending"');
@@ -47,6 +48,7 @@ try {
     addColIfNotExists($conn, 'okr_key_activities', 'owner_name', 'VARCHAR(255)');
     addColIfNotExists($conn, 'okr_key_activities', 'owner_avatar', 'VARCHAR(10)');
     addColIfNotExists($conn, 'okr_key_activities', 'kr_id', 'INT DEFAULT 0');
+    addColIfNotExists($conn, 'okr_key_activities', 'sort_order', 'INT DEFAULT 0');
 
     // Expand numeric columns to support large values (e.g. billions/trillions in revenue targets)
     @$conn->query("ALTER TABLE `okr_results` MODIFY COLUMN `target_value` DECIMAL(20,2) DEFAULT 0");
@@ -208,13 +210,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
         }
 
         if (!$is_partial) {
+            $sort_order = intval($_POST['sort_order'] ?? ($curr_data['sort_order'] ?? 0));
             if ($type === 'metric') {
                 // val is now progress % — compute current_value proportionally, keep target_value intact
-                $stmt = $conn->prepare("UPDATE okr_results SET metric_name = ?, current_value = ROUND((? / 100.0) * target_value, 2), status = ?, priority = ?, weight = ?, owner_name = ?, owner_avatar = ?, activity_id = ? WHERE id = ?");
-                $stmt->bind_param("sdssissii", $name, $val, $status, $priority, $weight, $owner_name, $avatar, $activity_id, $id);
+                $stmt = $conn->prepare("UPDATE okr_results SET metric_name = ?, current_value = ROUND((? / 100.0) * target_value, 2), status = ?, priority = ?, weight = ?, owner_name = ?, owner_avatar = ?, activity_id = ?, sort_order = ? WHERE id = ?");
+                $stmt->bind_param("sdssissiii", $name, $val, $status, $priority, $weight, $owner_name, $avatar, $activity_id, $sort_order, $id);
             } else {
-                $stmt = $conn->prepare("UPDATE okr_key_activities SET activity_name = ?, progress = ?, status = ?, priority = ?, weight = ?, owner_name = ?, owner_avatar = ? WHERE id = ?");
-                $stmt->bind_param("sdssissi", $name, $val, $status, $priority, $weight, $owner_name, $avatar, $id);
+                $stmt = $conn->prepare("UPDATE okr_key_activities SET activity_name = ?, progress = ?, status = ?, priority = ?, weight = ?, owner_name = ?, owner_avatar = ?, sort_order = ? WHERE id = ?");
+                $stmt->bind_param("sdssisiii", $name, $val, $status, $priority, $weight, $owner_name, $avatar, $sort_order, $id);
             }
             $stmt->execute();
         }
@@ -397,16 +400,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
             exit();
         }
 
+        $sort_order = intval($_POST['sort_order'] ?? 0);
+
         if ($type === 'metric') {
             $target = 100; // Default target to 100 for percentage-based tracking
             $unit = '%'; // Default unit to %
             $activity_id = intval($_POST['activity_id'] ?? 0);
-            $stmt = $conn->prepare("INSERT INTO okr_results (objective_id, metric_name, target_value, unit, owner_name, owner_avatar, priority, weight, activity_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)");
-            $stmt->bind_param("isdssssii", $oid, $name, $target, $unit, $owner_name, $owner_avatar, $priority, $weight, $activity_id);
+            $stmt = $conn->prepare("INSERT INTO okr_results (objective_id, metric_name, target_value, unit, owner_name, owner_avatar, priority, weight, activity_id, sort_order) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+            $stmt->bind_param("isdssssiii", $oid, $name, $target, $unit, $owner_name, $owner_avatar, $priority, $weight, $activity_id, $sort_order);
             $stmt->execute();
         } else {
-            $stmt = $conn->prepare("INSERT INTO okr_key_activities (objective_id, activity_name, owner_name, owner_avatar, priority, weight) VALUES (?, ?, ?, ?, ?, ?)");
-            $stmt->bind_param("issssi", $oid, $name, $owner_name, $owner_avatar, $priority, $weight);
+            $stmt = $conn->prepare("INSERT INTO okr_key_activities (objective_id, activity_name, owner_name, owner_avatar, priority, weight, sort_order) VALUES (?, ?, ?, ?, ?, ?, ?)");
+            $stmt->bind_param("issssii", $oid, $name, $owner_name, $owner_avatar, $priority, $weight, $sort_order);
             $stmt->execute();
         }
 
@@ -703,7 +708,7 @@ while ($o = $res_o->fetch_assoc()) {
     
     // Fetch Activities first to build a parent map
     $activities = [];
-    $a_res = $conn->query("SELECT a.*, (SELECT content FROM okr_explanations WHERE item_id = a.id AND item_type = 'activity' ORDER BY created_at DESC LIMIT 1) as latest_explanation FROM okr_key_activities a WHERE a.objective_id = $oid ORDER BY FIELD(priority, 'high', 'medium', 'low') ASC, id DESC");
+    $a_res = $conn->query("SELECT a.*, (SELECT content FROM okr_explanations WHERE item_id = a.id AND item_type = 'activity' ORDER BY created_at DESC LIMIT 1) as latest_explanation FROM okr_key_activities a WHERE a.objective_id = $oid ORDER BY sort_order ASC, FIELD(priority, 'high', 'medium', 'low') ASC, id DESC");
     if ($a_res) {
         while($a = $a_res->fetch_assoc()) {
             $a['results'] = []; // Placeholder for child KRs
@@ -713,7 +718,7 @@ while ($o = $res_o->fetch_assoc()) {
     
     // Fetch KRs (Results) and assign to their parent Activity if available
     $unlinked_results = [];
-    $r_res = $conn->query("SELECT r.*, (SELECT content FROM okr_explanations WHERE item_id = r.id AND item_type = 'metric' ORDER BY created_at DESC LIMIT 1) as latest_explanation FROM okr_results r WHERE r.objective_id = $oid ORDER BY FIELD(priority, 'high', 'medium', 'low') ASC, id DESC");
+    $r_res = $conn->query("SELECT r.*, (SELECT content FROM okr_explanations WHERE item_id = r.id AND item_type = 'metric' ORDER BY created_at DESC LIMIT 1) as latest_explanation FROM okr_results r WHERE r.objective_id = $oid ORDER BY sort_order ASC, FIELD(priority, 'high', 'medium', 'low') ASC, id DESC");
     if ($r_res) {
         while($r = $r_res->fetch_assoc()) {
             if ($r['activity_id'] > 0 && isset($activities[$r['activity_id']])) {
@@ -1382,7 +1387,7 @@ function getLatestWeeklyProgress($id, $type, $map, $current_week, $live_fallback
                                             </td>
                                             <td class="col-action">
                                                 <div style="display:flex; align-items:center; gap:4px;">
-                                                    <button class="btn-edit-row" onclick="openUpdateModal('<?php echo addslashes($a['activity_name'] ?? ''); ?>', 'activity', <?php echo $a['id']; ?>, <?php echo floatval($a['progress'] ?? 0); ?>, 100, '<?php echo $a['status'] ?? 'pending'; ?>', '<?php echo addslashes($a['owner_name'] ?? ''); ?>', '<?php echo $a['priority'] ?? 'medium'; ?>', <?php echo intval($a['weight'] ?? 0); ?>, <?php echo $obj['id']; ?>, 0)"><i class="fas fa-history"></i></button>
+                                                    <button class="btn-edit-row" onclick="openUpdateModal('<?php echo addslashes($a['activity_name'] ?? ''); ?>', 'activity', <?php echo $a['id']; ?>, <?php echo floatval($a['progress'] ?? 0); ?>, 100, '<?php echo $a['status'] ?? 'pending'; ?>', '<?php echo addslashes($a['owner_name'] ?? ''); ?>', '<?php echo $a['priority'] ?? 'medium'; ?>', <?php echo intval($a['weight'] ?? 0); ?>, <?php echo $obj['id']; ?>, 0, <?php echo intval($a['sort_order'] ?? 0); ?>)"><i class="fas fa-history"></i></button>
                                                     <button class="btn-delete-row" title="Delete Activity" onclick="deleteOkrItem(<?php echo $a['id']; ?>, 'activity')"><i class="fas fa-trash-alt"></i></button>
                                                 </div>
                                             </td>
@@ -1421,7 +1426,7 @@ function getLatestWeeklyProgress($id, $type, $map, $current_week, $live_fallback
                                                 </td>
                                                 <td class="col-action">
                                                     <div style="display:flex; align-items:center; gap:4px;">
-                                                        <button class="btn-edit-row" onclick="openUpdateModal('<?php echo addslashes($r['metric_name'] ?? ''); ?>', 'metric', <?php echo $r['id']; ?>, <?php echo round($progress_pct, 1); ?>, 100, '<?php echo $r['status'] ?? 'pending'; ?>', '<?php echo addslashes($r['owner_name'] ?? ''); ?>', '<?php echo $r['priority'] ?? 'medium'; ?>', <?php echo intval($r['weight'] ?? 0); ?>, <?php echo $obj['id']; ?>, <?php echo $a['id']; ?>)"><i class="fas fa-history"></i></button>
+                                                        <button class="btn-edit-row" onclick="openUpdateModal('<?php echo addslashes($r['metric_name'] ?? ''); ?>', 'metric', <?php echo $r['id']; ?>, <?php echo round($progress_pct, 1); ?>, 100, '<?php echo $r['status'] ?? 'pending'; ?>', '<?php echo addslashes($r['owner_name'] ?? ''); ?>', '<?php echo $r['priority'] ?? 'medium'; ?>', <?php echo intval($r['weight'] ?? 0); ?>, <?php echo $obj['id']; ?>, <?php echo $a['id']; ?>, <?php echo intval($r['sort_order'] ?? 0); ?>)"><i class="fas fa-history"></i></button>
                                                         <button class="btn-delete-row" title="Delete KR" onclick="deleteOkrItem(<?php echo $r['id']; ?>, 'metric')"><i class="fas fa-trash-alt"></i></button>
                                                     </div>
                                                 </td>
@@ -1458,7 +1463,7 @@ function getLatestWeeklyProgress($id, $type, $map, $current_week, $live_fallback
                                                 </td>
                                                 <td class="col-action">
                                                     <div style="display:flex; align-items:center; gap:4px;">
-                                                        <button class="btn-edit-row" onclick="openUpdateModal('<?php echo addslashes($r['metric_name'] ?? ''); ?>', 'metric', <?php echo $r['id']; ?>, <?php echo round($progress_pct, 1); ?>, 100, '<?php echo $r['status'] ?? 'pending'; ?>', '<?php echo addslashes($r['owner_name'] ?? ''); ?>', '<?php echo $r['priority'] ?? 'medium'; ?>', <?php echo intval($r['weight'] ?? 0); ?>, <?php echo $obj['id']; ?>, 0)"><i class="fas fa-history"></i></button>
+                                                        <button class="btn-edit-row" onclick="openUpdateModal('<?php echo addslashes($r['metric_name'] ?? ''); ?>', 'metric', <?php echo $r['id']; ?>, <?php echo round($progress_pct, 1); ?>, 100, '<?php echo $r['status'] ?? 'pending'; ?>', '<?php echo addslashes($r['owner_name'] ?? ''); ?>', '<?php echo $r['priority'] ?? 'medium'; ?>', <?php echo intval($r['weight'] ?? 0); ?>, <?php echo $obj['id']; ?>, 0, <?php echo intval($r['sort_order'] ?? 0); ?>)"><i class="fas fa-history"></i></button>
                                                         <button class="btn-delete-row" title="Delete KR" onclick="deleteOkrItem(<?php echo $r['id']; ?>, 'metric')"><i class="fas fa-trash-alt"></i></button>
                                                     </div>
                                                 </td>
@@ -1532,14 +1537,15 @@ function getLatestWeeklyProgress($id, $type, $map, $current_week, $live_fallback
                     </select>
                 </div>
                 <div class="modal-control">
-                    <label>Priority & Weight (%)</label>
+                    <label>Priority, Weight (%) & Sort Order</label>
                     <div style="display:flex; gap:10px;">
                         <select id="updateItemPriority" style="flex:1;">
                             <option value="high">High Priority</option>
                             <option value="medium">Medium</option>
                             <option value="low">Low</option>
                         </select>
-                        <input type="number" id="updateItemWeight" placeholder="Weight %" style="width:100px;" min="0" max="100">
+                        <input type="number" id="updateItemWeight" placeholder="Weight %" style="width:90px;" min="0" max="100">
+                        <input type="number" id="updateItemSortOrder" placeholder="Sort" style="width:70px;" min="0">
                     </div>
                 </div>
                 <div class="modal-control">
@@ -1593,16 +1599,24 @@ function getLatestWeeklyProgress($id, $type, $map, $current_week, $live_fallback
                 </div>
 
 
+                <div class="modal-control" id="addModalActivityControl" style="display:none;">
+                    <label>Linked Key Activity</label>
+                    <select id="addModalActivity">
+                        <option value="0">-- Không liên kết --</option>
+                    </select>
+                </div>
+
                 <input type="hidden" id="addModalActivityId" value="0">
                 <div class="modal-control">
-                    <label>Priority & Weight (%)</label>
+                    <label>Priority, Weight (%) & Sort Order</label>
                     <div style="display:flex; gap:10px;">
                         <select id="addItemPriority" style="flex:1;">
                             <option value="high">High Priority</option>
                             <option value="medium" selected>Medium</option>
                             <option value="low">Low</option>
                         </select>
-                        <input type="number" id="addItemWeight" placeholder="Weight %" style="width:100px;" min="0" max="100" value="0">
+                        <input type="number" id="addItemWeight" placeholder="Weight %" style="width:80px;" min="0" max="100" value="0">
+                        <input type="number" id="addItemSort" placeholder="Sort" style="width:70px;" min="0" value="0">
                     </div>
                 </div>
             </div>
@@ -1881,7 +1895,7 @@ function getLatestWeeklyProgress($id, $type, $map, $current_week, $live_fallback
             card.classList.toggle('collapsed');
         }
 
-    function openUpdateModal(itemName, type, id, currentValue, targetValue, status, ownerName, priority, weight, objId, activityId) {
+    function openUpdateModal(itemName, type, id, currentValue, targetValue, status, ownerName, priority, weight, objId, activityId, sortOrder) {
             document.getElementById('updateModalTitle').innerText = 'Update ' + (type === 'metric' ? 'Key Result' : 'Activity');
             document.getElementById('updateItemId').value = id;
             document.getElementById('updateItemType').value = type;
@@ -1892,6 +1906,7 @@ function getLatestWeeklyProgress($id, $type, $map, $current_week, $live_fallback
             document.getElementById('updateItemOwner').value = ownerName || '';
             document.getElementById('updateItemPriority').value = priority || 'medium';
             document.getElementById('updateItemWeight').value = weight || 0;
+            document.getElementById('updateItemSortOrder').value = sortOrder || 0;
             document.getElementById('updateItemWeek').value = <?php echo $current_week_num; ?>;
             quill.root.innerHTML = ''; // Clear Editor
 
@@ -2057,6 +2072,7 @@ function getLatestWeeklyProgress($id, $type, $map, $current_week, $live_fallback
                 owner: owner,
                 priority: priority,
                 weight: weight,
+                sort_order: document.getElementById('updateItemSortOrder').value,
                 explanation: explanation,
                 week_num: document.getElementById('updateItemWeek').value,
                 activity_id: (type === 'metric') ? document.getElementById('updateItemActivity').value : 0,
@@ -2132,12 +2148,30 @@ function getLatestWeeklyProgress($id, $type, $map, $current_week, $live_fallback
             document.getElementById('addModalName').value = '';
             document.getElementById('addModalOwner').value = '';
 
+            const activityControl = document.getElementById('addModalActivityControl');
+            const activitySelect = document.getElementById('addModalActivity');
+
             if (type === 'metric') {
                 document.getElementById('addModalTitle').innerText = 'Add Target Result (Metric)';
                 document.getElementById('addModalNameLbl').innerText = 'Metric Description';
+                
+                activityControl.style.display = 'block';
+                activitySelect.innerHTML = '<option value="0">-- Không liên kết --</option>';
+                // Populate from DOM
+                const activityElements = document.querySelectorAll(`.activity-row-for-obj-${obj_id}`);
+                activityElements.forEach(el => {
+                    const a_id = el.getAttribute('data-id');
+                    const a_name = el.getAttribute('data-name');
+                    const opt = document.createElement('option');
+                    opt.value = a_id;
+                    opt.innerText = a_name;
+                    if (parseInt(a_id) === parseInt(activity_id)) opt.selected = true;
+                    activitySelect.appendChild(opt);
+                });
             } else {
                 document.getElementById('addModalTitle').innerText = 'Add Key Activity';
                 document.getElementById('addModalNameLbl').innerText = 'Activity Description';
+                activityControl.style.display = 'none';
             }
 
             let modal = document.getElementById('addModalOverlay');
@@ -2158,6 +2192,8 @@ function getLatestWeeklyProgress($id, $type, $map, $current_week, $live_fallback
             const owner = document.getElementById('addModalOwner').value;
             const priority = document.getElementById('addItemPriority').value;
             const weight = document.getElementById('addItemWeight').value;
+            const sort_order = document.getElementById('addItemSort').value;
+            const activity_id = (type === 'metric') ? document.getElementById('addModalActivity').value : 0;
 
             if (!name) { alert("Vui lòng nhập tên công việc/chỉ số!"); return; }
 
@@ -2171,7 +2207,8 @@ function getLatestWeeklyProgress($id, $type, $map, $current_week, $live_fallback
                 owner_name: owner,
                 priority: priority,
                 weight: weight,
-                activity_id: document.getElementById('addModalActivityId').value
+                sort_order: sort_order,
+                activity_id: activity_id
             }, function(res) {
                 document.getElementById('addLoadingSpinner').style.display = 'none';
                 if(res.success) {
