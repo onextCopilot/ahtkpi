@@ -47,6 +47,8 @@ cache/
 *.backup
 *.sql.gz
 *.sql.zip
+backups/*
+!backups/.htaccess
 
 # OS generated files
 .DS_Store
