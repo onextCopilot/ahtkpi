@@ -355,6 +355,7 @@ class OdooAPI
                 'write_date', // Last update date (proxy for payment date if state is paid)
                 'x_studio_project_code',
                 'x_studio_invoice_type_1',
+                'company_id',
                 'invoice_payments_widget' // JSON blob with payment info
             ];
 
@@ -556,27 +557,30 @@ class OdooAPI
         }
 
         // Find applicable rate (first one where rate_date <= date)
-        // Filter by company if provided
-        foreach ($ratesCache[$currencyName] as $entry) {
-            if ($entry['date'] <= $date) {
-                if ($companyName && ($entry['company'] ?? 'Global') !== $companyName) {
-                    continue;
+        // Strictly filter by company if provided
+        $entries = $ratesCache[$currencyName];
+        if ($companyName) {
+            $filtered = [];
+            foreach ($entries as $entry) {
+                if (($entry['company'] ?? 'Global') === $companyName) {
+                    $filtered[] = $entry;
                 }
+            }
+            $entries = $filtered;
+        }
+
+        if (empty($entries)) {
+            return false;
+        }
+
+        foreach ($entries as $entry) {
+            if ($entry['date'] <= $date) {
                 return (float)$entry['rate'];
             }
         }
 
-        // Fallback: if no match for specific company, search without company filter
-        if ($companyName) {
-            foreach ($ratesCache[$currencyName] as $entry) {
-                if ($entry['date'] <= $date) {
-                    return (float)$entry['rate'];
-                }
-            }
-        }
-
-        // If data is older than all rates, use the oldest (last)
-        $last = end($ratesCache[$currencyName]);
+        // If no entry matched the date, return the oldest one for this company/global
+        $last = end($entries);
         return (float)$last['rate'];
     }
 
