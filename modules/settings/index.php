@@ -329,6 +329,28 @@ if ($res) {
                             </svg>
                         </div>
                     </a>
+
+                    <!-- Auto Backup Module -->
+                    <a href="/settings/backup" class="setting-card">
+                        <div class="setting-icon">
+                            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"></path>
+                            </svg>
+                        </div>
+                        <div class="setting-info">
+                            <h3>Database Autobackup</h3>
+                            <p>Configure automatic database backups, frequency, and retention policy.</p>
+                        </div>
+                        <div class="setting-arrow">
+                            Configure Backup
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <line x1="5" y1="12" x2="19" y2="12"></line>
+                                <polyline points="12 5 19 12 12 19"></polyline>
+                            </svg>
+                        </div>
+                    </a>
                 </div>
 
                 <!-- Online Users Block -->
