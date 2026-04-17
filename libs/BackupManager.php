@@ -140,4 +140,46 @@ class BackupManager {
         }
         return false;
     }
+
+    /**
+     * Restore a database backup
+     * @param string $filename
+     * @return array [success => bool, message => string]
+     */
+    public function restoreBackup($filename) {
+        $filePath = $this->backupDir . $filename;
+        
+        if (!file_exists($filePath)) {
+            return ['success' => false, 'message' => 'Backup file not found.'];
+        }
+
+        try {
+            $sql = file_get_contents($filePath);
+            
+            // Temporary disable foreign key checks
+            $this->conn->query("SET FOREIGN_KEY_CHECKS=0");
+
+            // Execute multi-query
+            if ($this->conn->multi_query($sql)) {
+                do {
+                    // Flush multi_query results
+                    if ($result = $this->conn->store_result()) {
+                        $result->free();
+                    }
+                } while ($this->conn->more_results() && $this->conn->next_result());
+            }
+
+            if ($this->conn->error) {
+                $error = $this->conn->error;
+                $this->conn->query("SET FOREIGN_KEY_CHECKS=1");
+                return ['success' => false, 'message' => 'Restore failed: ' . $error];
+            }
+
+            $this->conn->query("SET FOREIGN_KEY_CHECKS=1");
+            return ['success' => true, 'message' => 'Database restored successfully from ' . $filename];
+
+        } catch (Exception $e) {
+            return ['success' => false, 'message' => 'Restore error: ' . $e->getMessage()];
+        }
+    }
 }

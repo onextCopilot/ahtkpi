@@ -69,6 +69,16 @@ if (isset($_GET['delete'])) {
     }
 }
 
+// Handle Restore Backup
+if (isset($_GET['restore'])) {
+    $result = $backupManager->restoreBackup($_GET['restore']);
+    if ($result['success']) {
+        $success_message = $result['message'];
+    } else {
+        $error_message = $result['message'];
+    }
+}
+
 // Handle Download Backup
 if (isset($_GET['download'])) {
     $filename = $_GET['download'];
@@ -231,6 +241,11 @@ $backups = $backupManager->listBackups();
             color: #ef4444;
         }
 
+        .btn-warning {
+            background: #fef3c7;
+            color: #d97706;
+        }
+
         .backup-table {
             width: 100%;
             border-collapse: collapse;
@@ -373,6 +388,9 @@ $backups = $backupManager->listBackups();
                                                         <div style="display:flex; gap:0.5rem;">
                                                             <a href="?download=<?php echo urlencode($b['filename']); ?>" class="btn btn-secondary" style="padding:0.4rem 0.8rem; font-size:0.85rem;">
                                                                 Download
+                                                            </a>
+                                                            <a href="?restore=<?php echo urlencode($b['filename']); ?>" class="btn btn-warning" style="padding:0.4rem 0.8rem; font-size:0.85rem;" onclick="return confirm('WARNING: This will overwrite CURRENT database. It is recommended to create a new backup before restoring. Proceed?')">
+                                                                Restore
                                                             </a>
                                                             <a href="?delete=<?php echo urlencode($b['filename']); ?>" class="btn btn-danger" style="padding:0.4rem 0.8rem; font-size:0.85rem;" onclick="return confirm('Are you sure you want to delete this backup?')">
                                                                 Delete
