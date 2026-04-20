@@ -2279,7 +2279,8 @@ function getLatestWeeklyProgress($id, $type, $map, $current_week, $live_fallback
             
             const ownerSelect = document.getElementById('updateItemOwner');
             const owner_id = ownerSelect.value;
-            const owner_name = ownerSelect.options[ownerSelect.selectedIndex].getAttribute('data-name') || '';
+            const selectedOpt = ownerSelect.options[ownerSelect.selectedIndex];
+            const owner_name = selectedOpt ? (selectedOpt.getAttribute('data-name') || '') : '';
 
             const priority = document.getElementById('updateItemPriority').value;
             const weight = document.getElementById('updateItemWeight').value;
@@ -2424,7 +2425,8 @@ function getLatestWeeklyProgress($id, $type, $map, $current_week, $live_fallback
             
             const ownerSelect = document.getElementById('addModalOwner');
             const owner_id = ownerSelect.value;
-            const owner_name = ownerSelect.options[ownerSelect.selectedIndex].getAttribute('data-name') || '';
+            const selectedOpt = ownerSelect.options[ownerSelect.selectedIndex];
+            const owner_name = selectedOpt ? (selectedOpt.getAttribute('data-name') || '') : '';
 
             const priority = document.getElementById('addItemPriority').value;
             const weight = document.getElementById('addItemWeight').value;
