@@ -17,6 +17,8 @@ $conn->query("CREATE TABLE IF NOT EXISTS okr_objectives (id INT AUTO_INCREMENT P
 $conn->query("CREATE TABLE IF NOT EXISTS okr_key_activities (id INT AUTO_INCREMENT PRIMARY KEY, objective_id INT, activity_name VARCHAR(255), progress DECIMAL(5,2) DEFAULT 0, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;");
 $conn->query("CREATE TABLE IF NOT EXISTS okr_results (id INT AUTO_INCREMENT PRIMARY KEY, objective_id INT, metric_name VARCHAR(255), current_value DECIMAL(15,2) DEFAULT 0, target_value DECIMAL(15,2) DEFAULT 0, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;");
 $conn->query("CREATE TABLE IF NOT EXISTS okr_settings (setting_key VARCHAR(100) PRIMARY KEY, setting_value TEXT) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;");
+$conn->query("CREATE TABLE IF NOT EXISTS okr_teams (id INT AUTO_INCREMENT PRIMARY KEY, team_name VARCHAR(100) NOT NULL, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;");
+$conn->query("CREATE TABLE IF NOT EXISTS okr_team_members (id INT AUTO_INCREMENT PRIMARY KEY, team_id INT, user_id INT, UNIQUE KEY `unique_membership` (`team_id`, `user_id`)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;");
 
 // Fetch OKR Settings
 $okr_settings = [];
@@ -56,6 +58,11 @@ try {
     addColIfNotExists($conn, 'okr_objectives', 'status', 'VARCHAR(100) DEFAULT "on_track"');
     addColIfNotExists($conn, 'okr_objectives', 'quarter', 'INT DEFAULT 1');
     addColIfNotExists($conn, 'okr_objectives', 'year', 'INT DEFAULT 2026');
+    addColIfNotExists($conn, 'okr_key_activities', 'result_id', 'INT DEFAULT 0');
+    addColIfNotExists($conn, 'okr_key_activities', 'owner', 'VARCHAR(255)');
+    addColIfNotExists($conn, 'okr_key_activities', 'owner_id', 'INT DEFAULT 0');
+    addColIfNotExists($conn, 'okr_key_activities', 'weight', 'INT DEFAULT 0');
+    addColIfNotExists($conn, 'okr_key_activities', 'status', 'VARCHAR(100) DEFAULT "pending"');
     addColIfNotExists($conn, 'okr_objectives', 'cycle_id', 'INT DEFAULT 1');
     addColIfNotExists($conn, 'okr_objectives', 'sort_order', 'INT DEFAULT 0');
     addColIfNotExists($conn, 'okr_objectives', 'is_company_okr', 'TINYINT DEFAULT 0');
@@ -139,7 +146,7 @@ if ($now_dt < $q_start_dt) $days_passed = 0;
 $current_week_num = min(13, max(1, floor($days_passed / 7) + 1));
 $q_start_date_str = $q_start_dt->format('Y-m-d');
 
-// Global Variable for Hide Flag
+addColIfNotExists($conn, 'okr_key_activities', 'result_id', 'INT(11) DEFAULT 0');
 addColIfNotExists($conn, 'users', 'hide_from_okr', 'TINYINT(1) DEFAULT 0');
 
 // Handle naming inconsistencies across versions
@@ -236,7 +243,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
             exit();
         }
 
-        $activity_id = ($type === 'metric') ? intval($_POST['activity_id'] ?? ($curr_data['activity_id'] ?? 0)) : 0;
+        $result_id = ($type === 'activity') ? intval($_POST['parent_id'] ?? ($curr_data['result_id'] ?? 0)) : 0;
 
         // Recalculate avatar initials for the owner
         $avatar = '';
@@ -248,14 +255,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
         if (!$is_partial) {
             $sort_order = intval($_POST['sort_order'] ?? ($curr_data['sort_order'] ?? 0));
             if ($type === 'metric') {
-                // val is now progress % — compute current_value proportionally, keep target_value intact
-                $stmt = $conn->prepare("UPDATE okr_results SET metric_name = ?, current_value = ROUND((? / 100.0) * target_value, 2), status = ?, priority = ?, weight = ?, owner_name = ?, owner_id = ?, owner_2_name = ?, owner_2_id = ?, owner_avatar = ?, activity_id = ?, sort_order = ? WHERE id = ?");
-                $stmt->bind_param("sdssisssissii", $name, $val, $status, $priority, $weight, $owner_name, $owner_id, $owner_2_name, $owner_2_id, $avatar, $activity_id, $sort_order, $id);
+                $stmt = $conn->prepare("UPDATE okr_results SET metric_name = ?, current_value = ROUND((? / 100.0) * target_value, 2), status = ?, priority = ?, weight = ?, owner_name = ?, owner_id = ?, owner_2_name = ?, owner_2_id = ?, owner_avatar = ?, sort_order = ? WHERE id = ?");
+                $stmt->bind_param("sdssisssisii", $name, $val, $status, $priority, $weight, $owner_name, $owner_id, $owner_2_name, $owner_2_id, $avatar, $sort_order, $id);
+                $stmt->execute();
+                
+                // If an activity was selected to link, update that KA's result_id
+                $link_activity_id = intval($_POST['activity_id'] ?? 0);
+                if ($link_activity_id > 0) {
+                    $conn->query("UPDATE okr_key_activities SET result_id = $id WHERE id = $link_activity_id");
+                }
             } else {
-                $stmt = $conn->prepare("UPDATE okr_key_activities SET activity_name = ?, progress = ?, status = ?, priority = ?, weight = ?, owner_name = ?, owner_id = ?, owner_avatar = ?, sort_order = ? WHERE id = ?");
-                $stmt->bind_param("sdssisissi", $name, $val, $status, $priority, $weight, $owner_name, $owner_id, $avatar, $sort_order, $id);
+                $stmt = $conn->prepare("UPDATE okr_key_activities SET activity_name = ?, progress = ?, status = ?, priority = ?, weight = ?, owner_name = ?, owner_id = ?, owner_avatar = ?, result_id = ?, sort_order = ? WHERE id = ?");
+                $stmt->bind_param("sdssisssiii", $name, $val, $status, $priority, $weight, $owner_name, $owner_id, $avatar, $result_id, $sort_order, $id);
+                $stmt->execute();
             }
-            $stmt->execute();
         }
         
         // Save explanation & Weekly Progress
@@ -447,13 +460,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
         if ($type === 'metric') {
             $owner_2_id = intval($_POST['owner_2_id'] ?? 0);
             $owner_2_name = trim($_POST['owner_2_name'] ?? '');
-            $activity_id = intval($_POST['activity_id'] ?? 0);
-            $stmt = $conn->prepare("INSERT INTO okr_results (objective_id, metric_name, target_value, unit, status, owner_name, owner_id, owner_2_name, owner_2_id, owner_avatar, priority, weight, activity_id, sort_order) VALUES (?, ?, 100, '%', 'pending', ?, ?, ?, ?, ?, ?, ?, ?, ?)");
-            $stmt->bind_param("isssississsii", $oid, $name, $owner_name, $owner_id, $owner_2_name, $owner_2_id, $avatar, $priority, $weight, $activity_id, $sort_order);
+            $stmt = $conn->prepare("INSERT INTO okr_results (objective_id, metric_name, target_value, unit, status, owner_name, owner_id, owner_2_name, owner_2_id, owner_avatar, priority, weight, sort_order) VALUES (?, ?, 100, '%', 'pending', ?, ?, ?, ?, ?, ?, ?, ?)");
+            $stmt->bind_param("isssississsi", $oid, $name, $owner_name, $owner_id, $owner_2_name, $owner_2_id, $avatar, $priority, $weight, $sort_order);
             $stmt->execute();
+            $new_kr_id = $conn->insert_id;
+            
+            // If an activity was selected to link
+            $link_activity_id = intval($_POST['activity_id'] ?? 0);
+            if ($link_activity_id > 0) {
+                $conn->query("UPDATE okr_key_activities SET result_id = $new_kr_id WHERE id = $link_activity_id");
+            }
         } else {
-            $stmt = $conn->prepare("INSERT INTO okr_key_activities (objective_id, activity_name, progress, status, owner_name, owner_id, owner_avatar, priority, weight, sort_order) VALUES (?, ?, 0, 'pending', ?, ?, ?, ?, ?, ?)");
-            $stmt->bind_param("isssisssii", $oid, $name, $owner_name, $owner_id, $avatar, $priority, $weight, $sort_order);
+            $result_id = intval($_POST['parent_id'] ?? 0);
+            $stmt = $conn->prepare("INSERT INTO okr_key_activities (objective_id, activity_name, progress, status, owner_name, owner_id, owner_avatar, priority, weight, result_id, sort_order) VALUES (?, ?, 0, 'pending', ?, ?, ?, ?, ?, ?, ?)");
+            $stmt->bind_param("isssisssiii", $oid, $name, $owner_name, $owner_id, $avatar, $priority, $weight, $result_id, $sort_order);
             $stmt->execute();
         }
 
@@ -596,6 +616,64 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
         echo json_encode(['success' => true, 'html' => $html]);
         exit();
     }
+    if($_POST['action'] === 'fetch_okr_teams_data') {
+        if (!$is_admin) { echo json_encode(['success' => false]); exit(); }
+        $teams = [];
+        $res = $conn->query("SELECT * FROM okr_teams ORDER BY team_name ASC");
+        while($row = $res->fetch_assoc()) {
+            $tid = $row['id'];
+            $m_res = $conn->query("SELECT user_id FROM okr_team_members WHERE team_id = $tid");
+            $members = [];
+            while($m = $m_res->fetch_assoc()) $members[] = (int)$m['user_id'];
+            $row['members'] = $members;
+            $teams[] = $row;
+        }
+        echo json_encode(['success' => true, 'teams' => $teams]);
+        exit();
+    }
+
+    if($_POST['action'] === 'save_okr_new_team') {
+        if (!$is_admin) { echo json_encode(['success' => false]); exit(); }
+        $id = intval($_POST['id'] ?? 0);
+        $name = trim($_POST['name'] ?? '');
+        if($id > 0) {
+            $stmt = $conn->prepare("UPDATE okr_teams SET team_name = ? WHERE id = ?");
+            $stmt->bind_param("si", $name, $id);
+        } else {
+            $stmt = $conn->prepare("INSERT INTO okr_teams (team_name) VALUES (?)");
+            $stmt->bind_param("s", $name);
+        }
+        $stmt->execute();
+        echo json_encode(['success' => true]);
+        exit();
+    }
+
+    if($_POST['action'] === 'delete_okr_team_data') {
+        if (!$is_admin) { echo json_encode(['success' => false]); exit(); }
+        $id = intval($_POST['id'] ?? 0);
+        $conn->query("DELETE FROM okr_teams WHERE id = $id");
+        $conn->query("DELETE FROM okr_team_members WHERE team_id = $id");
+        echo json_encode(['success' => true]);
+        exit();
+    }
+
+    if($_POST['action'] === 'update_okr_team_members') {
+        if (!$is_admin) { echo json_encode(['success' => false]); exit(); }
+        $tid = intval($_POST['team_id'] ?? 0);
+        $uids = $_POST['user_ids'] ?? [];
+        $conn->query("DELETE FROM okr_team_members WHERE team_id = $tid");
+        if(!empty($uids)) {
+            $stmt = $conn->prepare("INSERT INTO okr_team_members (team_id, user_id) VALUES (?, ?)");
+            foreach($uids as $uid) {
+                $uid_int = intval($uid);
+                $stmt->bind_param("ii", $tid, $uid_int);
+                $stmt->execute();
+            }
+        }
+        echo json_encode(['success' => true]);
+        exit();
+    }
+
     if ($_POST['action'] === 'save_user_visibility') {
         if (!$is_admin) { echo json_encode(['success' => false]); exit(); }
         $hidden_users = $_POST['hidden_users'] ?? []; // Array of full_names
@@ -627,6 +705,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
 }
 
 // Fetch Users for Dropdown (Focusing on active participants)
+$all_users_for_mgmt = [];
+$u_res = $conn->query("SELECT id, full_name FROM users ORDER BY full_name ASC");
+if($u_res) {
+    while($u = $u_res->fetch_assoc()) $all_users_for_mgmt[] = $u;
+}
+
 $am_users = [];
 try {
     // Try to fetch users marked as AM/BD (active OKR participants) and not hidden
@@ -657,17 +741,28 @@ if (empty($am_users)) {
 }
 
 // Fetch Teams for Tabs
+// 1. New Logic: Fetch OKR Teams
 $sale_teams_list = [];
 try {
-    $teams_res = $conn->query("SELECT name FROM sale_teams ORDER BY order_num ASC");
-    if ($teams_res && $teams_res->num_rows > 0) {
-        while($t = $teams_res->fetch_assoc()) {
-            if(!empty($t['name'])) $sale_teams_list[] = $t['name'];
+    $ot_res = $conn->query("SELECT team_name FROM okr_teams ORDER BY team_name ASC");
+    if ($ot_res && $ot_res->num_rows > 0) {
+        while($ot = $ot_res->fetch_assoc()) $sale_teams_list[] = $ot['team_name'];
+    } else {
+        // Migration Hint: If no OKR teams, maybe copy from old sale_teams once?
+        $old_teams = $conn->query("SELECT name FROM sale_teams");
+        if($old_teams && $old_teams->num_rows > 0) {
+            while($ot = $old_teams->fetch_assoc()) {
+                $tname = $conn->real_escape_string($ot['name']);
+                $conn->query("INSERT INTO okr_teams (team_name) VALUES ('$tname')");
+                $sale_teams_list[] = $ot['name'];
+            }
         }
     }
 } catch (Exception $e) {}
+
+// Fallback logic
 if (empty($sale_teams_list)) {
-    $sale_teams_list = ['Team BD/AM', 'Sales & Marketing']; // Fallbacks
+    $sale_teams_list = ['Team AHT BD Global'];
 }
 
 // Fetch Data for Render
@@ -675,12 +770,12 @@ $objectives = [];
 $current_team_tab = $_GET['team'] ?? null;
 $selected_user = $_GET['user'] ?? null;
 
-// Find Current User's Teams
+// Find Current User's Teams (using OKR Teams)
 $my_teams = [];
 $uid = $_SESSION['user_id'];
-$ut_res = $conn->query("SELECT st.name FROM user_sale_teams ust JOIN sale_teams st ON ust.team_id = st.id WHERE ust.user_id = $uid");
+$ut_res = $conn->query("SELECT ot.team_name FROM okr_team_members otm JOIN okr_teams ot ON otm.team_id = ot.id WHERE otm.user_id = $uid");
 if ($ut_res) {
-    while($ut = $ut_res->fetch_assoc()) $my_teams[] = $ut['name'];
+    while($ut = $ut_res->fetch_assoc()) $my_teams[] = $ut['team_name'];
 }
 
 $all_teams = [];
@@ -704,13 +799,13 @@ $selected_user_name = null;
 
 if ($current_team_tab !== 'all') {
     $safe_team = $conn->real_escape_string($current_team_tab);
-    // Exclude users with 'admin' role and hidden users from members list
+    // Fetch members assigned to this specific OKR Team
     $members_res = $conn->query("
         SELECT DISTINCT u.id, u.full_name 
         FROM users u 
-        JOIN user_sale_teams ust ON u.id = ust.user_id 
-        JOIN sale_teams st ON ust.team_id = st.id 
-        WHERE st.name = '$safe_team' AND u.role != 'admin' AND u.hide_from_okr = 0
+        JOIN okr_team_members otm ON u.id = otm.user_id 
+        JOIN okr_teams ot ON otm.team_id = ot.id 
+        WHERE ot.team_name = '$safe_team' AND u.hide_from_okr = 0
         ORDER BY u.full_name ASC
     ");
     while($m = $members_res->fetch_assoc()) {
@@ -748,13 +843,12 @@ if ($current_quarter > 0) {
 }
 $team_filter .= " AND year = $current_year";
 
-// Fetch Objectives with Owner's Team info
+// Fetch Objectives with Owner's Team info (using OKR Teams)
 $sql_o = "SELECT o.*, 
     (SELECT u.avatar FROM users u WHERE u.id = o.owner_id LIMIT 1) as owner_image,
-    (SELECT st.name FROM sale_teams st 
-     JOIN user_sale_teams ust ON st.id = ust.team_id 
-     JOIN users u ON ust.user_id = u.id 
-     WHERE u.full_name = o.owner LIMIT 1) as owner_team_name
+    (SELECT ot.team_name FROM okr_teams ot 
+     JOIN okr_team_members otm ON ot.id = otm.team_id 
+     WHERE otm.user_id = o.owner_id LIMIT 1) as owner_team_name
     FROM okr_objectives o" . $team_filter . " ORDER BY sort_order ASC, id DESC";
 
 $res_o = $conn->query($sql_o);
@@ -765,61 +859,47 @@ while ($o = $res_o->fetch_assoc()) {
     $o_parts = explode(' ', $o['owner'] ?? '');
     $o['owner_avatar'] = !empty($o['owner']) ? mb_substr(end($o_parts), 0, 1, "UTF-8") : '??';
     
-    // Fetch Activities first to build a parent map
-    $activities = [];
-    $a_res = $conn->query("SELECT a.*, 
-        (SELECT u.avatar FROM users u WHERE u.id = a.owner_id LIMIT 1) as owner_image,
-        (SELECT content FROM okr_explanations WHERE item_id = a.id AND item_type = 'activity' ORDER BY created_at DESC LIMIT 1) as latest_explanation FROM okr_key_activities a WHERE a.objective_id = $oid ORDER BY sort_order ASC, FIELD(priority, 'high', 'medium', 'low') ASC, id DESC");
-    if ($a_res) {
-        while($a = $a_res->fetch_assoc()) {
-            $a['results'] = []; // Placeholder for child KRs
-            $activities[$a['id']] = $a;
-        }
-    }
-    
-    // Fetch KRs (Results) and assign to their parent Activity if available
-    $unlinked_results = [];
+    // Fetch KRs (Results) first to build a parent map
+    $results = [];
     $r_res = $conn->query("SELECT r.*, 
         (SELECT u.avatar FROM users u WHERE u.id = r.owner_id LIMIT 1) as owner_image,
         (SELECT u.avatar FROM users u WHERE u.id = r.owner_2_id LIMIT 1) as owner_2_image,
         (SELECT content FROM okr_explanations WHERE item_id = r.id AND item_type = 'metric' ORDER BY created_at DESC LIMIT 1) as latest_explanation FROM okr_results r WHERE r.objective_id = $oid ORDER BY sort_order ASC, FIELD(priority, 'high', 'medium', 'low') ASC, id DESC");
     if ($r_res) {
         while($r = $r_res->fetch_assoc()) {
+            // Generate initials for owner 1
+            $r_parts = explode(' ', $r['owner_name'] ?? '');
+            $r['owner_avatar'] = !empty($r['owner_name']) ? mb_substr(end($r_parts), 0, 1, "UTF-8") : '??';
+            
             // Generate initials for owner 2
             $o2_parts = explode(' ', $r['owner_2_name'] ?? '');
             $r['owner_2_avatar'] = !empty($r['owner_2_name']) ? mb_substr(end($o2_parts), 0, 1, "UTF-8") : '';
+            $r['activities'] = []; // Placeholder for child KAs
+            $results[$r['id']] = $r;
+        }
+    }
+    
+    // Fetch Activities (KAs) and assign to their parent KR if available
+    $unlinked_activities = [];
+    $a_res = $conn->query("SELECT a.*, 
+        (SELECT u.avatar FROM users u WHERE u.id = a.owner_id LIMIT 1) as owner_image,
+        (SELECT content FROM okr_explanations WHERE item_id = a.id AND item_type = 'activity' ORDER BY created_at DESC LIMIT 1) as latest_explanation FROM okr_key_activities a WHERE a.objective_id = $oid ORDER BY sort_order ASC, FIELD(priority, 'high', 'medium', 'low') ASC, id DESC");
+    if ($a_res) {
+        while($a = $a_res->fetch_assoc()) {
+            // Generate initials for owner
+            $a_parts = explode(' ', $a['owner_name'] ?? '');
+            $a['owner_avatar'] = !empty($a['owner_name']) ? mb_substr(end($a_parts), 0, 1, "UTF-8") : '??';
 
-            if ($r['activity_id'] > 0 && isset($activities[$r['activity_id']])) {
-                $activities[$r['activity_id']]['results'][] = $r;
+            if ($a['result_id'] > 0 && isset($results[$a['result_id']])) {
+                $results[$a['result_id']]['activities'][] = $a;
             } else {
-                $unlinked_results[] = $r;
+                $unlinked_activities[] = $a;
             }
         }
     }
     
-    // 1. Sync KA progress if child KRs exist (Hierarchy integrity)
-    if (!empty($activities)) {
-        foreach($activities as &$act) {
-            $act_id = $act['id'];
-            $kr_calc = $conn->query("SELECT 
-                                        CASE 
-                                            WHEN SUM(weight) > 0 THEN SUM(LEAST((current_value / NULLIF(target_value,0)) * 100, 100) * weight) / SUM(weight)
-                                            ELSE AVG(LEAST((current_value / NULLIF(target_value,0)) * 100, 100))
-                                        END as actual_progress
-                                      FROM okr_results 
-                                      WHERE activity_id = $act_id");
-            if ($krc = $kr_calc->fetch_assoc()) {
-                if ($krc['actual_progress'] !== null) {
-                    $act['progress'] = $krc['actual_progress'];
-                    // Update DB to be sure
-                    $conn->query("UPDATE okr_key_activities SET progress = " . floatval($act['progress']) . " WHERE id = $act_id");
-                }
-            }
-        }
-    }
-    
-    $o['activities'] = $activities;
-    $o['unlinked_results'] = $unlinked_results;
+    $o['results'] = $results;
+    $o['unlinked_activities'] = $unlinked_activities;
     $objectives[] = $o;
 }
 
@@ -857,6 +937,13 @@ $grouped_objectives = [];
 foreach ($objectives as $obj) {
     // Priority: Owner's actual team from DB > Explicit team column > Fallback
     $t = $obj['owner_team_name'] ?: ($obj['team'] ?: 'Unassigned Team');
+    
+    // Safety: If we are on a specific team tab, force the objective into that team's group 
+    // if it passed the SQL filter but has a different owner_team_name calculated
+    if ($current_team_tab !== 'all' && $current_team_tab !== null) {
+        $t = $current_team_tab; 
+    }
+    
     $grouped_objectives[$t][] = $obj;
 }
 
@@ -1288,6 +1375,7 @@ function getLatestWeeklyProgress($id, $type, $map, $current_week, $live_fallback
                         <?php if ($is_admin): ?>
                             <button class="btn-secondary" onclick="openVisibilityModal()" title="Quản lý hiển thị Users"><i class="fas fa-users-cog"></i></button>
                             <button class="btn-secondary" onclick="openOkrSettingsModal()" title="Cài đặt màu sắc Progress"><i class="fas fa-palette"></i></button>
+                            <button class="btn-secondary" onclick="openOkrTeamManagementModal()" title="Quản lý Team OKR"><i class="fas fa-users-class"></i> Manage Teams</button>
                         <?php endif; ?>
                         <button class="btn-apple" onclick="openCreateObjModal()"><i class="fas fa-plus"></i> Add Objective</button>
                     </div>
@@ -1303,6 +1391,17 @@ function getLatestWeeklyProgress($id, $type, $map, $current_week, $live_fallback
                 <?php if ($current_team_tab !== 'all' && !empty($team_members)): ?>
                 <div class="member-ribbon">
                     <span style="font-size: 11px; color: #86868b; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; margin-right: 8px;">Members:</span>
+                    
+                    <!-- Team OKR Tab (Moved to front) -->
+                    <div class="member-item team-tab <?php echo ($is_team_view) ? 'active' : ''; ?>" style="padding: 4px 12px; background: <?php echo $is_team_view ? '#0071e3' : '#f5f5f7'; ?>; border-radius:12px;">
+                        <a href="?team=<?php echo urlencode($current_team_tab); ?>&view=team&quarter=<?php echo $current_quarter; ?>&year=<?php echo $current_year; ?>" style="text-decoration:none; color:<?php echo $is_team_view ? 'white' : '#1d1d1f'; ?>; display:flex; align-items:center; gap:8px; font-weight:700;">
+                            <i class="fas fa-users-cog"></i>
+                            <span style="white-space:nowrap;">Team OKR</span>
+                        </a>
+                        <button class="btn-view-annual" onclick="viewAnnualOKR(0, '<?php echo addslashes($current_team_tab); ?>', <?php echo $current_year; ?>)" title="Xem OKR của Team cả năm">
+                            <i class="fas fa-calendar-alt"></i>
+                        </button>
+                    </div>
                     <?php foreach ($team_members as $m): ?>
                         <div class="member-item <?php echo ($selected_user_id == $m['id']) ? 'active' : ''; ?>" style="padding: 4px 10px; padding-right: 4px;">
                             <a href="?team=<?php echo urlencode($current_team_tab); ?>&user_id=<?php echo $m['id']; ?>&quarter=<?php echo $current_quarter; ?>&year=<?php echo $current_year; ?>" style="text-decoration:none; color:inherit; display:flex; align-items:center; gap:8px;">
@@ -1315,16 +1414,6 @@ function getLatestWeeklyProgress($id, $type, $map, $current_week, $live_fallback
                         </div>
                     <?php endforeach; ?>
                     
-                    <!-- Team OKR Tab -->
-                    <div class="member-item team-tab <?php echo ($is_team_view) ? 'active' : ''; ?>" style="padding: 4px 12px; background: <?php echo $is_team_view ? '#0071e3' : '#f5f5f7'; ?>; border-radius:12px;">
-                        <a href="?team=<?php echo urlencode($current_team_tab); ?>&view=team&quarter=<?php echo $current_quarter; ?>&year=<?php echo $current_year; ?>" style="text-decoration:none; color:<?php echo $is_team_view ? 'white' : '#1d1d1f'; ?>; display:flex; align-items:center; gap:8px; font-weight:700;">
-                            <i class="fas fa-users-cog"></i>
-                            <span style="white-space:nowrap;">Team OKR</span>
-                        </a>
-                        <button class="btn-view-annual" onclick="viewAnnualOKR(0, '<?php echo addslashes($current_team_tab); ?>', <?php echo $current_year; ?>)" title="Xem OKR của Team cả năm">
-                            <i class="fas fa-calendar-alt"></i>
-                        </button>
-                    </div>
                 </div>
                 <?php endif; ?>
 
@@ -1408,7 +1497,7 @@ function getLatestWeeklyProgress($id, $type, $map, $current_week, $live_fallback
                         <div class="okr-card <?php echo (count($objs_in_team) > 3) ? 'collapsed' : ''; ?> <?php echo $obj_prog_class; ?>" id="obj-<?php echo $obj['id']; ?>">
                         <div class="okr-card-header" onclick="toggleObjectiveAccordion(this, event)">
                             <div class="obj-left">
-                                <h3 title="<?php echo htmlspecialchars($obj['title']); ?>" style="display:flex; align-items:center;">
+                                <h3 data-id="<?php echo $obj['id']; ?>">
                                     <i class="fas fa-bullseye" style="color:#6366f1; margin-right:8px;"></i>
                                     <span style="color:#6366f1; opacity:0.8; font-weight:800; margin-right:4px;">OBJ <?php echo $global_obj_idx++; ?> :</span>
                                     <?php echo htmlspecialchars($obj['title']); ?>
@@ -1444,8 +1533,8 @@ function getLatestWeeklyProgress($id, $type, $map, $current_week, $live_fallback
                                         <button class="btn-delete-row" style="opacity:1;" onclick="deleteObjective(<?php echo $obj['id']; ?>)">
                                             <i class="fas fa-trash-alt"></i>
                                         </button>
-                                        <button class="btn-apple" style="padding: 6px 14px; font-size: 11px; height: 30px; margin-left:12px; box-shadow:none;" onclick="openAddModal(<?php echo $obj['id']; ?>, 'activity')">
-                                            <i class="fas fa-plus"></i> Add KA
+                                        <button class="btn-apple" style="padding: 6px 14px; font-size: 11px; height: 30px; margin-left:12px; box-shadow:none;" onclick="openAddModal(<?php echo $obj['id']; ?>, 'metric')">
+                                            <i class="fas fa-plus"></i> Add KR
                                         </button>
                                     </div>
                                 </div>
@@ -1461,7 +1550,7 @@ function getLatestWeeklyProgress($id, $type, $map, $current_week, $live_fallback
                         <table class="okr-table">
                             <thead>
                                 <tr style="background: #fbfbfd; border-bottom: 1px solid #f2f2f7;">
-                                    <th style="padding: 12px 16px; text-align: left; font-size: 11px; color: #86868b; text-transform: uppercase;">Key Activity / Result</th>
+                                    <th style="padding: 12px 16px; text-align: left; font-size: 11px; color: #86868b; text-transform: uppercase;">Key Result / Activity</th>
                                     <th style="width: 60px; text-align: center; font-size: 11px; color: #86868b; text-transform: uppercase;">Owner</th>
                                     <th style="width: 60px; text-align: center; font-size: 11px; color: #86868b; text-transform: uppercase;">Weight</th>
                                     <th style="width: 100px; text-align: left; font-size: 11px; color: #86868b; text-transform: uppercase;">Status</th>
@@ -1470,190 +1559,168 @@ function getLatestWeeklyProgress($id, $type, $map, $current_week, $live_fallback
                                 </tr>
                             </thead>
                             <tbody>
-                                <?php if(empty($obj['activities']) && empty($obj['unlinked_results'])): ?>
+                                <?php if(empty($obj['results']) && empty($obj['unlinked_activities'])): ?>
                                     <tr>
                                         <td colspan="6" style="text-align:center; padding:60px 40px; color:#86868b;">
-                                            <div style="font-size:14px; margin-bottom:12px; font-style:italic;">No data found. Start by adding a Key Activity.</div>
-                                            <button class="btn-apple" style="margin:0 auto; box-shadow:0 4px 12px rgba(0,113,227,0.1);" onclick="openAddModal(<?php echo $obj['id']; ?>, 'activity')">
-                                                <i class="fas fa-plus-circle"></i> Add First Key Activity
+                                            <div style="font-size:14px; margin-bottom:12px; font-style:italic;">No data found. Start by adding a Key Result.</div>
+                                            <button class="btn-apple" style="margin:0 auto; box-shadow:0 4px 12px rgba(0,113,227,0.1);" onclick="openAddModal(<?php echo $obj['id']; ?>, 'metric')">
+                                                <i class="fas fa-plus-circle"></i> Add First Key Result
                                             </button>
                                         </td>
                                     </tr>
                                 <?php else: ?>
-                                    <!-- Activities and their nested Results -->
+                                    <!-- Results and their nested Activities -->
                                     <?php 
-                                    $a_idx = 1; 
-                                    foreach ($obj['activities'] as $a): 
-                                        $display_prog = getLatestWeeklyProgress($a['id'], 'activity', $weekly_tracking_map, $current_week_num, $a['progress']); 
-                                        $prog_class = 'prog-low';
-                                        if ($display_prog >= 90) $prog_class = 'prog-high';
-                                        else if ($display_prog >= 70) $prog_class = 'prog-mid';
+                                    $r_idx = 1; 
+                                    foreach ($obj['results'] as $r): 
+                                        $progress_pct = ($r['target_value'] > 0) ? ($r['current_value'] / $r['target_value']) * 100 : 0;
+                                        $progress_pct = min(100, round($progress_pct, 1));
+                                        
+                                        $display_prog_kr = getLatestWeeklyProgress($r['id'], 'metric', $weekly_tracking_map, $current_week_num, $progress_pct); 
+                                        $prog_class_kr = 'prog-low';
+                                        if ($display_prog_kr >= 90) $prog_class_kr = 'prog-high';
+                                        else if ($display_prog_kr >= 70) $prog_class_kr = 'prog-mid';
 
-                                        $row_class = 'activity-header row-prio-' . ($a['priority'] ?? 'medium') . ' ' . $prog_class;
-                                        if(($a['status'] ?? '') === 'completed') $row_class .= ' row-completed';
+                                        $row_class_kr = 'activity-header row-prio-' . ($r['priority'] ?? 'medium') . ' ' . $prog_class_kr;
+                                        if(($r['status'] ?? '') === 'completed') $row_class_kr .= ' row-completed';
                                     ?>
-                                        <tr class="<?php echo $row_class; ?> activity-row-for-obj-<?php echo $obj['id']; ?>" data-id="<?php echo $a['id']; ?>" data-name="<?php echo htmlspecialchars($a['activity_name']); ?>">
+                                        <tr class="<?php echo $row_class_kr; ?>">
                                             <td class="col-name">
                                                 <div class="item-header-row">
-                                                    <span class="item-number-circle"><?php echo $a_idx++; ?></span>
+                                                    <span class="item-number-circle"><?php echo $r_idx++; ?></span>
                                                     <h4 class="item-main-title">
-                                                        <span class="ka-badge">KA <?php echo ($a_idx - 1); ?></span>
-                                                        <?php echo htmlspecialchars($a['activity_name'] ?? ''); ?>
-                                                        <?php if(($expl_counts['activity'][$a['id']] ?? 0) > 0): ?>
-                                                            <i class="fas fa-exclamation-circle has-explanation-icon" onclick="openExplanationSidebar(<?php echo $a['id']; ?>, 'activity', '<?php echo addslashes($a['activity_name'] ?? ''); ?>')" title="Xem giải trình/lưu ý"></i>
-                                                        <?php endif; ?>
-                                                    </h4>
-                                                    <button class="btn-add-inline" title="Add result to this activity" onclick="openAddModal(<?php echo $obj['id']; ?>, 'metric', <?php echo $a['id']; ?>)" style="margin-left:8px;"><i class="fas fa-plus-circle"></i> Add KR</button>
-                                                </div>
-                                            </td>
-                                            <td class="col-owner" style="text-align:center;">
-                                                <div class="user-avatar" style="margin:0 auto; overflow:hidden;" title="<?php echo htmlspecialchars($a['owner_name'] ?? ''); ?>">
-                                                    <?php if(!empty($a['owner_image'])): ?>
-                                                        <img src="<?php echo htmlspecialchars($a['owner_image']); ?>" style="width:100%; height:100%; object-fit:cover;">
-                                                    <?php else: ?>
-                                                        <?php echo $a['owner_avatar'] ?? '??'; ?>
-                                                    <?php endif; ?>
-                                                </div>
-                                            </td>
-                                            <td class="col-weight" style="text-align:center; font-weight:600;"><?php echo intval($a['weight'] ?? 0); ?>%</td>
-                                            <td class="col-status"><?php echo getBadgeHtml($a['status'] ?? 'pending'); ?></td>
-                                            <td class="col-progress">
-                                                <?php 
-                                                    $display_prog = getLatestWeeklyProgress($a['id'], 'activity', $weekly_tracking_map, $current_week_num, $a['progress']); 
-                                                ?>
-                                                <div style="display:flex; align-items:center; gap:8px;">
-                                                    <span style="font-weight:700; font-size:12px; min-width:32px;"><span id="td-val-activity-<?php echo $a['id']; ?>"><?php echo intval($display_prog); ?></span>%</span>
-                                                    <div class="progress-tiny"><div class="progress-bar" id="td-bar-activity-<?php echo $a['id']; ?>" style="width: <?php echo $display_prog; ?>%; background:#34c759;"></div></div>
-                                                </div>
-                                                <?php echo renderWeeklyTrackingDots($a['id'], 'activity', $weekly_tracking_map, $current_week_num, $a['progress']); ?>
-                                            </td>
-                                            <td class="col-action">
-                                                <div style="display:flex; align-items:center; gap:4px;">
-                                                    <button class="btn-edit-row" onclick="openUpdateModal('<?php echo addslashes($a['activity_name'] ?? ''); ?>', 'activity', <?php echo $a['id']; ?>, <?php echo floatval($a['progress'] ?? 0); ?>, 100, '<?php echo $a['status'] ?? 'pending'; ?>', <?php echo intval($a['owner_id'] ?? 0); ?>, 0, '<?php echo $a['priority'] ?? 'medium'; ?>', <?php echo intval($a['weight'] ?? 0); ?>, <?php echo $obj['id']; ?>, 0, <?php echo intval($a['sort_order'] ?? 0); ?>)"><i class="fas fa-history"></i></button>
-                                                    <button class="btn-delete-row" title="Delete Activity" onclick="deleteOkrItem(<?php echo $a['id']; ?>, 'activity')"><i class="fas fa-trash-alt"></i></button>
-                                                </div>
-                                            </td>
-                                        </tr>
-
-                                        <!-- Nested Results for this Activity -->
-                                        <?php if (!empty($a['results'])): $kr_idx = 1; foreach ($a['results'] as $r): 
-                                            $progress_pct = ($r['target_value'] > 0) ? ($r['current_value'] / $r['target_value']) * 100 : 0;
-                                            $progress_pct = min(100, round($progress_pct, 1));
-                                            
-                                            $display_prog_kr = getLatestWeeklyProgress($r['id'], 'metric', $weekly_tracking_map, $current_week_num, $progress_pct); 
-                                            $prog_class_kr = 'prog-low';
-                                            if ($display_prog_kr >= 90) $prog_class_kr = 'prog-high';
-                                            else if ($display_prog_kr >= 70) $prog_class_kr = 'prog-mid';
-                                        ?>
-                                            <?php 
-                                            $row_class_kr = 'row-kr-sub ' . $prog_class_kr;
-                                            if (($r['status'] ?? '') === 'completed') $row_class_kr .= ' row-completed';
-                                            if (($r['status'] ?? '') === 'at_risk' || ($r['status'] ?? '') === 'delayed') $row_class_kr .= ' row-at-risk';
-                                            ?>
-                                            <tr class="<?php echo $row_class_kr; ?>">
-                                                <td class="col-name">
-                                                    <h4 class="item-main-title">
-                                                        <span class="kr-badge">KR <?php echo $kr_idx++; ?></span>
+                                                        <span class="kr-badge">KR <?php echo ($r_idx - 1); ?></span>
                                                         <?php echo htmlspecialchars($r['metric_name'] ?? ''); ?>
                                                         <?php if(($expl_counts['metric'][$r['id']] ?? 0) > 0): ?>
                                                             <i class="fas fa-exclamation-circle has-explanation-icon" onclick="openExplanationSidebar(<?php echo $r['id']; ?>, 'metric', '<?php echo addslashes($r['metric_name'] ?? ''); ?>')" title="Xem giải trình/lưu ý"></i>
                                                         <?php endif; ?>
                                                     </h4>
+                                                    <button class="btn-add-inline" title="Add activity to this result" onclick="openAddModal(<?php echo $obj['id']; ?>, 'activity', <?php echo $r['id']; ?>)" style="margin-left:8px;"><i class="fas fa-plus-circle"></i> Add KA</button>
+                                                </div>
+                                            </td>
+                                            <td class="col-owner" style="text-align:center;">
+                                                <div style="display:flex; justify-content:center; align-items:center;">
+                                                    <div class="user-avatar avatar-purple" style="margin:0; overflow:hidden; position:relative; z-index:1; border: 1.5px solid #fff; box-shadow: 0 2px 4px rgba(0,0,0,0.1);" title="<?php echo htmlspecialchars($r['owner_name'] ?? ''); ?>">
+                                                        <?php if(!empty($r['owner_image'])): ?>
+                                                            <img src="<?php echo htmlspecialchars($r['owner_image']); ?>" style="width:100%; height:100%; object-fit:cover;">
+                                                        <?php else: ?>
+                                                            <?php echo $r['owner_avatar'] ?? ''; ?>
+                                                        <?php endif; ?>
+                                                    </div>
+                                                    <?php if(!empty($r['owner_2_name'])): ?>
+                                                    <div class="user-avatar avatar-purple" style="margin-left:-12px; overflow:hidden; position:relative; z-index:2; border: 1.5px solid #fff; box-shadow: 0 2px 4px rgba(0,0,0,0.1);" title="<?php echo htmlspecialchars($r['owner_2_name'] ?? ''); ?>">
+                                                        <?php if(!empty($r['owner_2_image'])): ?>
+                                                            <img src="<?php echo htmlspecialchars($r['owner_2_image']); ?>" style="width:100%; height:100%; object-fit:cover;">
+                                                        <?php else: ?>
+                                                            <?php echo $r['owner_2_avatar'] ?? ''; ?>
+                                                        <?php endif; ?>
+                                                    </div>
+                                                    <?php endif; ?>
+                                                </div>
+                                            </td>
+                                            <td class="col-weight" style="text-align:center; font-weight:600;"><?php echo intval($r['weight'] ?? 0); ?>%</td>
+                                            <td class="col-status"><?php echo getBadgeHtml($r['status'] ?? 'pending'); ?></td>
+                                            <td class="col-progress">
+                                                <div style="display:flex; align-items:center; gap:8px;">
+                                                    <span style="font-weight:700; font-size:12px; min-width:32px;"><span id="td-val-metric-<?php echo $r['id']; ?>"><?php echo intval($display_prog_kr); ?></span>%</span>
+                                                    <div class="progress-tiny"><div class="progress-bar" id="td-bar-metric-<?php echo $r['id']; ?>" style="width: <?php echo $display_prog_kr; ?>%; background:#0071e3;"></div></div>
+                                                </div>
+                                                <?php echo renderWeeklyTrackingDots($r['id'], 'metric', $weekly_tracking_map, $current_week_num, $progress_pct); ?>
+                                            </td>
+                                            <td class="col-action">
+                                                <div style="display:flex; align-items:center; gap:4px;">
+                                                    <button class="btn-edit-row" onclick="openUpdateModal('<?php echo addslashes($r['metric_name'] ?? ''); ?>', 'metric', <?php echo $r['id']; ?>, <?php echo round($progress_pct, 1); ?>, 100, '<?php echo $r['status'] ?? 'pending'; ?>', <?php echo intval($r['owner_id'] ?? 0); ?>, <?php echo intval($r['owner_2_id'] ?? 0); ?>, '<?php echo $r['priority'] ?? 'medium'; ?>', <?php echo intval($r['weight'] ?? 0); ?>, <?php echo $obj['id']; ?>, 0, <?php echo intval($r['sort_order'] ?? 0); ?>)"><i class="fas fa-history"></i></button>
+                                                    <button class="btn-delete-row" title="Delete KR" onclick="deleteOkrItem(<?php echo $r['id']; ?>, 'metric')"><i class="fas fa-trash-alt"></i></button>
+                                                </div>
+                                            </td>
+                                        </tr>
+
+                                        <!-- Nested Activities for this KR -->
+                                        <?php if (!empty($r['activities'])): $ka_idx = 1; foreach ($r['activities'] as $ka): 
+                                            $display_prog_ka = getLatestWeeklyProgress($ka['id'], 'activity', $weekly_tracking_map, $current_week_num, $ka['progress']); 
+                                            $prog_class_ka = 'prog-low';
+                                            if ($display_prog_ka >= 90) $prog_class_ka = 'prog-high';
+                                            else if ($display_prog_ka >= 70) $prog_class_ka = 'prog-mid';
+                                            
+                                            $row_class_ka = 'row-kr-sub ' . $prog_class_ka;
+                                            if (($ka['status'] ?? '') === 'completed') $row_class_ka .= ' row-completed';
+                                        ?>
+                                            <tr class="<?php echo $row_class_ka; ?>">
+                                                <td class="col-name">
+                                                    <h4 class="item-main-title">
+                                                        <span class="ka-badge">KA <?php echo $ka_idx++; ?></span>
+                                                        <?php echo htmlspecialchars($ka['activity_name'] ?? ''); ?>
+                                                        <?php if(($expl_counts['activity'][$ka['id']] ?? 0) > 0): ?>
+                                                            <i class="fas fa-exclamation-circle has-explanation-icon" onclick="openExplanationSidebar(<?php echo $ka['id']; ?>, 'activity', '<?php echo addslashes($ka['activity_name'] ?? ''); ?>')" title="Xem giải trình/lưu ý"></i>
+                                                        <?php endif; ?>
+                                                    </h4>
                                                 </td>
                                                 <td class="col-owner" style="text-align:center;">
-                                                    <div style="display:flex; justify-content:center; align-items:center;">
-                                                        <div class="user-avatar avatar-purple" style="margin:0; overflow:hidden; position:relative; z-index:1; border: 1.5px solid #fff; box-shadow: 0 2px 4px rgba(0,0,0,0.1);" title="<?php echo htmlspecialchars($r['owner_name'] ?? ''); ?>">
-                                                            <?php if(!empty($r['owner_image'])): ?>
-                                                                <img src="<?php echo htmlspecialchars($r['owner_image']); ?>" style="width:100%; height:100%; object-fit:cover;">
-                                                            <?php else: ?>
-                                                                <?php echo $r['owner_avatar'] ?? ''; ?>
-                                                            <?php endif; ?>
-                                                        </div>
-                                                        <?php if(!empty($r['owner_2_name'])): ?>
-                                                        <div class="user-avatar avatar-purple" style="margin-left:-12px; overflow:hidden; position:relative; z-index:2; border: 1.5px solid #fff; box-shadow: 0 2px 4px rgba(0,0,0,0.1);" title="<?php echo htmlspecialchars($r['owner_2_name'] ?? ''); ?>">
-                                                            <?php if(!empty($r['owner_2_image'])): ?>
-                                                                <img src="<?php echo htmlspecialchars($r['owner_2_image']); ?>" style="width:100%; height:100%; object-fit:cover;">
-                                                            <?php else: ?>
-                                                                <?php echo $r['owner_2_avatar'] ?? ''; ?>
-                                                            <?php endif; ?>
-                                                        </div>
+                                                    <div class="user-avatar avatar-purple" style="margin:0 auto; overflow:hidden;" title="<?php echo htmlspecialchars($ka['owner_name'] ?? ''); ?>">
+                                                        <?php if(!empty($ka['owner_image'])): ?>
+                                                            <img src="<?php echo htmlspecialchars($ka['owner_image']); ?>" style="width:100%; height:100%; object-fit:cover;">
+                                                        <?php else: ?>
+                                                            <?php echo $ka['owner_avatar'] ?? '??'; ?>
                                                         <?php endif; ?>
                                                     </div>
                                                 </td>
-                                                <td class="col-weight" style="text-align:center; color:#86868b; font-weight:500;"><?php echo intval($r['weight'] ?? 0); ?>%</td>
-                                                <td class="col-status"><?php echo getBadgeHtml($r['status']); ?></td>
+                                                <td class="col-weight" style="text-align:center; font-weight:500; color:#86868b;"><?php echo intval($ka['weight'] ?? 0); ?>%</td>
+                                                <td class="col-status"><?php echo getBadgeHtml($ka['status']); ?></td>
                                                 <td class="col-progress">
                                                     <div style="display:flex; align-items:center; gap:8px;">
-                                                        <?php $display_prog = getLatestWeeklyProgress($r['id'], 'metric', $weekly_tracking_map, $current_week_num, $progress_pct); ?>
-                                                        <span style="font-weight:700; font-size:11px; color:#8e8e93; min-width:32px;"><span id="td-val-metric-<?php echo $r['id']; ?>"><?php echo $display_prog; ?></span>%</span>
-                                                        <div class="progress-tiny"><div class="progress-bar" id="td-bar-metric-<?php echo $r['id']; ?>" style="width: <?php echo $display_prog; ?>%; background:#0071e3;"></div></div>
+                                                        <span style="font-weight:700; font-size:11px; color:#8e8e93; min-width:32px;"><span><?php echo intval($display_prog_ka); ?></span>%</span>
+                                                        <div class="progress-tiny"><div class="progress-bar" style="width: <?php echo $display_prog_ka; ?>%; background:#34c759;"></div></div>
                                                     </div>
-                                                    <?php echo renderWeeklyTrackingDots($r['id'], 'metric', $weekly_tracking_map, $current_week_num, $progress_pct); ?>
+                                                    <?php echo renderWeeklyTrackingDots($ka['id'], 'activity', $weekly_tracking_map, $current_week_num, $ka['progress']); ?>
                                                 </td>
                                                 <td class="col-action">
                                                     <div style="display:flex; align-items:center; gap:4px;">
-                                                        <button class="btn-edit-row" onclick="openUpdateModal('<?php echo addslashes($r['metric_name'] ?? ''); ?>', 'metric', <?php echo $r['id']; ?>, <?php echo round($progress_pct, 1); ?>, 100, '<?php echo $r['status'] ?? 'pending'; ?>', <?php echo intval($r['owner_id'] ?? 0); ?>, <?php echo intval($r['owner_2_id'] ?? 0); ?>, '<?php echo $r['priority'] ?? 'medium'; ?>', <?php echo intval($r['weight'] ?? 0); ?>, <?php echo $obj['id']; ?>, <?php echo $a['id']; ?>, <?php echo intval($r['sort_order'] ?? 0); ?>)"><i class="fas fa-history"></i></button>
-                                                        <button class="btn-delete-row" title="Delete KR" onclick="deleteOkrItem(<?php echo $r['id']; ?>, 'metric')"><i class="fas fa-trash-alt"></i></button>
+                                                        <button class="btn-edit-row" onclick="openUpdateModal('<?php echo addslashes($ka['activity_name'] ?? ''); ?>', 'activity', <?php echo $ka['id']; ?>, <?php echo floatval($ka['progress'] ?? 0); ?>, 100, '<?php echo $ka['status'] ?? 'pending'; ?>', <?php echo intval($ka['owner_id'] ?? 0); ?>, 0, '<?php echo $ka['priority'] ?? 'medium'; ?>', <?php echo intval($ka['weight'] ?? 0); ?>, <?php echo $obj['id']; ?>, <?php echo $r['id']; ?>, <?php echo intval($ka['sort_order'] ?? 0); ?>)"><i class="fas fa-history"></i></button>
+                                                        <button class="btn-delete-row" title="Delete KA" onclick="deleteOkrItem(<?php echo $ka['id']; ?>, 'activity')"><i class="fas fa-trash-alt"></i></button>
                                                     </div>
                                                 </td>
                                             </tr>
                                         <?php endforeach; endif; ?>
                                     <?php endforeach; ?>
 
-                                    <!-- Unlinked Results -->
-                                    <?php if (!empty($obj['unlinked_results'])): ?>
-                                        <tr style="background:#fbfbfd;"><td colspan="6" style="font-size:10px; font-weight:700; color:#86868b; text-transform:uppercase; letter-spacing:0.05em; padding:12px 20px; border-top:1px solid #f2f2f7;">Other Results (Unlinked) <button class="btn-add-inline" onclick="openAddModal(<?php echo $obj['id']; ?>, 'metric')" style="margin-left:8px;">+ Add KR</button></td></tr>
-                                        <?php foreach ($obj['unlinked_results'] as $r): 
-                                            $progress_pct = ($r['target_value'] > 0) ? ($r['current_value'] / $r['target_value']) * 100 : 0;
-                                            $progress_pct = min(100, round($progress_pct, 1));
-                                            
+                                    <!-- Unlinked Activities -->
+                                    <?php if (!empty($obj['unlinked_activities'])): ?>
+                                        <tr style="background:#fbfbfd;"><td colspan="6" style="font-size:10px; font-weight:700; color:#86868b; text-transform:uppercase; letter-spacing:0.05em; padding:12px 20px; border-top:1px solid #f2f2f7;">Other Activities (Unlinked) <button class="btn-add-inline" onclick="openAddModal(<?php echo $obj['id']; ?>, 'activity')" style="margin-left:8px;">+ Add KA</button></td></tr>
+                                        <?php foreach ($obj['unlinked_activities'] as $ka): 
+                                            $display_prog_ka = getLatestWeeklyProgress($ka['id'], 'activity', $weekly_tracking_map, $current_week_num, $ka['progress']); 
                                             $row_class = '';
-                                            if (($r['status'] ?? '') === 'completed') $row_class = 'row-completed';
-                                            if (($r['status'] ?? '') === 'at_risk' || ($r['status'] ?? '') === 'delayed') $row_class = 'row-at-risk';
+                                            if (($ka['status'] ?? '') === 'completed') $row_class = 'row-completed';
                                         ?>
                                             <tr class="<?php echo $row_class; ?>">
                                                 <td class="col-name" style="padding-left:20px !important;">
-                                                    <h4 class="item-main-title"><?php echo htmlspecialchars($r['metric_name'] ?? ''); ?></h4>
+                                                    <h4 class="item-main-title"><?php echo htmlspecialchars($ka['activity_name'] ?? ''); ?></h4>
                                                 </td>
                                                 <td class="col-owner" style="text-align:center;">
-                                                    <div style="display:flex; justify-content:center; align-items:center;">
-                                                        <div class="user-avatar avatar-purple" style="margin:0; overflow:hidden; position:relative; z-index:1; border: 1.5px solid #fff; box-shadow: 0 2px 4px rgba(0,0,0,0.1);" title="<?php echo htmlspecialchars($r['owner_name'] ?? ''); ?>">
-                                                            <?php if(!empty($r['owner_image'])): ?>
-                                                                <img src="<?php echo htmlspecialchars($r['owner_image']); ?>" style="width:100%; height:100%; object-fit:cover;">
-                                                            <?php else: ?>
-                                                                <?php echo $r['owner_avatar'] ?? ''; ?>
-                                                            <?php endif; ?>
-                                                        </div>
-                                                        <?php if(!empty($r['owner_2_name'])): ?>
-                                                        <div class="user-avatar avatar-purple" style="margin-left:-12px; overflow:hidden; position:relative; z-index:2; border: 1.5px solid #fff; box-shadow: 0 2px 4px rgba(0,0,0,0.1);" title="<?php echo htmlspecialchars($r['owner_2_name'] ?? ''); ?>">
-                                                            <?php if(!empty($r['owner_2_image'])): ?>
-                                                                <img src="<?php echo htmlspecialchars($r['owner_2_image']); ?>" style="width:100%; height:100%; object-fit:cover;">
-                                                            <?php else: ?>
-                                                                <?php echo $r['owner_2_avatar'] ?? ''; ?>
-                                                            <?php endif; ?>
-                                                        </div>
+                                                    <div class="user-avatar" style="margin:0 auto; overflow:hidden;" title="<?php echo htmlspecialchars($ka['owner_name'] ?? ''); ?>">
+                                                        <?php if(!empty($ka['owner_image'])): ?>
+                                                            <img src="<?php echo htmlspecialchars($ka['owner_image']); ?>" style="width:100%; height:100%; object-fit:cover;">
+                                                        <?php else: ?>
+                                                            <?php echo $ka['owner_avatar'] ?? '??'; ?>
                                                         <?php endif; ?>
                                                     </div>
                                                 </td>
-                                                <td class="col-weight" style="text-align:center; color:#86868b; font-weight:500;"><?php echo intval($r['weight'] ?? 0); ?>%</td>
-                                                <td class="col-status"><?php echo getBadgeHtml($r['status']); ?></td>
+                                                <td class="col-weight" style="text-align:center; color:#86868b; font-weight:500;"><?php echo intval($ka['weight'] ?? 0); ?>%</td>
+                                                <td class="col-status"><?php echo getBadgeHtml($ka['status']); ?></td>
                                                 <td class="col-progress">
                                                     <div style="display:flex; align-items:center; gap:8px;">
-                                                        <?php $display_prog = getLatestWeeklyProgress($r['id'], 'metric', $weekly_tracking_map, $current_week_num, $progress_pct); ?>
-                                                        <span style="font-weight:700; font-size:11px; color:#8e8e93; min-width:32px;"><span id="td-val-metric-<?php echo $r['id']; ?>"><?php echo $display_prog; ?></span>%</span>
-                                                        <div class="progress-tiny"><div class="progress-bar" id="td-bar-metric-<?php echo $r['id']; ?>" style="width: <?php echo $display_prog; ?>%; background:#0071e3;"></div></div>
+                                                        <span style="font-weight:700; font-size:11px; color:#8e8e93; min-width:32px;"><span><?php echo intval($display_prog_ka); ?></span>%</span>
+                                                        <div class="progress-tiny"><div class="progress-bar" style="width: <?php echo $display_prog_ka; ?>%; background:#34c759;"></div></div>
                                                     </div>
-                                                    <?php echo renderWeeklyTrackingDots($r['id'], 'metric', $weekly_tracking_map, $current_week_num, $progress_pct); ?>
+                                                    <?php echo renderWeeklyTrackingDots($ka['id'], 'activity', $weekly_tracking_map, $current_week_num, $ka['progress']); ?>
                                                 </td>
                                                 <td class="col-action">
                                                     <div style="display:flex; align-items:center; gap:4px;">
-                                                        <button class="btn-edit-row" onclick="openUpdateModal('<?php echo addslashes($r['metric_name'] ?? ''); ?>', 'metric', <?php echo $r['id']; ?>, <?php echo round($progress_pct, 1); ?>, 100, '<?php echo $r['status'] ?? 'pending'; ?>', <?php echo intval($r['owner_id'] ?? 0); ?>, <?php echo intval($r['owner_2_id'] ?? 0); ?>, '<?php echo $r['priority'] ?? 'medium'; ?>', <?php echo intval($r['weight'] ?? 0); ?>, <?php echo $obj['id']; ?>, 0, <?php echo intval($r['sort_order'] ?? 0); ?>)"><i class="fas fa-history"></i></button>
-                                                        <button class="btn-delete-row" title="Delete KR" onclick="deleteOkrItem(<?php echo $r['id']; ?>, 'metric')"><i class="fas fa-trash-alt"></i></button>
+                                                        <button class="btn-edit-row" onclick="openUpdateModal('<?php echo addslashes($ka['activity_name'] ?? ''); ?>', 'activity', <?php echo $ka['id']; ?>, <?php echo floatval($ka['progress'] ?? 0); ?>, 100, '<?php echo $ka['status'] ?? 'pending'; ?>', <?php echo intval($ka['owner_id'] ?? 0); ?>, 0, '<?php echo $ka['priority'] ?? 'medium'; ?>', <?php echo intval($ka['weight'] ?? 0); ?>, <?php echo $obj['id']; ?>, 0, <?php echo intval($ka['sort_order'] ?? 0); ?>)"><i class="fas fa-history"></i></button>
+                                                        <button class="btn-delete-row" title="Delete KA" onclick="deleteOkrItem(<?php echo $ka['id']; ?>, 'activity')"><i class="fas fa-trash-alt"></i></button>
                                                     </div>
                                                 </td>
                                             </tr>
-                                        <?php endforeach; ?>
-                                    <?php endif; ?>
+                                        <?php endforeach; endif; ?>
                                 <?php endif; ?>
                             </tbody>
                         </table>
@@ -1747,8 +1814,14 @@ function getLatestWeeklyProgress($id, $type, $map, $current_week, $live_fallback
                     <input type="hidden" id="updateItemExplanation">
                 </div>
 
-                <div class="modal-control" id="updateItemParentActivityControl" style="display:none;">
-                    <label>Liên kết với Key Activity (Công việc)</label>
+                <div class="modal-control" id="updateItemParentResultControl" style="display:none;">
+                    <label>Liên kết với Key Result (Kết quả then chốt)</label>
+                    <select id="updateItemResult">
+                        <option value="0">-- Không liên kết --</option>
+                    </select>
+                </div>
+                <div class="modal-control" id="updateItemLinkActivityControl" style="display:none;">
+                    <label>Liên kết với Công việc (Key Activity)</label>
                     <select id="updateItemActivity">
                         <option value="0">-- Không liên kết --</option>
                     </select>
@@ -1801,8 +1874,14 @@ function getLatestWeeklyProgress($id, $type, $map, $current_week, $live_fallback
                 </div>
 
 
+                <div class="modal-control" id="addModalParentResultControl" style="display:none;">
+                    <label>Linked Key Result</label>
+                    <select id="addModalResult">
+                        <option value="0">-- Không liên kết --</option>
+                    </select>
+                </div>
                 <div class="modal-control" id="addModalActivityControl" style="display:none;">
-                    <label>Linked Key Activity</label>
+                    <label>Link Existing Activity (KA)</label>
                     <select id="addModalActivity">
                         <option value="0">-- Không liên kết --</option>
                     </select>
@@ -2179,7 +2258,7 @@ function getLatestWeeklyProgress($id, $type, $map, $current_week, $live_fallback
             card.classList.toggle('collapsed');
         }
 
-    function openUpdateModal(itemName, type, id, currentValue, targetValue, status, ownerId, owner2Id, priority, weight, objId, activityId, sortOrder) {
+    function openUpdateModal(itemName, type, id, currentValue, targetValue, status, ownerId, owner2Id, priority, weight, objId, resultId, sortOrder) {
             document.getElementById('updateModalTitle').innerText = 'Update ' + (type === 'metric' ? 'Key Result' : 'Activity');
             document.getElementById('updateItemId').value = id;
             document.getElementById('updateItemType').value = type;
@@ -2202,25 +2281,53 @@ function getLatestWeeklyProgress($id, $type, $map, $current_week, $live_fallback
             document.getElementById('updateItemWeek').value = <?php echo $current_week_num; ?>;
             quill.root.innerHTML = ''; // Clear Editor
 
-            // Handle parent Activity linking UI for Key Results
-            const activityControl = document.getElementById('updateItemParentActivityControl');
-            const activitySelect = document.getElementById('updateItemActivity');
-            if (type === 'metric') {
-                activityControl.style.display = 'block';
-                activitySelect.innerHTML = '<option value="0">-- Không liên kết --</option>';
-                // Populate Activity list for this objective from the page
-                const activityElements = document.querySelectorAll(`.activity-row-for-obj-${objId}`);
-                activityElements.forEach(el => {
-                    const a_id = el.getAttribute('data-id');
-                    const a_name = el.getAttribute('data-name');
+            // Handle parent Result linking UI for Key Activities
+            const resultControl = document.getElementById('updateItemParentResultControl');
+            const resultSelect = document.getElementById('updateItemResult');
+            const linkActivityControl = document.getElementById('updateItemLinkActivityControl');
+            const linkActivitySelect = document.getElementById('updateItemActivity');
+            
+            if (type === 'activity') {
+                resultControl.style.display = 'block';
+                linkActivityControl.style.display = 'none';
+                resultSelect.innerHTML = '<option value="0">-- Không liên kết --</option>';
+                const objCard = document.querySelector(`.okr-card-header h3[data-id="${objId}"]`)?.closest('.okr-card') || document.body;
+                const krRows = objCard.querySelectorAll('table tr.activity-header'); 
+                krRows.forEach(row => {
+                   const editBtn = row.querySelector('.btn-edit-row');
+                   if (!editBtn) return;
+                   const matches = editBtn.getAttribute('onclick').match(/metric',\s*(\d+)/);
+                   if (!matches) return;
+                   const r_id = matches[1];
+                   const r_name = row.querySelector('.item-main-title').innerText.replace(/^KR \d+/, '').trim();
+                   const opt = document.createElement('option');
+                   opt.value = r_id;
+                   opt.innerText = r_name;
+                   if (parseInt(r_id) === parseInt(resultId)) opt.selected = true;
+                   resultSelect.appendChild(opt);
+                });
+            } else if (type === 'metric') {
+                resultControl.style.display = 'none';
+                linkActivityControl.style.display = 'block';
+                linkActivitySelect.innerHTML = '<option value="0">-- Không liên kết --</option>';
+                // Find unlinked KAs in this objective
+                const objCard = document.querySelector(`.okr-card-header h3[data-id="${objId}"]`)?.closest('.okr-card') || document.body;
+                const unlinkedKAs = objCard.querySelectorAll('tr:not(.activity-header):not(.row-kr-sub) .item-main-title');
+                unlinkedKAs.forEach(title => {
+                    const row = title.closest('tr');
+                    const editBtn = row.querySelector('.btn-edit-row');
+                    if (!editBtn) return;
+                    const matches = editBtn.getAttribute('onclick').match(/activity',\s*(\d+)/);
+                    if (!matches) return;
+                    const a_id = matches[1];
                     const opt = document.createElement('option');
                     opt.value = a_id;
-                    opt.innerText = a_name;
-                    if (parseInt(a_id) === parseInt(activityId)) opt.selected = true;
-                    activitySelect.appendChild(opt);
+                    opt.innerText = title.innerText.trim();
+                    linkActivitySelect.appendChild(opt);
                 });
             } else {
-                activityControl.style.display = 'none';
+                resultControl.style.display = 'none';
+                linkActivityControl.style.display = 'none';
             }
 
             // Both KA and KR use progress % (0-100)
@@ -2379,6 +2486,7 @@ function getLatestWeeklyProgress($id, $type, $map, $current_week, $live_fallback
                 sort_order: document.getElementById('updateItemSortOrder').value,
                 explanation: explanation,
                 week_num: document.getElementById('updateItemWeek').value,
+                parent_id: (type === 'activity') ? document.getElementById('updateItemResult').value : 0,
                 activity_id: (type === 'metric') ? document.getElementById('updateItemActivity').value : 0,
                 save_quarter: <?php echo $current_quarter; ?>,
                 save_year: <?php echo $current_year; ?>
@@ -2447,42 +2555,63 @@ function getLatestWeeklyProgress($id, $type, $map, $current_week, $live_fallback
         }
 
         /* ADD MODAL */
-        function openAddModal(obj_id, type, activity_id = 0) {
+        function openAddModal(obj_id, type, result_id = 0) {
             document.getElementById('addModalObjId').value = obj_id;
             document.getElementById('addModalType').value = type;
-            document.getElementById('addModalActivityId').value = activity_id;
             document.getElementById('addModalName').value = '';
             document.getElementById('addModalOwner').value = '';
 
-            const activityControl = document.getElementById('addModalActivityControl');
-            const activitySelect = document.getElementById('addModalActivity');
+                const resultControl = document.getElementById('addModalParentResultControl');
+                const resultSelect = document.getElementById('addModalResult');
+                const activityControl = document.getElementById('addModalActivityControl');
+                const activitySelect = document.getElementById('addModalActivity');
 
-            if (type === 'metric') {
-                document.getElementById('addModalTitle').innerText = 'Add Target Result (Metric)';
-                document.getElementById('addModalNameLbl').innerText = 'Metric Description';
-                
-                document.getElementById('addModalOwner2Control').style.display = 'block';
-                document.getElementById('addModalOwner2').value = '0';
-
-                activityControl.style.display = 'block';
-                activitySelect.innerHTML = '<option value="0">-- Không liên kết --</option>';
-                // Populate from DOM
-                const activityElements = document.querySelectorAll(`.activity-row-for-obj-${obj_id}`);
-                activityElements.forEach(el => {
-                    const a_id = el.getAttribute('data-id');
-                    const a_name = el.getAttribute('data-name');
-                    const opt = document.createElement('option');
-                    opt.value = a_id;
-                    opt.innerText = a_name;
-                    if (parseInt(a_id) === parseInt(activity_id)) opt.selected = true;
-                    activitySelect.appendChild(opt);
-                });
-            } else {
-                document.getElementById('addModalTitle').innerText = 'Add Key Activity';
-                document.getElementById('addModalNameLbl').innerText = 'Activity Description';
-                document.getElementById('addModalOwner2Control').style.display = 'none';
-                activityControl.style.display = 'none';
-            }
+                if (type === 'activity') {
+                    document.getElementById('addModalTitle').innerText = 'Add Key Activity';
+                    document.getElementById('addModalNameLbl').innerText = 'Activity Description';
+                    document.getElementById('addModalOwner2Control').style.display = 'none';
+                    activityControl.style.display = 'none';
+                    resultControl.style.display = 'block';
+                    resultSelect.innerHTML = '<option value="0">-- Không liên kết --</option>';
+                    
+                    const objCard = document.querySelector(`.okr-card-header h3[data-id="${obj_id}"]`)?.closest('.okr-card') || document.body;
+                    const krRows = objCard.querySelectorAll('table tr.activity-header');
+                    krRows.forEach(row => {
+                       const editBtn = row.querySelector('.btn-edit-row');
+                       if(!editBtn) return;
+                       const matches = editBtn.getAttribute('onclick').match(/metric',\s*(\d+)/);
+                       if(!matches) return;
+                       const r_id = matches[1];
+                       const r_name = row.querySelector('.item-main-title').innerText.replace(/^KR \d+/, '').trim();
+                       const opt = document.createElement('option');
+                       opt.value = r_id;
+                       opt.innerText = r_name;
+                       if (parseInt(r_id) === parseInt(result_id)) opt.selected = true;
+                       resultSelect.appendChild(opt);
+                    });
+                } else {
+                    document.getElementById('addModalTitle').innerText = 'Add Target Result (Metric)';
+                    document.getElementById('addModalNameLbl').innerText = 'Metric Description';
+                    document.getElementById('addModalOwner2Control').style.display = 'block';
+                    document.getElementById('addModalOwner2').value = '0';
+                    resultControl.style.display = 'none';
+                    activityControl.style.display = 'block';
+                    activitySelect.innerHTML = '<option value="0">-- Không liên kết --</option>';
+                    const objCard = document.querySelector(`.okr-card-header h3[data-id="${obj_id}"]`)?.closest('.okr-card') || document.body;
+                    const unlinkedKAs = objCard.querySelectorAll('tr:not(.activity-header):not(.row-kr-sub) .item-main-title');
+                    unlinkedKAs.forEach(title => {
+                        const row = title.closest('tr');
+                        const editBtn = row.querySelector('.btn-edit-row');
+                        if (!editBtn) return;
+                        const matches = editBtn.getAttribute('onclick').match(/activity',\s*(\d+)/);
+                        if (!matches) return;
+                        const a_id = matches[1];
+                        const opt = document.createElement('option');
+                        opt.value = a_id;
+                        opt.innerText = title.innerText.trim();
+                        activitySelect.appendChild(opt);
+                    });
+                }
 
             let modal = document.getElementById('addModalOverlay');
             modal.style.display = 'flex';
@@ -2513,6 +2642,7 @@ function getLatestWeeklyProgress($id, $type, $map, $current_week, $live_fallback
             const priority = document.getElementById('addItemPriority').value;
             const weight = document.getElementById('addItemWeight').value;
             const sort_order = document.getElementById('addItemSort').value;
+            const result_id = (type === 'activity') ? document.getElementById('addModalResult').value : 0;
             const activity_id = (type === 'metric') ? document.getElementById('addModalActivity').value : 0;
 
             if (!name) { alert("Vui lòng nhập tên công việc/chỉ số!"); return; }
@@ -2531,6 +2661,7 @@ function getLatestWeeklyProgress($id, $type, $map, $current_week, $live_fallback
                 priority: priority,
                 weight: weight,
                 sort_order: sort_order,
+                parent_id: result_id,
                 activity_id: activity_id
             }, function(res) {
                 document.getElementById('addLoadingSpinner').style.display = 'none';
@@ -2889,6 +3020,119 @@ function getLatestWeeklyProgress($id, $type, $map, $current_week, $live_fallback
             });
         }
         <?php endif; ?>
+    </script>
+    <!-- OKR Team Management Modal -->
+    <div id="okrTeamManagementModal" class="apple-modal-overlay" onclick="if(event.target===this) closeOkrTeamManagementModal()">
+        <div class="apple-modal">
+            <div class="modal-body" style="padding-top:20px;">
+                <h3 class="modal-title">OKR Teams Management</h3>
+                <p class="modal-subtitle">Create teams and assign members specifically for OKRs.</p>
+                
+                <div class="modal-control">
+                    <label>Add New Team</label>
+                    <div style="display:flex; gap:8px;">
+                        <input type="text" id="new_team_name" placeholder="Enter team name..." style="flex:1;">
+                        <button class="btn-apple" onclick="saveNewOkrTeam()" style="padding:10px 20px;">Add</button>
+                    </div>
+                </div>
+
+                <div id="okrTeamsListContainer" style="margin-top:24px;">
+                    <!-- Teams will be loaded here -->
+                </div>
+            </div>
+            <div class="modal-actions" style="background:#fff;">
+                <button class="btn-secondary" onclick="closeOkrTeamManagementModal()">Close</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+    function openOkrTeamManagementModal() {
+        $('#okrTeamManagementModal').fadeIn(200).css('display','flex').find('.apple-modal').addClass('active');
+        loadOkrTeams();
+    }
+    function closeOkrTeamManagementModal() {
+        $('#okrTeamManagementModal').find('.apple-modal').removeClass('active');
+        setTimeout(() => $('#okrTeamManagementModal').fadeOut(200), 400);
+    }
+    function loadOkrTeams() {
+        $('#okrTeamsListContainer').html('<p style="text-align:center; color:#86868b; padding:20px;"><i class="fas fa-spinner fa-spin"></i> Loading teams...</p>');
+        $.post(window.location.href, { action: 'fetch_okr_teams_data' }, function(res) {
+            if(res.success) {
+                let html = '';
+                if(res.teams.length === 0) {
+                    html = '<div style="text-align:center; padding:40px; color:#86868b; border:1px dashed #d2d2d7; border-radius:12px;">No teams created yet.</div>';
+                } else {
+                    res.teams.forEach(t => {
+                        html += `
+                        <div class="team-mgmt-item" style="background:#fbfbfd; border:1px solid #e5e5ea; border-radius:12px; padding:16px; margin-bottom:16px;">
+                            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+                                <strong style="font-size:15px; color:#1d1d1f;">${t.team_name}</strong>
+                                <button class="btn-delete-row" style="opacity:1;" onclick="deleteOkrTeam(${t.id})"><i class="fas fa-trash-alt"></i></button>
+                            </div>
+                            <div class="modal-control" style="margin-bottom:0;">
+                                <label style="font-size:11px;">Assign Members</label>
+                                <select class="team-members-select" multiple data-team-id="${t.id}" style="height:120px; font-size:13px; background:#fff;">
+                                    <?php foreach($all_users_for_mgmt as $u): ?>
+                                        <option value="<?php echo $u['id']; ?>"><?php echo htmlspecialchars($u['full_name']); ?></option>
+                                    <?php endforeach; ?>
+                                </select>
+                                <button class="btn-apple" style="width:100%; margin-top:8px; font-size:12px; padding:8px;" onclick="saveTeamMembers(this, ${t.id})">Update Members</button>
+                            </div>
+                        </div>`;
+                    });
+                }
+                $('#okrTeamsListContainer').html(html);
+                
+                // Set selections
+                res.teams.forEach(t => {
+                    let select = $(`.team-members-select[data-team-id="${t.id}"]`);
+                    select.val(t.members);
+                });
+            }
+        }, 'json');
+    }
+    function saveNewOkrTeam() {
+        let name = $('#new_team_name').val().trim();
+        if(!name) return;
+        $.post(window.location.href, { action: 'save_okr_new_team', name: name }, function(res) {
+            if(res.success) {
+                $('#new_team_name').val('');
+                loadOkrTeams();
+                Swal.fire({ icon: 'success', title: 'Team added!', timer: 1000, showConfirmButton: false });
+            } else {
+                Swal.fire({ icon: 'error', title: 'Lỗi', text: 'Không thể thêm team' });
+            }
+        }, 'json');
+    }
+    function deleteOkrTeam(id) {
+        Swal.fire({
+            title: 'Delete this team?',
+            text: "Objectives associated with this team name will still exist but the tab will be gone.",
+            icon: 'warning',
+            showCancelButton: true,
+            confirmButtonText: 'Yes, delete it!'
+        }).then((result) => {
+            if (result.isConfirmed) {
+                $.post(window.location.href, { action: 'delete_okr_team_data', id: id }, function(res) {
+                    if(res.success) {
+                        loadOkrTeams();
+                    }
+                }, 'json');
+            }
+        });
+    }
+    function saveTeamMembers(btn, teamId) {
+        let select = $(btn).siblings('.team-members-select');
+        let userIds = select.val();
+        $(btn).prop('disabled', true).html('<i class="fas fa-spinner fa-spin"></i> Saving...');
+        $.post(window.location.href, { action: 'update_okr_team_members', team_id: teamId, user_ids: userIds }, function(res) {
+            $(btn).prop('disabled', false).html('Update Members');
+            if(res.success) {
+                Swal.fire({ icon: 'success', title: 'Members updated!', timer: 800, showConfirmButton: false });
+            }
+        }, 'json');
+    }
     </script>
 </body>
 </html>
