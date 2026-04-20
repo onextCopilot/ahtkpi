@@ -16,10 +16,39 @@ function addColIfNotExists($conn, $table, $col, $def) {
 $conn->query("CREATE TABLE IF NOT EXISTS okr_objectives (id INT AUTO_INCREMENT PRIMARY KEY, title VARCHAR(255) NOT NULL, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;");
 $conn->query("CREATE TABLE IF NOT EXISTS okr_key_activities (id INT AUTO_INCREMENT PRIMARY KEY, objective_id INT, activity_name VARCHAR(255), progress DECIMAL(5,2) DEFAULT 0, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;");
 $conn->query("CREATE TABLE IF NOT EXISTS okr_results (id INT AUTO_INCREMENT PRIMARY KEY, objective_id INT, metric_name VARCHAR(255), current_value DECIMAL(15,2) DEFAULT 0, target_value DECIMAL(15,2) DEFAULT 0, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;");
+$conn->query("CREATE TABLE IF NOT EXISTS okr_settings (setting_key VARCHAR(100) PRIMARY KEY, setting_value TEXT) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;");
+
+// Fetch OKR Settings
+$okr_settings = [];
+$s_res = $conn->query("SELECT * FROM okr_settings");
+if ($s_res) {
+    while($s_row = $s_res->fetch_assoc()) $okr_settings[$s_row['setting_key']] = $s_row['setting_value'];
+}
+
+$color_high = $okr_settings['color_high'] ?? '#f2fdf5';
+$color_mid  = $okr_settings['color_mid']  ?? '#fffcf0';
+$color_low  = $okr_settings['color_low']  ?? '#fff1f2';
+$text_high  = $okr_settings['text_high']  ?? '#166534';
+$text_mid   = $okr_settings['text_mid']   ?? '#854d0e';
+$text_low   = $okr_settings['text_low']   ?? '#991b1b';
+
+$kr_color_high = $okr_settings['kr_color_high'] ?? $color_high;
+$kr_color_mid  = $okr_settings['kr_color_mid']  ?? $color_mid;
+$kr_color_low  = $okr_settings['kr_color_low']  ?? $color_low;
+$kr_text_high  = $okr_settings['kr_text_high']  ?? $text_high;
+$kr_text_mid   = $okr_settings['kr_text_mid']   ?? $text_mid;
+$kr_text_low   = $okr_settings['kr_text_low']   ?? $text_low;
+
+$obj_color_high = $okr_settings['obj_color_high'] ?? '#ffffff';
+$obj_color_mid  = $okr_settings['obj_color_mid']  ?? '#ffffff';
+$obj_color_low  = $okr_settings['obj_color_low']  ?? '#ffffff';
+$obj_text_high  = $okr_settings['obj_text_high']  ?? '#1d1d1f';
+$obj_text_mid   = $okr_settings['obj_text_mid']   ?? '#1d1d1f';
+$obj_text_low   = $okr_settings['obj_text_low']   ?? '#1d1d1f';
 
 // Synchronize Structural Requirements (Migration Block)
 try {
-    // Objectives Table Enhancements
+    // ... items from objective table ...
     addColIfNotExists($conn, 'okr_objectives', 'team', 'VARCHAR(100) DEFAULT "Sales & Marketing"');
     addColIfNotExists($conn, 'okr_objectives', 'owner', 'VARCHAR(255)');
     addColIfNotExists($conn, 'okr_objectives', 'owner_id', 'INT DEFAULT 0');
@@ -37,6 +66,7 @@ try {
     addColIfNotExists($conn, 'okr_results', 'priority', 'VARCHAR(20) DEFAULT "medium"');
     addColIfNotExists($conn, 'okr_results', 'weight', 'INT DEFAULT 0');
     addColIfNotExists($conn, 'okr_results', 'owner_name', 'VARCHAR(255)');
+    addColIfNotExists($conn, 'okr_results', 'owner_id', 'INT DEFAULT 0');
     addColIfNotExists($conn, 'okr_results', 'owner_avatar', 'VARCHAR(10)');
     addColIfNotExists($conn, 'okr_results', 'activity_id', 'INT DEFAULT 0');
     addColIfNotExists($conn, 'okr_results', 'sort_order', 'INT DEFAULT 0');
@@ -46,14 +76,15 @@ try {
     addColIfNotExists($conn, 'okr_key_activities', 'priority', 'VARCHAR(20) DEFAULT "medium"');
     addColIfNotExists($conn, 'okr_key_activities', 'weight', 'INT DEFAULT 0');
     addColIfNotExists($conn, 'okr_key_activities', 'owner_name', 'VARCHAR(255)');
+    addColIfNotExists($conn, 'okr_key_activities', 'owner_id', 'INT DEFAULT 0');
     addColIfNotExists($conn, 'okr_key_activities', 'owner_avatar', 'VARCHAR(10)');
     addColIfNotExists($conn, 'okr_key_activities', 'kr_id', 'INT DEFAULT 0');
     addColIfNotExists($conn, 'okr_key_activities', 'sort_order', 'INT DEFAULT 0');
 
-    // Expand numeric columns to support large values (e.g. billions/trillions in revenue targets)
+    // Expand numeric columns to support large values
     @$conn->query("ALTER TABLE `okr_results` MODIFY COLUMN `target_value` DECIMAL(20,2) DEFAULT 0");
     @$conn->query("ALTER TABLE `okr_results` MODIFY COLUMN `current_value` DECIMAL(20,2) DEFAULT 0");
-} catch (Throwable $e) { /* Resilient against schema locks */ }
+} catch (Throwable $e) { }
 
 // Auto-migration for Explanations
 $check_table = $conn->query("SHOW TABLES LIKE 'okr_explanations'");
@@ -166,7 +197,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
         $priority = $is_partial ? ($curr_data['priority'] ?? 'medium') : ($_POST['priority'] ?? 'medium');
         $weight = $is_partial ? intval($curr_data['weight'] ?? 0) : intval($_POST['weight'] ?? 0);
         $name = $is_partial ? ($type==='metric' ? $curr_data['metric_name'] : $curr_data['activity_name']) : trim($_POST['name'] ?? '');
-        $owner_name = $is_partial ? ($curr_data['owner_name'] ?? '') : trim($_POST['owner'] ?? '');
+        $owner_name = $is_partial ? ($curr_data['owner_name'] ?? '') : trim($_POST['owner_name'] ?? '');
+        $owner_id = $is_partial ? intval($curr_data['owner_id'] ?? 0) : intval($_POST['owner_id'] ?? 0);
         $explanation = trim($_POST['explanation'] ?? '');
         
         if ($is_partial) {
@@ -213,11 +245,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
             $sort_order = intval($_POST['sort_order'] ?? ($curr_data['sort_order'] ?? 0));
             if ($type === 'metric') {
                 // val is now progress % — compute current_value proportionally, keep target_value intact
-                $stmt = $conn->prepare("UPDATE okr_results SET metric_name = ?, current_value = ROUND((? / 100.0) * target_value, 2), status = ?, priority = ?, weight = ?, owner_name = ?, owner_avatar = ?, activity_id = ?, sort_order = ? WHERE id = ?");
-                $stmt->bind_param("sdssissiii", $name, $val, $status, $priority, $weight, $owner_name, $avatar, $activity_id, $sort_order, $id);
+                $stmt = $conn->prepare("UPDATE okr_results SET metric_name = ?, current_value = ROUND((? / 100.0) * target_value, 2), status = ?, priority = ?, weight = ?, owner_name = ?, owner_id = ?, owner_avatar = ?, activity_id = ?, sort_order = ? WHERE id = ?");
+                $stmt->bind_param("sdssisissii", $name, $val, $status, $priority, $weight, $owner_name, $owner_id, $avatar, $activity_id, $sort_order, $id);
             } else {
-                $stmt = $conn->prepare("UPDATE okr_key_activities SET activity_name = ?, progress = ?, status = ?, priority = ?, weight = ?, owner_name = ?, owner_avatar = ?, sort_order = ? WHERE id = ?");
-                $stmt->bind_param("sdssisiii", $name, $val, $status, $priority, $weight, $owner_name, $avatar, $sort_order, $id);
+                $stmt = $conn->prepare("UPDATE okr_key_activities SET activity_name = ?, progress = ?, status = ?, priority = ?, weight = ?, owner_name = ?, owner_id = ?, owner_avatar = ?, sort_order = ? WHERE id = ?");
+                $stmt->bind_param("sdssisissi", $name, $val, $status, $priority, $weight, $owner_name, $owner_id, $avatar, $sort_order, $id);
             }
             $stmt->execute();
         }
@@ -385,8 +417,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
         $type = $_POST['type']; // 'metric' or 'activity'
         $name = trim($_POST['name']);
         $owner_name = trim($_POST['owner_name']);
+        $owner_id = intval($_POST['owner_id'] ?? 0);
         if (!$owner_name) $owner_name = 'User';
-        $owner_avatar = strtoupper(substr($owner_name, 0, 2));
+        
+        $avatar = strtoupper(substr($owner_name, 0, 2));
+        if(!empty($owner_name)) {
+            $parts = explode(' ', $owner_name);
+            $avatar = mb_substr(end($parts), 0, 1, "UTF-8");
+        }
 
         $priority = $_POST['priority'] ?? 'medium';
         $weight = intval($_POST['weight'] ?? 0);
@@ -403,15 +441,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
         $sort_order = intval($_POST['sort_order'] ?? 0);
 
         if ($type === 'metric') {
-            $target = 100; // Default target to 100 for percentage-based tracking
-            $unit = '%'; // Default unit to %
             $activity_id = intval($_POST['activity_id'] ?? 0);
-            $stmt = $conn->prepare("INSERT INTO okr_results (objective_id, metric_name, target_value, unit, owner_name, owner_avatar, priority, weight, activity_id, sort_order) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
-            $stmt->bind_param("isdssssiii", $oid, $name, $target, $unit, $owner_name, $owner_avatar, $priority, $weight, $activity_id, $sort_order);
+            $stmt = $conn->prepare("INSERT INTO okr_results (objective_id, metric_name, target_value, unit, status, owner_name, owner_id, owner_avatar, priority, weight, activity_id, sort_order) VALUES (?, ?, 100, '%', 'pending', ?, ?, ?, ?, ?, ?, ?)");
+            $stmt->bind_param("isssisssiii", $oid, $name, $owner_name, $owner_id, $avatar, $priority, $weight, $activity_id, $sort_order);
             $stmt->execute();
         } else {
-            $stmt = $conn->prepare("INSERT INTO okr_key_activities (objective_id, activity_name, owner_name, owner_avatar, priority, weight, sort_order) VALUES (?, ?, ?, ?, ?, ?, ?)");
-            $stmt->bind_param("issssii", $oid, $name, $owner_name, $owner_avatar, $priority, $weight, $sort_order);
+            $stmt = $conn->prepare("INSERT INTO okr_key_activities (objective_id, activity_name, progress, status, owner_name, owner_id, owner_avatar, priority, weight, sort_order) VALUES (?, ?, 0, 'pending', ?, ?, ?, ?, ?, ?)");
+            $stmt->bind_param("isssisssii", $oid, $name, $owner_name, $owner_id, $avatar, $priority, $weight, $sort_order);
             $stmt->execute();
         }
 
@@ -570,6 +606,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
         echo json_encode(['success' => true]);
         exit();
     }
+    
+    if ($_POST['action'] === 'save_okr_settings') {
+        if (!$is_admin) { echo json_encode(['success' => false]); exit(); }
+        $settings = $_POST['settings'] ?? [];
+        foreach($settings as $key => $val) {
+            $stmt = $conn->prepare("INSERT INTO okr_settings (setting_key, setting_value) VALUES (?, ?) ON DUPLICATE KEY UPDATE setting_value = ?");
+            $stmt->bind_param("sss", $key, $val, $val);
+            $stmt->execute();
+        }
+        echo json_encode(['success' => true]);
+        exit();
+    }
 }
 
 // Fetch Users for Dropdown (Focusing on active participants)
@@ -696,6 +744,7 @@ $team_filter .= " AND year = $current_year";
 
 // Fetch Objectives with Owner's Team info
 $sql_o = "SELECT o.*, 
+    (SELECT u.avatar FROM users u WHERE u.id = o.owner_id LIMIT 1) as owner_image,
     (SELECT st.name FROM sale_teams st 
      JOIN user_sale_teams ust ON st.id = ust.team_id 
      JOIN users u ON ust.user_id = u.id 
@@ -706,9 +755,15 @@ $res_o = $conn->query($sql_o);
 while ($o = $res_o->fetch_assoc()) {
     $oid = $o['id'];
     
+    // Generate avatar initials for Objective owner
+    $o_parts = explode(' ', $o['owner'] ?? '');
+    $o['owner_avatar'] = !empty($o['owner']) ? mb_substr(end($o_parts), 0, 1, "UTF-8") : '??';
+    
     // Fetch Activities first to build a parent map
     $activities = [];
-    $a_res = $conn->query("SELECT a.*, (SELECT content FROM okr_explanations WHERE item_id = a.id AND item_type = 'activity' ORDER BY created_at DESC LIMIT 1) as latest_explanation FROM okr_key_activities a WHERE a.objective_id = $oid ORDER BY sort_order ASC, FIELD(priority, 'high', 'medium', 'low') ASC, id DESC");
+    $a_res = $conn->query("SELECT a.*, 
+        (SELECT u.avatar FROM users u WHERE u.id = a.owner_id LIMIT 1) as owner_image,
+        (SELECT content FROM okr_explanations WHERE item_id = a.id AND item_type = 'activity' ORDER BY created_at DESC LIMIT 1) as latest_explanation FROM okr_key_activities a WHERE a.objective_id = $oid ORDER BY sort_order ASC, FIELD(priority, 'high', 'medium', 'low') ASC, id DESC");
     if ($a_res) {
         while($a = $a_res->fetch_assoc()) {
             $a['results'] = []; // Placeholder for child KRs
@@ -718,7 +773,9 @@ while ($o = $res_o->fetch_assoc()) {
     
     // Fetch KRs (Results) and assign to their parent Activity if available
     $unlinked_results = [];
-    $r_res = $conn->query("SELECT r.*, (SELECT content FROM okr_explanations WHERE item_id = r.id AND item_type = 'metric' ORDER BY created_at DESC LIMIT 1) as latest_explanation FROM okr_results r WHERE r.objective_id = $oid ORDER BY sort_order ASC, FIELD(priority, 'high', 'medium', 'low') ASC, id DESC");
+    $r_res = $conn->query("SELECT r.*, 
+        (SELECT u.avatar FROM users u WHERE u.id = r.owner_id LIMIT 1) as owner_image,
+        (SELECT content FROM okr_explanations WHERE item_id = r.id AND item_type = 'metric' ORDER BY created_at DESC LIMIT 1) as latest_explanation FROM okr_results r WHERE r.objective_id = $oid ORDER BY sort_order ASC, FIELD(priority, 'high', 'medium', 'low') ASC, id DESC");
     if ($r_res) {
         while($r = $r_res->fetch_assoc()) {
             if ($r['activity_id'] > 0 && isset($activities[$r['activity_id']])) {
@@ -851,7 +908,11 @@ function getLatestWeeklyProgress($id, $type, $map, $current_week, $live_fallback
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
     <!-- Quill Rich Text Editor -->
     <link href="https://cdn.quilljs.com/1.3.6/quill.snow.css" rel="stylesheet">
+    <!-- Libraries -->
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.quilljs.com/1.3.6/quill.js"></script>
     
     <!-- Professional Apple-Style OKR Dashboard Styling -->
     <style>
@@ -918,24 +979,69 @@ function getLatestWeeklyProgress($id, $type, $map, $current_week, $live_fallback
         .okr-table tr:last-child td { border-bottom: none; }
         
         /* Activity vs KR distinction */
-        .activity-header { background: rgba(52, 199, 89, 0.03) !important; border-top: 1px solid rgba(52, 199, 89, 0.08); }
-        .activity-header .item-main-title { font-size: 16px; font-weight: 700; color: #1d1d1f; letter-spacing: -0.01em; margin: 0; }
+        /* Activity vs KR distinction - Dynamic Background based on Progress */
+        .activity-header { 
+            background: rgba(0, 113, 227, 0.04) !important; 
+            border-top: 1px solid rgba(0, 113, 227, 0.12) !important; 
+            border-bottom: 1px solid rgba(0, 113, 227, 0.05) !important;
+            transition: all 0.2s ease;
+            border-left: 4px solid transparent;
+        }
+        
+        .activity-header.prog-high { background: <?php echo $color_high; ?> !important; color: <?php echo $text_high; ?> !important; border-top-color: rgba(0,0,0,0.05) !important; }
+        .activity-header.prog-mid { background: <?php echo $color_mid; ?> !important; color: <?php echo $text_mid; ?> !important; border-top-color: rgba(0,0,0,0.05) !important; }
+        .activity-header.prog-low { background: <?php echo $color_low; ?> !important; color: <?php echo $text_low; ?> !important; border-top-color: rgba(0,0,0,0.05) !important; }
+        
+        .row-kr-sub.prog-high { background: <?php echo $kr_color_high; ?> !important; color: <?php echo $kr_text_high; ?> !important; border-top-color: rgba(0,0,0,0.05) !important; }
+        .row-kr-sub.prog-mid { background: <?php echo $kr_color_mid; ?> !important; color: <?php echo $kr_text_mid; ?> !important; border-top-color: rgba(0,0,0,0.05) !important; }
+        .row-kr-sub.prog-low { background: <?php echo $kr_color_low; ?> !important; color: <?php echo $kr_text_low; ?> !important; border-top-color: rgba(0,0,0,0.05) !important; }
+        
+        .okr-card.obj-prog-high .okr-card-header { background: <?php echo $obj_color_high; ?> !important; color: <?php echo $obj_text_high; ?> !important; }
+        .okr-card.obj-prog-mid .okr-card-header { background: <?php echo $obj_color_mid; ?> !important; color: <?php echo $obj_text_mid; ?> !important; }
+        .okr-card.obj-prog-low .okr-card-header { background: <?php echo $obj_color_low; ?> !important; color: <?php echo $obj_text_low; ?> !important; }
+        .okr-card.obj-prog-high .obj-left h3, .okr-card.obj-prog-high .obj-meta-item,
+        .okr-card.obj-prog-mid .obj-left h3, .okr-card.obj-prog-mid .obj-meta-item,
+        .okr-card.obj-prog-low .obj-left h3, .okr-card.obj-prog-low .obj-meta-item { color: inherit !important; }
+        .okr-card.obj-prog-high .obj-left h3 i, .okr-card.obj-prog-high .obj-left h3 span,
+        .okr-card.obj-prog-mid .obj-left h3 i, .okr-card.obj-prog-mid .obj-left h3 span,
+        .okr-card.obj-prog-low .obj-left h3 i, .okr-card.obj-prog-low .obj-left h3 span { color: inherit !important; opacity: 1 !important; }
+
+        .activity-header:hover, .row-kr-sub:hover { opacity: 0.9; }
+
+        /* Priority-based borders for KA */
+        .activity-header.row-prio-high { border-left-color: #ff3b30 !important; }
+        .activity-header.row-prio-medium { border-left-color: #0071e3 !important; }
+        
+        .activity-header .item-main-title { font-size: 16px; font-weight: 700; color: inherit; letter-spacing: -0.01em; margin: 0; }
+        .activity-header .item-number-circle { border-color: rgba(0, 113, 227, 0.3); color: #0071e3; background: #fff; box-shadow: 0 2px 6px rgba(0, 113, 227, 0.08); }
         .item-header-row { display: flex; align-items: center; gap: 12px; }
         
+        /* Ensure child elements inherit color in colored rows */
+        .prog-high .item-number-circle, .prog-mid .item-number-circle, .prog-low .item-number-circle { background: rgba(255,255,255,0.9); border-color: transparent; }
+        .prog-high .btn-add-inline, .prog-mid .btn-add-inline, .prog-low .btn-add-inline { color: inherit; background: rgba(255,255,255,0.15); border-color: rgba(255,255,255,0.2); }
+        .prog-high .btn-add-inline:hover, .prog-mid .btn-add-inline:hover, .prog-low .btn-add-inline:hover { background: rgba(255,255,255,0.25); }
+        .ka-badge, .kr-badge { padding: 2px 8px; border-radius: 6px; font-weight: 800; text-transform: uppercase; border: 1px solid transparent; transition: all 0.2s; }
+        .ka-badge { background: rgba(0, 71, 227, 0.08); color: #0071e3; border-color: rgba(0, 71, 227, 0.1); font-size: 11px; }
+        .kr-badge { background: rgba(100, 116, 139, 0.08); color: #64748b; border-color: rgba(100, 116, 139, 0.1); font-size: 10px; margin-right: 8px; }
+
+        .prog-high .ka-badge, .prog-mid .ka-badge, .prog-low .ka-badge,
+        .prog-high .kr-badge, .prog-mid .kr-badge, .prog-low .kr-badge { background: rgba(255,255,255,0.2) !important; color: inherit !important; border-color: rgba(255,255,255,0.3) !important; }
+
         .row-kr-sub { 
             background-color: #ffffff; 
-            transition: background-color 0.2s ease;
+            transition: all 0.2s ease;
+            color: #48484a;
         }
         .row-kr-sub:hover { 
             background-color: #f5f5f7 !important; 
         }
-        .row-kr-sub.row-completed { background-color: #f2fdf5 !important; }
-        .row-kr-sub.row-at-risk { background-color: #fff1f2 !important; }
+        .row-kr-sub.row-completed { background-color: <?php echo $kr_color_high; ?> !important; color: <?php echo $kr_text_high; ?> !important; opacity: 0.7; }
+        .row-kr-sub.row-at-risk { background-color: <?php echo $kr_color_low; ?> !important; color: <?php echo $kr_text_low; ?> !important; }
         .row-kr-sub.row-completed:hover { background-color: #e8f5e9 !important; }
         .row-kr-sub.row-at-risk:hover { background-color: #ffe4e6 !important; }
         .row-at-risk { background-color: #fff1f2 !important; }
         .row-at-risk:hover { background-color: #ffe4e6 !important; }
-        .row-kr-sub td { padding: 12px 20px !important; }
+        .row-kr-sub td { padding: 12px 20px !important; color: inherit; }
         .row-kr-sub .col-name { padding-left: 78px !important; position: relative; }
         .row-kr-sub .col-name::before {
             content: '';
@@ -948,7 +1054,7 @@ function getLatestWeeklyProgress($id, $type, $map, $current_week, $live_fallback
             border-bottom: 1.5px solid #e5e5ea;
             border-bottom-left-radius: 10px;
         }
-        .row-kr-sub .item-main-title { font-size: 13.5px !important; color: #48484a !important; font-weight: 500 !important; display: flex; align-items: center; gap: 8px; }
+        .row-kr-sub .item-main-title { font-size: 13.5px !important; color: inherit !important; font-weight: 500 !important; display: flex; align-items: center; gap: 8px; }
         .row-kr-sub .item-main-title::before { content: ''; width: 6px; height: 6px; background: #d2d2d7; border-radius: 50%; flex-shrink: 0; }
 
         /* Modern Progress Bars */
@@ -998,6 +1104,7 @@ function getLatestWeeklyProgress($id, $type, $map, $current_week, $live_fallback
         .row-completed .item-main-title { color: #248a3d !important; text-decoration: line-through; opacity: 0.6; }
 
         .apple-modal.active { transform: translateX(0); }
+        .swal2-container { z-index: 20000 !important; }
         
         .modal-body { flex: 1; overflow-y: auto; padding: 40px 32px; }
         .modal-title { font-size: 22px; font-weight: 700; margin-bottom: 8px; color: #1d1d1f; letter-spacing: -0.01em; }
@@ -1169,6 +1276,7 @@ function getLatestWeeklyProgress($id, $type, $map, $current_week, $live_fallback
                         </div>
                         <?php if ($is_admin): ?>
                             <button class="btn-secondary" onclick="openVisibilityModal()" title="Quản lý hiển thị Users"><i class="fas fa-users-cog"></i></button>
+                            <button class="btn-secondary" onclick="openOkrSettingsModal()" title="Cài đặt màu sắc Progress"><i class="fas fa-palette"></i></button>
                         <?php endif; ?>
                         <button class="btn-apple" onclick="openCreateObjModal()"><i class="fas fa-plus"></i> Add Objective</button>
                     </div>
@@ -1281,8 +1389,12 @@ function getLatestWeeklyProgress($id, $type, $map, $current_week, $live_fallback
                             <span style="font-size: 12px; font-weight: 600; color: #1d1d1f; background: #f5f5f7; padding: 2px 8px; border-radius: 12px;"><?php echo count($objs_in_team); ?> Objectives</span>
                         </div>
 
-                        <?php foreach ($objs_in_team as $obj): ?>
-                        <div class="okr-card <?php echo (count($objs_in_team) > 3) ? 'collapsed' : ''; ?>" id="obj-<?php echo $obj['id']; ?>">
+                        <?php foreach ($objs_in_team as $obj): 
+                            $obj_prog_class = 'obj-prog-low';
+                            if ($obj['progress'] >= 90) $obj_prog_class = 'obj-prog-high';
+                            else if ($obj['progress'] >= 70) $obj_prog_class = 'obj-prog-mid';
+                        ?>
+                        <div class="okr-card <?php echo (count($objs_in_team) > 3) ? 'collapsed' : ''; ?> <?php echo $obj_prog_class; ?>" id="obj-<?php echo $obj['id']; ?>">
                         <div class="okr-card-header" onclick="toggleObjectiveAccordion(this, event)">
                             <div class="obj-left">
                                 <h3 title="<?php echo htmlspecialchars($obj['title']); ?>" style="display:flex; align-items:center;">
@@ -1291,8 +1403,14 @@ function getLatestWeeklyProgress($id, $type, $map, $current_week, $live_fallback
                                     <?php echo htmlspecialchars($obj['title']); ?>
                                 </h3>
                                 <div class="obj-meta-row">
-                                    <div class="obj-meta-item">
-                                        <i class="fas fa-user-circle"></i>
+                                    <div class="obj-meta-item" style="display:flex; align-items:center;">
+                                        <div class="user-avatar" style="width:20px; height:20px; font-size:9px; margin-right:8px; border-width:1px; overflow:hidden;">
+                                            <?php if(!empty($obj['owner_image'])): ?>
+                                                <img src="<?php echo htmlspecialchars($obj['owner_image']); ?>" style="width:100%; height:100%; object-fit:cover;">
+                                            <?php else: ?>
+                                                <?php echo $obj['owner_avatar']; ?>
+                                            <?php endif; ?>
+                                        </div>
                                         Owner: <strong><?php echo htmlspecialchars($obj['owner']); ?></strong>
                                     </div>
                                     <div class="obj-meta-item">
@@ -1355,7 +1473,12 @@ function getLatestWeeklyProgress($id, $type, $map, $current_week, $live_fallback
                                     <?php 
                                     $a_idx = 1; 
                                     foreach ($obj['activities'] as $a): 
-                                        $row_class = 'activity-header row-prio-' . ($a['priority'] ?? 'medium');
+                                        $display_prog = getLatestWeeklyProgress($a['id'], 'activity', $weekly_tracking_map, $current_week_num, $a['progress']); 
+                                        $prog_class = 'prog-low';
+                                        if ($display_prog >= 90) $prog_class = 'prog-high';
+                                        else if ($display_prog >= 70) $prog_class = 'prog-mid';
+
+                                        $row_class = 'activity-header row-prio-' . ($a['priority'] ?? 'medium') . ' ' . $prog_class;
                                         if(($a['status'] ?? '') === 'completed') $row_class .= ' row-completed';
                                     ?>
                                         <tr class="<?php echo $row_class; ?> activity-row-for-obj-<?php echo $obj['id']; ?>" data-id="<?php echo $a['id']; ?>" data-name="<?php echo htmlspecialchars($a['activity_name']); ?>">
@@ -1363,7 +1486,7 @@ function getLatestWeeklyProgress($id, $type, $map, $current_week, $live_fallback
                                                 <div class="item-header-row">
                                                     <span class="item-number-circle"><?php echo $a_idx++; ?></span>
                                                     <h4 class="item-main-title">
-                                                        <span style="color:#0071e3; font-weight:800; margin-right:4px;">KA <?php echo ($a_idx - 1); ?> :</span>
+                                                        <span class="ka-badge">KA <?php echo ($a_idx - 1); ?></span>
                                                         <?php echo htmlspecialchars($a['activity_name'] ?? ''); ?>
                                                         <?php if(($expl_counts['activity'][$a['id']] ?? 0) > 0): ?>
                                                             <i class="fas fa-exclamation-circle has-explanation-icon" onclick="openExplanationSidebar(<?php echo $a['id']; ?>, 'activity', '<?php echo addslashes($a['activity_name'] ?? ''); ?>')" title="Xem giải trình/lưu ý"></i>
@@ -1372,8 +1495,16 @@ function getLatestWeeklyProgress($id, $type, $map, $current_week, $live_fallback
                                                     <button class="btn-add-inline" title="Add result to this activity" onclick="openAddModal(<?php echo $obj['id']; ?>, 'metric', <?php echo $a['id']; ?>)" style="margin-left:8px;"><i class="fas fa-plus-circle"></i> Add KR</button>
                                                 </div>
                                             </td>
-                                            <td class="col-owner" style="text-align:center;"><div class="user-avatar" style="margin:0 auto;" title="<?php echo htmlspecialchars($a['owner_name'] ?? ''); ?>"><?php echo $a['owner_avatar'] ?? '??'; ?></div></td>
-                                            <td class="col-weight" style="text-align:center; font-weight:600; color:#1d1d1f;"><?php echo intval($a['weight'] ?? 0); ?>%</td>
+                                            <td class="col-owner" style="text-align:center;">
+                                                <div class="user-avatar" style="margin:0 auto; overflow:hidden;" title="<?php echo htmlspecialchars($a['owner_name'] ?? ''); ?>">
+                                                    <?php if(!empty($a['owner_image'])): ?>
+                                                        <img src="<?php echo htmlspecialchars($a['owner_image']); ?>" style="width:100%; height:100%; object-fit:cover;">
+                                                    <?php else: ?>
+                                                        <?php echo $a['owner_avatar'] ?? '??'; ?>
+                                                    <?php endif; ?>
+                                                </div>
+                                            </td>
+                                            <td class="col-weight" style="text-align:center; font-weight:600;"><?php echo intval($a['weight'] ?? 0); ?>%</td>
                                             <td class="col-status"><?php echo getBadgeHtml($a['status'] ?? 'pending'); ?></td>
                                             <td class="col-progress">
                                                 <?php 
@@ -1397,23 +1528,36 @@ function getLatestWeeklyProgress($id, $type, $map, $current_week, $live_fallback
                                         <?php if (!empty($a['results'])): $kr_idx = 1; foreach ($a['results'] as $r): 
                                             $progress_pct = ($r['target_value'] > 0) ? ($r['current_value'] / $r['target_value']) * 100 : 0;
                                             $progress_pct = min(100, round($progress_pct, 1));
+                                            
+                                            $display_prog_kr = getLatestWeeklyProgress($r['id'], 'metric', $weekly_tracking_map, $current_week_num, $progress_pct); 
+                                            $prog_class_kr = 'prog-low';
+                                            if ($display_prog_kr >= 90) $prog_class_kr = 'prog-high';
+                                            else if ($display_prog_kr >= 70) $prog_class_kr = 'prog-mid';
                                         ?>
                                             <?php 
-                                            $row_class = 'row-kr-sub';
-                                            if (($r['status'] ?? '') === 'completed') $row_class .= ' row-completed';
-                                            if (($r['status'] ?? '') === 'at_risk' || ($r['status'] ?? '') === 'delayed') $row_class .= ' row-at-risk';
+                                            $row_class_kr = 'row-kr-sub ' . $prog_class_kr;
+                                            if (($r['status'] ?? '') === 'completed') $row_class_kr .= ' row-completed';
+                                            if (($r['status'] ?? '') === 'at_risk' || ($r['status'] ?? '') === 'delayed') $row_class_kr .= ' row-at-risk';
                                             ?>
-                                            <tr class="<?php echo $row_class; ?>">
+                                            <tr class="<?php echo $row_class_kr; ?>">
                                                 <td class="col-name">
                                                     <h4 class="item-main-title">
-                                                        <span style="color:#64748b; font-weight:700; margin-right:4px;">KR <?php echo $kr_idx++; ?> :</span>
+                                                        <span class="kr-badge">KR <?php echo $kr_idx++; ?></span>
                                                         <?php echo htmlspecialchars($r['metric_name'] ?? ''); ?>
                                                         <?php if(($expl_counts['metric'][$r['id']] ?? 0) > 0): ?>
                                                             <i class="fas fa-exclamation-circle has-explanation-icon" onclick="openExplanationSidebar(<?php echo $r['id']; ?>, 'metric', '<?php echo addslashes($r['metric_name'] ?? ''); ?>')" title="Xem giải trình/lưu ý"></i>
                                                         <?php endif; ?>
                                                     </h4>
                                                 </td>
-                                                <td class="col-owner" style="text-align:center;"><div class="user-avatar avatar-purple" style="margin:0 auto;" title="<?php echo htmlspecialchars($r['owner_name'] ?? ''); ?>"><?php echo $r['owner_avatar'] ?? ''; ?></div></td>
+                                                <td class="col-owner" style="text-align:center;">
+                                                    <div class="user-avatar avatar-purple" style="margin:0 auto; overflow:hidden;" title="<?php echo htmlspecialchars($r['owner_name'] ?? ''); ?>">
+                                                        <?php if(!empty($r['owner_image'])): ?>
+                                                            <img src="<?php echo htmlspecialchars($r['owner_image']); ?>" style="width:100%; height:100%; object-fit:cover;">
+                                                        <?php else: ?>
+                                                            <?php echo $r['owner_avatar'] ?? ''; ?>
+                                                        <?php endif; ?>
+                                                    </div>
+                                                </td>
                                                 <td class="col-weight" style="text-align:center; color:#86868b; font-weight:500;"><?php echo intval($r['weight'] ?? 0); ?>%</td>
                                                 <td class="col-status"><?php echo getBadgeHtml($r['status']); ?></td>
                                                 <td class="col-progress">
@@ -1530,9 +1674,9 @@ function getLatestWeeklyProgress($id, $type, $map, $current_week, $live_fallback
                 <div class="modal-control">
                     <label>Owner (Assignee)</label>
                     <select id="updateItemOwner">
-                        <option value="">-- Chọn User (Lấy từ Setting) --</option>
+                        <option value="0">-- Chọn User (Lấy từ Setting) --</option>
                         <?php foreach ($am_users as $u): ?>
-                            <option value="<?php echo htmlspecialchars($u['full_name']); ?>"><?php echo htmlspecialchars($u['full_name']); ?></option>
+                            <option value="<?php echo $u['id']; ?>" data-name="<?php echo htmlspecialchars($u['full_name']); ?>"><?php echo htmlspecialchars($u['full_name']); ?></option>
                         <?php endforeach; ?>
                     </select>
                 </div>
@@ -1591,9 +1735,9 @@ function getLatestWeeklyProgress($id, $type, $map, $current_week, $live_fallback
                 <div class="modal-control">
                     <label>Owner (Assignee)</label>
                     <select id="addModalOwner">
-                        <option value="">-- Chọn User --</option>
+                        <option value="0">-- Chọn User --</option>
                         <?php foreach ($am_users as $u): ?>
-                            <option value="<?php echo htmlspecialchars($u['full_name']); ?>"><?php echo htmlspecialchars($u['full_name']); ?></option>
+                            <option value="<?php echo $u['id']; ?>" data-name="<?php echo htmlspecialchars($u['full_name']); ?>"><?php echo htmlspecialchars($u['full_name']); ?></option>
                         <?php endforeach; ?>
                     </select>
                 </div>
@@ -1749,6 +1893,88 @@ function getLatestWeeklyProgress($id, $type, $map, $current_week, $live_fallback
                 <button class="btn-secondary" onclick="closeVisibilityModal()">Cancel</button>
                 <button class="btn-apple" onclick="saveVisibilitySettings(this)">
                     Save Settings <i class="fas fa-spinner" id="visLoadingSpinner" style="display:none; margin-left:8px; animation: spin 1s linear infinite;"></i>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- OKR COLOR SETTINGS MODAL -->
+    <div class="apple-modal-overlay" id="okrSettingsModalOverlay">
+        <div class="apple-modal" id="okrSettingsModalContent">
+            <div class="modal-body" style="padding: 24px 32px;">
+                <h4 style="margin: 0 0 15px 0; font-size: 14px; color: #ff9500; border-bottom: 1px solid #f2f2f7; padding-bottom: 8px;">OBJ Progress Colors (Objectives)</h4>
+                <div class="modal-control">
+                    <label>OBJ High Progress (>= 90%)</label>
+                    <div style="display:flex; gap:12px;">
+                        <div style="flex:1;"><small style="color:#86868b;">Background</small><br><input type="color" id="cfg_obj_color_high" value="<?php echo $obj_color_high; ?>" style="height:38px; width:100%; padding:2px;"></div>
+                        <div style="flex:1;"><small style="color:#86868b;">Font Color</small><br><input type="color" id="cfg_obj_text_high" value="<?php echo $obj_text_high; ?>" style="height:38px; width:100%; padding:2px;"></div>
+                    </div>
+                </div>
+                <div class="modal-control">
+                    <label>OBJ Medium Progress (70% - 89%)</label>
+                    <div style="display:flex; gap:12px;">
+                        <div style="flex:1;"><small style="color:#86868b;">Background</small><br><input type="color" id="cfg_obj_color_mid" value="<?php echo $obj_color_mid; ?>" style="height:38px; width:100%; padding:2px;"></div>
+                        <div style="flex:1;"><small style="color:#86868b;">Font Color</small><br><input type="color" id="cfg_obj_text_mid" value="<?php echo $obj_text_mid; ?>" style="height:38px; width:100%; padding:2px;"></div>
+                    </div>
+                </div>
+                <div class="modal-control">
+                    <label>OBJ Low Progress (< 70%)</label>
+                    <div style="display:flex; gap:12px;">
+                        <div style="flex:1;"><small style="color:#86868b;">Background</small><br><input type="color" id="cfg_obj_color_low" value="<?php echo $obj_color_low; ?>" style="height:38px; width:100%; padding:2px;"></div>
+                        <div style="flex:1;"><small style="color:#86868b;">Font Color</small><br><input type="color" id="cfg_obj_text_low" value="<?php echo $obj_text_low; ?>" style="height:38px; width:100%; padding:2px;"></div>
+                    </div>
+                </div>
+
+                <h4 style="margin: 30px 0 15px 0; font-size: 14px; color: #0071e3; border-bottom: 1px solid #f2f2f7; padding-bottom: 8px;">KA Progress Colors (Key Activities)</h4>
+                <div class="modal-control">
+                    <label>KA High Progress (>= 90%)</label>
+                    <div style="display:flex; gap:12px;">
+                        <div style="flex:1;"><small style="color:#86868b;">Background</small><br><input type="color" id="cfg_color_high" value="<?php echo $color_high; ?>" style="height:38px; width:100%; padding:2px;"></div>
+                        <div style="flex:1;"><small style="color:#86868b;">Font Color</small><br><input type="color" id="cfg_text_high" value="<?php echo $text_high; ?>" style="height:38px; width:100%; padding:2px;"></div>
+                    </div>
+                </div>
+                <div class="modal-control">
+                    <label>KA Medium Progress (70% - 89%)</label>
+                    <div style="display:flex; gap:12px;">
+                        <div style="flex:1;"><small style="color:#86868b;">Background</small><br><input type="color" id="cfg_color_mid" value="<?php echo $color_mid; ?>" style="height:38px; width:100%; padding:2px;"></div>
+                        <div style="flex:1;"><small style="color:#86868b;">Font Color</small><br><input type="color" id="cfg_text_mid" value="<?php echo $text_mid; ?>" style="height:38px; width:100%; padding:2px;"></div>
+                    </div>
+                </div>
+                <div class="modal-control">
+                    <label>KA Low Progress (< 70%)</label>
+                    <div style="display:flex; gap:12px;">
+                        <div style="flex:1;"><small style="color:#86868b;">Background</small><br><input type="color" id="cfg_color_low" value="<?php echo $color_low; ?>" style="height:38px; width:100%; padding:2px;"></div>
+                        <div style="flex:1;"><small style="color:#86868b;">Font Color</small><br><input type="color" id="cfg_text_low" value="<?php echo $text_low; ?>" style="height:38px; width:100%; padding:2px;"></div>
+                    </div>
+                </div>
+
+                <h4 style="margin: 30px 0 15px 0; font-size: 14px; color: #af52de; border-bottom: 1px solid #f2f2f7; padding-bottom: 8px;">KR Progress Colors (Key Results)</h4>
+                <div class="modal-control">
+                    <label>KR High Progress (>= 90%)</label>
+                    <div style="display:flex; gap:12px;">
+                        <div style="flex:1;"><small style="color:#86868b;">Background</small><br><input type="color" id="cfg_kr_color_high" value="<?php echo $kr_color_high; ?>" style="height:38px; width:100%; padding:2px;"></div>
+                        <div style="flex:1;"><small style="color:#86868b;">Font Color</small><br><input type="color" id="cfg_kr_text_high" value="<?php echo $kr_text_high; ?>" style="height:38px; width:100%; padding:2px;"></div>
+                    </div>
+                </div>
+                <div class="modal-control">
+                    <label>KR Medium Progress (70% - 89%)</label>
+                    <div style="display:flex; gap:12px;">
+                        <div style="flex:1;"><small style="color:#86868b;">Background</small><br><input type="color" id="cfg_kr_color_mid" value="<?php echo $kr_color_mid; ?>" style="height:38px; width:100%; padding:2px;"></div>
+                        <div style="flex:1;"><small style="color:#86868b;">Font Color</small><br><input type="color" id="cfg_kr_text_mid" value="<?php echo $kr_text_mid; ?>" style="height:38px; width:100%; padding:2px;"></div>
+                    </div>
+                </div>
+                <div class="modal-control">
+                    <label>KR Low Progress (< 70%)</label>
+                    <div style="display:flex; gap:12px;">
+                        <div style="flex:1;"><small style="color:#86868b;">Background</small><br><input type="color" id="cfg_kr_color_low" value="<?php echo $kr_color_low; ?>" style="height:38px; width:100%; padding:2px;"></div>
+                        <div style="flex:1;"><small style="color:#86868b;">Font Color</small><br><input type="color" id="cfg_kr_text_low" value="<?php echo $kr_text_low; ?>" style="height:38px; width:100%; padding:2px;"></div>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-actions">
+                <button class="btn-secondary" onclick="closeOkrSettingsModal()">Cancel</button>
+                <button class="btn-apple" onclick="saveOkrSettings(this)">
+                    Save Colors <i class="fas fa-spinner" id="okrSettingsLoadingSpinner" style="display:none; margin-left:8px; animation: spin 1s linear infinite;"></i>
                 </button>
             </div>
         </div>
@@ -2050,11 +2276,14 @@ function getLatestWeeklyProgress($id, $type, $map, $current_week, $live_fallback
             const name = document.getElementById('updateItemNameInput').value;
             const val = document.getElementById('updateItemVal').value;
             const status = document.getElementById('updateItemStatus').value;
-            const owner = document.getElementById('updateItemOwner').value;
+            
+            const ownerSelect = document.getElementById('updateItemOwner');
+            const owner_id = ownerSelect.value;
+            const owner_name = ownerSelect.options[ownerSelect.selectedIndex].getAttribute('data-name') || '';
+
             const priority = document.getElementById('updateItemPriority').value;
             const weight = document.getElementById('updateItemWeight').value;
             const explanation = quill.root.innerHTML;
-            // Both KA and KR now use simple progress %, no separate target/unit fields
             
             if (quill.getText().trim().length === 0) {
                  // Option: don't save if empty, or just let it pass
@@ -2062,14 +2291,15 @@ function getLatestWeeklyProgress($id, $type, $map, $current_week, $live_fallback
             
             document.getElementById('loadingSpinner').style.display = 'inline-block';
 
-            $.post('/modules/okr/index.php', {
+            const postData = {
                 action: 'update_okr_item',
                 id: id,
                 type: type,
                 name: name,
                 val: val,
                 status: status,
-                owner: owner,
+                owner_id: owner_id,
+                owner_name: owner_name,
                 priority: priority,
                 weight: weight,
                 sort_order: document.getElementById('updateItemSortOrder').value,
@@ -2078,7 +2308,9 @@ function getLatestWeeklyProgress($id, $type, $map, $current_week, $live_fallback
                 activity_id: (type === 'metric') ? document.getElementById('updateItemActivity').value : 0,
                 save_quarter: <?php echo $current_quarter; ?>,
                 save_year: <?php echo $current_year; ?>
-            }, function(res) {
+            };
+
+            $.post('/modules/okr/index.php', postData, function(res) {
                 document.getElementById('loadingSpinner').style.display = 'none';
                 if(res.success) {
                     if (status === 'completed') {
@@ -2189,7 +2421,11 @@ function getLatestWeeklyProgress($id, $type, $map, $current_week, $live_fallback
             const oid = document.getElementById('addModalObjId').value;
             const type = document.getElementById('addModalType').value;
             const name = document.getElementById('addModalName').value;
-            const owner = document.getElementById('addModalOwner').value;
+            
+            const ownerSelect = document.getElementById('addModalOwner');
+            const owner_id = ownerSelect.value;
+            const owner_name = ownerSelect.options[ownerSelect.selectedIndex].getAttribute('data-name') || '';
+
             const priority = document.getElementById('addItemPriority').value;
             const weight = document.getElementById('addItemWeight').value;
             const sort_order = document.getElementById('addItemSort').value;
@@ -2204,7 +2440,8 @@ function getLatestWeeklyProgress($id, $type, $map, $current_week, $live_fallback
                 obj_id: oid,
                 type: type,
                 name: name,
-                owner_name: owner,
+                owner_id: owner_id,
+                owner_name: owner_name,
                 priority: priority,
                 weight: weight,
                 sort_order: sort_order,
@@ -2374,19 +2611,88 @@ function getLatestWeeklyProgress($id, $type, $map, $current_week, $live_fallback
             const quarter = $(this).data('quarter');
             const year = $(this).data('year');
             
-            openObjectiveModal(id, title, owner, status, sort_order, quarter, year, owner_id, team);
+             openObjectiveModal(id, title, owner, status, sort_order, quarter, year, owner_id, team);
         });
 
         function openVisibilityModal() {
-            let modal = document.getElementById('visibilityModalOverlay');
-            modal.style.display = 'flex';
-            setTimeout(function() { document.getElementById('visibilityModalContent').classList.add('active'); }, 10);
+            $('#visibilityModalOverlay').fadeIn(200);
+            $('#visibilityModalContent').addClass('active');
         }
-
         function closeVisibilityModal() {
-            let modalContent = document.getElementById('visibilityModalContent');
-            modalContent.classList.remove('active');
-            setTimeout(function() { document.getElementById('visibilityModalOverlay').style.display = 'none'; }, 200);
+            $('#visibilityModalOverlay').fadeOut(200);
+            $('#visibilityModalContent').removeClass('active');
+        }
+        
+        function openOkrSettingsModal() {
+            $('#okrSettingsModalOverlay').fadeIn(200);
+            $('#okrSettingsModalContent').addClass('active');
+        }
+        function closeOkrSettingsModal() {
+            $('#okrSettingsModalOverlay').fadeOut(200);
+            $('#okrSettingsModalContent').removeClass('active');
+        }
+        function saveOkrSettings(btn) {
+            const high = $('#cfg_color_high').val();
+            const mid = $('#cfg_color_mid').val();
+            const low = $('#cfg_color_low').val();
+            const t_high = $('#cfg_text_high').val();
+            const t_mid = $('#cfg_text_mid').val();
+            const t_low = $('#cfg_text_low').val();
+
+            const kr_high = $('#cfg_kr_color_high').val();
+            const kr_mid = $('#cfg_kr_color_mid').val();
+            const kr_low = $('#cfg_kr_color_low').val();
+            const kr_t_high = $('#cfg_kr_text_high').val();
+            const kr_t_mid = $('#cfg_kr_text_mid').val();
+            const kr_t_low = $('#cfg_kr_text_low').val();
+
+            const obj_high = $('#cfg_obj_color_high').val();
+            const obj_mid = $('#cfg_obj_color_mid').val();
+            const obj_low = $('#cfg_obj_color_low').val();
+            const obj_t_high = $('#cfg_obj_text_high').val();
+            const obj_t_mid = $('#cfg_obj_text_mid').val();
+            const obj_t_low = $('#cfg_obj_text_low').val();
+            
+            $(btn).prop('disabled', true);
+            $('#okrSettingsLoadingSpinner').show();
+            
+            $.post(window.location.href, {
+                action: 'save_okr_settings',
+                settings: {
+                    color_high: high,
+                    color_mid: mid,
+                    color_low: low,
+                    text_high: t_high,
+                    text_mid: t_mid,
+                    text_low: t_low,
+                    kr_color_high: kr_high,
+                    kr_color_mid: kr_mid,
+                    kr_color_low: kr_low,
+                    kr_text_high: kr_t_high,
+                    kr_text_mid: kr_t_mid,
+                    kr_text_low: kr_t_low,
+                    obj_color_high: obj_high,
+                    obj_color_mid: obj_mid,
+                    obj_color_low: obj_low,
+                    obj_text_high: obj_t_high,
+                    obj_text_mid: obj_t_mid,
+                    obj_text_low: obj_t_low
+                }
+            }, function(res) {
+                $(btn).prop('disabled', false);
+                $('#okrSettingsLoadingSpinner').hide();
+                if(res.success) {
+                    Swal.fire({
+                        icon: 'success',
+                        title: 'Thành công',
+                        text: 'Màu nền tiến độ đã được cập nhật.',
+                        timer: 1500,
+                        showConfirmButton: false
+                    }).then(() => location.reload());
+                } else {
+                    Swal.fire('Lỗi', 'Không thể lưu cài đặt.', 'error');
+                }
+            }, 'json');
         }
 
         function saveVisibilitySettings(btn) {
