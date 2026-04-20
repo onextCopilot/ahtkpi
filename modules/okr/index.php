@@ -1032,16 +1032,86 @@ function getLatestWeeklyProgress($id, $type, $map, $current_week, $live_fallback
         .btn-secondary { background-color: #ffffff; color: #1d1d1f; border-radius: 980px; padding: 10px 20px; font-size: 14px; font-weight: 600; border: 1px solid #d2d2d7; cursor: pointer; transition: all 0.2s; box-shadow: 0 1px 2px rgba(0,0,0,0.05); }
         .btn-secondary:hover { background-color: #f5f5f7; border-color: #86868b; }
 
-        .okr-tabs { margin-bottom: 32px; display: flex; gap: 4px; border-bottom: 1px solid #e5e5ea; padding-bottom: 2px; }
-        .tab-item { padding: 10px 20px; border-radius: 12px 12px 0 0; background: transparent; color: #86868b; font-size: 14px; font-weight: 600; text-decoration: none; transition: all 0.2s; border-bottom: 2px solid transparent; }
-        .tab-item:hover { color: #1d1d1f; background: #f5f5f7; }
-        .tab-item.active { color: #0071e3; border-bottom: 2px solid #0071e3; }
+        .okr-tabs { 
+            margin-bottom: 40px; 
+            display: flex; 
+            gap: 6px; 
+            background: #f2f2f7; 
+            padding: 6px; 
+            border-radius: 18px; 
+            width: fit-content;
+            border: none;
+            box-shadow: inset 0 1px 2px rgba(0,0,0,0.05);
+            max-width: 100%;
+            overflow-x: auto;
+            scrollbar-width: none;
+        }
+        .okr-tabs::-webkit-scrollbar { display: none; }
+        
+        .tab-item { 
+            padding: 8px 24px; 
+            border-radius: 12px; 
+            background: transparent; 
+            color: #86868b; 
+            font-size: 14px; 
+            font-weight: 600; 
+            text-decoration: none; 
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); 
+            border: none;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            white-space: nowrap;
+        }
+        .tab-item:hover { 
+            color: #1d1d1f; 
+            background: rgba(255,255,255,0.5); 
+        }
+        .tab-item.active { 
+            color: #0071e3; 
+            background: #ffffff; 
+            box-shadow: 0 4px 12px rgba(0,0,0,0.08); 
+        }
         
         /* Member Ribbon & Time Filters */
-        .member-ribbon { display: flex; gap: 12px; margin-bottom: 32px; flex-wrap: wrap; align-items: center; padding: 4px; }
-        .member-item { display: flex; align-items: center; gap: 10px; padding: 6px 16px; background: #ffffff; border: 1px solid #e5e5ea; border-radius: 980px; text-decoration: none; color: #515154; font-size: 13px; font-weight: 500; transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1); box-shadow: 0 1px 2px rgba(0,0,0,0.02); }
-        .member-item:hover { background: #f5f5f7; border-color: #d2d2d7; transform: translateY(-1px); }
-        .member-item.active { background: #ffffff; color: #0071e3; border-color: #0071e3; box-shadow: 0 4px 12px rgba(0,113,227,0.12); }
+        .member-ribbon { 
+            display: flex; 
+            gap: 8px; 
+            margin-bottom: 32px; 
+            flex-wrap: wrap; 
+            align-items: center; 
+            padding: 6px;
+            background: rgba(242, 242, 247, 0.5);
+            border-radius: 16px;
+        }
+        .member-item { 
+            display: flex; 
+            align-items: center; 
+            gap: 10px; 
+            padding: 6px 16px; 
+            background: #ffffff; 
+            border: 1px solid #e5e5ea; 
+            border-radius: 14px; 
+            text-decoration: none; 
+            color: #515154; 
+            font-size: 13px; 
+            font-weight: 600; 
+            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1); 
+            box-shadow: 0 1px 2px rgba(0,0,0,0.02); 
+            cursor: pointer;
+        }
+        .member-item:hover { 
+            background: #ffffff; 
+            border-color: #0071e3; 
+            transform: translateY(-2px);
+            box-shadow: 0 6px 16px rgba(0,0,0,0.06);
+        }
+        .member-item.active { 
+            background: #0071e3; 
+            color: #ffffff; 
+            border-color: #0071e3; 
+            box-shadow: 0 8px 20px rgba(0,113,227,0.2); 
+        }
         
         .member-avatar { width: 22px; height: 22px; border-radius: 50%; background: #f2f2f7; display: flex; align-items: center; justify-content: center; font-size: 9px; font-weight: 700; color: #515154; border: 1px solid #e5e5ea; }
         .member-item.active .member-avatar { background: #0071e3; color: #ffffff; border-color: #0071e3; }
@@ -1392,10 +1462,12 @@ function getLatestWeeklyProgress($id, $type, $map, $current_week, $live_fallback
                 <div class="member-ribbon">
                     <span style="font-size: 11px; color: #86868b; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; margin-right: 8px;">Members:</span>
                     
-                    <!-- Team OKR Tab (Moved to front) -->
-                    <div class="member-item team-tab <?php echo ($is_team_view) ? 'active' : ''; ?>" style="padding: 4px 12px; background: <?php echo $is_team_view ? '#0071e3' : '#f5f5f7'; ?>; border-radius:12px;">
-                        <a href="?team=<?php echo urlencode($current_team_tab); ?>&view=team&quarter=<?php echo $current_quarter; ?>&year=<?php echo $current_year; ?>" style="text-decoration:none; color:<?php echo $is_team_view ? 'white' : '#1d1d1f'; ?>; display:flex; align-items:center; gap:8px; font-weight:700;">
-                            <i class="fas fa-users-cog"></i>
+                    <!-- Team OKR Tab (Pill Design) -->
+                    <div class="member-item team-tab <?php echo ($is_team_view) ? 'active' : ''; ?>" style="padding: 4px 10px; padding-right: 4px;">
+                        <a href="?team=<?php echo urlencode($current_team_tab); ?>&view=team&quarter=<?php echo $current_quarter; ?>&year=<?php echo $current_year; ?>" style="text-decoration:none; color:inherit; display:flex; align-items:center; gap:8px;">
+                            <div class="member-avatar" style="flex-shrink:0; <?php echo $is_team_view ? 'background:rgba(255,255,255,0.25); color:white; border-color:transparent;' : ''; ?>">
+                                <i class="fas fa-users-cog"></i>
+                            </div>
                             <span style="white-space:nowrap;">Team OKR</span>
                         </a>
                         <button class="btn-view-annual" onclick="viewAnnualOKR(0, '<?php echo addslashes($current_team_tab); ?>', <?php echo $current_year; ?>)" title="Xem OKR của Team cả năm">
@@ -1403,9 +1475,11 @@ function getLatestWeeklyProgress($id, $type, $map, $current_week, $live_fallback
                         </button>
                     </div>
                     <?php foreach ($team_members as $m): ?>
-                        <div class="member-item <?php echo ($selected_user_id == $m['id']) ? 'active' : ''; ?>" style="padding: 4px 10px; padding-right: 4px;">
+                        <div class="member-item <?php echo ($selected_user_id == $m['id'] && !$is_team_view) ? 'active' : ''; ?>" style="padding: 4px 10px; padding-right: 4px;">
                             <a href="?team=<?php echo urlencode($current_team_tab); ?>&user_id=<?php echo $m['id']; ?>&quarter=<?php echo $current_quarter; ?>&year=<?php echo $current_year; ?>" style="text-decoration:none; color:inherit; display:flex; align-items:center; gap:8px;">
-                                <div class="member-avatar" style="flex-shrink:0;"><?php echo strtoupper(substr($m['full_name'], 0, 2)); ?></div>
+                                <div class="member-avatar" style="flex-shrink:0; <?php echo ($selected_user_id == $m['id'] && !$is_team_view) ? 'background:rgba(255,255,255,0.25); color:white; border-color:transparent;' : ''; ?>">
+                                    <?php echo strtoupper(substr($m['full_name'], 0, 2)); ?>
+                                </div>
                                 <span style="white-space:nowrap;"><?php echo htmlspecialchars($m['full_name']); ?></span>
                             </a>
                             <button class="btn-view-annual" onclick="viewAnnualOKR(<?php echo $m['id']; ?>, '<?php echo addslashes($m['full_name']); ?>', <?php echo $current_year; ?>)" title="Xem OKR cả năm">
