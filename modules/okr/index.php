@@ -534,16 +534,27 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
     if ($_POST['action'] === 'fetch_annual_okrs') {
         $uid = intval($_POST['user_id']);
         $year = intval($_POST['year']);
+        $team_name = trim($_POST['team'] ?? '');
         
         $u_res = $conn->query("SELECT full_name FROM users WHERE id = $uid");
         $uname = ($u_res && $row = $u_res->fetch_assoc()) ? $row['full_name'] : trim($_POST['user_name'] ?? '');
         
         if ($uid > 0) {
-            $stmt = $conn->prepare("SELECT id, title, quarter, progress, status FROM okr_objectives WHERE owner_id = ? AND year = ? ORDER BY quarter ASC, sort_order ASC");
-            $stmt->bind_param("ii", $uid, $year);
+            if ($team_name && $team_name !== 'all') {
+                $stmt = $conn->prepare("SELECT id, title, quarter, progress, status FROM okr_objectives WHERE owner_id = ? AND year = ? AND team = ? ORDER BY quarter ASC, sort_order ASC");
+                $stmt->bind_param("iis", $uid, $year, $team_name);
+            } else {
+                $stmt = $conn->prepare("SELECT id, title, quarter, progress, status FROM okr_objectives WHERE owner_id = ? AND year = ? ORDER BY quarter ASC, sort_order ASC");
+                $stmt->bind_param("ii", $uid, $year);
+            }
         } else {
-            $stmt = $conn->prepare("SELECT id, title, quarter, progress, status FROM okr_objectives WHERE owner_id = 0 AND owner = ? AND year = ? ORDER BY quarter ASC, sort_order ASC");
-            $stmt->bind_param("si", $uname, $year);
+            if ($team_name && $team_name !== 'all') {
+                $stmt = $conn->prepare("SELECT id, title, quarter, progress, status FROM okr_objectives WHERE (owner_id = 0 OR owner = ?) AND year = ? AND team = ? ORDER BY quarter ASC, sort_order ASC");
+                $stmt->bind_param("sis", $uname, $year, $team_name);
+            } else {
+                $stmt = $conn->prepare("SELECT id, title, quarter, progress, status FROM okr_objectives WHERE owner_id = 0 AND owner = ? AND year = ? ORDER BY quarter ASC, sort_order ASC");
+                $stmt->bind_param("si", $uname, $year);
+            }
         }
         $stmt->execute();
         $res = $stmt->get_result();
@@ -824,13 +835,14 @@ if ($selected_user_id === 0 && !empty($team_members) && !$is_team_view) {
 
 $team_filter = '';
 if ($current_team_tab !== 'all') {
-    $safe_team = $conn->real_escape_string($current_team_tab);
-    if ($is_team_view) {
-        $team_filter = " WHERE (team = '$safe_team' AND (owner_id = 0 OR owner = '$safe_team'))";
-    } elseif ($selected_user_id > 0) {
-        $team_filter = " WHERE (owner_id = $selected_user_id OR (owner_id = 0 AND owner = '" . $conn->real_escape_string((string)$selected_user_name) . "'))";
-    } else {
-        $team_filter = " WHERE (team = '$safe_team')";
+    $safe_team = $conn->real_escape_string((string)$current_team_tab);
+    // Base filter: must strictly belong to the objective's assigned team
+    $team_filter = " WHERE team = '$safe_team'";
+    
+    // If exploring a specific user within this team, filter further
+    if (!$is_team_view && $selected_user_id > 0) {
+        $safe_user_name = $conn->real_escape_string((string)$selected_user_name);
+        $team_filter .= " AND (owner_id = $selected_user_id OR (owner_id = 0 AND owner = '$safe_user_name'))";
     }
 }
 
@@ -1995,7 +2007,17 @@ function getLatestWeeklyProgress($id, $type, $map, $current_week, $live_fallback
                 
                 <div class="modal-control">
                     <label>Objective Title</label>
-                    <input type="text" id="objModalTitle">
+                    <input type="text" id="objModalTitle" placeholder="e.g. Increase revenue by 20%">
+                </div>
+
+                <div class="modal-control">
+                    <label>Assigned Team</label>
+                    <select id="objModalTeam">
+                        <option value="">-- No Team --</option>
+                        <?php foreach ($sale_teams_list as $tname): ?>
+                            <option value="<?php echo htmlspecialchars((string)$tname); ?>"><?php echo htmlspecialchars((string)$tname); ?></option>
+                        <?php endforeach; ?>
+                    </select>
                 </div>
                 
                 <div class="modal-control">
@@ -2754,6 +2776,14 @@ function getLatestWeeklyProgress($id, $type, $map, $current_week, $live_fallback
             document.getElementById('objModalId').value = '';
             document.getElementById('objModalTitle').value = '';
             
+            // Pre-select current team
+            const currentTeamTab = '<?php echo addslashes((string)$current_team_tab); ?>';
+            if (currentTeamTab !== 'all') {
+                document.getElementById('objModalTeam').value = currentTeamTab;
+            } else {
+                document.getElementById('objModalTeam').value = '';
+            }
+
             // Default based on current view
             if (<?php echo $is_team_view ? 'true' : 'false'; ?>) {
                // Tìm option team tương ứng và chọn
@@ -2783,10 +2813,11 @@ function getLatestWeeklyProgress($id, $type, $map, $current_week, $live_fallback
             
             const owner_id = ownerSelect.value;
             const owner_name = selectedOpt.getAttribute('data-name') || '';
-            let team = selectedOpt.getAttribute('data-team') || '<?php echo ($current_team_tab === "all") ? "" : addslashes($current_team_tab); ?>';
+            const team = document.getElementById('objModalTeam').value;
             
             // Nếu là Dashboard và chọn User, cố gắng gán team "Default" hoặc để trống
-            if (!team && '<?php echo $current_team_tab; ?>' === 'all') team = 'General';
+            let finalTeam = team;
+            if (!finalTeam && '<?php echo $current_team_tab; ?>' === 'all') finalTeam = 'General';
 
             const status = document.getElementById('objModalStatus').value;
             const sort_order = document.getElementById('objModalSortOrder').value;
@@ -2800,7 +2831,7 @@ function getLatestWeeklyProgress($id, $type, $map, $current_week, $live_fallback
             $.post('/modules/okr/index.php', {
                 action: 'create_objective',
                 title: title,
-                team: team,
+                team: finalTeam,
                 owner_id: owner_id,
                 owner_name: owner_name,
                 status: status,
@@ -2820,6 +2851,8 @@ function getLatestWeeklyProgress($id, $type, $map, $current_week, $live_fallback
         function openObjectiveModal(id, title, owner, status, sort_order, quarter, year, owner_id, team) {
             document.getElementById('objModalId').value = id;
             document.getElementById('objModalTitle').value = title;
+            document.getElementById('objModalTeam').value = team || '';
+            
             // Chọn owner đúng (Team hoặc User)
             if (owner_id == 0) {
                 $('#objModalOwner option[data-type="team"][data-team="'+team+'"]').prop('selected', true);
@@ -2854,7 +2887,7 @@ function getLatestWeeklyProgress($id, $type, $map, $current_week, $live_fallback
             
             const owner_id = ownerSelect.value;
             const owner_name = selectedOpt.getAttribute('data-name') || '';
-            let team = selectedOpt.getAttribute('data-team') || '<?php echo ($current_team_tab === "all") ? "" : addslashes($current_team_tab); ?>';
+            let team = document.getElementById('objModalTeam').value;
             
             if (!team && '<?php echo $current_team_tab; ?>' === 'all') team = 'General';
 
