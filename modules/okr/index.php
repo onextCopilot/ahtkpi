@@ -67,6 +67,8 @@ try {
     addColIfNotExists($conn, 'okr_results', 'weight', 'INT DEFAULT 0');
     addColIfNotExists($conn, 'okr_results', 'owner_name', 'VARCHAR(255)');
     addColIfNotExists($conn, 'okr_results', 'owner_id', 'INT DEFAULT 0');
+    addColIfNotExists($conn, 'okr_results', 'owner_2_name', 'VARCHAR(255)');
+    addColIfNotExists($conn, 'okr_results', 'owner_2_id', 'INT DEFAULT 0');
     addColIfNotExists($conn, 'okr_results', 'owner_avatar', 'VARCHAR(10)');
     addColIfNotExists($conn, 'okr_results', 'activity_id', 'INT DEFAULT 0');
     addColIfNotExists($conn, 'okr_results', 'sort_order', 'INT DEFAULT 0');
@@ -199,6 +201,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
         $name = $is_partial ? ($type==='metric' ? $curr_data['metric_name'] : $curr_data['activity_name']) : trim($_POST['name'] ?? '');
         $owner_name = $is_partial ? ($curr_data['owner_name'] ?? '') : trim($_POST['owner_name'] ?? '');
         $owner_id = $is_partial ? intval($curr_data['owner_id'] ?? 0) : intval($_POST['owner_id'] ?? 0);
+        $owner_2_name = $is_partial ? ($curr_data['owner_2_name'] ?? '') : trim($_POST['owner_2_name'] ?? '');
+        $owner_2_id = $is_partial ? intval($curr_data['owner_2_id'] ?? 0) : intval($_POST['owner_2_id'] ?? 0);
         $explanation = trim($_POST['explanation'] ?? '');
         
         if ($is_partial) {
@@ -245,8 +249,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
             $sort_order = intval($_POST['sort_order'] ?? ($curr_data['sort_order'] ?? 0));
             if ($type === 'metric') {
                 // val is now progress % — compute current_value proportionally, keep target_value intact
-                $stmt = $conn->prepare("UPDATE okr_results SET metric_name = ?, current_value = ROUND((? / 100.0) * target_value, 2), status = ?, priority = ?, weight = ?, owner_name = ?, owner_id = ?, owner_avatar = ?, activity_id = ?, sort_order = ? WHERE id = ?");
-                $stmt->bind_param("sdssisissii", $name, $val, $status, $priority, $weight, $owner_name, $owner_id, $avatar, $activity_id, $sort_order, $id);
+                $stmt = $conn->prepare("UPDATE okr_results SET metric_name = ?, current_value = ROUND((? / 100.0) * target_value, 2), status = ?, priority = ?, weight = ?, owner_name = ?, owner_id = ?, owner_2_name = ?, owner_2_id = ?, owner_avatar = ?, activity_id = ?, sort_order = ? WHERE id = ?");
+                $stmt->bind_param("sdssisssissii", $name, $val, $status, $priority, $weight, $owner_name, $owner_id, $owner_2_name, $owner_2_id, $avatar, $activity_id, $sort_order, $id);
             } else {
                 $stmt = $conn->prepare("UPDATE okr_key_activities SET activity_name = ?, progress = ?, status = ?, priority = ?, weight = ?, owner_name = ?, owner_id = ?, owner_avatar = ?, sort_order = ? WHERE id = ?");
                 $stmt->bind_param("sdssisissi", $name, $val, $status, $priority, $weight, $owner_name, $owner_id, $avatar, $sort_order, $id);
@@ -441,9 +445,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
         $sort_order = intval($_POST['sort_order'] ?? 0);
 
         if ($type === 'metric') {
+            $owner_2_id = intval($_POST['owner_2_id'] ?? 0);
+            $owner_2_name = trim($_POST['owner_2_name'] ?? '');
             $activity_id = intval($_POST['activity_id'] ?? 0);
-            $stmt = $conn->prepare("INSERT INTO okr_results (objective_id, metric_name, target_value, unit, status, owner_name, owner_id, owner_avatar, priority, weight, activity_id, sort_order) VALUES (?, ?, 100, '%', 'pending', ?, ?, ?, ?, ?, ?, ?)");
-            $stmt->bind_param("isssisssiii", $oid, $name, $owner_name, $owner_id, $avatar, $priority, $weight, $activity_id, $sort_order);
+            $stmt = $conn->prepare("INSERT INTO okr_results (objective_id, metric_name, target_value, unit, status, owner_name, owner_id, owner_2_name, owner_2_id, owner_avatar, priority, weight, activity_id, sort_order) VALUES (?, ?, 100, '%', 'pending', ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+            $stmt->bind_param("isssississsii", $oid, $name, $owner_name, $owner_id, $owner_2_name, $owner_2_id, $avatar, $priority, $weight, $activity_id, $sort_order);
             $stmt->execute();
         } else {
             $stmt = $conn->prepare("INSERT INTO okr_key_activities (objective_id, activity_name, progress, status, owner_name, owner_id, owner_avatar, priority, weight, sort_order) VALUES (?, ?, 0, 'pending', ?, ?, ?, ?, ?, ?)");
@@ -775,9 +781,14 @@ while ($o = $res_o->fetch_assoc()) {
     $unlinked_results = [];
     $r_res = $conn->query("SELECT r.*, 
         (SELECT u.avatar FROM users u WHERE u.id = r.owner_id LIMIT 1) as owner_image,
+        (SELECT u.avatar FROM users u WHERE u.id = r.owner_2_id LIMIT 1) as owner_2_image,
         (SELECT content FROM okr_explanations WHERE item_id = r.id AND item_type = 'metric' ORDER BY created_at DESC LIMIT 1) as latest_explanation FROM okr_results r WHERE r.objective_id = $oid ORDER BY sort_order ASC, FIELD(priority, 'high', 'medium', 'low') ASC, id DESC");
     if ($r_res) {
         while($r = $r_res->fetch_assoc()) {
+            // Generate initials for owner 2
+            $o2_parts = explode(' ', $r['owner_2_name'] ?? '');
+            $r['owner_2_avatar'] = !empty($r['owner_2_name']) ? mb_substr(end($o2_parts), 0, 1, "UTF-8") : '';
+
             if ($r['activity_id'] > 0 && isset($activities[$r['activity_id']])) {
                 $activities[$r['activity_id']]['results'][] = $r;
             } else {
@@ -1518,7 +1529,7 @@ function getLatestWeeklyProgress($id, $type, $map, $current_week, $live_fallback
                                             </td>
                                             <td class="col-action">
                                                 <div style="display:flex; align-items:center; gap:4px;">
-                                                    <button class="btn-edit-row" onclick="openUpdateModal('<?php echo addslashes($a['activity_name'] ?? ''); ?>', 'activity', <?php echo $a['id']; ?>, <?php echo floatval($a['progress'] ?? 0); ?>, 100, '<?php echo $a['status'] ?? 'pending'; ?>', '<?php echo addslashes($a['owner_name'] ?? ''); ?>', '<?php echo $a['priority'] ?? 'medium'; ?>', <?php echo intval($a['weight'] ?? 0); ?>, <?php echo $obj['id']; ?>, 0, <?php echo intval($a['sort_order'] ?? 0); ?>)"><i class="fas fa-history"></i></button>
+                                                    <button class="btn-edit-row" onclick="openUpdateModal('<?php echo addslashes($a['activity_name'] ?? ''); ?>', 'activity', <?php echo $a['id']; ?>, <?php echo floatval($a['progress'] ?? 0); ?>, 100, '<?php echo $a['status'] ?? 'pending'; ?>', <?php echo intval($a['owner_id'] ?? 0); ?>, 0, '<?php echo $a['priority'] ?? 'medium'; ?>', <?php echo intval($a['weight'] ?? 0); ?>, <?php echo $obj['id']; ?>, 0, <?php echo intval($a['sort_order'] ?? 0); ?>)"><i class="fas fa-history"></i></button>
                                                     <button class="btn-delete-row" title="Delete Activity" onclick="deleteOkrItem(<?php echo $a['id']; ?>, 'activity')"><i class="fas fa-trash-alt"></i></button>
                                                 </div>
                                             </td>
@@ -1550,11 +1561,22 @@ function getLatestWeeklyProgress($id, $type, $map, $current_week, $live_fallback
                                                     </h4>
                                                 </td>
                                                 <td class="col-owner" style="text-align:center;">
-                                                    <div class="user-avatar avatar-purple" style="margin:0 auto; overflow:hidden;" title="<?php echo htmlspecialchars($r['owner_name'] ?? ''); ?>">
-                                                        <?php if(!empty($r['owner_image'])): ?>
-                                                            <img src="<?php echo htmlspecialchars($r['owner_image']); ?>" style="width:100%; height:100%; object-fit:cover;">
-                                                        <?php else: ?>
-                                                            <?php echo $r['owner_avatar'] ?? ''; ?>
+                                                    <div style="display:flex; justify-content:center; align-items:center;">
+                                                        <div class="user-avatar avatar-purple" style="margin:0; overflow:hidden; position:relative; z-index:1; border: 1.5px solid #fff; box-shadow: 0 2px 4px rgba(0,0,0,0.1);" title="<?php echo htmlspecialchars($r['owner_name'] ?? ''); ?>">
+                                                            <?php if(!empty($r['owner_image'])): ?>
+                                                                <img src="<?php echo htmlspecialchars($r['owner_image']); ?>" style="width:100%; height:100%; object-fit:cover;">
+                                                            <?php else: ?>
+                                                                <?php echo $r['owner_avatar'] ?? ''; ?>
+                                                            <?php endif; ?>
+                                                        </div>
+                                                        <?php if(!empty($r['owner_2_name'])): ?>
+                                                        <div class="user-avatar avatar-purple" style="margin-left:-12px; overflow:hidden; position:relative; z-index:2; border: 1.5px solid #fff; box-shadow: 0 2px 4px rgba(0,0,0,0.1);" title="<?php echo htmlspecialchars($r['owner_2_name'] ?? ''); ?>">
+                                                            <?php if(!empty($r['owner_2_image'])): ?>
+                                                                <img src="<?php echo htmlspecialchars($r['owner_2_image']); ?>" style="width:100%; height:100%; object-fit:cover;">
+                                                            <?php else: ?>
+                                                                <?php echo $r['owner_2_avatar'] ?? ''; ?>
+                                                            <?php endif; ?>
+                                                        </div>
                                                         <?php endif; ?>
                                                     </div>
                                                 </td>
@@ -1570,7 +1592,7 @@ function getLatestWeeklyProgress($id, $type, $map, $current_week, $live_fallback
                                                 </td>
                                                 <td class="col-action">
                                                     <div style="display:flex; align-items:center; gap:4px;">
-                                                        <button class="btn-edit-row" onclick="openUpdateModal('<?php echo addslashes($r['metric_name'] ?? ''); ?>', 'metric', <?php echo $r['id']; ?>, <?php echo round($progress_pct, 1); ?>, 100, '<?php echo $r['status'] ?? 'pending'; ?>', '<?php echo addslashes($r['owner_name'] ?? ''); ?>', '<?php echo $r['priority'] ?? 'medium'; ?>', <?php echo intval($r['weight'] ?? 0); ?>, <?php echo $obj['id']; ?>, <?php echo $a['id']; ?>, <?php echo intval($r['sort_order'] ?? 0); ?>)"><i class="fas fa-history"></i></button>
+                                                        <button class="btn-edit-row" onclick="openUpdateModal('<?php echo addslashes($r['metric_name'] ?? ''); ?>', 'metric', <?php echo $r['id']; ?>, <?php echo round($progress_pct, 1); ?>, 100, '<?php echo $r['status'] ?? 'pending'; ?>', <?php echo intval($r['owner_id'] ?? 0); ?>, <?php echo intval($r['owner_2_id'] ?? 0); ?>, '<?php echo $r['priority'] ?? 'medium'; ?>', <?php echo intval($r['weight'] ?? 0); ?>, <?php echo $obj['id']; ?>, <?php echo $a['id']; ?>, <?php echo intval($r['sort_order'] ?? 0); ?>)"><i class="fas fa-history"></i></button>
                                                         <button class="btn-delete-row" title="Delete KR" onclick="deleteOkrItem(<?php echo $r['id']; ?>, 'metric')"><i class="fas fa-trash-alt"></i></button>
                                                     </div>
                                                 </td>
@@ -1584,17 +1606,35 @@ function getLatestWeeklyProgress($id, $type, $map, $current_week, $live_fallback
                                         <?php foreach ($obj['unlinked_results'] as $r): 
                                             $progress_pct = ($r['target_value'] > 0) ? ($r['current_value'] / $r['target_value']) * 100 : 0;
                                             $progress_pct = min(100, round($progress_pct, 1));
-                                        ?>
-                                            <?php 
+                                            
                                             $row_class = '';
                                             if (($r['status'] ?? '') === 'completed') $row_class = 'row-completed';
                                             if (($r['status'] ?? '') === 'at_risk' || ($r['status'] ?? '') === 'delayed') $row_class = 'row-at-risk';
-                                            ?>
+                                        ?>
                                             <tr class="<?php echo $row_class; ?>">
                                                 <td class="col-name" style="padding-left:20px !important;">
                                                     <h4 class="item-main-title"><?php echo htmlspecialchars($r['metric_name'] ?? ''); ?></h4>
                                                 </td>
-                                                <td class="col-owner" style="text-align:center;"><div class="user-avatar avatar-purple" style="margin:0 auto;" title="<?php echo htmlspecialchars($r['owner_name'] ?? ''); ?>"><?php echo $r['owner_avatar'] ?? ''; ?></div></td>
+                                                <td class="col-owner" style="text-align:center;">
+                                                    <div style="display:flex; justify-content:center; align-items:center;">
+                                                        <div class="user-avatar avatar-purple" style="margin:0; overflow:hidden; position:relative; z-index:1; border: 1.5px solid #fff; box-shadow: 0 2px 4px rgba(0,0,0,0.1);" title="<?php echo htmlspecialchars($r['owner_name'] ?? ''); ?>">
+                                                            <?php if(!empty($r['owner_image'])): ?>
+                                                                <img src="<?php echo htmlspecialchars($r['owner_image']); ?>" style="width:100%; height:100%; object-fit:cover;">
+                                                            <?php else: ?>
+                                                                <?php echo $r['owner_avatar'] ?? ''; ?>
+                                                            <?php endif; ?>
+                                                        </div>
+                                                        <?php if(!empty($r['owner_2_name'])): ?>
+                                                        <div class="user-avatar avatar-purple" style="margin-left:-12px; overflow:hidden; position:relative; z-index:2; border: 1.5px solid #fff; box-shadow: 0 2px 4px rgba(0,0,0,0.1);" title="<?php echo htmlspecialchars($r['owner_2_name'] ?? ''); ?>">
+                                                            <?php if(!empty($r['owner_2_image'])): ?>
+                                                                <img src="<?php echo htmlspecialchars($r['owner_2_image']); ?>" style="width:100%; height:100%; object-fit:cover;">
+                                                            <?php else: ?>
+                                                                <?php echo $r['owner_2_avatar'] ?? ''; ?>
+                                                            <?php endif; ?>
+                                                        </div>
+                                                        <?php endif; ?>
+                                                    </div>
+                                                </td>
                                                 <td class="col-weight" style="text-align:center; color:#86868b; font-weight:500;"><?php echo intval($r['weight'] ?? 0); ?>%</td>
                                                 <td class="col-status"><?php echo getBadgeHtml($r['status']); ?></td>
                                                 <td class="col-progress">
@@ -1607,7 +1647,7 @@ function getLatestWeeklyProgress($id, $type, $map, $current_week, $live_fallback
                                                 </td>
                                                 <td class="col-action">
                                                     <div style="display:flex; align-items:center; gap:4px;">
-                                                        <button class="btn-edit-row" onclick="openUpdateModal('<?php echo addslashes($r['metric_name'] ?? ''); ?>', 'metric', <?php echo $r['id']; ?>, <?php echo round($progress_pct, 1); ?>, 100, '<?php echo $r['status'] ?? 'pending'; ?>', '<?php echo addslashes($r['owner_name'] ?? ''); ?>', '<?php echo $r['priority'] ?? 'medium'; ?>', <?php echo intval($r['weight'] ?? 0); ?>, <?php echo $obj['id']; ?>, 0, <?php echo intval($r['sort_order'] ?? 0); ?>)"><i class="fas fa-history"></i></button>
+                                                        <button class="btn-edit-row" onclick="openUpdateModal('<?php echo addslashes($r['metric_name'] ?? ''); ?>', 'metric', <?php echo $r['id']; ?>, <?php echo round($progress_pct, 1); ?>, 100, '<?php echo $r['status'] ?? 'pending'; ?>', <?php echo intval($r['owner_id'] ?? 0); ?>, <?php echo intval($r['owner_2_id'] ?? 0); ?>, '<?php echo $r['priority'] ?? 'medium'; ?>', <?php echo intval($r['weight'] ?? 0); ?>, <?php echo $obj['id']; ?>, 0, <?php echo intval($r['sort_order'] ?? 0); ?>)"><i class="fas fa-history"></i></button>
                                                         <button class="btn-delete-row" title="Delete KR" onclick="deleteOkrItem(<?php echo $r['id']; ?>, 'metric')"><i class="fas fa-trash-alt"></i></button>
                                                     </div>
                                                 </td>
@@ -1680,6 +1720,15 @@ function getLatestWeeklyProgress($id, $type, $map, $current_week, $live_fallback
                         <?php endforeach; ?>
                     </select>
                 </div>
+                <div class="modal-control" id="updateItemOwner2Control" style="display:none;">
+                    <label>Co-Owner (Assignee 2 - Only for KR)</label>
+                    <select id="updateItemOwner2">
+                        <option value="0">-- None / Extra Owner --</option>
+                        <?php foreach ($am_users as $u): ?>
+                            <option value="<?php echo $u['id']; ?>" data-name="<?php echo htmlspecialchars($u['full_name']); ?>"><?php echo htmlspecialchars($u['full_name']); ?></option>
+                        <?php endforeach; ?>
+                    </select>
+                </div>
                 <div class="modal-control">
                     <label>Priority, Weight (%) & Sort Order</label>
                     <div style="display:flex; gap:10px;">
@@ -1736,6 +1785,15 @@ function getLatestWeeklyProgress($id, $type, $map, $current_week, $live_fallback
                     <label>Owner (Assignee)</label>
                     <select id="addModalOwner">
                         <option value="0">-- Chọn User --</option>
+                        <?php foreach ($am_users as $u): ?>
+                            <option value="<?php echo $u['id']; ?>" data-name="<?php echo htmlspecialchars($u['full_name']); ?>"><?php echo htmlspecialchars($u['full_name']); ?></option>
+                        <?php endforeach; ?>
+                    </select>
+                </div>
+                <div class="modal-control" id="addModalOwner2Control" style="display:none;">
+                    <label>Co-Owner (Assignee 2 - Only for KR)</label>
+                    <select id="addModalOwner2">
+                        <option value="0">-- None --</option>
                         <?php foreach ($am_users as $u): ?>
                             <option value="<?php echo $u['id']; ?>" data-name="<?php echo htmlspecialchars($u['full_name']); ?>"><?php echo htmlspecialchars($u['full_name']); ?></option>
                         <?php endforeach; ?>
@@ -2121,7 +2179,7 @@ function getLatestWeeklyProgress($id, $type, $map, $current_week, $live_fallback
             card.classList.toggle('collapsed');
         }
 
-    function openUpdateModal(itemName, type, id, currentValue, targetValue, status, ownerName, priority, weight, objId, activityId, sortOrder) {
+    function openUpdateModal(itemName, type, id, currentValue, targetValue, status, ownerId, owner2Id, priority, weight, objId, activityId, sortOrder) {
             document.getElementById('updateModalTitle').innerText = 'Update ' + (type === 'metric' ? 'Key Result' : 'Activity');
             document.getElementById('updateItemId').value = id;
             document.getElementById('updateItemType').value = type;
@@ -2129,7 +2187,15 @@ function getLatestWeeklyProgress($id, $type, $map, $current_week, $live_fallback
             document.getElementById('updateItemNameInput').value = itemName;
             document.getElementById('updateItemVal').value = currentValue;
             document.getElementById('updateItemStatus').value = status;
-            document.getElementById('updateItemOwner').value = ownerName || '';
+            document.getElementById('updateItemOwner').value = ownerId || 0;
+            
+            if (type === 'metric') {
+                document.getElementById('updateItemOwner2Control').style.display = 'block';
+                document.getElementById('updateItemOwner2').value = owner2Id || 0;
+            } else {
+                document.getElementById('updateItemOwner2Control').style.display = 'none';
+            }
+
             document.getElementById('updateItemPriority').value = priority || 'medium';
             document.getElementById('updateItemWeight').value = weight || 0;
             document.getElementById('updateItemSortOrder').value = sortOrder || 0;
@@ -2282,6 +2348,11 @@ function getLatestWeeklyProgress($id, $type, $map, $current_week, $live_fallback
             const selectedOpt = ownerSelect.options[ownerSelect.selectedIndex];
             const owner_name = selectedOpt ? (selectedOpt.getAttribute('data-name') || '') : '';
 
+            const owner2Select = document.getElementById('updateItemOwner2');
+            const owner_2_id = owner2Select.value;
+            const selectedOpt2 = owner2Select.options[owner2Select.selectedIndex];
+            const owner_2_name = selectedOpt2 ? (selectedOpt2.getAttribute('data-name') || '') : '';
+
             const priority = document.getElementById('updateItemPriority').value;
             const weight = document.getElementById('updateItemWeight').value;
             const explanation = quill.root.innerHTML;
@@ -2301,6 +2372,8 @@ function getLatestWeeklyProgress($id, $type, $map, $current_week, $live_fallback
                 status: status,
                 owner_id: owner_id,
                 owner_name: owner_name,
+                owner_2_id: owner_2_id,
+                owner_2_name: owner_2_name,
                 priority: priority,
                 weight: weight,
                 sort_order: document.getElementById('updateItemSortOrder').value,
@@ -2388,6 +2461,9 @@ function getLatestWeeklyProgress($id, $type, $map, $current_week, $live_fallback
                 document.getElementById('addModalTitle').innerText = 'Add Target Result (Metric)';
                 document.getElementById('addModalNameLbl').innerText = 'Metric Description';
                 
+                document.getElementById('addModalOwner2Control').style.display = 'block';
+                document.getElementById('addModalOwner2').value = '0';
+
                 activityControl.style.display = 'block';
                 activitySelect.innerHTML = '<option value="0">-- Không liên kết --</option>';
                 // Populate from DOM
@@ -2404,6 +2480,7 @@ function getLatestWeeklyProgress($id, $type, $map, $current_week, $live_fallback
             } else {
                 document.getElementById('addModalTitle').innerText = 'Add Key Activity';
                 document.getElementById('addModalNameLbl').innerText = 'Activity Description';
+                document.getElementById('addModalOwner2Control').style.display = 'none';
                 activityControl.style.display = 'none';
             }
 
@@ -2428,6 +2505,11 @@ function getLatestWeeklyProgress($id, $type, $map, $current_week, $live_fallback
             const selectedOpt = ownerSelect.options[ownerSelect.selectedIndex];
             const owner_name = selectedOpt ? (selectedOpt.getAttribute('data-name') || '') : '';
 
+            const owner2Select = document.getElementById('addModalOwner2');
+            const owner_2_id = owner2Select.value;
+            const selectedOpt2 = owner2Select.options[owner2Select.selectedIndex];
+            const owner_2_name = selectedOpt2 ? (selectedOpt2.getAttribute('data-name') || '') : '';
+
             const priority = document.getElementById('addItemPriority').value;
             const weight = document.getElementById('addItemWeight').value;
             const sort_order = document.getElementById('addItemSort').value;
@@ -2444,6 +2526,8 @@ function getLatestWeeklyProgress($id, $type, $map, $current_week, $live_fallback
                 name: name,
                 owner_id: owner_id,
                 owner_name: owner_name,
+                owner_2_id: owner_2_id,
+                owner_2_name: owner_2_name,
                 priority: priority,
                 weight: weight,
                 sort_order: sort_order,
