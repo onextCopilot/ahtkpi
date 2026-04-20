@@ -461,7 +461,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
             $owner_2_id = intval($_POST['owner_2_id'] ?? 0);
             $owner_2_name = trim($_POST['owner_2_name'] ?? '');
             $stmt = $conn->prepare("INSERT INTO okr_results (objective_id, metric_name, target_value, unit, status, owner_name, owner_id, owner_2_name, owner_2_id, owner_avatar, priority, weight, sort_order) VALUES (?, ?, 100, '%', 'pending', ?, ?, ?, ?, ?, ?, ?, ?)");
-            $stmt->bind_param("issisis sii", $oid, $name, $owner_name, $owner_id, $owner_2_name, $owner_2_id, $avatar, $priority, $weight, $sort_order);
+            $stmt->bind_param("issisissii", $oid, $name, $owner_name, $owner_id, $owner_2_name, $owner_2_id, $avatar, $priority, $weight, $sort_order);
             $stmt->execute();
             $new_kr_id = $conn->insert_id;
             
