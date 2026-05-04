@@ -916,6 +916,9 @@ $status_map = ['draft' => ['#F1F5F9', '#64748B'], 'active' => ['#DBEAFE', '#1D4E
         }
         .dept-list-item:hover { background: #F3F4F6; color: #111827; }
         .dept-list-item.active { background: #EFF6FF; color: #1D4ED8; font-weight: 600; }
+        .dept-list-item.dragging { opacity: 0.5; background: #F3F4F6; border: 1px dashed #6366f1; }
+        .dept-list-item:active { cursor: grabbing; }
+        
         .dept-cnt {
             font-size: 11px;
             background: #E5E7EB;
@@ -1048,9 +1051,16 @@ $status_map = ['draft' => ['#F1F5F9', '#64748B'], 'active' => ['#DBEAFE', '#1D4E
                 <div class="team-sb-body">
                     <?php foreach ($departments as $dpt): 
                         $cnt = $dept_kpi_count[$dpt['id']] ?? 0;
+                        if ($cnt == 0 && $filter_dept != $dpt['id']) continue;
                     ?>
                         <a href="?tab=<?= $tab ?>&year=<?= $year ?>&dept=<?= $dpt['id'] ?>" 
-                           class="dept-list-item <?= $filter_dept == $dpt['id'] ? 'active' : '' ?>">
+                           class="dept-list-item <?= $filter_dept == $dpt['id'] ? 'active' : '' ?>"
+                           draggable="true"
+                           data-id="<?= $dpt['id'] ?>"
+                           ondragstart="handleDragStart(event)"
+                           ondragover="handleDragOver(event)"
+                           ondrop="handleDrop(event)"
+                           style="cursor: move;">
                             <span><?= htmlspecialchars($dpt['name']) ?></span>
                             <span class="dept-cnt"><?= $cnt ?></span>
                         </a>
@@ -1257,6 +1267,58 @@ $status_map = ['draft' => ['#F1F5F9', '#64748B'], 'active' => ['#DBEAFE', '#1D4E
             } else {
                 sb.classList.add('open');
                 overlay.style.display = 'block';
+            }
+        }
+
+        let draggedItem = null;
+
+        function handleDragStart(e) {
+            draggedItem = e.currentTarget;
+            e.dataTransfer.effectAllowed = 'move';
+            draggedItem.classList.add('dragging');
+        }
+
+        function handleDragOver(e) {
+            e.preventDefault();
+            e.dataTransfer.dropEffect = 'move';
+        }
+
+        function handleDrop(e) {
+            e.preventDefault();
+            const targetItem = e.currentTarget;
+            if (draggedItem && draggedItem !== targetItem) {
+                const parent = targetItem.parentNode;
+                const items = Array.from(parent.querySelectorAll('.dept-list-item'));
+                const draggedIndex = items.indexOf(draggedItem);
+                const targetIndex = items.indexOf(targetItem);
+
+                if (draggedIndex < targetIndex) {
+                    parent.insertBefore(draggedItem, targetItem.nextSibling);
+                } else {
+                    parent.insertBefore(draggedItem, targetItem);
+                }
+                
+                saveDeptOrder();
+            }
+            if (draggedItem) draggedItem.classList.remove('dragging');
+        }
+
+        async function saveDeptOrder() {
+            const items = Array.from(document.querySelectorAll('.team-sb-body .dept-list-item'));
+            const order = items.map(item => item.getAttribute('data-id'));
+            
+            try {
+                const res = await fetch('/api/save_dept_order.php', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ order })
+                });
+                const data = await res.json();
+                if (!data.success) {
+                    console.error('Failed to save order:', data.message);
+                }
+            } catch (err) {
+                console.error('Error saving order:', err);
             }
         }
     </script>
