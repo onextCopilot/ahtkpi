@@ -417,12 +417,10 @@ if ($res) {
                 if ($ratio > 100) {
                     // Ratio is high, likely already in VND (e.g. 25000 for USD)
                     $vnd_value = $amount * $ratio;
-                    error_log("[DEBT ODOO RATIO-VND] Inv: $oid, Curr: $curr, Amt: $amount, Ratio: $ratio, Res: $vnd_value");
                 } else {
                     // Ratio is low, likely in a different company currency (e.g. 1.0 for MYR, 0.25 for USD)
                     // Needs conversion to VND using the VND multiplier relative to the base.
                     $vnd_value = $amount * $ratio * $vnd_multiplier;
-                    error_log("[DEBT ODOO RATIO-BASE] Inv: $oid, Curr: $curr, Amt: $amount, Ratio: $ratio, Mult: $vnd_multiplier, Res: $vnd_value");
                 }
             } else if ($odoo_total > 0 && $curr === 'VND') {
                  $vnd_value = $amount;
@@ -435,10 +433,6 @@ if ($res) {
             $vnd_multiplier = $odoo->getRate('VND', $date);
             // (Amount / Rate) = Amount in Company Currency. Then multiply by getRate('VND') to get VND.
             $vnd_value = ($rate > 0) ? (($amount / $rate) * $vnd_multiplier) : $amount;
-            
-            if ($curr !== 'VND') {
-                 error_log("[DEBT] Curr: $curr, Amount: $amount, Rate: $rate, VND Mult: $vnd_multiplier, Result: $vnd_value");
-            }
         }
 
         $total_amount_vnd += $vnd_value;
