@@ -148,9 +148,13 @@ function isMenuItemActive($path, $current_uri)
                 $bc_chk_stmt->close();
             }
         }
-        if ($has_bc_access): ?>
+        
+        // Folio is now part of BC section
+        $is_folio_active = strpos($current_uri, '/folio') !== false;
+        
+        if ($has_bc_access || $is_folio_active || true): // Always show if we want Folio visible here ?>
             <div class="nav-item nav-item-parent <?php
-            $is_bc_open = strpos($current_uri, '/bc-reports') !== false;
+            $is_bc_open = strpos($current_uri, '/bc-reports') !== false || $is_folio_active;
             echo $is_bc_open ? 'active open' : ''; ?>" onclick="toggleSubmenu(this)">
                 <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
                     stroke-linecap="round" stroke-linejoin="round">
@@ -163,9 +167,15 @@ function isMenuItemActive($path, $current_uri)
                 </svg>
             </div>
             <div class="submenu <?php echo $is_bc_open ? 'open' : ''; ?>">
+                <?php if ($has_bc_access): ?>
                 <a href="/bc-reports"
                     class="submenu-item <?php echo (strpos($current_uri, '/bc-reports') !== false) ? 'active' : ''; ?>">
                     <span>BC Reports</span>
+                </a>
+                <?php endif; ?>
+                
+                <a href="/folio" class="submenu-item <?php echo $is_folio_active ? 'active' : ''; ?>">
+                    <span>Folio – Jira Projects</span>
                 </a>
             </div>
         <?php endif; ?>

@@ -1,0 +1,82 @@
+{
+    "success": {
+        "folioId": 2033,
+        "canEdit": true,
+        "canSeeSensibleData": true,
+        "expensesCount": 1,
+        "positionsCount": 0,
+        "opexCategory": {
+            "name": "OPEX",
+            "displayName": "Operational Expenditures",
+            "shortDisplayName": "OPEX",
+            "salarySectionName": "Salaries",
+            "expenseTypes": [
+                {
+                    "id": "2112898591",
+                    "name": "Total Development",
+                    "expensesCount": 1,
+                    "expenses": [
+                        {
+                            "id": 13055,
+                            "name": "Total design + development",
+                            "amount": 2400,
+                            "convertedAmount": 2400,
+                            "currencyCode": "USD",
+                            "actual": false,
+                            "revenue": false,
+                            "reporter": {
+                                "value": "duyetbv",
+                                "avatarUrl": "https:\/\/cyclethis.com\/secure\/useravatar?size=medium&ownerId=duyetbv&avatarId=13411",
+                                "displayName": "B\u00f9i V\u0103n Duy\u1ec7t",
+                                "userKey": "duyetbv",
+                                "username": "duyetbv",
+                                "canEvaluate": false,
+                                "isNotAJIRAUser": false,
+                                "isActive": true,
+                                "isJIRAAdmin": false,
+                                "isSuperAdmin": false,
+                                "canEditGlobalSettings": false
+                            },
+                            "recurrence": {
+                                "displayRecurrence": "Once on 9\/Mar\/26",
+                                "frequency": {
+                                    "name": "ONCE",
+                                    "displayName": "Once"
+                                },
+                                "canBeAmortized": false,
+                                "startDate": "9\/Mar\/26",
+                                "occurrences": 1,
+                                "interval": 1,
+                                "shortDisplayRecurrence": "",
+                                "displayRecurrenceWithoutDate": "",
+                                "payments": {
+                                    "paymentList": [
+                                        {
+                                            "amount": 2400,
+                                            "date": "9\/Mar\/26"
+                                        }
+                                    ],
+                                    "totalCost": 2400
+                                },
+                                "outOfScope": false
+                            },
+                            "actualCost": 2400,
+                            "customFieldValues": [],
+                            "labels": [],
+                            "amortized": false
+                        }
+                    ],
+                    "totalCost": 2400
+                }
+            ],
+            "expensesCount": 1,
+            "positionsCount": 0,
+            "totalCost": 2400,
+            "expensesTotalCost": 2400
+        },
+        "totalCost": 2400,
+        "modified": true,
+        "applyingPositionUserRates": true,
+        "folioAdmin": false
+    }
+}

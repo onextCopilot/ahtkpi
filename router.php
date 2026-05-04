@@ -57,6 +57,7 @@ $routes = [
     '/sale-reports-admin' => 'modules/sale_reports_admin/index.php',
     '/guides' => 'modules/guides/index.php',
     '/core-key-kpi' => 'modules/core_kpi/index.php',
+    '/folio'        => 'modules/folio/index.php',
 ];
 
 // Check if route exists

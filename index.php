@@ -102,6 +102,7 @@ $routes = [
     '/plan-budgeting' => 'modules/plan_budgeting/index.php',
     '/plan-budgeting/report' => 'modules/plan_budgeting/report.php',
     '/documents' => 'modules/documents/index.php',
+    '/folio'     => 'modules/folio/index.php',
 ];
 
 // Check if route exists in our mapping
