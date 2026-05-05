@@ -3574,36 +3574,41 @@ function getLatestWeeklyProgress($id, $type, $map, $current_week, $live_fallback
                         $('#aiRawText').text(res.text || "(Empty response)");
                         let lines = res.text.split('\n');
                         let krs = [];
-                        let kas = [];
-                        let currentMode = 'kr';
+                        let currentKR = null;
 
                         lines.forEach(line => {
                             let l = line.trim();
-                            if (!l) return;
-                            let lower = l.toLowerCase();
-                            if (lower.includes('key result')) { currentMode = 'kr'; return; }
-                            if (lower.includes('key activity') || lower.includes('key activities')) { currentMode = 'ka'; return; }
-                            if (lower.includes('objective:')) return;
-                            let name = l.replace(/^[0-9\.\-\*\s]+/, '').replace(/^kr:?\s*/i, '').replace(/^ka:?\s*/i, '').trim();
-                            if (name.length < 5) return;
-                            if (currentMode === 'kr' && !lower.startsWith('-') && !lower.startsWith('*')) {
-                                krs.push({ name: name, children: [] });
-                            } else {
-                                kas.push(name);
+                            if (!l || l.toLowerCase().startsWith('objective:')) return;
+                            
+                            // 1. Clean the line: remove leading bullets, numbers, and symbols (including the dot bullet •)
+                            let clean = l.replace(/^[0-9\.\-\*\s•\u2022]+/, '').trim();
+                            let lowerClean = clean.toLowerCase();
+                            
+                            // 2. Identify Key Result (KR)
+                            if (lowerClean.startsWith('kr:') || lowerClean.startsWith('key result:')) {
+                                let name = clean.replace(/^(kr|key result):?\s*/i, '').trim();
+                                if (name.length > 5) {
+                                    currentKR = { name: name, children: [] };
+                                    krs.push(currentKR);
+                                }
+                            } 
+                            // 3. Identify Key Activity (KA)
+                            else if (lowerClean.startsWith('ka:') || lowerClean.startsWith('key activity:')) {
+                                let name = clean.replace(/^(ka|key activity):?\s*/i, '').trim();
+                                if (name.length > 5) {
+                                    if (!currentKR) {
+                                        currentKR = { name: "Suggested Key Result", children: [] };
+                                        krs.push(currentKR);
+                                    }
+                                    currentKR.children.push({ type: 'activity', name: name });
+                                }
+                            } 
+                            // 4. Fallback: if it doesn't have a prefix but we are inside a KR, treat it as a KA
+                            else if (currentKR && clean.length > 10) {
+                                currentKR.children.push({ type: 'activity', name: clean });
                             }
                         });
 
-                        if (kas.length > 0) {
-                            if (krs.length > 0) {
-                                kas.forEach((ka, idx) => {
-                                    let krIdx = Math.min(idx, krs.length - 1);
-                                    krs[krIdx].children.push({ type: 'activity', name: ka });
-                                });
-                            } else {
-                                krs.push({ name: "Suggested KR", children: kas.map(k => ({ type: 'activity', name: k })) });
-                            }
-                        }
-                        
                         let items = krs;
                         let html = '';
                         if (items.length === 0) {
