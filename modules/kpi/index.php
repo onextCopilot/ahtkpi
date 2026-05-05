@@ -106,18 +106,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $is_cond = isset($_POST['is_condition']) ? 1 : 0;
             $notes = trim($_POST['notes'] ?? '');
             $calc_method = in_array($_POST['calc_method'] ?? '', ['sum', 'avg']) ? $_POST['calc_method'] : 'sum';
+            $trend_type = in_array($_POST['trend_type'] ?? '', ['up', 'down']) ? $_POST['trend_type'] : 'up';
 
             if (empty($name)) {
                 $msg_err = "Tên KPI không được để trống.";
             } else {
                 if ($action === 'add_def') {
-                    $stmt = $conn->prepare("INSERT INTO kpi_definitions (year,department_id,kpi_group,kpi_name,target_base,unit,weight,kpi_owner_id,is_condition,notes,created_by,calc_method) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)");
-                    $stmt->bind_param("iissssdisiss", $yr, $dept_id, $group, $name, $target, $unit, $weight, $owner_id, $is_cond, $notes, $_SESSION['user_id'], $calc_method);
+                    $stmt = $conn->prepare("INSERT INTO kpi_definitions (year,department_id,kpi_group,kpi_name,target_base,unit,weight,kpi_owner_id,is_condition,notes,created_by,calc_method,trend_type) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)");
+                    $stmt->bind_param("iissssdisisss", $yr, $dept_id, $group, $name, $target, $unit, $weight, $owner_id, $is_cond, $notes, $_SESSION['user_id'], $calc_method, $trend_type);
                     $stmt->execute() ? $msg_ok = "Đã lưu KPI!" : $msg_err = $conn->error;
                 } else {
                     $id = intval($_POST['id']);
-                    $stmt = $conn->prepare("UPDATE kpi_definitions SET year=?,department_id=?,kpi_group=?,kpi_name=?,target_base=?,unit=?,weight=?,kpi_owner_id=?,is_condition=?,notes=?,calc_method=? WHERE id=?");
-                    $stmt->bind_param("iissssdiissi", $yr, $dept_id, $group, $name, $target, $unit, $weight, $owner_id, $is_cond, $notes, $calc_method, $id);
+                    $stmt = $conn->prepare("UPDATE kpi_definitions SET year=?,department_id=?,kpi_group=?,kpi_name=?,target_base=?,unit=?,weight=?,kpi_owner_id=?,is_condition=?,notes=?,calc_method=?,trend_type=? WHERE id=?");
+                    $stmt->bind_param("iissssdiisssi", $yr, $dept_id, $group, $name, $target, $unit, $weight, $owner_id, $is_cond, $notes, $calc_method, $trend_type, $id);
                     $stmt->execute() ? $msg_ok = "Đã lưu KPI!" : $msg_err = $conn->error;
                 }
             }
@@ -228,6 +229,11 @@ if ($col_check && $col_check->num_rows == 0) {
 $vdept_col_check = $conn->query("SHOW COLUMNS FROM users LIKE 'viewable_department_ids'");
 if ($vdept_col_check && $vdept_col_check->num_rows == 0) {
     $conn->query("ALTER TABLE users ADD COLUMN viewable_department_ids TEXT DEFAULT NULL AFTER department_id");
+}
+// Auto-create trend_type if missing
+$trend_col_check = $conn->query("SHOW COLUMNS FROM kpi_definitions LIKE 'trend_type'");
+if ($trend_col_check && $trend_col_check->num_rows == 0) {
+    $conn->query("ALTER TABLE kpi_definitions ADD COLUMN trend_type VARCHAR(10) DEFAULT 'up' AFTER calc_method");
 }
 
 $r = $conn->query("SELECT k.*, d.name dept_name, u.full_name owner_name, u.avatar owner_avatar, d.owner_id as dept_owner_id, d.manager_id as dept_manager_id
@@ -1162,12 +1168,19 @@ $status_map = ['draft' => ['#F1F5F9', '#64748B'], 'active' => ['#DBEAFE', '#1D4E
                         </select>
                     </div>
                     <div class="fg">
-                        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;margin-top:22px">
-                            <input type="checkbox" name="is_condition" id="def_cond"
-                                style="width:16px;height:16px;accent-color:#1D4ED8">
-                            ⚑ KPI điều kiện (phải đạt mới tính thưởng)
-                        </label>
+                        <label>Tính chất (Trend)</label>
+                        <select name="trend_type" id="def_trend_type">
+                            <option value="up">📈 Càng lớn càng tốt</option>
+                            <option value="down">📉 Càng nhỏ càng tốt</option>
+                        </select>
                     </div>
+                </div>
+                <div class="fg">
+                    <label style="display:flex;align-items:center;gap:8px;cursor:pointer;margin-top:10px">
+                        <input type="checkbox" name="is_condition" id="def_cond"
+                            style="width:16px;height:16px;accent-color:#1D4ED8">
+                        ⚑ KPI điều kiện (phải đạt mới tính thưởng)
+                    </label>
                 </div>
                 <div class="mf">
                     <button type="button" class="btn" onclick="closeDefModal()">Huỷ</button>
@@ -1186,6 +1199,8 @@ $status_map = ['draft' => ['#F1F5F9', '#64748B'], 'active' => ['#DBEAFE', '#1D4E
             document.getElementById('def_unit').value = '';
             document.getElementById('def_year').value = <?= $year ?>;
             document.getElementById('def_dept').value = '<?= $_SESSION['role'] !== 'admin' ? ($_SESSION['department_id'] ?? '') : '' ?>';
+            document.getElementById('def_calc_method').value = 'sum';
+            document.getElementById('def_trend_type').value = 'up';
             document.getElementById('defModal').classList.add('show');
         }
         function openEditDef(d) {
@@ -1203,6 +1218,7 @@ $status_map = ['draft' => ['#F1F5F9', '#64748B'], 'active' => ['#DBEAFE', '#1D4E
             document.getElementById('def_notes').value = d.notes || '';
             document.getElementById('def_cond').checked = d.is_condition == 1;
             document.getElementById('def_calc_method').value = d.calc_method || 'sum';
+            document.getElementById('def_trend_type').value = d.trend_type || 'up';
             document.getElementById('defModal').classList.add('show');
         }
         function closeDefModal() { document.getElementById('defModal').classList.remove('show') }

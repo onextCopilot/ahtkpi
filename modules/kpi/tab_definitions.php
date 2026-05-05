@@ -119,19 +119,43 @@ foreach ($defs as $d) {
 }
 
 // Helper: progress data from actual sum + target num
-function calcProgress($actualSum, $targetNum)
+function calcProgress($actualSum, $targetNum, $trendType = 'up')
 {
     if ($targetNum === null || $targetNum <= 0)
         return null;
-    $pct = min(999, round($actualSum / $targetNum * 100, 1));
-    if ($pct >= 100)
-        $c = ['bar' => '#10B981', 'txt' => '#065F46'];
-    elseif ($pct >= 80)
-        $c = ['bar' => '#3B82F6', 'txt' => '#1D4ED8'];
-    elseif ($pct >= 60)
-        $c = ['bar' => '#F59E0B', 'txt' => '#B45309'];
-    else
-        $c = ['bar' => '#EF4444', 'txt' => '#B91C1C'];
+
+    if ($trendType === 'down') {
+        // Càng nhỏ càng tốt (ví dụ: Nợ xấu, DSO, Chi phí)
+        // Công thức: % Hoàn thành = (2 - Thực tế/Mục tiêu) * 100
+        // Nếu Thực tế = 0 => 200% (Rất tốt)
+        // Nếu Thực tế = Mục tiêu => 100%
+        // Nếu Thực tế = 2 * Mục tiêu => 0% (Rất xấu)
+        $ratio = $actualSum / $targetNum;
+        $score = (2 - $ratio) * 100;
+        $pct = max(0, min(999, round($score, 1)));
+        
+        // Với logic này, % cao vẫn là tốt, % thấp là xấu -> Đồng nhất với KPI thuận
+        if ($pct >= 100)
+            $c = ['bar' => '#10B981', 'txt' => '#065F46']; // Xanh
+        elseif ($pct >= 80)
+            $c = ['bar' => '#3B82F6', 'txt' => '#1D4ED8']; // Xanh dương
+        elseif ($pct >= 60)
+            $c = ['bar' => '#F59E0B', 'txt' => '#B45309']; // Vàng
+        else
+            $c = ['bar' => '#EF4444', 'txt' => '#B91C1C']; // Đỏ
+    } else {
+        // Càng lớn càng tốt (ví dụ: Doanh thu)
+        $pct = min(999, round($actualSum / $targetNum * 100, 1));
+        if ($pct >= 100)
+            $c = ['bar' => '#10B981', 'txt' => '#065F46'];
+        elseif ($pct >= 80)
+            $c = ['bar' => '#3B82F6', 'txt' => '#1D4ED8'];
+        elseif ($pct >= 60)
+            $c = ['bar' => '#F59E0B', 'txt' => '#B45309'];
+        else
+            $c = ['bar' => '#EF4444', 'txt' => '#B91C1C'];
+    }
+    
     return ['pct' => $pct, 'barPct' => min(100, $pct), 'bar' => $c['bar'], 'txt' => $c['txt']];
 }
 
@@ -217,7 +241,7 @@ $COLS = 14; // STT+Nhóm+Tên+TargetNăm+CảNăm+Tỷtrọng+Q1+Q2+Q3+Q4+Owner+
                 $yrTot = $def_yr_totals[$d['id']] ?? null;
                 $baseRaw = stripThousands(trim($d['target_base'] ?? ''));
                 $baseNum = (is_numeric($baseRaw) && (float) $baseRaw > 0) ? (float) $baseRaw : null;
-                $yrProg = ($yrTot && !$yrTot['mixed'] && $baseNum) ? calcProgress($yrTot['sum'], $baseNum) : null;
+                $yrProg = ($yrTot && !$yrTot['mixed'] && $baseNum) ? calcProgress($yrTot['sum'], $baseNum, $d['trend_type'] ?? 'up') : null;
 
                 // Prepare 12-month data for chart drilldown
                 $yr_months_detail = [];
@@ -339,7 +363,7 @@ $COLS = 14; // STT+Nhóm+Tên+TargetNăm+CảNăm+Tỷtrọng+Q1+Q2+Q3+Q4+Owner+
                         }
 
                         
-                        $qProg = ($tot && !$tot['mixed'] && $qPlan) ? calcProgress($tot['sum'], $qPlan) : null;
+                        $qProg = ($tot && !$tot['mixed'] && $qPlan) ? calcProgress($tot['sum'], $qPlan, $d['trend_type'] ?? 'up') : null;
                         ?>
                         <?php
                             $months_detail = [];
