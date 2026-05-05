@@ -77,6 +77,7 @@ $routes = [
     '/settings/sale-levels' => 'modules/settings/sale-levels/index.php',
     '/settings/odoo-rates' => 'modules/settings/odoo_rates/index.php',
     '/settings/backup' => 'modules/settings/backup/index.php',
+    '/settings/workflow' => 'modules/settings/workflow/index.php',
     '/debt' => 'modules/debt/index.php',
     '/my-debt' => 'modules/my_debt/index.php',
     '/debt-warning' => 'modules/debt_warning/index.php',

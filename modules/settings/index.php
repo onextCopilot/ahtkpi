@@ -375,6 +375,29 @@ if ($res) {
                             </svg>
                         </div>
                     </a>
+
+                    <!-- AI Workflow Module -->
+                    <a href="/settings/workflow" class="setting-card">
+                        <div class="setting-icon">
+                            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M12 2a10 10 0 1 0 10 10A10 10 0 0 0 12 2zm0 18a8 8 0 1 1 8-8 8 8 0 0 1-8 8z"></path>
+                                <path d="M12 6v6l4 2"></path>
+                            </svg>
+                        </div>
+                        <div class="setting-info">
+                            <h3>AI Workflow Settings</h3>
+                            <p>Configure API Key for AI Agent workflows and OKR suggestions.</p>
+                        </div>
+                        <div class="setting-arrow">
+                            Configure Workflow
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <line x1="5" y1="12" x2="19" y2="12"></line>
+                                <polyline points="12 5 19 12 12 19"></polyline>
+                            </svg>
+                        </div>
+                    </a>
                 </div>
 
                 <!-- Online Users Block -->
