@@ -2213,7 +2213,7 @@ function getLatestWeeklyProgress($id, $type, $map, $current_week, $live_fallback
                         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
                             <label style="margin:0;">Objective Title</label>
                             <button type="button" class="btn-apple" style="padding:4px 12px; font-size:11px; background: linear-gradient(135deg, #5856d6 0%, #0071e3 100%); border:none; box-shadow: 0 4px 12px rgba(88,86,214,0.3);" onclick="openAiSidebar()">
-                                <i class="fas fa-sparkles" style="margin-right:6px;"></i> AI Assistant
+                                <i class="fas fa-lightbulb" style="margin-right:6px;"></i> AI Assistant
                             </button>
                         </div>
                         <input type="text" id="objModalTitle" placeholder="e.g. Increase revenue by 20%">
