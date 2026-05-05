@@ -888,8 +888,12 @@ if ($current_team_tab !== 'all') {
     // Base filter: must strictly belong to the objective's assigned team
     $team_filter = " WHERE team = '$safe_team'";
     
+    // If team view, strictly only show objectives belonging to the team itself (owner_id = 0)
+    if ($is_team_view) {
+        $team_filter .= " AND (owner_id = 0 OR owner_id IS NULL)";
+    }
     // If exploring a specific user within this team, filter further
-    if (!$is_team_view && $selected_user_id > 0) {
+    else if (!$is_team_view && $selected_user_id > 0) {
         $safe_user_name = $conn->real_escape_string((string)$selected_user_name);
         $team_filter .= " AND (owner_id = $selected_user_id OR (owner_id = 0 AND owner = '$safe_user_name'))";
     }
