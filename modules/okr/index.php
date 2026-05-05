@@ -113,6 +113,9 @@ addColIfNotExists($conn, 'okr_explanations', 'progress_value', 'DECIMAL(5,2) DEF
 addColIfNotExists($conn, 'okr_explanations', 'quarter', 'INT DEFAULT 0');
 addColIfNotExists($conn, 'okr_explanations', 'year', 'INT DEFAULT 0');
 
+// Seed AI Agent Key if missing
+$conn->query("INSERT IGNORE INTO okr_settings (setting_key, setting_value) VALUES ('ai_agent_key', 'app-A5A6IHS348o03mcq1yame8bl')");
+
 // Module-specific Page Titles
 $page_title = "OKR Management";
 $page_subtitle = "Sales & Marketing OKRs";
@@ -473,9 +476,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
         } else {
             $result_id = intval($_POST['parent_id'] ?? 0);
             $stmt = $conn->prepare("INSERT INTO okr_key_activities (objective_id, activity_name, progress, status, owner_name, owner_id, owner_avatar, priority, weight, result_id, sort_order) VALUES (?, ?, 0, 'pending', ?, ?, ?, ?, ?, ?, ?)");
-            $stmt->bind_param("ississsii", $oid, $name, $owner_name, $owner_id, $avatar, $priority, $weight, $result_id, $sort_order);
+            $stmt->bind_param("ississiii", $oid, $name, $owner_name, $owner_id, $avatar, $priority, $weight, $result_id, $sort_order);
             $stmt->execute();
         }
+
+        $inserted_id = $conn->insert_id;
 
         // Auto Update Objective Progress if it's a KR
         if ($type === 'metric') {
@@ -492,7 +497,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
                           WHERE o.id = $oid");
         }
         
-        echo json_encode(['success' => true]);
+        echo json_encode(['success' => true, 'id' => $inserted_id]);
         exit();
     }
     if ($_POST['action'] === 'create_objective') {
@@ -509,7 +514,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
         $stmt = $conn->prepare("INSERT INTO okr_objectives (title, team, owner, owner_id, status, progress, sort_order, quarter, year, cycle_id) VALUES (?, ?, ?, ?, ?, 0, ?, ?, ?, 1)");
         $stmt->bind_param("sssisiii", $title, $team, $owner_name, $owner_id, $status, $sort_order, $quarter, $year);
         $stmt->execute();
-        echo json_encode(['success' => true]);
+        echo json_encode(['success' => true, 'id' => $conn->insert_id]);
         exit();
     }
 
@@ -527,7 +532,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
         $stmt = $conn->prepare("UPDATE okr_objectives SET title=?, team=?, owner=?, owner_id=?, status=?, sort_order=?, quarter=?, year=? WHERE id=?");
         $stmt->bind_param("sssisiiii", $title, $team, $owner_name, $owner_id, $status, $sort_order, $quarter, $year, $oid);
         $stmt->execute();
-        echo json_encode(['success' => true]);
+        echo json_encode(['success' => true, 'id' => $oid]);
         exit();
     }
 
@@ -711,6 +716,50 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
             $stmt->execute();
         }
         echo json_encode(['success' => true]);
+        exit();
+    }
+    if ($_POST['action'] === 'run_okr_ai_agent') {
+        $objective = trim($_POST['objective'] ?? '');
+        $api_key = $okr_settings['ai_agent_key'] ?? '';
+        
+        if (!$api_key) {
+            echo json_encode(['success' => false, 'error' => 'API Key chưa được cấu hình trong Settings.']);
+            exit();
+        }
+        if (!$objective) {
+            echo json_encode(['success' => false, 'error' => 'Vui lòng nhập Mục tiêu để AI gợi ý.']);
+            exit();
+        }
+
+        $ch = curl_init('https://api.aihive.global/v1/workflows/run');
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($ch, CURLOPT_POST, true);
+        curl_setopt($ch, CURLOPT_HTTPHEADER, [
+            'Authorization: Bearer ' . $api_key,
+            'Content-Type: application/json'
+        ]);
+        
+        $payload = json_encode([
+            'inputs' => ['objective' => $objective],
+            'response_mode' => 'blocking',
+            'user' => 'user-' . ($_SESSION['user_id'] ?? 'anon')
+        ]);
+        
+        curl_setopt($ch, CURLOPT_POSTFIELDS, $payload);
+        
+        $response = curl_exec($ch);
+        $http_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        // curl_close() is no longer needed since PHP 8.0 and deprecated in newer versions
+        
+        if ($http_code !== 200) {
+            echo json_encode(['success' => false, 'error' => 'API Error (Code ' . $http_code . '): ' . $response]);
+            exit();
+        }
+        
+        $data = json_decode($response, true);
+        $ai_text = $data['data']['outputs']['text'] ?? '';
+        
+        echo json_encode(['success' => true, 'text' => $ai_text]);
         exit();
     }
 }
@@ -1200,7 +1249,7 @@ function getLatestWeeklyProgress($id, $type, $map, $current_week, $live_fallback
         .prog-high .item-number-circle, .prog-mid .item-number-circle, .prog-low .item-number-circle { background: rgba(255,255,255,0.9); border-color: transparent; }
         .prog-high .btn-add-inline, .prog-mid .btn-add-inline, .prog-low .btn-add-inline { color: inherit; background: rgba(255,255,255,0.15); border-color: rgba(255,255,255,0.2); }
         .prog-high .btn-add-inline:hover, .prog-mid .btn-add-inline:hover, .prog-low .btn-add-inline:hover { background: rgba(255,255,255,0.25); }
-        .ka-badge, .kr-badge { padding: 2px 8px; border-radius: 6px; font-weight: 800; text-transform: uppercase; border: 1px solid transparent; transition: all 0.2s; }
+        .ka-badge, .kr-badge { padding: 2px 8px; border-radius: 6px; font-weight: 800; text-transform: uppercase; border: 1px solid transparent; transition: all 0.2s; white-space: nowrap; flex-shrink: 0; }
         .ka-badge { background: rgba(0, 71, 227, 0.08); color: #0071e3; border-color: rgba(0, 71, 227, 0.1); font-size: 11px; }
         .kr-badge { background: rgba(100, 116, 139, 0.08); color: #64748b; border-color: rgba(100, 116, 139, 0.1); font-size: 10px; margin-right: 8px; }
 
@@ -1267,7 +1316,7 @@ function getLatestWeeklyProgress($id, $type, $map, $current_week, $live_fallback
         
         /* Sidebar Drawer */
         .apple-modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.15); backdrop-filter: saturate(180%) blur(20px); z-index: 9999; display: none; justify-content: flex-end; }
-        .apple-modal { background: rgba(255,255,255,0.92); width: 480px; height: 100%; box-shadow: -20px 0 60px rgba(0,0,0,0.05); transform: translateX(100%); transition: transform 0.6s cubic-bezier(0.16, 1, 0.3, 1); display: flex; flex-direction: column; border-left: 1px solid rgba(0,0,0,0.05); }
+        .apple-modal { background: rgba(255,255,255,0.92); min-width: 480px; height: 100%; box-shadow: -20px 0 60px rgba(0,0,0,0.05); transform: translateX(100%); transition: transform 0.6s cubic-bezier(0.16, 1, 0.3, 1); display: flex; flex-direction: column; border-left: 1px solid rgba(0,0,0,0.05); }
         
         
         /* Celebration row */
@@ -1999,89 +2048,250 @@ function getLatestWeeklyProgress($id, $type, $map, $current_week, $live_fallback
 
     <!-- OBJECTIVE MODAL -->
     <div class="apple-modal-overlay" id="objModalOverlay">
-        <div class="apple-modal" id="objModalContent">
-            <div class="modal-body">
-                <h3 class="modal-title">Objective Details</h3>
-                <p class="modal-subtitle">Modify the objective title, owner, and status.</p>
-                <input type="hidden" id="objModalId" value="">
-                
-                <div class="modal-control">
-                    <label>Objective Title</label>
-                    <input type="text" id="objModalTitle" placeholder="e.g. Increase revenue by 20%">
-                </div>
-
-                <div class="modal-control">
-                    <label>Assigned Team</label>
-                    <select id="objModalTeam">
-                        <option value="">-- No Team --</option>
-                        <?php foreach ($sale_teams_list as $tname): ?>
-                            <option value="<?php echo htmlspecialchars((string)$tname); ?>"><?php echo htmlspecialchars((string)$tname); ?></option>
-                        <?php endforeach; ?>
-                    </select>
-                </div>
-                
-                <div class="modal-control">
-                    <label>Owner (Assignee)</label>
-                    <select id="objModalOwner">
-                        <option value="0" disabled selected>-- Chọn Người sở hữu (User hoặc Team) --</option>
-                        <optgroup label="Hệ thống / Teams">
-                            <?php foreach ($all_teams as $tname): ?>
-                                <option value="0" data-type="team" data-name="<?php echo htmlspecialchars($tname); ?>" data-team="<?php echo htmlspecialchars($tname); ?>">[Team] <?php echo htmlspecialchars($tname); ?></option>
-                            <?php endforeach; ?>
-                        </optgroup>
-                        <optgroup label="Thành viên cá nhân">
-                            <?php foreach ($am_users as $u): ?>
-                                <option value="<?php echo $u['id']; ?>" data-type="user" data-name="<?php echo htmlspecialchars($u['full_name']); ?>" data-team="<?php echo htmlspecialchars($current_team_tab === 'all' ? '' : $current_team_tab); ?>"><?php echo htmlspecialchars($u['full_name']); ?></option>
-                            <?php endforeach; ?>
-                        </optgroup>
-                    </select>
-                </div>
-
-                <div class="modal-control">
-                    <label>Status</label>
-                    <select id="objModalStatus">
-                        <option value="pending">Pending</option>
-                        <option value="on_track">On Track</option>
-                        <option value="at_risk">At Risk</option>
-                        <option value="completed">Completed</option>
-                    </select>
-                </div>
-
-                <div class="modal-row" style="display:flex; gap:16px;">
-                    <div class="modal-control" style="flex:1;">
-                        <label>Quarter</label>
-                        <select id="objModalQuarter">
-                            <option value="1">Q1</option>
-                            <option value="2">Q2</option>
-                            <option value="3">Q3</option>
-                            <option value="4">Q4</option>
-                        </select>
+        <div class="apple-modal" id="objModalContent" style="width: 480px; max-width: 95vw; display: flex; flex-direction: row !important; transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1); overflow: hidden;">
+            
+            <!-- LEFT SIDE: AI SUGGESTIONS (Initially Hidden) -->
+            <div id="aiModalExtension" style="display:none; width: 680px; flex-shrink: 0; border-right: 1px solid #e5e5ea; background: #ffffff; flex-direction: column;">
+                <div class="sidebar-header" style="background: #ffffff; color: #1d1d1f; padding: 24px 32px 16px 32px; border-bottom: 1px solid #f2f2f7;">
+                    <div>
+                        <h3 style="margin:0; font-size:22px; font-weight:700;">AI Suggestions</h3>
+                        <p style="margin:0; font-size:13px; color:#86868b;">Review and edit suggested Key Results.</p>
                     </div>
-                    <div class="modal-control" style="flex:1;">
-                        <label>Year</label>
-                        <select id="objModalYear">
-                            <?php 
-                            $start_y = date('Y') - 1;
-                            $end_y = date('Y') + 1;
-                            for($y=$start_y;$y<=$end_y;$y++): ?>
-                                <option value="<?php echo $y; ?>"><?php echo $y; ?></option>
-                            <?php endfor; ?>
-                        </select>
-                    </div>
+                    <button type="button" class="btn-delete-row" style="color:#86868b; font-size:20px;" onclick="closeAiSidebar()">
+                        <i class="fas fa-times"></i>
+                    </button>
                 </div>
+                <div class="sidebar-body" style="padding: 16px 24px; overflow-y: auto; flex: 1;">
+                    <div id="aiConfigSection" style="background: #f5f5f7; padding: 16px; border-radius: 12px; margin-bottom: 20px; border: 1px solid #e5e5ea;">
+                        <label style="font-size:11px; font-weight:700; color:#1d1d1f; text-transform:uppercase; margin-bottom:12px; display:block;">AI Optimization Context</label>
+                        
+                        <div style="display:flex; gap:10px; margin-bottom:12px;">
+                            <div style="flex:1;">
+                                <label style="font-size:11px; color:#86868b; display:block; margin-bottom:4px;">Target Quarter</label>
+                                <select id="aiConfigQuarter" style="width:100%; font-size:12px; padding:8px; border-radius:8px; border:1px solid #d2d2d7; background:#fff;">
+                                    <option value="Q1">Quarter 1</option>
+                                    <option value="Q2" selected>Quarter 2</option>
+                                    <option value="Q3">Quarter 3</option>
+                                    <option value="Q4">Quarter 4</option>
+                                </select>
+                            </div>
+                            <div style="flex:1; position:relative;" class="ai-dropdown-wrapper">
+                                <label style="font-size:11px; color:#86868b; display:block; margin-bottom:4px;">Industry (Multi)</label>
+                                <div class="ai-custom-dropdown" onclick="event.stopPropagation(); $(this).find('.dropdown-options').toggle()">
+                                    <div class="selected-text" style="font-size:12px; padding:8px; border:1px solid #d2d2d7; border-radius:8px; background:#fff; cursor:pointer; min-height:34px; display:flex; align-items:center; justify-content:space-between;">
+                                        <span class="display-label">Select Industries</span> <i class="fas fa-chevron-down" style="font-size:10px; color:#86868b;"></i>
+                                    </div>
+                                    <div class="dropdown-options" style="display:none; position:absolute; top:100%; left:0; right:0; background:#fff; border:1px solid #d2d2d7; border-radius:8px; z-index:100; max-height:200px; overflow-y:auto; padding:8px; box-shadow:0 4px 12px rgba(0,0,0,0.1);">
+                                        <?php 
+                                        $industries = ["Technology", "Finance", "Manufacturing", "Retail", "Services", "Marketing", "Healthcare", "Education", "Real Estate", "E-commerce", "Logistics", "Hospitality", "Energy", "Agriculture"];
+                                        foreach($industries as $ind): ?>
+                                            <label style="display:flex; align-items:center; gap:8px; font-size:12px; padding:4px 0; cursor:pointer;">
+                                                <input type="checkbox" class="ai-industry-check" value="<?php echo $ind; ?>" onclick="event.stopPropagation(); updateAiDropdownLabel(this)"> <?php echo $ind; ?>
+                                            </label>
+                                        <?php endforeach; ?>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
 
-                <div class="modal-control">
-                    <label>Position / Sort Order</label>
-                    <input type="number" id="objModalSortOrder" value="0" placeholder="Số nhỏ hiện trước">
+                        <div style="display:flex; gap:10px; margin-bottom:12px;">
+                            <div style="flex:1;">
+                                <label style="font-size:11px; color:#86868b; display:block; margin-bottom:4px;">Budget ($)</label>
+                                <input type="text" id="aiConfigBudget" placeholder="e.g. 50,000" style="width:100%; font-size:12px; padding:8px; border-radius:8px; border:1px solid #d2d2d7;">
+                            </div>
+                            <div style="flex:1;">
+                                <label style="font-size:11px; color:#86868b; display:block; margin-bottom:4px;">Target Revenue ($)</label>
+                                <input type="text" id="aiConfigRevenue" placeholder="e.g. 1,000,000" style="width:100%; font-size:12px; padding:8px; border-radius:8px; border:1px solid #d2d2d7;">
+                            </div>
+                        </div>
+
+                        <div style="display:flex; gap:10px; margin-bottom:12px;">
+                            <div style="flex:1; position:relative;" class="ai-dropdown-wrapper">
+                                <label style="font-size:11px; color:#86868b; display:block; margin-bottom:4px;">Channel Type</label>
+                                <div class="ai-custom-dropdown" onclick="event.stopPropagation(); $(this).find('.dropdown-options').toggle()">
+                                    <div class="selected-text" style="font-size:12px; padding:8px; border:1px solid #d2d2d7; border-radius:8px; background:#fff; cursor:pointer; min-height:34px; display:flex; align-items:center; justify-content:space-between;">
+                                        <span class="display-label">Digital/Offline</span> <i class="fas fa-chevron-down" style="font-size:10px; color:#86868b;"></i>
+                                    </div>
+                                    <div class="dropdown-options" style="display:none; position:absolute; top:100%; left:0; right:0; background:#fff; border:1px solid #d2d2d7; border-radius:8px; z-index:100; padding:8px; box-shadow:0 4px 12px rgba(0,0,0,0.1);">
+                                        <label style="display:flex; align-items:center; gap:8px; font-size:12px; padding:4px 0; cursor:pointer;">
+                                            <input type="checkbox" class="ai-channel-check" value="Digital" onclick="event.stopPropagation(); updateAiDropdownLabel(this)"> Digital
+                                        </label>
+                                        <label style="display:flex; align-items:center; gap:8px; font-size:12px; padding:4px 0; cursor:pointer;">
+                                            <input type="checkbox" class="ai-channel-check" value="Offline" onclick="event.stopPropagation(); updateAiDropdownLabel(this)"> Offline
+                                        </label>
+                                    </div>
+                                </div>
+                            </div>
+                            <div style="flex:1; position:relative;" class="ai-dropdown-wrapper">
+                                <label style="font-size:11px; color:#86868b; display:block; margin-bottom:4px;">Department</label>
+                                <div class="ai-custom-dropdown" onclick="event.stopPropagation(); $(this).find('.dropdown-options').toggle()">
+                                    <div class="selected-text" style="font-size:12px; padding:8px; border:1px solid #d2d2d7; border-radius:8px; background:#fff; cursor:pointer; min-height:34px; display:flex; align-items:center; justify-content:space-between;">
+                                        <span class="display-label">Select Dept</span> <i class="fas fa-chevron-down" style="font-size:10px; color:#86868b;"></i>
+                                    </div>
+                                    <div class="dropdown-options" style="display:none; position:absolute; top:100%; left:0; right:0; background:#fff; border:1px solid #d2d2d7; border-radius:8px; z-index:100; padding:8px; box-shadow:0 4px 12px rgba(0,0,0,0.1);">
+                                        <label style="display:flex; align-items:center; gap:8px; font-size:12px; padding:4px 0; cursor:pointer;">
+                                            <input type="checkbox" class="ai-dept-check" value="Sales" onclick="event.stopPropagation(); updateAiDropdownLabel(this)"> Sales
+                                        </label>
+                                        <label style="display:flex; align-items:center; gap:8px; font-size:12px; padding:4px 0; cursor:pointer;">
+                                            <input type="checkbox" class="ai-dept-check" value="Marketing" onclick="event.stopPropagation(); updateAiDropdownLabel(this)"> Marketing
+                                        </label>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div style="margin-bottom:20px; position:relative;" class="ai-dropdown-wrapper">
+                            <label style="font-size:11px; color:#86868b; display:block; margin-bottom:4px;">Focus Countries (Multi)</label>
+                            <div class="ai-custom-dropdown" onclick="event.stopPropagation(); $(this).find('.dropdown-options').toggle()">
+                                <div class="selected-text" style="font-size:12px; padding:8px; border:1px solid #d2d2d7; border-radius:8px; background:#fff; cursor:pointer; min-height:34px; display:flex; align-items:center; justify-content:space-between;">
+                                    <span class="display-label">Select Countries</span> <i class="fas fa-chevron-down" style="font-size:10px; color:#86868b;"></i>
+                                </div>
+                                <div class="dropdown-options" style="display:none; position:absolute; top:100%; left:0; right:0; background:#fff; border:1px solid #d2d2d7; border-radius:8px; z-index:100; max-height:200px; overflow-y:auto; padding:10px; box-shadow:0 4px 12px rgba(0,0,0,0.1);">
+                                    <div style="display:grid; grid-template-columns: 1fr 1fr; gap:4px;">
+                                    <?php 
+                                    $countries = ["Vietnam", "Thailand", "Singapore", "Malaysia", "Philippines", "Indonesia", "USA", "UK", "Australia", "Japan", "Korea", "China", "Germany", "France", "Canada"];
+                                    foreach($countries as $c): ?>
+                                        <label style="display:flex; align-items:center; gap:8px; font-size:12px; padding:4px 0; cursor:pointer;">
+                                            <input type="checkbox" class="ai-country-check" value="<?php echo $c; ?>" onclick="event.stopPropagation(); updateAiDropdownLabel(this)"> <?php echo $c; ?>
+                                        </label>
+                                    <?php endforeach; ?>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div style="margin-bottom:12px; position:relative;" class="ai-dropdown-wrapper">
+                            <label style="font-size:11px; color:#86868b; display:block; margin-bottom:4px;">Target Audience (Multi)</label>
+                            <div class="ai-custom-dropdown" onclick="event.stopPropagation(); $(this).find('.dropdown-options').toggle()">
+                                <div class="selected-text" style="font-size:12px; padding:8px; border:1px solid #d2d2d7; border-radius:8px; background:#fff; cursor:pointer; min-height:34px; display:flex; align-items:center; justify-content:space-between;">
+                                    <span class="display-label">Select Audience</span> <i class="fas fa-chevron-down" style="font-size:10px; color:#86868b;"></i>
+                                </div>
+                                <div class="dropdown-options" style="display:none; position:absolute; top:100%; left:0; right:0; background:#fff; border:1px solid #d2d2d7; border-radius:8px; z-index:100; max-height:200px; overflow-y:auto; padding:10px; box-shadow:0 4px 12px rgba(0,0,0,0.1);">
+                                    <div style="display:grid; grid-template-columns: 1fr 1fr; gap:4px;">
+                                    <?php 
+                                    $audiences = ["B2B", "B2C", "Gen Z", "Millennials", "Enterprise", "SMBs/SMEs", "High-income", "Tech-savvy", "Parents", "Students", "Freelancers"];
+                                    foreach($audiences as $aud): ?>
+                                        <label style="display:flex; align-items:center; gap:8px; font-size:12px; padding:4px 0; cursor:pointer;">
+                                            <input type="checkbox" class="ai-audience-check" value="<?php echo $aud; ?>" onclick="event.stopPropagation(); updateAiDropdownLabel(this)"> <?php echo $aud; ?>
+                                        </label>
+                                    <?php endforeach; ?>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div style="margin-bottom:20px;">
+                            <label style="font-size:11px; color:#86868b; display:block; margin-bottom:4px;">Additional Requirements</label>
+                            <textarea id="aiConfigNotes" placeholder="e.g. Focus on organic growth, no paid ads..." style="width:100%; font-size:12px; padding:8px; border-radius:8px; border:1px solid #d2d2d7; height:60px; resize:none;"></textarea>
+                        </div>
+
+                        <button type="button" class="btn-apple" id="btnAiRunReal" style="width:100%; justify-content:center; background:#1d1d1f;" onclick="runAiGeneration()">
+                            Generate Smart Suggestions <i class="fas fa-magic" style="margin-left:8px;"></i>
+                        </button>
+                    </div>
+
+                    <div class="ai-raw-response" style="margin-bottom:20px; display: none;">
+                        <label style="font-size:11px; font-weight:700; color:#86868b; text-transform:uppercase; margin-bottom:8px; display:block;">Raw AI Output (Debug)</label>
+                        <div id="aiRawText" style="font-size:12px; color:#424245; background:#fff; padding:12px; border-radius:8px; border:1px solid #e5e5ea; white-space:pre-wrap; max-height:150px; overflow-y:auto;"></div>
+                    </div>
+                    
+                    <label style="font-size:11px; font-weight:700; color:#86868b; text-transform:uppercase; margin-bottom:12px; display:block;">Generated Suggestions</label>
+                    <div id="aiSidebarResultsList">
+                        <!-- KR/KA groups will be injected here -->
+                    </div>
                 </div>
             </div>
 
-            <div class="modal-actions">
-                <button class="btn-secondary" onclick="closeObjectiveModal()">Cancel</button>
-                <button class="btn-apple">
-                    <span id="objModalBtnText">Save Changes</span>
-                    <i class="fas fa-spinner" id="objLoadingSpinner" style="display:none; margin-left:8px; animation: spin 1s linear infinite;"></i>
-                </button>
+            <!-- RIGHT SIDE: FORM -->
+            <div style="flex: 1; width: 480px; min-width: 480px; display: flex; flex-direction: column; background: #ffffff; position: relative;">
+                <div class="modal-body" style="flex: 1; overflow-y: auto; padding: 40px 32px;">
+                    <h3 class="modal-title" style="margin:0; font-size:22px; font-weight:700; color:#1d1d1f;">Objective Details</h3>
+                    <p class="modal-subtitle" style="margin:0 0 24px 0; font-size:13px; color:#86868b;">Modify the objective title, owner, and status.</p>
+                    <input type="hidden" id="objModalId" value="">
+                    
+                    <div class="modal-control">
+                        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+                            <label style="margin:0;">Objective Title</label>
+                            <button type="button" class="btn-apple" style="padding:4px 12px; font-size:11px; background: linear-gradient(135deg, #5856d6 0%, #0071e3 100%); border:none; box-shadow: 0 4px 12px rgba(88,86,214,0.3);" onclick="openAiSidebar()">
+                                <i class="fas fa-sparkles" style="margin-right:6px;"></i> AI Assistant
+                            </button>
+                        </div>
+                        <input type="text" id="objModalTitle" placeholder="e.g. Increase revenue by 20%">
+                    </div>
+
+                    <div class="modal-control">
+                        <label>Assigned Team</label>
+                        <select id="objModalTeam">
+                            <option value="">-- No Team --</option>
+                            <?php foreach ($sale_teams_list as $tname): ?>
+                                <option value="<?php echo htmlspecialchars((string)$tname); ?>"><?php echo htmlspecialchars((string)$tname); ?></option>
+                            <?php endforeach; ?>
+                        </select>
+                    </div>
+                    
+                    <div class="modal-control">
+                        <label>Owner (Assignee)</label>
+                        <select id="objModalOwner">
+                            <option value="0" disabled selected>-- Chọn Người sở hữu (User hoặc Team) --</option>
+                            <optgroup label="Hệ thống / Teams">
+                                <?php foreach ($all_teams as $tname): ?>
+                                    <option value="0" data-type="team" data-name="<?php echo htmlspecialchars($tname); ?>" data-team="<?php echo htmlspecialchars($tname); ?>">[Team] <?php echo htmlspecialchars($tname); ?></option>
+                                <?php endforeach; ?>
+                            </optgroup>
+                            <optgroup label="Thành viên cá nhân">
+                                <?php foreach ($am_users as $u): ?>
+                                    <option value="<?php echo $u['id']; ?>" data-type="user" data-name="<?php echo htmlspecialchars($u['full_name']); ?>" data-team="<?php echo htmlspecialchars($current_team_tab === 'all' ? '' : $current_team_tab); ?>"><?php echo htmlspecialchars($u['full_name']); ?></option>
+                                <?php endforeach; ?>
+                            </optgroup>
+                        </select>
+                    </div>
+
+                    <div class="modal-control">
+                        <label>Status</label>
+                        <select id="objModalStatus">
+                            <option value="pending">Pending</option>
+                            <option value="on_track">On Track</option>
+                            <option value="at_risk">At Risk</option>
+                            <option value="completed">Completed</option>
+                        </select>
+                    </div>
+
+                    <div class="modal-row" style="display:flex; gap:16px;">
+                        <div class="modal-control" style="flex:1;">
+                            <label>Quarter</label>
+                            <select id="objModalQuarter">
+                                <option value="1">Q1</option>
+                                <option value="2">Q2</option>
+                                <option value="3">Q3</option>
+                                <option value="4">Q4</option>
+                            </select>
+                        </div>
+                        <div class="modal-control" style="flex:1;">
+                            <label>Year</label>
+                            <select id="objModalYear">
+                                <?php 
+                                $start_y = date('Y') - 1;
+                                $end_y = date('Y') + 1;
+                                for($y=$start_y;$y<=$end_y;$y++): ?>
+                                    <option value="<?php echo $y; ?>"><?php echo $y; ?></option>
+                                <?php endfor; ?>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="modal-control">
+                        <label>Position / Sort Order</label>
+                        <input type="number" id="objModalSortOrder" value="0" placeholder="Số nhỏ hiện trước">
+                    </div>
+                </div>
+
+                <div class="modal-actions" style="border-top: 1px solid #f2f2f7; background: #fff; padding: 20px;">
+                    <button type="button" class="btn-secondary" onclick="closeObjectiveModal()">Cancel</button>
+                    <button type="button" class="btn-apple" id="btnObjModalSave">
+                        <span id="objModalBtnText">Save Changes</span>
+                        <i class="fas fa-spinner" id="objLoadingSpinner" style="display:none; margin-left:8px; animation: spin 1s linear infinite;"></i>
+                    </button>
+                </div>
             </div>
         </div>
     </div>
@@ -2203,6 +2413,13 @@ function getLatestWeeklyProgress($id, $type, $map, $current_week, $live_fallback
                         <div style="flex:1;"><small style="color:#86868b;">Font Color</small><br><input type="color" id="cfg_kr_text_low" value="<?php echo $kr_text_low; ?>" style="height:38px; width:100%; padding:2px;"></div>
                     </div>
                 </div>
+                
+                <h4 style="margin: 30px 0 15px 0; font-size: 14px; color: #5856d6; border-bottom: 1px solid #f2f2f7; padding-bottom: 8px;">AI Agent Settings</h4>
+                <div class="modal-control">
+                    <label>AI Agent API Key</label>
+                    <input type="password" id="cfg_ai_agent_key" value="<?php echo htmlspecialchars($okr_settings['ai_agent_key'] ?? ''); ?>" placeholder="Enter API Key" style="width:100%; padding:10px; border:1px solid #d2d2d7; border-radius:8px;">
+                    <small style="color:#86868b; margin-top:4px; display:block;">Used for generating KR & KA from Objective titles.</small>
+                </div>
             </div>
             <div class="modal-actions">
                 <button class="btn-secondary" onclick="closeOkrSettingsModal()">Cancel</button>
@@ -2213,7 +2430,8 @@ function getLatestWeeklyProgress($id, $type, $map, $current_week, $live_fallback
         </div>
     </div>
 
-    <!-- EXPLANATION SIDEBAR -->
+
+
     <div class="sidebar-overlay" id="sidebarOverlay" onclick="closeExplanationSidebar()"></div>
     <div class="explanation-sidebar" id="explanationSidebar">
         <div class="sidebar-header">
@@ -2785,12 +3003,20 @@ function getLatestWeeklyProgress($id, $type, $map, $current_week, $live_fallback
             }
 
             // Default based on current view
-            if (<?php echo $is_team_view ? 'true' : 'false'; ?>) {
-               // Tìm option team tương ứng và chọn
-               const teamName = '<?php echo addslashes($current_team_tab); ?>';
-               $('#objModalOwner option[data-type="team"][data-name="'+teamName+'"]').prop('selected', true);
+            const selectedUserId = '<?php echo (int)$selected_user_id; ?>';
+            const selectedUserName = '<?php echo addslashes((string)$selected_user_name); ?>';
+            const isTeamView = <?php echo $is_team_view ? 'true' : 'false'; ?>;
+
+            if (isTeamView) {
+                // Team view: select the team itself as owner
+                const teamName = '<?php echo addslashes((string)$current_team_tab); ?>';
+                $('#objModalOwner option[data-type="team"][data-team="'+teamName+'"]').prop('selected', true);
+            } else if (selectedUserId > 0 && selectedUserId != '0') {
+                // Individual user view: select that specific user
+                document.getElementById('objModalOwner').value = selectedUserId;
             } else {
-               document.getElementById('objModalOwner').value = '<?php echo $_SESSION['user_id'] ?? 0; ?>';
+                // Fallback to logged-in user
+                document.getElementById('objModalOwner').value = '<?php echo $_SESSION['user_id'] ?? 0; ?>';
             }
             document.getElementById('objModalStatus').value = 'on_track';
             document.getElementById('objModalSortOrder').value = '0';
@@ -2799,7 +3025,7 @@ function getLatestWeeklyProgress($id, $type, $map, $current_week, $live_fallback
             
             document.querySelector('#objModalOverlay .modal-title').innerText = 'Create New Objective';
             document.getElementById('objModalBtnText').innerText = 'Create Objective';
-            document.querySelector('#objModalOverlay .btn-apple').setAttribute('onclick', 'saveCreateObjModal(this)');
+            document.getElementById('btnObjModalSave').setAttribute('onclick', 'saveCreateObjModal(this)');
 
             let modal = document.getElementById('objModalOverlay');
             modal.style.display = 'flex';
@@ -2841,7 +3067,16 @@ function getLatestWeeklyProgress($id, $type, $map, $current_week, $live_fallback
             }, function(res) {
                 document.getElementById('objLoadingSpinner').style.display = 'none';
                 if(res && res.success) {
-                    window.location.reload(); 
+                    // Check if AI panel is open and has suggestions
+                    if ($('#aiModalExtension').is(':visible') && $('#aiSidebarResultsList .ai-suggestion-group').length > 0) {
+                        saveAiSuggestions(res.id, owner_id, owner_name, function() {
+                            closeObjectiveModal();
+                            window.location.reload();
+                        });
+                    } else {
+                        closeObjectiveModal();
+                        window.location.reload();
+                    }
                 } else {
                     alert('Error creating objective');
                 }
@@ -2866,7 +3101,7 @@ function getLatestWeeklyProgress($id, $type, $map, $current_week, $live_fallback
             
             document.querySelector('#objModalOverlay .modal-title').innerText = 'Update Objective';
             document.getElementById('objModalBtnText').innerText = 'Save Changes';
-            document.querySelector('#objModalOverlay .btn-apple').setAttribute('onclick', 'saveObjectiveModal(this)');
+            document.getElementById('btnObjModalSave').setAttribute('onclick', 'saveObjectiveModal(this)');
 
             let modal = document.getElementById('objModalOverlay');
             modal.style.display = 'flex';
@@ -2876,7 +3111,10 @@ function getLatestWeeklyProgress($id, $type, $map, $current_week, $live_fallback
         function closeObjectiveModal() {
             let modalContent = document.getElementById('objModalContent');
             modalContent.classList.remove('active');
-            setTimeout(function() { document.getElementById('objModalOverlay').style.display = 'none'; }, 200);
+            setTimeout(function() { 
+                document.getElementById('objModalOverlay').style.display = 'none'; 
+                closeAiSidebar();
+            }, 200);
         }
 
         function saveObjectiveModal(btn) {
@@ -2914,8 +3152,16 @@ function getLatestWeeklyProgress($id, $type, $map, $current_week, $live_fallback
             }, function(res) {
                 document.getElementById('objLoadingSpinner').style.display = 'none';
                 if(res && res.success) {
-                    closeObjectiveModal();
-                    window.location.reload(); 
+                    // Check if AI panel is open and has suggestions
+                    if ($('#aiModalExtension').is(':visible') && $('#aiSidebarResultsList .ai-suggestion-group').length > 0) {
+                        saveAiSuggestions(res.id, owner_id, owner_name, function() {
+                            closeObjectiveModal();
+                            window.location.reload();
+                        });
+                    } else {
+                        closeObjectiveModal();
+                        window.location.reload();
+                    }
                 } else {
                     alert('Error updating objective data');
                 }
@@ -2953,7 +3199,7 @@ function getLatestWeeklyProgress($id, $type, $map, $current_week, $live_fallback
         }
         function closeOkrSettingsModal() {
             $('#okrSettingsModalOverlay').fadeOut(200);
-            $('#okrSettingsModalContent').removeClass('active');
+            $('#okrSettingsModalContent').addClass('active');
         }
         function saveOkrSettings(btn) {
             const high = $('#cfg_color_high').val();
@@ -2976,6 +3222,7 @@ function getLatestWeeklyProgress($id, $type, $map, $current_week, $live_fallback
             const obj_t_high = $('#cfg_obj_text_high').val();
             const obj_t_mid = $('#cfg_obj_text_mid').val();
             const obj_t_low = $('#cfg_obj_text_low').val();
+            const ai_key = $('#cfg_ai_agent_key').val();
             
             $(btn).prop('disabled', true);
             $('#okrSettingsLoadingSpinner').show();
@@ -3000,7 +3247,8 @@ function getLatestWeeklyProgress($id, $type, $map, $current_week, $live_fallback
                     obj_color_low: obj_low,
                     obj_text_high: obj_t_high,
                     obj_text_mid: obj_t_mid,
-                    obj_text_low: obj_t_low
+                    obj_text_low: obj_t_low,
+                    ai_agent_key: ai_key
                 }
             }, function(res) {
                 $(btn).prop('disabled', false);
@@ -3240,6 +3488,276 @@ function getLatestWeeklyProgress($id, $type, $map, $current_week, $live_fallback
             }
         }, 'json');
     }
+        $(document).ready(function() {
+            // Prevent ENTER key from submitting the modal/page
+            $(document).on('keydown', '#objModalTitle', function(e) {
+                if (e.which === 13) {
+                    e.preventDefault();
+                    generateWithAI(e);
+                    return false;
+                }
+            });
+            
+            // Debugging: Warn before reload to catch what triggers it
+            /*
+            window.onbeforeunload = function() {
+                return "Hệ thống đang cố gắng reload trang. Hãy kiểm tra Console để xem lỗi trước khi nhấn OK.";
+            };
+            */
+        });
+
+        function openAiSidebar() {
+            $('#aiModalExtension').css('display', 'flex');
+            $('#objModalContent').css({
+                'width': '1160px',
+                'flex-direction': 'row'
+            });
+        }
+        function closeAiSidebar() {
+            $('#aiModalExtension').hide();
+            $('#objModalContent').css('width', '480px');
+        }
+
+        function runAiGeneration() {
+            const objective = $('#objModalTitle').val().trim();
+            const quarter = $('#aiConfigQuarter').val();
+            
+            // Get selected industries from checkboxes
+            let industries = [];
+            $('.ai-industry-check:checked').each(function() { industries.push($(this).val()); });
+            
+            const budget = $('#aiConfigBudget').val().trim();
+            const revenue = $('#aiConfigRevenue').val().trim();
+            
+            // Get selected countries from checkboxes
+            let countries = [];
+            $('.ai-country-check:checked').each(function() { countries.push($(this).val()); });
+            
+            // Get other channels
+            let channels = [];
+            $('.ai-channel-check:checked').each(function() { channels.push($(this).val()); });
+
+            // Get selected depts
+            let depts = [];
+            $('.ai-dept-check:checked').each(function() { depts.push($(this).val()); });
+
+            // Get selected audience
+            let audience = [];
+            $('.ai-audience-check:checked').each(function() { audience.push($(this).val()); });
+
+            const notes = $('#aiConfigNotes').val().trim();
+            
+            if (!objective) {
+                alert("Vui lòng nhập Mục tiêu chính.");
+                return;
+            }
+
+            const btn = $('#btnAiRunReal');
+            const originalHtml = btn.html();
+            btn.prop('disabled', true).html('<i class="fas fa-spinner fa-spin"></i> Analyzing context...');
+
+            $('#aiSidebarResultsList').html('<div style="text-align:center; padding:40px; color:#86868b;"><i class="fas fa-brain fa-spin" style="font-size:24px; margin-bottom:12px;"></i><p style="font-size:13px;">AI is crafting personalized OKRs for you...</p></div>');
+
+            const fullContext = `Objective: ${objective}\nIndustry: ${industries.join(', ')}\nQuarter: ${quarter}\nBudget: ${budget || 'Flexible'}\nTarget Revenue: ${revenue || 'N/A'}\nChannels: ${channels.join(', ')}\nDepartment: ${depts.join(', ')}\nTarget Audience: ${audience.join(', ')}\nTarget Countries: ${countries.join(', ')}\nSpecific Requirements: ${notes || 'None'}`;
+
+            $.ajax({
+                url: window.location.href,
+                type: 'POST',
+                data: {
+                    action: 'run_okr_ai_agent',
+                    objective: fullContext + "\n\nIMPORTANT: Format your response as follows:\nKR: [Key Result Title]\n- KA: [Key Activity for this KR]\n- KA: [Another Key Activity for this KR]\nKR: [Next Key Result]..."
+                },
+                dataType: 'json',
+                success: function(res) {
+                    btn.prop('disabled', false).html(originalHtml);
+                    if (res.success) {
+                        $('#aiRawText').text(res.text || "(Empty response)");
+                        let lines = res.text.split('\n');
+                        let krs = [];
+                        let kas = [];
+                        let currentMode = 'kr';
+
+                        lines.forEach(line => {
+                            let l = line.trim();
+                            if (!l) return;
+                            let lower = l.toLowerCase();
+                            if (lower.includes('key result')) { currentMode = 'kr'; return; }
+                            if (lower.includes('key activity') || lower.includes('key activities')) { currentMode = 'ka'; return; }
+                            if (lower.includes('objective:')) return;
+                            let name = l.replace(/^[0-9\.\-\*\s]+/, '').replace(/^kr:?\s*/i, '').replace(/^ka:?\s*/i, '').trim();
+                            if (name.length < 5) return;
+                            if (currentMode === 'kr' && !lower.startsWith('-') && !lower.startsWith('*')) {
+                                krs.push({ name: name, children: [] });
+                            } else {
+                                kas.push(name);
+                            }
+                        });
+
+                        if (kas.length > 0) {
+                            if (krs.length > 0) {
+                                kas.forEach((ka, idx) => {
+                                    let krIdx = Math.min(idx, krs.length - 1);
+                                    krs[krIdx].children.push({ type: 'activity', name: ka });
+                                });
+                            } else {
+                                krs.push({ name: "Suggested KR", children: kas.map(k => ({ type: 'activity', name: k })) });
+                            }
+                        }
+                        
+                        let items = krs;
+                        let html = '';
+                        if (items.length === 0) {
+                            html = '<p style="color:#86868b; text-align:center; font-size:12px;">AI response format was unusual. Try adjusting the title.</p>';
+                        } else {
+                            items.forEach((item, idx) => {
+                                html += `
+                                <div class="ai-suggestion-group" style="margin-bottom:20px; padding:12px; background:#fff; border-radius:12px; border:1px solid #e5e5ea;">
+                                    <div class="ai-suggestion-row" data-role="parent" style="display:flex; gap:8px; margin-bottom:10px; align-items:center;">
+                                        <span style="font-size:10px; font-weight:800; color:#0071e3; background:rgba(0,113,227,0.1); padding:2px 6px; border-radius:4px;">KR</span>
+                                        <input type="text" class="ai-suggest-name" value="${item.name.replace(/"/g, '&quot;')}" style="flex:1; padding:6px; font-size:13px; font-weight:700; border:none; border-bottom:1px solid #f2f2f7; outline:none;">
+                                        <button type="button" class="btn-delete-row" onclick="$(this).closest('.ai-suggestion-group').remove()"><i class="fas fa-times"></i></button>
+                                    </div>
+                                    <div class="ai-suggestion-children" style="padding-left:24px; border-left:2px solid #f2f2f7; margin-left:10px;">`;
+                                item.children.forEach(child => {
+                                    html += `
+                                    <div class="ai-suggestion-row" data-role="child" style="display:flex; gap:8px; margin-bottom:8px; align-items:center;">
+                                        <span style="font-size:10px; font-weight:800; color:#86868b; background:rgba(0,0,0,0.05); padding:2px 6px; border-radius:4px;">KA</span>
+                                        <input type="text" class="ai-suggest-name" value="${child.name.replace(/"/g, '&quot;')}" style="flex:1; padding:4px; font-size:12px; border:none; outline:none; color:#515154;">
+                                        <button type="button" class="btn-delete-row" onclick="$(this).closest('.ai-suggestion-row').remove()"><i class="fas fa-times"></i></button>
+                                    </div>`;
+                                });
+                                html += `</div></div>`;
+                            });
+                        }
+                        $('#aiSidebarResultsList').html(html);
+                    } else {
+                        alert("Lỗi từ AI: " + (res.error || "Không có phản hồi."));
+                    }
+                },
+                error: function(xhr, status, error) {
+                    btn.css('pointer-events', 'auto').css('opacity', '1');
+                    btn.html(originalHtml);
+                    alert("Lỗi kết nối đến máy chủ.");
+                }
+            });
+            return false;
+        }
+
+        async function saveAiSuggestions(objId, ownerId, ownerName, callback) {
+            const groups = $('.ai-suggestion-group');
+            console.log("Saving AI suggestions for Obj ID:", objId, "Groups found:", groups.length);
+            
+            if (groups.length === 0) {
+                console.log("No AI suggestions to save.");
+                if (callback) callback();
+                return;
+            }
+
+            const finalOwnerId = ownerId || <?php echo $_SESSION['user_id'] ?? 0; ?>;
+            const finalOwnerName = ownerName || '<?php echo addslashes($_SESSION['full_name'] ?? 'AI Agent'); ?>';
+
+            for (let i = 0; i < groups.length; i++) {
+                const group = $(groups[i]);
+                const krName = group.find('[data-role="parent"] .ai-suggest-name').val().trim();
+                
+                if (krName) {
+                    try {
+                        console.log(`Saving KR ${i+1}: ${krName}`);
+                        const krRes = await $.ajax({
+                            url: window.location.href,
+                            type: 'POST',
+                            data: {
+                                action: 'add_okr_item',
+                                obj_id: objId,
+                                type: 'metric',
+                                name: krName,
+                                owner_id: finalOwnerId,
+                                owner_name: finalOwnerName
+                            },
+                            dataType: 'json'
+                        });
+                        
+                        if (krRes && krRes.success) {
+                            const krId = krRes.id;
+                            console.log(`KR Saved successfully. ID: ${krId}. Now saving KAs...`);
+                            
+                            const children = group.find('[data-role="child"]');
+                            for (let j = 0; j < children.length; j++) {
+                                const kaName = $(children[j]).find('.ai-suggest-name').val().trim();
+                                if (kaName) {
+                                    console.log(`Saving KA ${j+1} for KR ${krId}: ${kaName}`);
+                                    const kaRes = await $.ajax({
+                                        url: window.location.href,
+                                        type: 'POST',
+                                        data: {
+                                            action: 'add_okr_item',
+                                            obj_id: objId,
+                                            type: 'activity',
+                                            name: kaName,
+                                            parent_id: krId, // LINKING HAPPENS HERE
+                                            owner_id: finalOwnerId,
+                                            owner_name: finalOwnerName
+                                        },
+                                        dataType: 'json'
+                                    });
+                                    if (kaRes && kaRes.success) {
+                                        console.log(`KA ${j+1} linked successfully.`);
+                                    } else {
+                                        console.error(`Failed to link KA ${j+1}:`, kaRes);
+                                    }
+                                }
+                            }
+                        } else {
+                            console.error(`Failed to save KR ${i+1}:`, krRes);
+                        }
+                    } catch (e) {
+                        console.error("Critical error in saveAiSuggestions:", e);
+                    }
+                }
+            }
+            console.log("All AI suggestions processing complete.");
+            if (callback) callback();
+        }
+
+        function updateAiDropdownLabel(checkbox) {
+            const wrapper = $(checkbox).closest('.ai-dropdown-wrapper');
+            const display = wrapper.find('.display-label');
+            const isIndustry = wrapper.find('.ai-industry-check').length > 0;
+            const isCountry = wrapper.find('.ai-country-check').length > 0;
+            const isChannel = wrapper.find('.ai-channel-check').length > 0;
+            const isDept = wrapper.find('.ai-dept-check').length > 0;
+            const isAudience = wrapper.find('.ai-audience-check').length > 0;
+
+            let defaultText = 'Select Options';
+            if (isIndustry) defaultText = 'Select Industries';
+            else if (isCountry) defaultText = 'Select Countries';
+            else if (isChannel) defaultText = 'Digital/Offline';
+            else if (isDept) defaultText = 'Select Dept';
+            else if (isAudience) defaultText = 'Select Audience';
+            
+            let selected = [];
+            wrapper.find('input[type="checkbox"]:checked').each(function() {
+                selected.push($(this).val());
+            });
+
+            if (selected.length === 0) {
+                display.text(defaultText).css('color', '#86868b');
+            } else if (selected.length <= 2) {
+                display.text(selected.join(', ')).css('color', '#1d1d1f');
+            } else {
+                let suffix = ' items selected';
+                if (isIndustry) suffix = ' industries selected';
+                else if (isCountry) suffix = ' countries selected';
+                display.text(selected.length + suffix).css('color', '#1d1d1f');
+            }
+        }
+
+        // Close dropdowns when clicking outside
+        $(document).on('click', function(e) {
+            if (!$(e.target).closest('.ai-custom-dropdown').length) {
+                $('.dropdown-options').hide();
+            }
+        });
     </script>
 </body>
 </html>
