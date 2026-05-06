@@ -58,8 +58,15 @@ $routes = [
     '/sale-reports-admin' => 'modules/sale_reports_admin/index.php',
     '/guides' => 'modules/guides/index.php',
     '/core-key-kpi' => 'modules/core_kpi/index.php',
-    '/folio'        => 'modules/folio/index.php',
+    '/folio' => 'modules/folio/index.php',
+    '/hrm' => 'modules/hrm/index.php',
+    '/hrm/e-hiring' => 'modules/hrm/e_hiring.php',
+    '/hrm/company-info' => 'modules/hrm/company_info.php',
+    '/hrm/ajax-handler' => 'modules/hrm/ajax_handler.php',
 ];
+
+// DEBUG: log URI + match result
+file_put_contents(__DIR__ . '/debug_router.log', date('H:i:s') . " URI=[$uri] IN_ROUTES=" . (array_key_exists($uri, $routes) ? 'YES' : 'NO') . "\n", FILE_APPEND);
 
 // Check if route exists
 if (array_key_exists($uri, $routes)) {
