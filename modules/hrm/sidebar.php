@@ -2,10 +2,14 @@
 $current_page = $_SERVER['REQUEST_URI'];
 $sidebar_logo = null;
 if (isset($conn)) {
-    $logo_res = $conn->query("SELECT logo FROM hrm_company_settings WHERE id = 1");
-    if ($logo_res) {
-        $logo_row = $logo_res->fetch_assoc();
-        $sidebar_logo = $logo_row['logo'] ?? null;
+    try {
+        $logo_res = $conn->query("SELECT logo FROM hrm_company_settings WHERE id = 1");
+        if ($logo_res) {
+            $logo_row = $logo_res->fetch_assoc();
+            $sidebar_logo = $logo_row['logo'] ?? null;
+        }
+    } catch (\Exception $e) {
+        // Table doesn't exist yet, ignore
     }
 }
 ?>
