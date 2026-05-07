@@ -7,7 +7,7 @@
  */
 
 $uri = parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH);
-$uri = urldecode($uri);
+$uri = strtolower(urldecode($uri));
 
 // Strip any script filename prefix (e.g. /router.php, /index.php)
 // This happens when PHP built-in server is invoked with a router script
@@ -75,6 +75,10 @@ $routes = [
     '/hrm/job-post-create' => 'modules/hrm/job_post_create.php',
     '/hrm/system-settings' => 'modules/hrm/system_settings.php',
     '/hrm/ajax-handler' => 'modules/hrm/ajax_handler.php',
+    '/hrm/email-templates' => 'modules/hrm/email_templates.php',
+    '/hrm/email-template-detail' => 'modules/hrm/email_template_detail.php',
+    '/hrm/interview-templates' => 'modules/hrm/interview_templates.php',
+    '/hrm/interview-template-detail' => 'modules/hrm/interview_template_detail.php',
 ];
 
 // DEBUG: log URI + match result
