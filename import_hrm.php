@@ -1006,6 +1006,11 @@ if ($conn->query('CREATE TABLE IF NOT EXISTS `hrm_email_templates` (
   PRIMARY KEY (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;</small></li>';
 }
+if ($conn->query('DELETE FROM `hrm_email_templates`;')) {
+    // echo '<li>Thành công</li>';
+} else {
+    echo '<li style="color:red">Lỗi: ' . $conn->error . ' <br><small>Query: DELETE FROM `hrm_email_templates`;</small></li>';
+}
 if ($conn->query('CREATE TABLE IF NOT EXISTS `hrm_evaluation_criteria` (
   `id` int(11) NOT NULL AUTO_INCREMENT,
   `group_id` int(11) DEFAULT NULL,
