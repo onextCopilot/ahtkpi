@@ -238,13 +238,13 @@ if (count($filter_clauses) > 0 || count($time_clauses) > 0) {
     $active_filters_sql = implode(" AND ", $combined);
 }
 
-$where_sql = "WHERE $identity_sql AND ($active_filters_sql OR d.invoice_date IS NULL OR d.invoice_date = '0000-00-00')";
+    $where_sql = "WHERE $identity_sql AND ($active_filters_sql OR d.invoice_date IS NULL OR d.invoice_date < '1000-01-01')";
 
 $groupedDebts = [];
 $monthTotals = [];
 $total_amount_usd = 0;
 $total_amount_vnd = 0;
-$res = $conn->query("SELECT d.*, st.name as team_name FROM debts d LEFT JOIN sale_teams st ON d.sale_team_id = st.id $where_sql ORDER BY (d.invoice_date IS NULL OR d.invoice_date = '0000-00-00') DESC, d.invoice_date DESC, d.id DESC");
+$res = $conn->query("SELECT d.*, st.name as team_name FROM debts d LEFT JOIN sale_teams st ON d.sale_team_id = st.id $where_sql ORDER BY (d.invoice_date IS NULL OR d.invoice_date < '1000-01-01') DESC, d.invoice_date DESC, d.id DESC");
 
 // Trigger cache refresh if needed (OdooAPI::getInvoices handles the 1-hour check internally)
 $odoo->getInvoices(1, 0);
@@ -496,7 +496,7 @@ if ($res) {
         $row['currency'] = 'VND';
         $row['formatted_original'] = formatCurrency($amount, $curr);
 
-        $mKey = (!empty($row['invoice_date']) && $row['invoice_date'] !== '0000-00-00') ? date('m/Y', strtotime($row['invoice_date'])) : 'Nợ chưa vào tháng';
+        $mKey = (!empty($row['invoice_date']) && $row['invoice_date'] > '1000-01-01') ? date('m/Y', strtotime($row['invoice_date'])) : 'Nợ chưa vào tháng';
         $groupedDebts[$mKey][] = $row;
         if (!isset($monthTotals[$mKey]))
             $monthTotals[$mKey] = 0;
