@@ -3,6 +3,7 @@ require_once __DIR__ . '/config/config.php';
 global $conn;
 if (!isset($conn) || $conn->connect_error) { die('Connection failed'); }
 
+$conn->query('SET FOREIGN_KEY_CHECKS=0;');
 echo '<h2>Bắt đầu import dữ liệu HRM...</h2><ul>';
 
 if ($conn->query('CREATE TABLE IF NOT EXISTS `hrm_candidate_sources` (
@@ -1969,4 +1970,5 @@ if ($conn->query('INSERT INTO `hrm_talent_pools` (`id`, `name`, `description`, `
     echo '<li style="color:red">Lỗi: ' . $conn->error . ' <br><small>Query: INSERT INTO `hrm_talent_pools` (`id`, `name`, `description`, `created_by`, `created_at`) VALUES (\&#039;4\&#039;, \&#039;All Databases\&#039;, \&#039;\&#039;, \&#039;1\&#039;, \&#039;2026-05-07 10:31:42\&#039;);</small></li>';
 }
 
+$conn->query('SET FOREIGN_KEY_CHECKS=1;');
 echo '</ul><h3>✅ HOÀN TẤT IMPORT! Bạn có thể xoá file import_hrm.php này khỏi server.</h3>';
