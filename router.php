@@ -9,13 +9,16 @@
 $uri = parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH);
 $uri = urldecode($uri);
 
-// Remove query string
-$uri = strtok($uri, '?');
+// Strip any script filename prefix (e.g. /router.php, /index.php)
+// This happens when PHP built-in server is invoked with a router script
+$uri = preg_replace('#^/(router|index)\.php#', '', $uri);
+if (empty($uri)) $uri = '/';
 
 // Remove trailing slash except for root
 if ($uri !== '/') {
     $uri = rtrim($uri, '/');
 }
+if (empty($uri)) $uri = '/';
 
 // Route mapping
 $routes = [
@@ -62,6 +65,15 @@ $routes = [
     '/hrm' => 'modules/hrm/index.php',
     '/hrm/e-hiring' => 'modules/hrm/e_hiring.php',
     '/hrm/company-info' => 'modules/hrm/company_info.php',
+    '/hrm/permissions' => 'modules/hrm/permissions.php',
+    '/hrm/proposal-settings' => 'modules/hrm/proposal_settings.php',
+    '/hrm/other-settings' => 'modules/hrm/other_settings.php',
+    '/hrm/candidate-sources' => 'modules/hrm/candidate_sources.php',
+    '/hrm/rejection-reasons' => 'modules/hrm/rejection_reasons.php',
+    '/hrm/expired-job-settings' => 'modules/hrm/expired_job_settings.php',
+    '/hrm/evaluation-criteria' => 'modules/hrm/evaluation_criteria.php',
+    '/hrm/job-post-create' => 'modules/hrm/job_post_create.php',
+    '/hrm/system-settings' => 'modules/hrm/system_settings.php',
     '/hrm/ajax-handler' => 'modules/hrm/ajax_handler.php',
 ];
 
@@ -71,8 +83,10 @@ file_put_contents(__DIR__ . '/debug_router.log', date('H:i:s') . " URI=[$uri] IN
 // Check if route exists
 if (array_key_exists($uri, $routes)) {
     $file = __DIR__ . '/' . $routes[$uri];
+    file_put_contents(__DIR__ . '/debug_router.log', date('H:i:s') . " DEBUG: __DIR__=[" . __DIR__ . "] FILE=[" . $file . "] EXISTS=" . (file_exists($file) ? 'YES' : 'NO') . "\n", FILE_APPEND);
 
     if (file_exists($file)) {
+        file_put_contents(__DIR__ . '/debug_router.log', date('H:i:s') . " MATCHED! Requiring: [$file]\n", FILE_APPEND);
         // Set the script filename for proper path resolution
         $_SERVER['SCRIPT_FILENAME'] = $file;
         $_SERVER['SCRIPT_NAME'] = '/' . $routes[$uri];

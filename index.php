@@ -16,12 +16,9 @@ $request_uri = $_SERVER['REQUEST_URI'];
 $parsed_uri = parse_url($request_uri, PHP_URL_PATH);
 $uri = urldecode($parsed_uri);
 
-// Try to auto-detect base path if app is installed in a subdirectory
-$script_name = $_SERVER['SCRIPT_NAME']; // usually /index.php or /subdir/index.php
-$base_path = dirname($script_name);
-if ($base_path !== '/' && $base_path !== '\\' && strpos($uri, $base_path) === 0) {
-    $uri = substr($uri, strlen($base_path));
-}
+// Strip any script filename prefix (e.g. /router.php, /index.php)
+$uri = preg_replace('#^/(router|index)\.php#', '', $uri);
+if (empty($uri)) $uri = '/';
 
 // Clean up URI
 $uri = rtrim($uri, '/');
@@ -104,7 +101,23 @@ $routes = [
     '/plan-budgeting/report' => 'modules/plan_budgeting/report.php',
     '/documents' => 'modules/documents/index.php',
     '/folio'     => 'modules/folio/index.php',
+    '/hrm' => 'modules/hrm/index.php',
+    '/hrm/e-hiring' => 'modules/hrm/e_hiring.php',
+    '/hrm/company-info' => 'modules/hrm/company_info.php',
+    '/hrm/permissions' => 'modules/hrm/permissions.php',
+    '/hrm/proposal-settings' => 'modules/hrm/proposal_settings.php',
+    '/hrm/other-settings' => 'modules/hrm/other_settings.php',
+    '/hrm/candidate-sources' => 'modules/hrm/candidate_sources.php',
+    '/hrm/rejection-reasons' => 'modules/hrm/rejection_reasons.php',
+    '/hrm/expired-job-settings' => 'modules/hrm/expired_job_settings.php',
+    '/hrm/evaluation-criteria' => 'modules/hrm/evaluation_criteria.php',
+    '/hrm/job-post-create' => 'modules/hrm/job_post_create.php',
+    '/hrm/system-settings' => 'modules/hrm/system_settings.php',
+    '/hrm/ajax-handler' => 'modules/hrm/ajax_handler.php',
 ];
+
+// DEBUG: log URI + match result
+file_put_contents(__DIR__ . '/debug_index.log', date('H:i:s') . " URI=[$uri] IN_ROUTES=" . (array_key_exists($uri, $routes) ? 'YES' : 'NO') . "\n", FILE_APPEND);
 
 // Check if route exists in our mapping
 if (array_key_exists($uri, $routes)) {

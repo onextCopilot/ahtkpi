@@ -14,8 +14,8 @@
 .ck-tab:hover{color:#1D4ED8;background:#fff;}
 .ck-tab.active{background:#fff;color:#1D4ED8;font-weight:700;box-shadow:0 1px 4px rgba(0,0,0,.12);}
 .ck-body{flex:1;overflow-y:auto;padding:16px 20px;display:flex;flex-direction:column;gap:14px;}
-.panel{background:#fff;border:1px solid #E5E7EB;border-radius:var(--radius);overflow:hidden;}
-.panel-hd{display:flex;align-items:center;justify-content:space-between;padding:10px 16px;border-bottom:1px solid #F3F4F6;background:#FAFAFA;}
+.panel{background:#fff;border:1px solid #E5E7EB;border-radius:var(--radius);display:flex;flex-direction:column;overflow:hidden;}
+.panel-hd{display:flex;align-items:center;justify-content:space-between;padding:10px 16px;border-bottom:1px solid #F3F4F6;background:#FAFAFA;flex-shrink:0;}
 .panel-hd h3{font-size:14px;font-weight:700;color:#111827;margin:0;}
 .panel-bd{padding:14px 16px;}
 .btn{display:inline-flex;align-items:center;gap:5px;padding:6px 14px;border-radius:6px;font-size:13px;font-weight:500;cursor:pointer;border:1px solid #D1D5DB;background:#fff;color:#374151;transition:all .15s;text-decoration:none;}
@@ -27,12 +27,12 @@
 .btn-sm{padding:3px 9px;font-size:12px;}
 .badge{display:inline-block;padding:2px 8px;border-radius:12px;font-size:11px;font-weight:600;}
 /* Table */
-.tbl{width:100%;border-collapse:collapse;font-size:13px;}
-.tbl th{background:#F8FAFC;padding:8px 10px;text-align:left;font-weight:600;color:#374151;border-bottom:2px solid #E5E7EB;white-space:nowrap;}
-.tbl td{padding:7px 10px;border-bottom:1px solid #F3F4F6;color:#374151;vertical-align:middle;}
+.tbl{width:100%;border-collapse:separate;border-spacing:0;font-size:13px;}
+.tbl th{background:#F8FAFC;padding:8px 10px;text-align:left;font-weight:600;color:#374151;border-bottom:2px solid #E5E7EB;white-space:nowrap;position:sticky;top:0;z-index:10;box-shadow:0 2px 0 0 #E5E7EB;}
+.tbl td{padding:7px 10px;border-bottom:1px solid #F3F4F6;color:#374151;vertical-align:middle;background:#fff;}
 .tbl tr:hover td{background:#F8FAFF;}
 .tbl tfoot td{background:#F8FAFC;font-weight:700;border-top:2px solid #E5E7EB;}
-.tbl-wrap{overflow-x:auto;}
+.tbl-wrap{overflow:auto;flex:1;max-height:calc(100vh - 220px);}
 /* Cards grid */
 .emp-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:14px;}
 .emp-card{background:#fff;border:1px solid #E5E7EB;border-radius:10px;padding:14px;transition:box-shadow .15s;}
