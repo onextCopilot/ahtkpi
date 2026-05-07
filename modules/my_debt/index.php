@@ -28,6 +28,15 @@ if (!isset($_SESSION['email'])) {
 }
 $current_user_email = $_SESSION['email'] ?? '';
 
+// Fetch user's team IDs
+$user_team_ids = [];
+$res_teams = $conn->query("SELECT team_id FROM user_sale_teams WHERE user_id = $current_user_id");
+if ($res_teams) {
+    while ($rt = $res_teams->fetch_assoc()) {
+        $user_team_ids[] = intval($rt['team_id']);
+    }
+}
+
 // Prevent caching
 header("Cache-Control: no-store, no-cache, must-revalidate, max-age=0");
 header("Cache-Control: post-check=0, pre-check=0", false);
@@ -163,72 +172,79 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 // --- FILTERING & FETCH DATA ---
 // Filter by current user's email (identical to My Reports logic)
 
+$identity_clauses = [];
 if (!empty($current_user_email)) {
-    // Fallback logic: check am_email OR match by first name for old records
-    $user_first = explode(' ', trim($_SESSION['full_name']))[0];
-    $where_clauses[] = "(d.am_email = '" . $conn->real_escape_string($current_user_email) . "')";
-} else {
-    // If no email, fallback to old name-based logic
-    $user_first = explode(' ', trim($_SESSION['full_name']))[0];
-    $where_clauses[] = "d.am LIKE '%" . $conn->real_escape_string($user_first) . "%'";
+    $identity_clauses[] = "d.am_email = '" . $conn->real_escape_string($current_user_email) . "'";
 }
+if (!empty($user_team_ids)) {
+    $identity_clauses[] = "d.sale_team_id IN (" . implode(',', $user_team_ids) . ")";
+}
+$identity_sql = count($identity_clauses) > 0 ? "(" . implode(" AND ", $identity_clauses) . ")" : "1=1";
 
+$filter_clauses = [];
 if (!empty($_GET['invoice_status_class'])) {
     $inv_class_filter = $conn->real_escape_string($_GET['invoice_status_class']);
     if ($inv_class_filter === 'Xanh') {
-        $where_clauses[] = "(d.invoice_status_class = 'Xanh' OR d.invoice_status_class = 'Tốt')";
+        $filter_clauses[] = "(d.invoice_status_class = 'Xanh' OR d.invoice_status_class = 'Tốt')";
     } else {
-        $where_clauses[] = "d.invoice_status_class = '$inv_class_filter'";
+        $filter_clauses[] = "d.invoice_status_class = '$inv_class_filter'";
     }
 }
 
 if (!empty($_GET['status'])) {
     $status_filter = $conn->real_escape_string($_GET['status']);
-    $where_clauses[] = "d.payment_status = '$status_filter'";
+    $filter_clauses[] = "d.payment_status = '$status_filter'";
 }
 
 if (!empty($_GET['q'])) {
     $search = $conn->real_escape_string($_GET['q']);
-    $where_clauses[] = "(d.client_name LIKE '%$search%' OR d.project_name LIKE '%$search%' OR d.vat_invoice LIKE '%$search%')";
+    $filter_clauses[] = "(d.client_name LIKE '%$search%' OR d.project_name LIKE '%$search%' OR d.vat_invoice LIKE '%$search%')";
 }
 
+$time_clauses = [];
 if (!empty($_GET['year'])) {
     $year = intval($_GET['year']);
-    $where_clauses[] = "YEAR(d.invoice_date) = $year";
+    $time_clauses[] = "YEAR(d.invoice_date) = $year";
 }
 
 if (!empty($_GET['quarter'])) {
     $qtr = intval($_GET['quarter']);
     if ($qtr == 1)
-        $where_clauses[] = "MONTH(d.invoice_date) IN (1,2,3)";
+        $time_clauses[] = "MONTH(d.invoice_date) IN (1,2,3)";
     elseif ($qtr == 2)
-        $where_clauses[] = "MONTH(d.invoice_date) IN (4,5,6)";
+        $time_clauses[] = "MONTH(d.invoice_date) IN (4,5,6)";
     elseif ($qtr == 3)
-        $where_clauses[] = "MONTH(d.invoice_date) IN (7,8,9)";
+        $time_clauses[] = "MONTH(d.invoice_date) IN (7,8,9)";
     elseif ($qtr == 4)
-        $where_clauses[] = "MONTH(d.invoice_date) IN (10,11,12)";
+        $time_clauses[] = "MONTH(d.invoice_date) IN (10,11,12)";
 }
 
 if (!empty($_GET['month'])) {
     $month = intval($_GET['month']);
-    $where_clauses[] = "MONTH(d.invoice_date) = $month";
+    $time_clauses[] = "MONTH(d.invoice_date) = $month";
 }
 
 if (!empty($_GET['week'])) {
     $week_number = intval($_GET['week']);
-    $where_clauses[] = "(d.weekly_update LIKE '%Tuần $week_number%' OR d.weekly_update LIKE '%tuần $week_number%' OR d.weekly_update = '$week_number' OR d.weekly_update LIKE '%W$week_number%' OR d.weekly_update LIKE '%w$week_number%')";
+    $filter_clauses[] = "(d.weekly_update LIKE '%Tuần $week_number%' OR d.weekly_update LIKE '%tuần $week_number%' OR d.weekly_update = '$week_number' OR d.weekly_update LIKE '%W$week_number%' OR d.weekly_update LIKE '%w$week_number%')";
 }
 
-$where_sql = "";
-if (count($where_clauses) > 0) {
-    $where_sql = "WHERE " . implode(" AND ", $where_clauses);
+// Build the final WHERE logic
+// Identity must match ALWAYS.
+// Then either: (it matches all active filters AND time filters) OR (it has no month)
+$active_filters_sql = "1=1";
+if (count($filter_clauses) > 0 || count($time_clauses) > 0) {
+    $combined = array_merge($time_clauses, $filter_clauses);
+    $active_filters_sql = implode(" AND ", $combined);
 }
+
+$where_sql = "WHERE $identity_sql AND ($active_filters_sql OR d.invoice_date IS NULL OR d.invoice_date = '0000-00-00')";
 
 $groupedDebts = [];
 $monthTotals = [];
 $total_amount_usd = 0;
 $total_amount_vnd = 0;
-$res = $conn->query("SELECT d.*, st.name as team_name FROM debts d LEFT JOIN sale_teams st ON d.sale_team_id = st.id $where_sql ORDER BY d.invoice_date DESC, d.id DESC");
+$res = $conn->query("SELECT d.*, st.name as team_name FROM debts d LEFT JOIN sale_teams st ON d.sale_team_id = st.id $where_sql ORDER BY (d.invoice_date IS NULL OR d.invoice_date = '0000-00-00') DESC, d.invoice_date DESC, d.id DESC");
 
 // Trigger cache refresh if needed (OdooAPI::getInvoices handles the 1-hour check internally)
 $odoo->getInvoices(1, 0);
@@ -480,7 +496,7 @@ if ($res) {
         $row['currency'] = 'VND';
         $row['formatted_original'] = formatCurrency($amount, $curr);
 
-        $mKey = !empty($row['invoice_date']) ? date('m/Y', strtotime($row['invoice_date'])) : 'No Date';
+        $mKey = (!empty($row['invoice_date']) && $row['invoice_date'] !== '0000-00-00') ? date('m/Y', strtotime($row['invoice_date'])) : 'Nợ chưa vào tháng';
         $groupedDebts[$mKey][] = $row;
         if (!isset($monthTotals[$mKey]))
             $monthTotals[$mKey] = 0;
@@ -1545,7 +1561,7 @@ if ($team_res && $team_res->num_rows > 0) {
                                 <tr class="group-header">
                                     <td colspan="23">
                                         <div style="position: sticky; left: 20px; display: inline-block; z-index: 13;">
-                                            Tháng <?php echo $monthName; ?>
+                                            <?php echo (strpos($monthName, '/') !== false) ? "Tháng $monthName" : $monthName; ?>
                                             <span class="group-total">(Total:
                                                 <?php echo formatVND($monthTotals[$monthName]); ?>)</span>
                                         </div>
