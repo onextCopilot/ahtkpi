@@ -5,6 +5,27 @@ if (!isset($conn) || $conn->connect_error) { die('Connection failed'); }
 
 echo '<h2>Bắt đầu import dữ liệu HRM...</h2><ul>';
 
+if ($conn->query('CREATE TABLE IF NOT EXISTS `hrm_candidate_sources` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `name` varchar(255) COLLATE utf8mb4_unicode_ci NOT NULL,
+  `type` enum(\'internal\',\'external\') COLLATE utf8mb4_unicode_ci DEFAULT \'external\',
+  `is_active` tinyint(1) DEFAULT \'1\',
+  `sort_order` int(11) DEFAULT \'0\',
+  `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB AUTO_INCREMENT=162 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;')) {
+    // echo '<li>Thành công</li>';
+} else {
+    echo '<li style="color:red">Lỗi: ' . $conn->error . ' <br><small>Query: CREATE TABLE IF NOT EXISTS `hrm_candidate_sources` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `name` varchar(255) COLLATE utf8mb4_unicode_ci NOT NULL,
+  `type` enum(\&#039;internal\&#039;,\&#039;external\&#039;) COLLATE utf8mb4_unicode_ci DEFAULT \&#039;external\&#039;,
+  `is_active` tinyint(1) DEFAULT \&#039;1\&#039;,
+  `sort_order` int(11) DEFAULT \&#039;0\&#039;,
+  `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB AUTO_INCREMENT=162 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;</small></li>';
+}
 if ($conn->query('DELETE FROM `hrm_candidate_sources`;')) {
     // echo '<li>Thành công</li>';
 } else {
@@ -815,6 +836,69 @@ if ($conn->query('INSERT INTO `hrm_candidate_sources` (`id`, `name`, `type`, `is
 } else {
     echo '<li style="color:red">Lỗi: ' . $conn->error . ' <br><small>Query: INSERT INTO `hrm_candidate_sources` (`id`, `name`, `type`, `is_active`, `sort_order`, `created_at`) VALUES (\&#039;161\&#039;, \&#039;OTHER\&#039;, \&#039;external\&#039;, \&#039;1\&#039;, \&#039;160\&#039;, \&#039;2026-05-06 17:24:36\&#039;);</small></li>';
 }
+if ($conn->query('CREATE TABLE IF NOT EXISTS `hrm_company_settings` (
+  `id` int(11) NOT NULL DEFAULT \'1\',
+  `company_name` varchar(255) DEFAULT NULL,
+  `company_website` varchar(255) DEFAULT NULL,
+  `company_phone` varchar(50) DEFAULT NULL,
+  `company_address` text,
+  `recruit_title` varchar(255) DEFAULT NULL,
+  `recruit_url` varchar(255) DEFAULT NULL,
+  `recruit_desc` text,
+  `favicon` varchar(255) DEFAULT NULL,
+  `logo` varchar(255) DEFAULT NULL,
+  `sla_mode` varchar(50) DEFAULT NULL,
+  `require_job_code` tinyint(1) DEFAULT \'0\',
+  `evaluation_method` varchar(50) DEFAULT \'general\',
+  `auto_create_from_email` tinyint(1) DEFAULT \'0\',
+  `min_delete_permission` varchar(50) DEFAULT \'admin\',
+  `min_export_permission` varchar(50) DEFAULT \'admin\',
+  `enable_captcha` tinyint(1) DEFAULT \'0\',
+  `email_interview_invitation` int(11) DEFAULT \'0\',
+  `email_interview_update` int(11) DEFAULT \'0\',
+  `email_interview_cancel` int(11) DEFAULT \'0\',
+  `email_interview_bulk` int(11) DEFAULT \'0\',
+  `interview_cv_display` varchar(50) DEFAULT \'restricted\',
+  `onboard_integration_permission` varchar(50) DEFAULT \'manager\',
+  `rejection_reason_mandatory` tinyint(1) DEFAULT \'0\',
+  `auto_close_expired` tinyint(1) DEFAULT \'1\',
+  `auto_hide_expired` tinyint(1) DEFAULT \'1\',
+  `email_before_expiry` tinyint(1) DEFAULT \'1\',
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;')) {
+    // echo '<li>Thành công</li>';
+} else {
+    echo '<li style="color:red">Lỗi: ' . $conn->error . ' <br><small>Query: CREATE TABLE IF NOT EXISTS `hrm_company_settings` (
+  `id` int(11) NOT NULL DEFAULT \&#039;1\&#039;,
+  `company_name` varchar(255) DEFAULT NULL,
+  `company_website` varchar(255) DEFAULT NULL,
+  `company_phone` varchar(50) DEFAULT NULL,
+  `company_address` text,
+  `recruit_title` varchar(255) DEFAULT NULL,
+  `recruit_url` varchar(255) DEFAULT NULL,
+  `recruit_desc` text,
+  `favicon` varchar(255) DEFAULT NULL,
+  `logo` varchar(255) DEFAULT NULL,
+  `sla_mode` varchar(50) DEFAULT NULL,
+  `require_job_code` tinyint(1) DEFAULT \&#039;0\&#039;,
+  `evaluation_method` varchar(50) DEFAULT \&#039;general\&#039;,
+  `auto_create_from_email` tinyint(1) DEFAULT \&#039;0\&#039;,
+  `min_delete_permission` varchar(50) DEFAULT \&#039;admin\&#039;,
+  `min_export_permission` varchar(50) DEFAULT \&#039;admin\&#039;,
+  `enable_captcha` tinyint(1) DEFAULT \&#039;0\&#039;,
+  `email_interview_invitation` int(11) DEFAULT \&#039;0\&#039;,
+  `email_interview_update` int(11) DEFAULT \&#039;0\&#039;,
+  `email_interview_cancel` int(11) DEFAULT \&#039;0\&#039;,
+  `email_interview_bulk` int(11) DEFAULT \&#039;0\&#039;,
+  `interview_cv_display` varchar(50) DEFAULT \&#039;restricted\&#039;,
+  `onboard_integration_permission` varchar(50) DEFAULT \&#039;manager\&#039;,
+  `rejection_reason_mandatory` tinyint(1) DEFAULT \&#039;0\&#039;,
+  `auto_close_expired` tinyint(1) DEFAULT \&#039;1\&#039;,
+  `auto_hide_expired` tinyint(1) DEFAULT \&#039;1\&#039;,
+  `email_before_expiry` tinyint(1) DEFAULT \&#039;1\&#039;,
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;</small></li>';
+}
 if ($conn->query('DELETE FROM `hrm_company_settings`;')) {
     // echo '<li>Thành công</li>';
 } else {
@@ -824,6 +908,31 @@ if ($conn->query('INSERT INTO `hrm_company_settings` (`id`, `company_name`, `com
     // echo '<li>Thành công</li>';
 } else {
     echo '<li style="color:red">Lỗi: ' . $conn->error . ' <br><small>Query: INSERT INTO `hrm_company_settings` (`id`, `company_name`, `company_website`, `company_phone`, `company_address`, `recruit_title`, `recruit_url`, `recruit_desc`, `favicon`, `logo`, `sla_mode`, `require_job_code`, `evaluation_method`, `auto_create_from_email`, `min_delete_permission`, `min_export_permission`, `enable_captcha`, `email_interview_invitation`, `email_interview_update`, `email_interview_cancel`, `email_interview_bulk`, `interview_cv_display`, `onboard_integration_permission`, `rejection_reason_mandatory`, `auto_close_expired`, `auto_hide_expired`, `email_before_expiry`) VALUES (\&#039;1\&#039;, \&#039;CTY AHT TECH JSC\&#039;, \&#039;https://www.arrowhitech.com\&#039;, \&#039;(024)32025289\&#039;, \&#039;Tầng 8, Mitec Tower, Đường Bình Nghệ..\&#039;, \&#039;AHT TECH JSC - Tuyển dụng\&#039;, \&#039;https://aht.talent.vn\&#039;, \&#039;tuyển dụng, AHT TECH JSC, hiring, talent, vn, candidate, ứng viên, hồ sơ, nộp đơn s\&#039;, \&#039;/public/uploads/hrm/favicon_1778050910.png\&#039;, \&#039;/public/uploads/hrm/logo_1778050328.png\&#039;, \&#039;Dạ tiếng...\&#039;, \&#039;1\&#039;, \&#039;general\&#039;, \&#039;0\&#039;, \&#039;admin\&#039;, \&#039;admin\&#039;, \&#039;0\&#039;, \&#039;0\&#039;, \&#039;0\&#039;, \&#039;0\&#039;, \&#039;0\&#039;, \&#039;restricted\&#039;, \&#039;manager\&#039;, \&#039;1\&#039;, \&#039;0\&#039;, \&#039;0\&#039;, \&#039;0\&#039;);</small></li>';
+}
+if ($conn->query('CREATE TABLE IF NOT EXISTS `hrm_departments` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `name` varchar(255) NOT NULL,
+  `description` text,
+  `manager` varchar(255) DEFAULT NULL,
+  `creators` text,
+  `followers` text,
+  `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `sort_order` int(11) DEFAULT \'0\',
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB AUTO_INCREMENT=9 DEFAULT CHARSET=utf8mb4;')) {
+    // echo '<li>Thành công</li>';
+} else {
+    echo '<li style="color:red">Lỗi: ' . $conn->error . ' <br><small>Query: CREATE TABLE IF NOT EXISTS `hrm_departments` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `name` varchar(255) NOT NULL,
+  `description` text,
+  `manager` varchar(255) DEFAULT NULL,
+  `creators` text,
+  `followers` text,
+  `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `sort_order` int(11) DEFAULT \&#039;0\&#039;,
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB AUTO_INCREMENT=9 DEFAULT CHARSET=utf8mb4;</small></li>';
 }
 if ($conn->query('DELETE FROM `hrm_departments`;')) {
     // echo '<li>Thành công</li>';
@@ -869,6 +978,54 @@ if ($conn->query('INSERT INTO `hrm_departments` (`id`, `name`, `description`, `m
     // echo '<li>Thành công</li>';
 } else {
     echo '<li style="color:red">Lỗi: ' . $conn->error . ' <br><small>Query: INSERT INTO `hrm_departments` (`id`, `name`, `description`, `manager`, `creators`, `followers`, `created_at`, `sort_order`) VALUES (\&#039;8\&#039;, \&#039;Akdemy\&#039;, \&#039;Akdemy\&#039;, NULL, NULL, NULL, \&#039;2026-05-06 13:34:40\&#039;, \&#039;1\&#039;);</small></li>';
+}
+if ($conn->query('CREATE TABLE IF NOT EXISTS `hrm_email_templates` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `name` varchar(255) NOT NULL,
+  `email_subject` varchar(500) DEFAULT NULL,
+  `email_body` longtext,
+  `is_active` tinyint(1) DEFAULT \'1\',
+  `is_favorite` tinyint(1) DEFAULT \'0\',
+  `created_by` int(11) DEFAULT NULL,
+  `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;')) {
+    // echo '<li>Thành công</li>';
+} else {
+    echo '<li style="color:red">Lỗi: ' . $conn->error . ' <br><small>Query: CREATE TABLE IF NOT EXISTS `hrm_email_templates` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `name` varchar(255) NOT NULL,
+  `email_subject` varchar(500) DEFAULT NULL,
+  `email_body` longtext,
+  `is_active` tinyint(1) DEFAULT \&#039;1\&#039;,
+  `is_favorite` tinyint(1) DEFAULT \&#039;0\&#039;,
+  `created_by` int(11) DEFAULT NULL,
+  `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;</small></li>';
+}
+if ($conn->query('CREATE TABLE IF NOT EXISTS `hrm_evaluation_criteria` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `group_id` int(11) DEFAULT NULL,
+  `criterion_text` varchar(255) COLLATE utf8mb4_unicode_ci NOT NULL,
+  `sort_order` int(11) DEFAULT \'0\',
+  PRIMARY KEY (`id`),
+  KEY `group_id` (`group_id`),
+  CONSTRAINT `hrm_evaluation_criteria_ibfk_1` FOREIGN KEY (`group_id`) REFERENCES `hrm_evaluation_groups` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB AUTO_INCREMENT=45 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;')) {
+    // echo '<li>Thành công</li>';
+} else {
+    echo '<li style="color:red">Lỗi: ' . $conn->error . ' <br><small>Query: CREATE TABLE IF NOT EXISTS `hrm_evaluation_criteria` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `group_id` int(11) DEFAULT NULL,
+  `criterion_text` varchar(255) COLLATE utf8mb4_unicode_ci NOT NULL,
+  `sort_order` int(11) DEFAULT \&#039;0\&#039;,
+  PRIMARY KEY (`id`),
+  KEY `group_id` (`group_id`),
+  CONSTRAINT `hrm_evaluation_criteria_ibfk_1` FOREIGN KEY (`group_id`) REFERENCES `hrm_evaluation_groups` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB AUTO_INCREMENT=45 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;</small></li>';
 }
 if ($conn->query('DELETE FROM `hrm_evaluation_criteria`;')) {
     // echo '<li>Thành công</li>';
@@ -1095,6 +1252,21 @@ if ($conn->query('INSERT INTO `hrm_evaluation_criteria` (`id`, `group_id`, `crit
 } else {
     echo '<li style="color:red">Lỗi: ' . $conn->error . ' <br><small>Query: INSERT INTO `hrm_evaluation_criteria` (`id`, `group_id`, `criterion_text`, `sort_order`) VALUES (\&#039;44\&#039;, \&#039;4\&#039;, \&#039;Tư duy và kinh nghiệm về Process\&#039;, \&#039;1\&#039;);</small></li>';
 }
+if ($conn->query('CREATE TABLE IF NOT EXISTS `hrm_evaluation_groups` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `name` varchar(255) COLLATE utf8mb4_unicode_ci NOT NULL,
+  `sort_order` int(11) DEFAULT \'0\',
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB AUTO_INCREMENT=5 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;')) {
+    // echo '<li>Thành công</li>';
+} else {
+    echo '<li style="color:red">Lỗi: ' . $conn->error . ' <br><small>Query: CREATE TABLE IF NOT EXISTS `hrm_evaluation_groups` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `name` varchar(255) COLLATE utf8mb4_unicode_ci NOT NULL,
+  `sort_order` int(11) DEFAULT \&#039;0\&#039;,
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB AUTO_INCREMENT=5 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;</small></li>';
+}
 if ($conn->query('DELETE FROM `hrm_evaluation_groups`;')) {
     // echo '<li>Thành công</li>';
 } else {
@@ -1120,6 +1292,29 @@ if ($conn->query('INSERT INTO `hrm_evaluation_groups` (`id`, `name`, `sort_order
 } else {
     echo '<li style="color:red">Lỗi: ' . $conn->error . ' <br><small>Query: INSERT INTO `hrm_evaluation_groups` (`id`, `name`, `sort_order`) VALUES (\&#039;4\&#039;, \&#039;Chưa phân loại\&#039;, \&#039;3\&#039;);</small></li>';
 }
+if ($conn->query('CREATE TABLE IF NOT EXISTS `hrm_hiring_steps` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `name` varchar(255) COLLATE utf8mb4_unicode_ci NOT NULL,
+  `code` varchar(100) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `sort_order` int(11) DEFAULT \'0\',
+  `email_count` int(11) DEFAULT \'0\',
+  `duration` decimal(10,2) DEFAULT \'0.00\',
+  `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB AUTO_INCREMENT=3 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;')) {
+    // echo '<li>Thành công</li>';
+} else {
+    echo '<li style="color:red">Lỗi: ' . $conn->error . ' <br><small>Query: CREATE TABLE IF NOT EXISTS `hrm_hiring_steps` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `name` varchar(255) COLLATE utf8mb4_unicode_ci NOT NULL,
+  `code` varchar(100) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `sort_order` int(11) DEFAULT \&#039;0\&#039;,
+  `email_count` int(11) DEFAULT \&#039;0\&#039;,
+  `duration` decimal(10,2) DEFAULT \&#039;0.00\&#039;,
+  `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB AUTO_INCREMENT=3 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;</small></li>';
+}
 if ($conn->query('DELETE FROM `hrm_hiring_steps`;')) {
     // echo '<li>Thành công</li>';
 } else {
@@ -1135,6 +1330,39 @@ if ($conn->query('INSERT INTO `hrm_hiring_steps` (`id`, `name`, `code`, `sort_or
 } else {
     echo '<li style="color:red">Lỗi: ' . $conn->error . ' <br><small>Query: INSERT INTO `hrm_hiring_steps` (`id`, `name`, `code`, `sort_order`, `email_count`, `duration`, `created_at`) VALUES (\&#039;2\&#039;, \&#039;Phỏng vấn\&#039;, \&#039;phong_van\&#039;, \&#039;0\&#039;, \&#039;0\&#039;, \&#039;0.00\&#039;, \&#039;2026-05-06 15:59:04\&#039;);</small></li>';
 }
+if ($conn->query('CREATE TABLE IF NOT EXISTS `hrm_interview_templates` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `name` varchar(255) NOT NULL,
+  `interview_type` varchar(100) DEFAULT \'onsite\',
+  `participants` text,
+  `location` text,
+  `email_subject` varchar(500) DEFAULT NULL,
+  `email_body` longtext,
+  `questions` longtext,
+  `is_active` tinyint(1) DEFAULT \'1\',
+  `created_by` int(11) DEFAULT NULL,
+  `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB AUTO_INCREMENT=2 DEFAULT CHARSET=utf8mb4;')) {
+    // echo '<li>Thành công</li>';
+} else {
+    echo '<li style="color:red">Lỗi: ' . $conn->error . ' <br><small>Query: CREATE TABLE IF NOT EXISTS `hrm_interview_templates` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `name` varchar(255) NOT NULL,
+  `interview_type` varchar(100) DEFAULT \&#039;onsite\&#039;,
+  `participants` text,
+  `location` text,
+  `email_subject` varchar(500) DEFAULT NULL,
+  `email_body` longtext,
+  `questions` longtext,
+  `is_active` tinyint(1) DEFAULT \&#039;1\&#039;,
+  `created_by` int(11) DEFAULT NULL,
+  `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB AUTO_INCREMENT=2 DEFAULT CHARSET=utf8mb4;</small></li>';
+}
 if ($conn->query('DELETE FROM `hrm_interview_templates`;')) {
     // echo '<li>Thành công</li>';
 } else {
@@ -1145,6 +1373,63 @@ if ($conn->query('INSERT INTO `hrm_interview_templates` (`id`, `name`, `intervie
 } else {
     echo '<li style="color:red">Lỗi: ' . $conn->error . ' <br><small>Query: INSERT INTO `hrm_interview_templates` (`id`, `name`, `interview_type`, `participants`, `location`, `email_subject`, `email_body`, `questions`, `is_active`, `created_by`, `created_at`, `updated_at`) VALUES (\&#039;1\&#039;, \&#039;OS MBFS - MẪU THƯ MỜI PHỎNG VẤN\&#039;, \&#039;onsite\&#039;, \&#039;3,11\&#039;, \&#039;Tầng 9, Tòa nhà 5 Điện Biên Phủ, Ba Đình, Hà Nội\&#039;, \&#039;AHT TECH - THƯ MỜI PHỎNG VẤN VỊ TRÍ {job} - VÒNG PHỎNG VẤN KHÁCH HÀNG\&#039;, \&#039;&lt;p&gt;Dear bạn&lt;strong&gt; &lt;em&gt;{fullname}&lt;/em&gt;&lt;/strong&gt;,&lt;/p&gt;\n&lt;p&gt;C&amp;ocirc;ng ty mời bạn l&amp;uacute;c &lt;strong&gt;&lt;em&gt;{time}&lt;/em&gt;,&amp;nbsp;&lt;/strong&gt;tham dự phỏng vấn vị tr&amp;iacute;&lt;strong&gt; &lt;em&gt;{job}&lt;/em&gt;&lt;/strong&gt;&lt;strong&gt;&amp;nbsp;&lt;/strong&gt;tại văn ph&amp;ograve;ng kh&amp;aacute;ch h&amp;agrave;ng.&amp;nbsp;Khi đi bạn c&amp;oacute; thể mang theo sản phẩm đ&amp;atilde; l&amp;agrave;m (nếu c&amp;oacute;) để buổi phỏng vấn đạt được kết quả tốt nhất!&lt;/p&gt;\n&lt;p&gt;Bạn vui l&amp;ograve;ng phản hồi lại Email n&amp;agrave;y sau khi nhận được để Ph&amp;ograve;ng Nh&amp;acirc;n sự bố tr&amp;iacute; tiếp đ&amp;oacute;n.&lt;/p&gt;\n&lt;ul&gt;\n&lt;li&gt;&lt;strong&gt;Th&amp;ocirc;ng tin li&amp;ecirc;n hệ:&lt;/strong&gt;&amp;nbsp;\n&lt;ul&gt;\n&lt;li&gt;&lt;span class=\&quot;ui-provider a b c d e f g h i j k l m n o p q r s t u v w x y z ab ac ae af ag ah ai aj ak\&quot; style=\&quot;color: #000000;\&quot;&gt;Ms. Tr&amp;agrave; My - 0327648259 (Account Manager - đ&amp;oacute;n tại văn ph&amp;ograve;ng kh&amp;aacute;ch h&amp;agrave;ng)&lt;/span&gt;&lt;/li&gt;\n&lt;li&gt;&lt;span class=\&quot;ui-provider a b c d e f g h i j k l m n o p q r s t u v w x y z ab ac ae af ag ah ai aj ak\&quot; style=\&quot;color: #000000;\&quot;&gt;Ms. V&amp;acirc;n T&amp;igrave;nh - 0912212746 (HR)&lt;/span&gt;&lt;/li&gt;\n&lt;/ul&gt;\n&lt;/li&gt;\n&lt;li&gt;&lt;strong&gt;Địa chỉ văn ph&amp;ograve;ng kh&amp;aacute;ch h&amp;agrave;ng: Tầng 9, T&amp;ograve;a nh&amp;agrave; 5 Điện Bi&amp;ecirc;n Phủ, Ba Đ&amp;igrave;nh, H&amp;agrave; Nội&amp;nbsp;&lt;/strong&gt;(&lt;a href=\&quot;https://share.google/H8dMFQCSd62BXuBQS\&quot;&gt;Google Maps&lt;/a&gt;)&lt;/li&gt;\n&lt;/ul&gt;\n&lt;p&gt;&lt;em&gt;(Hướng dẫn gửi xe: Gửi xe dưới hầm của t&amp;ograve;a nh&amp;agrave;)&lt;/em&gt;&lt;/p&gt;\n&lt;p&gt;Mọi thắc mắc vui l&amp;ograve;ng li&amp;ecirc;n hệ lại Bộ phận Nh&amp;acirc;n sự để được hỗ trợ.&lt;/p&gt;\&#039;, \&#039;\&#039;, \&#039;1\&#039;, \&#039;1\&#039;, \&#039;2026-05-07 10:46:43\&#039;, \&#039;2026-05-07 10:52:15\&#039;);</small></li>';
 }
+if ($conn->query('CREATE TABLE IF NOT EXISTS `hrm_job_posts` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `title` varchar(255) COLLATE utf8mb4_unicode_ci NOT NULL,
+  `job_code` varchar(100) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `template_id` int(11) DEFAULT NULL,
+  `department_id` int(11) DEFAULT NULL,
+  `office` varchar(255) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `salary_from` decimal(15,2) DEFAULT NULL,
+  `salary_to` decimal(15,2) DEFAULT NULL,
+  `currency` varchar(10) COLLATE utf8mb4_unicode_ci DEFAULT \'VND\',
+  `show_salary` tinyint(1) DEFAULT \'1\',
+  `quantity` int(11) DEFAULT NULL,
+  `job_type` varchar(100) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `deadline` date DEFAULT NULL,
+  `job_description` text COLLATE utf8mb4_unicode_ci,
+  `talent_pool_id` int(11) DEFAULT NULL,
+  `managers` text COLLATE utf8mb4_unicode_ci,
+  `notes` text COLLATE utf8mb4_unicode_ci,
+  `completion_time` varchar(255) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `city` varchar(100) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `district` varchar(100) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `address` text COLLATE utf8mb4_unicode_ci,
+  `postal_code` varchar(20) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `status` varchar(50) COLLATE utf8mb4_unicode_ci DEFAULT \'draft\',
+  `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB AUTO_INCREMENT=2 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;')) {
+    // echo '<li>Thành công</li>';
+} else {
+    echo '<li style="color:red">Lỗi: ' . $conn->error . ' <br><small>Query: CREATE TABLE IF NOT EXISTS `hrm_job_posts` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `title` varchar(255) COLLATE utf8mb4_unicode_ci NOT NULL,
+  `job_code` varchar(100) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `template_id` int(11) DEFAULT NULL,
+  `department_id` int(11) DEFAULT NULL,
+  `office` varchar(255) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `salary_from` decimal(15,2) DEFAULT NULL,
+  `salary_to` decimal(15,2) DEFAULT NULL,
+  `currency` varchar(10) COLLATE utf8mb4_unicode_ci DEFAULT \&#039;VND\&#039;,
+  `show_salary` tinyint(1) DEFAULT \&#039;1\&#039;,
+  `quantity` int(11) DEFAULT NULL,
+  `job_type` varchar(100) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `deadline` date DEFAULT NULL,
+  `job_description` text COLLATE utf8mb4_unicode_ci,
+  `talent_pool_id` int(11) DEFAULT NULL,
+  `managers` text COLLATE utf8mb4_unicode_ci,
+  `notes` text COLLATE utf8mb4_unicode_ci,
+  `completion_time` varchar(255) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `city` varchar(100) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `district` varchar(100) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `address` text COLLATE utf8mb4_unicode_ci,
+  `postal_code` varchar(20) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `status` varchar(50) COLLATE utf8mb4_unicode_ci DEFAULT \&#039;draft\&#039;,
+  `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB AUTO_INCREMENT=2 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;</small></li>';
+}
 if ($conn->query('DELETE FROM `hrm_job_posts`;')) {
     // echo '<li>Thành công</li>';
 } else {
@@ -1154,6 +1439,25 @@ if ($conn->query('INSERT INTO `hrm_job_posts` (`id`, `title`, `job_code`, `templ
     // echo '<li>Thành công</li>';
 } else {
     echo '<li style="color:red">Lỗi: ' . $conn->error . ' <br><small>Query: INSERT INTO `hrm_job_posts` (`id`, `title`, `job_code`, `template_id`, `department_id`, `office`, `salary_from`, `salary_to`, `currency`, `show_salary`, `quantity`, `job_type`, `deadline`, `job_description`, `talent_pool_id`, `managers`, `notes`, `completion_time`, `city`, `district`, `address`, `postal_code`, `status`, `created_at`) VALUES (\&#039;1\&#039;, \&#039;sdfsdsds\&#039;, \&#039;\&#039;, \&#039;0\&#039;, \&#039;0\&#039;, \&#039;\&#039;, \&#039;0.00\&#039;, \&#039;0.00\&#039;, \&#039;VND\&#039;, \&#039;1\&#039;, \&#039;0\&#039;, \&#039;Nhân viên toàn thời gian\&#039;, NULL, \&#039;\&#039;, \&#039;0\&#039;, \&#039;\&#039;, \&#039;\&#039;, \&#039;\&#039;, \&#039;\&#039;, \&#039;\&#039;, \&#039;\&#039;, \&#039;\&#039;, \&#039;draft\&#039;, \&#039;2026-05-06 18:02:11\&#039;);</small></li>';
+}
+if ($conn->query('CREATE TABLE IF NOT EXISTS `hrm_offices` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `name` varchar(255) NOT NULL,
+  `address` text,
+  `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `sort_order` int(11) DEFAULT \'0\',
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB AUTO_INCREMENT=18 DEFAULT CHARSET=utf8mb4;')) {
+    // echo '<li>Thành công</li>';
+} else {
+    echo '<li style="color:red">Lỗi: ' . $conn->error . ' <br><small>Query: CREATE TABLE IF NOT EXISTS `hrm_offices` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `name` varchar(255) NOT NULL,
+  `address` text,
+  `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `sort_order` int(11) DEFAULT \&#039;0\&#039;,
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB AUTO_INCREMENT=18 DEFAULT CHARSET=utf8mb4;</small></li>';
 }
 if ($conn->query('DELETE FROM `hrm_offices`;')) {
     // echo '<li>Thành công</li>';
@@ -1245,6 +1549,25 @@ if ($conn->query('INSERT INTO `hrm_offices` (`id`, `name`, `address`, `created_a
 } else {
     echo '<li style="color:red">Lỗi: ' . $conn->error . ' <br><small>Query: INSERT INTO `hrm_offices` (`id`, `name`, `address`, `created_at`, `sort_order`) VALUES (\&#039;17\&#039;, \&#039;Văn phòng Đối tác – Nguyễn Phong Sắc, Hà Nội\&#039;, \&#039;Văn phòng Đối tác – Nguyễn Phong Sắc, Hà Nội\&#039;, \&#039;2026-05-06 13:42:49\&#039;, \&#039;3\&#039;);</small></li>';
 }
+if ($conn->query('CREATE TABLE IF NOT EXISTS `hrm_permissions` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `user_id` int(11) NOT NULL,
+  `role` varchar(50) COLLATE utf8mb4_unicode_ci NOT NULL,
+  `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `user_id` (`user_id`,`role`)
+) ENGINE=InnoDB AUTO_INCREMENT=5 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;')) {
+    // echo '<li>Thành công</li>';
+} else {
+    echo '<li style="color:red">Lỗi: ' . $conn->error . ' <br><small>Query: CREATE TABLE IF NOT EXISTS `hrm_permissions` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `user_id` int(11) NOT NULL,
+  `role` varchar(50) COLLATE utf8mb4_unicode_ci NOT NULL,
+  `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `user_id` (`user_id`,`role`)
+) ENGINE=InnoDB AUTO_INCREMENT=5 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;</small></li>';
+}
 if ($conn->query('DELETE FROM `hrm_permissions`;')) {
     // echo '<li>Thành công</li>';
 } else {
@@ -1270,6 +1593,33 @@ if ($conn->query('INSERT INTO `hrm_permissions` (`id`, `user_id`, `role`, `creat
 } else {
     echo '<li style="color:red">Lỗi: ' . $conn->error . ' <br><small>Query: INSERT INTO `hrm_permissions` (`id`, `user_id`, `role`, `created_at`) VALUES (\&#039;4\&#039;, \&#039;3\&#039;, \&#039;manager\&#039;, \&#039;2026-05-06 16:25:11\&#039;);</small></li>';
 }
+if ($conn->query('CREATE TABLE IF NOT EXISTS `hrm_proposal_approvers` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `proposal_type` enum(\'recruitment\',\'hiring\') COLLATE utf8mb4_unicode_ci NOT NULL,
+  `approver_type` varchar(50) COLLATE utf8mb4_unicode_ci NOT NULL,
+  `block_name` varchar(255) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `user_id` int(11) DEFAULT NULL,
+  `sla_hours` int(11) DEFAULT \'0\',
+  `sort_order` int(11) DEFAULT \'0\',
+  `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `metadata` text COLLATE utf8mb4_unicode_ci,
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB AUTO_INCREMENT=4 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;')) {
+    // echo '<li>Thành công</li>';
+} else {
+    echo '<li style="color:red">Lỗi: ' . $conn->error . ' <br><small>Query: CREATE TABLE IF NOT EXISTS `hrm_proposal_approvers` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `proposal_type` enum(\&#039;recruitment\&#039;,\&#039;hiring\&#039;) COLLATE utf8mb4_unicode_ci NOT NULL,
+  `approver_type` varchar(50) COLLATE utf8mb4_unicode_ci NOT NULL,
+  `block_name` varchar(255) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `user_id` int(11) DEFAULT NULL,
+  `sla_hours` int(11) DEFAULT \&#039;0\&#039;,
+  `sort_order` int(11) DEFAULT \&#039;0\&#039;,
+  `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `metadata` text COLLATE utf8mb4_unicode_ci,
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB AUTO_INCREMENT=4 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;</small></li>';
+}
 if ($conn->query('DELETE FROM `hrm_proposal_approvers`;')) {
     // echo '<li>Thành công</li>';
 } else {
@@ -1289,6 +1639,23 @@ if ($conn->query('INSERT INTO `hrm_proposal_approvers` (`id`, `proposal_type`, `
     // echo '<li>Thành công</li>';
 } else {
     echo '<li style="color:red">Lỗi: ' . $conn->error . ' <br><small>Query: INSERT INTO `hrm_proposal_approvers` (`id`, `proposal_type`, `approver_type`, `block_name`, `user_id`, `sla_hours`, `sort_order`, `created_at`, `metadata`) VALUES (\&#039;3\&#039;, \&#039;hiring\&#039;, \&#039;fixed\&#039;, \&#039;\&#039;, \&#039;3\&#039;, \&#039;0\&#039;, \&#039;0\&#039;, \&#039;2026-05-06 16:31:06\&#039;, \&#039;\&#039;);</small></li>';
+}
+if ($conn->query('CREATE TABLE IF NOT EXISTS `hrm_proposal_followers` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `proposal_type` enum(\'recruitment\',\'hiring\') COLLATE utf8mb4_unicode_ci NOT NULL,
+  `user_id` int(11) NOT NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `proposal_type` (`proposal_type`,`user_id`)
+) ENGINE=InnoDB AUTO_INCREMENT=8 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;')) {
+    // echo '<li>Thành công</li>';
+} else {
+    echo '<li style="color:red">Lỗi: ' . $conn->error . ' <br><small>Query: CREATE TABLE IF NOT EXISTS `hrm_proposal_followers` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `proposal_type` enum(\&#039;recruitment\&#039;,\&#039;hiring\&#039;) COLLATE utf8mb4_unicode_ci NOT NULL,
+  `user_id` int(11) NOT NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `proposal_type` (`proposal_type`,`user_id`)
+) ENGINE=InnoDB AUTO_INCREMENT=8 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;</small></li>';
 }
 if ($conn->query('DELETE FROM `hrm_proposal_followers`;')) {
     // echo '<li>Thành công</li>';
@@ -1310,6 +1677,27 @@ if ($conn->query('INSERT INTO `hrm_proposal_followers` (`id`, `proposal_type`, `
 } else {
     echo '<li style="color:red">Lỗi: ' . $conn->error . ' <br><small>Query: INSERT INTO `hrm_proposal_followers` (`id`, `proposal_type`, `user_id`) VALUES (\&#039;7\&#039;, \&#039;hiring\&#039;, \&#039;3\&#039;);</small></li>';
 }
+if ($conn->query('CREATE TABLE IF NOT EXISTS `hrm_proposal_settings` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `proposal_type` enum(\'recruitment\',\'hiring\') COLLATE utf8mb4_unicode_ci NOT NULL,
+  `approval_flow` varchar(50) COLLATE utf8mb4_unicode_ci DEFAULT \'sequential\',
+  `role_priority` varchar(50) COLLATE utf8mb4_unicode_ci DEFAULT \'last\',
+  `hrm_edit_after_approval` tinyint(1) DEFAULT \'0\',
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `proposal_type` (`proposal_type`)
+) ENGINE=InnoDB AUTO_INCREMENT=435 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;')) {
+    // echo '<li>Thành công</li>';
+} else {
+    echo '<li style="color:red">Lỗi: ' . $conn->error . ' <br><small>Query: CREATE TABLE IF NOT EXISTS `hrm_proposal_settings` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `proposal_type` enum(\&#039;recruitment\&#039;,\&#039;hiring\&#039;) COLLATE utf8mb4_unicode_ci NOT NULL,
+  `approval_flow` varchar(50) COLLATE utf8mb4_unicode_ci DEFAULT \&#039;sequential\&#039;,
+  `role_priority` varchar(50) COLLATE utf8mb4_unicode_ci DEFAULT \&#039;last\&#039;,
+  `hrm_edit_after_approval` tinyint(1) DEFAULT \&#039;0\&#039;,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `proposal_type` (`proposal_type`)
+) ENGINE=InnoDB AUTO_INCREMENT=435 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;</small></li>';
+}
 if ($conn->query('DELETE FROM `hrm_proposal_settings`;')) {
     // echo '<li>Thành công</li>';
 } else {
@@ -1324,6 +1712,29 @@ if ($conn->query('INSERT INTO `hrm_proposal_settings` (`id`, `proposal_type`, `a
     // echo '<li>Thành công</li>';
 } else {
     echo '<li style="color:red">Lỗi: ' . $conn->error . ' <br><small>Query: INSERT INTO `hrm_proposal_settings` (`id`, `proposal_type`, `approval_flow`, `role_priority`, `hrm_edit_after_approval`) VALUES (\&#039;2\&#039;, \&#039;hiring\&#039;, \&#039;sequential\&#039;, \&#039;first\&#039;, \&#039;0\&#039;);</small></li>';
+}
+if ($conn->query('CREATE TABLE IF NOT EXISTS `hrm_rejection_reasons` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `reason_text` varchar(255) COLLATE utf8mb4_unicode_ci NOT NULL,
+  `reason_code` varchar(100) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `is_active` tinyint(1) DEFAULT \'1\',
+  `created_by` varchar(100) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `sort_order` int(11) DEFAULT \'0\',
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB AUTO_INCREMENT=7 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;')) {
+    // echo '<li>Thành công</li>';
+} else {
+    echo '<li style="color:red">Lỗi: ' . $conn->error . ' <br><small>Query: CREATE TABLE IF NOT EXISTS `hrm_rejection_reasons` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `reason_text` varchar(255) COLLATE utf8mb4_unicode_ci NOT NULL,
+  `reason_code` varchar(100) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `is_active` tinyint(1) DEFAULT \&#039;1\&#039;,
+  `created_by` varchar(100) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `sort_order` int(11) DEFAULT \&#039;0\&#039;,
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB AUTO_INCREMENT=7 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;</small></li>';
 }
 if ($conn->query('DELETE FROM `hrm_rejection_reasons`;')) {
     // echo '<li>Thành công</li>';
@@ -1359,6 +1770,25 @@ if ($conn->query('INSERT INTO `hrm_rejection_reasons` (`id`, `reason_text`, `rea
     // echo '<li>Thành công</li>';
 } else {
     echo '<li style="color:red">Lỗi: ' . $conn->error . ' <br><small>Query: INSERT INTO `hrm_rejection_reasons` (`id`, `reason_text`, `reason_code`, `is_active`, `created_by`, `created_at`, `sort_order`) VALUES (\&#039;6\&#039;, \&#039;OTHER\&#039;, \&#039;other\&#039;, \&#039;1\&#039;, \&#039;hệ thống\&#039;, \&#039;2022-11-14 08:00:00\&#039;, \&#039;5\&#039;);</small></li>';
+}
+if ($conn->query('CREATE TABLE IF NOT EXISTS `hrm_role_permissions` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `role_id` int(11) NOT NULL,
+  `permission_key` varchar(100) NOT NULL,
+  `is_enabled` tinyint(1) DEFAULT \'1\',
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `role_id` (`role_id`,`permission_key`)
+) ENGINE=InnoDB AUTO_INCREMENT=18 DEFAULT CHARSET=utf8mb4;')) {
+    // echo '<li>Thành công</li>';
+} else {
+    echo '<li style="color:red">Lỗi: ' . $conn->error . ' <br><small>Query: CREATE TABLE IF NOT EXISTS `hrm_role_permissions` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `role_id` int(11) NOT NULL,
+  `permission_key` varchar(100) NOT NULL,
+  `is_enabled` tinyint(1) DEFAULT \&#039;1\&#039;,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `role_id` (`role_id`,`permission_key`)
+) ENGINE=InnoDB AUTO_INCREMENT=18 DEFAULT CHARSET=utf8mb4;</small></li>';
 }
 if ($conn->query('DELETE FROM `hrm_role_permissions`;')) {
     // echo '<li>Thành công</li>';
@@ -1450,6 +1880,25 @@ if ($conn->query('INSERT INTO `hrm_role_permissions` (`id`, `role_id`, `permissi
 } else {
     echo '<li style="color:red">Lỗi: ' . $conn->error . ' <br><small>Query: INSERT INTO `hrm_role_permissions` (`id`, `role_id`, `permission_key`, `is_enabled`) VALUES (\&#039;17\&#039;, \&#039;1\&#039;, \&#039;settings_edit\&#039;, \&#039;1\&#039;);</small></li>';
 }
+if ($conn->query('CREATE TABLE IF NOT EXISTS `hrm_roles` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `name` varchar(100) NOT NULL,
+  `description` text,
+  `is_system` tinyint(1) DEFAULT \'0\',
+  `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB AUTO_INCREMENT=5 DEFAULT CHARSET=utf8mb4;')) {
+    // echo '<li>Thành công</li>';
+} else {
+    echo '<li style="color:red">Lỗi: ' . $conn->error . ' <br><small>Query: CREATE TABLE IF NOT EXISTS `hrm_roles` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `name` varchar(100) NOT NULL,
+  `description` text,
+  `is_system` tinyint(1) DEFAULT \&#039;0\&#039;,
+  `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB AUTO_INCREMENT=5 DEFAULT CHARSET=utf8mb4;</small></li>';
+}
 if ($conn->query('DELETE FROM `hrm_roles`;')) {
     // echo '<li>Thành công</li>';
 } else {
@@ -1474,6 +1923,25 @@ if ($conn->query('INSERT INTO `hrm_roles` (`id`, `name`, `description`, `is_syst
     // echo '<li>Thành công</li>';
 } else {
     echo '<li style="color:red">Lỗi: ' . $conn->error . ' <br><small>Query: INSERT INTO `hrm_roles` (`id`, `name`, `description`, `is_system`, `created_at`) VALUES (\&#039;4\&#039;, \&#039;Interviewer\&#039;, \&#039;Người tham gia phỏng vấn và đánh giá chuyên môn\&#039;, \&#039;1\&#039;, \&#039;2026-05-06 17:06:48\&#039;);</small></li>';
+}
+if ($conn->query('CREATE TABLE IF NOT EXISTS `hrm_talent_pools` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `name` varchar(255) NOT NULL,
+  `description` text,
+  `created_by` int(11) DEFAULT NULL,
+  `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB AUTO_INCREMENT=5 DEFAULT CHARSET=utf8mb4;')) {
+    // echo '<li>Thành công</li>';
+} else {
+    echo '<li style="color:red">Lỗi: ' . $conn->error . ' <br><small>Query: CREATE TABLE IF NOT EXISTS `hrm_talent_pools` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `name` varchar(255) NOT NULL,
+  `description` text,
+  `created_by` int(11) DEFAULT NULL,
+  `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB AUTO_INCREMENT=5 DEFAULT CHARSET=utf8mb4;</small></li>';
 }
 if ($conn->query('DELETE FROM `hrm_talent_pools`;')) {
     // echo '<li>Thành công</li>';
