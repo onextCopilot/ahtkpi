@@ -65,16 +65,26 @@ if ($table_check->num_rows == 0) {
         die("Error creating table: " . $conn->error);
     }
 } else {
-    // Check and add sale_team_id if not exists
-    $check_col = $conn->query("SHOW COLUMNS FROM debts LIKE 'sale_team_id'");
-    if ($check_col->num_rows == 0) {
-        $conn->query("ALTER TABLE debts ADD COLUMN sale_team_id INT DEFAULT NULL AFTER am");
+    // Check and add columns if not exists
+    $columns_to_check = [
+        'sale_team_id' => 'INT DEFAULT NULL AFTER am',
+        'am_email' => 'VARCHAR(255) DEFAULT NULL AFTER am',
+        'currency' => "VARCHAR(20) DEFAULT 'VND' AFTER amount",
+        'invoice_date' => 'DATE DEFAULT NULL AFTER vat_invoice',
+        'odoo_invoice_id' => 'INT DEFAULT NULL AFTER id',
+        'original_amount' => 'DECIMAL(15, 2) DEFAULT 0 AFTER amount',
+        'original_currency' => 'VARCHAR(20) DEFAULT NULL AFTER currency'
+    ];
+
+    foreach ($columns_to_check as $col => $definition) {
+        $check = $conn->query("SHOW COLUMNS FROM debts LIKE '$col'");
+        if ($check->num_rows == 0) {
+            $conn->query("ALTER TABLE debts ADD COLUMN $col $definition");
+        }
     }
-    // Check and add am_email if not exists
-    $check_email = $conn->query("SHOW COLUMNS FROM debts LIKE 'am_email'");
-    if ($check_email->num_rows == 0) {
-        $conn->query("ALTER TABLE debts ADD COLUMN am_email VARCHAR(255) DEFAULT NULL AFTER am");
-    }
+
+    // Force amount precision fix
+    $conn->query("ALTER TABLE debts MODIFY COLUMN amount DECIMAL(20, 2) DEFAULT 0");
 }
 
 // --- HANDLE POST (Add/Edit/Delete) ---
@@ -105,21 +115,39 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $del_note = $_POST['delivery_notes'] ?? '';
         $prod_stat = $_POST['production_status'] ?? '';
 
+        // Fetch AM Email
+        $am_email = '';
+        if (!empty($am)) {
+            $stmt_am = $conn->prepare("SELECT email FROM users WHERE full_name = ? LIMIT 1");
+            $stmt_am->bind_param("s", $am);
+            $stmt_am->execute();
+            $res_am_em = $stmt_am->get_result();
+            if ($row_am_em = $res_am_em->fetch_assoc()) {
+                $am_email = $row_am_em['email'];
+            }
+            $stmt_am->close();
+        }
+        if (empty($am_email) && $am === $_SESSION['full_name']) {
+            $am_email = $_SESSION['email'] ?? '';
+        }
+
         if ($_POST['action'] === 'add') {
-            $stmt = $conn->prepare("INSERT INTO debts (company, sale_team_id, am, client_name, project_name, payment_milestone, expected_prod_date, expected_payment_date, invoice_status_class, amount, currency, invoice_status, vat_invoice, invoice_date, payment_status, payment_month, weekly_update, am_notes, delivery_notes, production_status, pl_class) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
-            $stmt->bind_param("sisssssssssdsssssssss", $company, $sale_team_id, $am, $client, $project, $milestone, $prod_date, $pay_date, $inv_class, $amount, $currency_val, $inv_stat, $vat, $invoice_date_val, $pay_stat, $pay_month, $weekly, $am_note, $del_note, $prod_stat, $pl);
+            $stmt = $conn->prepare("INSERT INTO debts (company, sale_team_id, am, am_email, client_name, project_name, payment_milestone, expected_prod_date, expected_payment_date, invoice_status_class, amount, currency, invoice_status, vat_invoice, invoice_date, payment_status, payment_month, weekly_update, am_notes, delivery_notes, production_status, pl_class) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+            $stmt->bind_param("sissssssssssssssssssss", $company, $sale_team_id, $am, $am_email, $client, $project, $milestone, $prod_date, $pay_date, $inv_class, $amount, $currency_val, $inv_stat, $vat, $invoice_date_val, $pay_stat, $pay_month, $weekly, $am_note, $del_note, $prod_stat, $pl);
         } else {
             // Edit
             $id = intval($_POST['id']);
-            $stmt = $conn->prepare("UPDATE debts SET company=?, sale_team_id=?, am=?, client_name=?, project_name=?, payment_milestone=?, expected_prod_date=?, expected_payment_date=?, invoice_status_class=?, amount=?, currency=?, invoice_status=?, vat_invoice=?, invoice_date=?, payment_status=?, payment_month=?, weekly_update=?, am_notes=?, delivery_notes=?, production_status=?, pl_class=? WHERE id=?");
-            $stmt->bind_param("sisssssssssdsssssssssi", $company, $sale_team_id, $am, $client, $project, $milestone, $prod_date, $pay_date, $inv_class, $amount, $currency_val, $inv_stat, $vat, $invoice_date_val, $pay_stat, $pay_month, $weekly, $am_note, $del_note, $prod_stat, $pl, $id);
+            $stmt = $conn->prepare("UPDATE debts SET company=?, sale_team_id=?, am=?, am_email=?, client_name=?, project_name=?, payment_milestone=?, expected_prod_date=?, expected_payment_date=?, invoice_status_class=?, amount=?, currency=?, invoice_status=?, vat_invoice=?, invoice_date=?, payment_status=?, payment_month=?, weekly_update=?, am_notes=?, delivery_notes=?, production_status=?, pl_class=? WHERE id=?");
+            $stmt->bind_param("sissssssssssssssssssssi", $company, $sale_team_id, $am, $am_email, $client, $project, $milestone, $prod_date, $pay_date, $inv_class, $amount, $currency_val, $inv_stat, $vat, $invoice_date_val, $pay_stat, $pay_month, $weekly, $am_note, $del_note, $prod_stat, $pl, $id);
         }
 
         if ($stmt->execute()) {
             header("Location: /my-debt");
             exit();
         } else {
-            $error_message = "Error: " . $conn->error;
+            $error_message = "Error: " . $stmt->error;
+            file_put_contents(__DIR__ . '/../../debug_file.log', date('Y-m-d H:i:s') . " SQL ERROR: " . $stmt->error . "\n", FILE_APPEND);
+            echo "<script>alert('Save failed: " . addslashes($stmt->error) . "');</script>";
         }
     }
 
@@ -1476,6 +1504,12 @@ if ($team_res && $team_res->num_rows > 0) {
                     </button>
                 </div>
 
+                <?php if (isset($error_message)): ?>
+                    <div style="background: #fee2e2; border: 1px solid #ef4444; color: #b91c1c; padding: 1rem; border-radius: 8px; margin-bottom: 1rem;">
+                        <?php echo $error_message; ?>
+                    </div>
+                <?php endif; ?>
+
                 <div class="data-table-wrapper">
                     <table class="debt-table" id="myDebtsTable">
                         <thead>
@@ -1814,7 +1848,7 @@ if ($team_res && $team_res->num_rows > 0) {
                         <div class="form-group">
                             <label>Project Name</label>
                             <input type="text" name="project_name" id="project_name"
-                                requiredclass="project-autocomplete-input" autocomplete="off">
+                                required class="project-autocomplete-input" autocomplete="off">
                         </div>
                     </div>
 
