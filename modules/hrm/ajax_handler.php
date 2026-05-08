@@ -1043,6 +1043,20 @@ if (!isset($_SESSION['user_id'])) {
         ];
         
         $response = ['success' => true, 'data' => $jobs, 'counts' => $counts];
+    } elseif ($action === 'delete_job' && $_SERVER['REQUEST_METHOD'] === 'POST') {
+        $data = json_decode(file_get_contents('php://input'), true);
+        $id = (int)($data['id'] ?? 0);
+        if ($id > 0) {
+            $conn->query("DELETE FROM hrm_job_evaluation_criteria WHERE job_id = $id");
+            $conn->query("DELETE FROM hrm_job_mandatory_requirements WHERE job_id = $id");
+            if ($conn->query("DELETE FROM hrm_job_posts WHERE id = $id")) {
+                $response = ['success' => true];
+            } else {
+                $response = ['success' => false, 'message' => $conn->error];
+            }
+        } else {
+            $response = ['success' => false, 'message' => 'Invalid job ID'];
+        }
     }
 }
 

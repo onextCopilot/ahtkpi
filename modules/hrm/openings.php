@@ -156,6 +156,7 @@ $first_name = end($_name_parts);
                             <th style="width:160px">Thời gian tạo</th>
                             <th style="width:160px">Kết thúc tuyển</th>
                             <th style="width:250px">Ghi chú</th>
+                            <th style="width:60px"></th>
                         </tr>
                     </thead>
                     <tbody id="jobsBody">
@@ -292,6 +293,11 @@ function renderJobs() {
             <td><div class="meta-text">${j.created_at ? j.created_at.split(' ')[0] : '---'}</div></td>
             <td><div class="meta-text">${j.deadline || '---'}</div></td>
             <td><div class="meta-text" style="max-width:200px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;" title="${j.notes || ''}">${j.notes || '---'}</div></td>
+            <td>
+                <button class="btn-icon" style="width:28px;height:28px;color:#ef4444;border-color:#fca5a5;background:#fef2f2" onclick="deleteJob(${j.id})" title="Xóa tin tuyển dụng">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"></path><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"></path><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"></path></svg>
+                </button>
+            </td>
         </tr>
     `).join('');
 }
@@ -316,6 +322,26 @@ function formatDateRange(j) {
 function formatStatus(s) {
     const map = { draft: 'Bản nháp', public: 'Công khai', private: 'Riêng tư', closed: 'Đã đóng' };
     return map[s] || s;
+}
+
+async function deleteJob(id) {
+    if (!confirm('Bạn có chắc chắn muốn xóa tin tuyển dụng này? Các dữ liệu liên quan cũng sẽ bị xóa.')) return;
+    try {
+        const res = await fetch('/hrm/ajax-handler?action=delete_job', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ id })
+        });
+        const data = await res.json();
+        if (data.success) {
+            fetchJobs();
+        } else {
+            alert('Lỗi: ' + (data.message || 'Không thể xóa'));
+        }
+    } catch (e) {
+        console.error(e);
+        alert('Có lỗi xảy ra khi xóa tin tuyển dụng.');
+    }
 }
 
 function updateCounts(counts) {
