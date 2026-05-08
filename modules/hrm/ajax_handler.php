@@ -901,10 +901,9 @@ if (!isset($_SESSION['user_id'])) {
                     }
                 }
             }
+            $processed++;
+            $rowIdx++;
         }
-        $processed++;
-        $rowIdx++;
-    }
         echo json_encode(['success' => true, 'message' => "Đã import thành công $count ứng viên"]); exit;
 
     } elseif ($action === 'get_candidate_detail') {
