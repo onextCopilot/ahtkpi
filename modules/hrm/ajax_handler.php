@@ -494,9 +494,21 @@ $conn->query("CREATE TABLE IF NOT EXISTS hrm_application_tags (
 $action = $_GET['action'] ?? '';
 $response = null;
 
+error_reporting(0);
+ini_set('display_errors', 0);
+
 if (!isset($_SESSION['user_id'])) {
     $response = ['success' => false, 'message' => 'Unauthorized'];
 } else {
+    // Ensure upload directory exists and is writable
+    $uploadDir = __DIR__ . '/../../uploads/hrm/cvs/';
+    if (!is_dir($uploadDir)) {
+        mkdir($uploadDir, 0777, true);
+    }
+    if (is_dir($uploadDir) && !is_writable($uploadDir)) {
+        @chmod($uploadDir, 0777);
+    }
+
     if ($action === 'get_depts') {
         $result = $conn->query("SELECT * FROM hrm_departments ORDER BY sort_order ASC, id DESC");
         $depts = [];
@@ -858,15 +870,12 @@ if (!isset($_SESSION['user_id'])) {
             // Check if we have a LOCAL CV file already
             $localCheck = $conn->query("SELECT id FROM hrm_application_attachments WHERE application_id = $application_id AND file_path LIKE '/uploads%'");
             if ($localCheck->num_rows == 0 && !empty($raw_cv_url)) {
-                $uploadDir = __DIR__ . '/../../uploads/hrm/cvs/';
-                if (!is_dir($uploadDir)) mkdir($uploadDir, 0777, true);
-
                 $fileExt = pathinfo(parse_url($raw_cv_url, PHP_URL_PATH), PATHINFO_EXTENSION) ?: 'pdf';
                 $localFileName = 'cv_app_' . $application_id . '.' . $fileExt;
                 $localFilePath = $uploadDir . $localFileName;
 
                 if (file_exists($localFilePath)) {
-                    // File already exists on disk, just register in DB if missing (already checked by localCheck)
+                    // File already exists on disk
                     $fileSize = filesize($localFilePath);
                     $dbPath = '/uploads/hrm/cvs/' . $localFileName;
                     $conn->query("INSERT INTO hrm_application_attachments (application_id, file_name, file_path, file_size) 
@@ -874,20 +883,22 @@ if (!isset($_SESSION['user_id'])) {
                 } else {
                     // Use CURL to bypass simple blocks
                     $ch = curl_init($raw_cv_url);
-                curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-                curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
-                curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
-                curl_setopt($ch, CURLOPT_USERAGENT, 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36');
-                curl_setopt($ch, CURLOPT_TIMEOUT, 30);
-                $fileData = curl_exec($ch);
-                $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+                    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+                    curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
+                    curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+                    curl_setopt($ch, CURLOPT_USERAGENT, 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36');
+                    curl_setopt($ch, CURLOPT_TIMEOUT, 30);
+                    $fileData = curl_exec($ch);
+                    $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
 
-                if ($fileData && $httpCode == 200) {
-                    $fileSize = strlen($fileData);
-                    file_put_contents($localFilePath, $fileData);
-                    $dbPath = '/uploads/hrm/cvs/' . $localFileName;
-                    $conn->query("INSERT INTO hrm_application_attachments (application_id, file_name, file_path, file_size) 
-                                  VALUES ($application_id, 'CV_Imported.".$fileExt."', '$dbPath', $fileSize)");
+                    if ($fileData && $httpCode == 200) {
+                        $fileSize = strlen($fileData);
+                        if (@file_put_contents($localFilePath, $fileData)) {
+                            $dbPath = '/uploads/hrm/cvs/' . $localFileName;
+                            $conn->query("INSERT INTO hrm_application_attachments (application_id, file_name, file_path, file_size) 
+                                          VALUES ($application_id, 'CV_Imported.".$fileExt."', '$dbPath', $fileSize)");
+                        }
+                    }
                 }
             }
         }
