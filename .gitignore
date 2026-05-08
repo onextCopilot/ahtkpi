@@ -49,6 +49,7 @@ cache/
 *.sql.zip
 backups/*
 !backups/.htaccess
+!backups/sys4386-openings-08042010-08052026.report.09.11.08.05.26.xlsx
 
 # OS generated files
 .DS_Store
