@@ -49,7 +49,9 @@ cache/
 *.sql.zip
 backups/*
 !backups/.htaccess
-!backups/sys4386-openings-08042010-08052026.report.09.11.08.05.26.xlsx
+
+# Allow specific Excel reports
+!*.xlsx
 
 # OS generated files
 .DS_Store
@@ -58,7 +60,7 @@ backups/*
 .Spotlight-V100
 .Trashes
 ehthumbs.db
-Desktop.ini
+61: Desktop.ini
 
 # SSH Keys
 aht_Kpi
@@ -76,4 +78,7 @@ describe.php
 desc.php
 desc_*.php
 *.db
-\n# HRM Uploads\nuploads/hrm/cvs/*\n!uploads/hrm/cvs/.gitkeep
+
+# HRM Uploads
+uploads/hrm/cvs/*
+!uploads/hrm/cvs/.gitkeep
