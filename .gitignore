@@ -82,3 +82,4 @@ desc_*.php
 # HRM Uploads
 uploads/hrm/cvs/*
 !uploads/hrm/cvs/.gitkeep
+\nuploads/hrm/temp/*\n!uploads/hrm/temp/.gitkeep

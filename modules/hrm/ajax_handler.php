@@ -758,9 +758,24 @@ if (!isset($_SESSION['user_id'])) {
                       VALUES ($aid, {$_SESSION['user_id']}, 'reject', 'Từ chối hồ sơ. Lý do: $reason')");
         echo json_encode(['success' => true]); exit;
 
+    } elseif ($action === 'upload_import_file' && $_SERVER['REQUEST_METHOD'] === 'POST') {
+        if (!isset($_FILES['file'])) { echo json_encode(['success' => false, 'message' => 'Không có file nào được tải lên']); exit; }
+        $tempDir = __DIR__ . '/../../uploads/hrm/temp/';
+        if (!is_dir($tempDir)) mkdir($tempDir, 0777, true);
+        
+        $fileName = 'import_' . time() . '_' . $_FILES['file']['name'];
+        $dest = $tempDir . $fileName;
+        if (move_uploaded_file($_FILES['file']['tmp_name'], $dest)) {
+            echo json_encode(['success' => true, 'file_path' => $fileName]); exit;
+        } else {
+            echo json_encode(['success' => false, 'message' => 'Lỗi khi lưu file tạm']); exit;
+        }
+
     } elseif ($action === 'get_import_total') {
-        $file = __DIR__ . '/data/sys4386-candidates-01032023-01042023.report.15.16.08.05.26.xlsx';
-        if (!file_exists($file)) { echo json_encode(['success' => false, 'message' => 'File không tồn tại']); exit; }
+        $fileName = $_GET['file'] ?? '';
+        $file = __DIR__ . '/../../uploads/hrm/temp/' . $fileName;
+        if (empty($fileName) || !file_exists($file)) { echo json_encode(['success' => false, 'message' => 'File không tồn tại: ' . $fileName]); exit; }
+        
         $zip = new ZipArchive();
         if ($zip->open($file) !== TRUE) { echo json_encode(['success' => false, 'message' => 'Không thể mở file Excel']); exit; }
         $xml = simplexml_load_string($zip->getFromName('xl/worksheets/sheet1.xml'));
@@ -772,9 +787,10 @@ if (!isset($_SESSION['user_id'])) {
         set_time_limit(300);
         $start = (int)($_GET['start'] ?? 0);
         $limit = (int)($_GET['limit'] ?? 20);
+        $fileName = $_GET['file'] ?? '';
+        $file = __DIR__ . '/../../uploads/hrm/temp/' . $fileName;
 
-        $file = __DIR__ . '/data/sys4386-candidates-01032023-01042023.report.15.16.08.05.26.xlsx';
-        if (!file_exists($file)) { echo json_encode(['success' => false, 'message' => 'File không tồn tại']); exit; }
+        if (empty($fileName) || !file_exists($file)) { echo json_encode(['success' => false, 'message' => 'File không tồn tại']); exit; }
         $zip = new ZipArchive();
         if ($zip->open($file) !== TRUE) { echo json_encode(['success' => false, 'message' => 'Không thể mở file Excel']); exit; }
 

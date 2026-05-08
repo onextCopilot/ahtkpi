@@ -444,6 +444,8 @@ $role = $_SESSION['role'] ?? 'staff';
     </div>
 </div>
 
+<input type="file" id="importFileInput" style="display:none" accept=".xlsx" onchange="processImportFile(this)">
+
 <script>
 let filters = { search: '', job_id: 0, status: 'all', source_id: 0, owner_id: 0, tag: '', date_from: '', date_to: '', sort: 'newest', page: 1, limit: 20 };
 let currentDetail = null;
@@ -469,34 +471,56 @@ async function loadInitialData() {
 }
 
 async function importExcel() {
-    if (!confirm('Bắt đầu import ứng viên từ file Excel? Quá trình này có thể mất vài phút.')) return;
+    document.getElementById('importFileInput').click();
+}
+
+async function processImportFile(input) {
+    if (!input.files || !input.files[0]) return;
+    const file = input.files[0];
     
+    if (!confirm(`Bắt đầu import ứng viên từ file "${file.name}"?`)) {
+        input.value = '';
+        return;
+    }
+
     const progressModal = document.getElementById('progressModal');
     const progressBar = document.getElementById('importProgressBar');
     const statusText = document.getElementById('importStatusText');
     
     progressModal.style.display = 'flex';
     progressBar.style.width = '0%';
-    statusText.innerText = 'Đang phân tích file...';
+    statusText.innerText = 'Đang tải file lên server...';
 
     try {
-        // 1. Get Total
-        const stats = await fetch('/hrm/ajax-handler?action=get_import_total').then(r => r.json());
+        // 1. Upload File
+        const formData = new FormData();
+        formData.append('file', file);
+        const upRes = await fetch('/hrm/ajax-handler?action=upload_import_file', {
+            method: 'POST',
+            body: formData
+        }).then(r => r.json());
+        
+        if (!upRes.success) throw new Error(upRes.message);
+        const tempFile = upRes.file_path;
+
+        // 2. Get Total
+        statusText.innerText = 'Đang phân tích file...';
+        const stats = await fetch(`/hrm/ajax-handler?action=get_import_total&file=${tempFile}`).then(r => r.json());
         if (!stats.success) throw new Error(stats.message);
         
         const total = stats.total;
-        const limit = 20; // Process 20 at a time
+        const limit = 20;
         let processed = 0;
 
-        // 2. Process Batches
+        // 3. Process Batches
         while (processed < total) {
-            const res = await fetch(`/hrm/ajax-handler?action=import_candidates&start=${processed}&limit=${limit}`).then(r => r.json());
+            const res = await fetch(`/hrm/ajax-handler?action=import_candidates&file=${tempFile}&start=${processed}&limit=${limit}`).then(r => r.json());
             if (!res.success) throw new Error(res.message);
             
             processed += limit;
             const percent = Math.min(100, Math.round((processed / total) * 100));
             progressBar.style.width = percent + '%';
-            statusText.innerText = `Đang tải: ${Math.min(processed, total)} / ${total} ứng viên...`;
+            statusText.innerText = `Đang xử lý: ${Math.min(processed, total)} / ${total} ứng viên...`;
         }
 
         alert(`Đã import thành công ${total} ứng viên!`);
@@ -505,6 +529,7 @@ async function importExcel() {
         alert('Lỗi: ' + e.message);
     } finally {
         progressModal.style.display = 'none';
+        input.value = '';
     }
 }
 
