@@ -419,6 +419,8 @@ if ($sl_tbl && $sl_tbl->num_rows > 0) {
     <link rel="stylesheet" href="/assets/css/dashboard.css">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Roboto:wght@400;500&display=swap"
         rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/tom-select@2.2.2/dist/css/tom-select.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/tom-select@2.2.2/dist/js/tom-select.complete.min.js"></script>
     <style>
         /* Shared Styles from Departments Module + Custom */
         .content-wrapper {
@@ -1065,12 +1067,11 @@ if ($sl_tbl && $sl_tbl->num_rows > 0) {
 
                         <div id="viewable_depts_row" class="team-select-container" style="border-top:none; margin-top:5px; padding-top:0;">
                             <label style="display:block; margin-bottom: 8px; color: #3c4043; font-size: 13px; font-weight: 500;">Can View Specific Teams</label>
-                            <select name="viewable_dept_ids[]" id="viewable_dept_ids" multiple style="height: 100px; width:100%; border-radius: 6px; border:1px solid #dadce0;">
+                            <select name="viewable_dept_ids[]" id="viewable_dept_ids" multiple placeholder="Select Teams...">
                                 <?php foreach ($depts as $d): ?>
                                     <option value="<?php echo $d['id']; ?>"><?php echo htmlspecialchars($d['name']); ?></option>
                                 <?php endforeach; ?>
                             </select>
-                            <small style="color: #70757a; font-size: 11px;">Hold Cmd/Ctrl to select multiple Teams.</small>
                         </div>
                         <div class="toggle-item">
                             <label for="is_am_bd" style="font-size: 13px; color: #3c4043;">Is AM/BD Member</label>
@@ -1082,14 +1083,12 @@ if ($sl_tbl && $sl_tbl->num_rows > 0) {
                         <div class="form-group" style="margin-bottom:12px">
                             <label style="margin-bottom: 8px; color: #5f6368; font-weight: 600;">Assign Sale
                                 Teams</label>
-                            <select name="team_ids[]" id="team_ids" multiple style="height: 120px; border-radius: 6px;">
+                            <select name="team_ids[]" id="team_ids" multiple placeholder="Select Sale Teams...">
                                 <?php foreach ($sale_teams as $st): ?>
                                     <option value="<?php echo $st['id']; ?>"><?php echo htmlspecialchars($st['name']); ?>
                                     </option>
                                 <?php endforeach; ?>
                             </select>
-                            <small style="color: #70757a; margin-top: 6px; display: block;">Hold Cmd/Ctrl to select
-                                multiple.</small>
                         </div>
                         <div class="form-group">
                             <label style="margin-bottom: 8px; color: #5f6368; font-weight: 600;">📊 Sale Level (KPI
@@ -1215,6 +1214,21 @@ if ($sl_tbl && $sl_tbl->num_rows > 0) {
         const canViewAllDebts = document.getElementById('can_view_all_debts');
         const role = document.getElementById('role');
 
+        let tsViewableDepts, tsTeamIds;
+
+        document.addEventListener('DOMContentLoaded', () => {
+            tsViewableDepts = new TomSelect('#viewable_dept_ids', {
+                plugins: ['remove_button'],
+                persist: false,
+                create: false,
+            });
+            tsTeamIds = new TomSelect('#team_ids', {
+                plugins: ['remove_button'],
+                persist: false,
+                create: false,
+            });
+        });
+
         function openAddModal() {
             modalTitle.textContent = 'Add User';
             formAction.value = 'add';
@@ -1233,9 +1247,12 @@ if ($sl_tbl && $sl_tbl->num_rows > 0) {
             canViewInvoice.checked = false;
             canViewAllDebts.checked = false;
             document.getElementById('can_view_all_kpi').checked = false;
-            const viewableDeptSel = document.getElementById('viewable_dept_ids');
-            if(viewableDeptSel) { for(let opt of viewableDeptSel.options) opt.selected = false; }
+            
+            if(tsViewableDepts) tsViewableDepts.clear();
+            
             document.getElementById('is_am_bd').checked = false;
+            if(tsTeamIds) tsTeamIds.clear();
+
             // Hide history
             document.getElementById('modal_level_history').style.display = 'none';
             toggleTeamSelect();
@@ -1263,28 +1280,20 @@ if ($sl_tbl && $sl_tbl->num_rows > 0) {
             document.getElementById('can_view_all_kpi').checked = user.can_view_all_kpi == 1;
             
             // Set viewable depts
-            const viewableDeptSel = document.getElementById('viewable_dept_ids');
-            if(viewableDeptSel) {
-                for(let opt of viewableDeptSel.options) opt.selected = false;
+            if(tsViewableDepts) {
+                tsViewableDepts.clear();
                 if(user.viewable_department_ids) {
-                    const vids = user.viewable_department_ids.split(',');
-                    for(let vid of vids) {
-                        const opt = viewableDeptSel.querySelector(`option[value="${vid}"]`);
-                        if(opt) opt.selected = true;
-                    }
+                    tsViewableDepts.setValue(user.viewable_department_ids.split(','));
                 }
             }
 
             document.getElementById('is_am_bd').checked = user.is_am_bd == 1;
 
             // Set teams
-            const teamIdsSelect = document.getElementById('team_ids');
-            for (let option of teamIdsSelect.options) { option.selected = false; }
-            if (user.team_ids) {
-                const ids = user.team_ids.split(',');
-                for (let id of ids) {
-                    const opt = teamIdsSelect.querySelector(`option[value="${id}"]`);
-                    if (opt) opt.selected = true;
+            if(tsTeamIds) {
+                tsTeamIds.clear();
+                if(user.team_ids) {
+                    tsTeamIds.setValue(user.team_ids.split(','));
                 }
             }
             // Set sale level
