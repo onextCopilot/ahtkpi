@@ -288,14 +288,48 @@ body{font-family:'Inter',sans-serif;background:#f8fafc;color:#1e293b;height:100v
                         </div>
                     </div>
 
-                    <!-- STEP 3-7: placeholders -->
-                    <div id="step-3-content" style="display:none;padding:40px;text-align:center;background:#fff;border-radius:8px;border:1px solid #e5e7eb">
-                        <h3 style="margin-bottom:16px">Quy trình tuyển dụng</h3>
-                        <p style="color:#6b7280">Đang phát triển...</p>
+                    <!-- STEP 3: QUY TRÌNH TUYỂN DỤNG -->
+                    <div id="step-3-content" style="display:none">
+                        <div class="form-section">
+                            <div class="section-header">Các giai đoạn tuyển dụng</div>
+                            <div class="section-body">
+                                <p style="font-size:13px;color:#6b7280;margin-bottom:20px">Thiết lập các giai đoạn mà ứng viên sẽ trải qua. Bạn có thể thêm, bớt hoặc thay đổi thứ tự các giai đoạn.</p>
+                                
+                                <div id="hiringStagesList">
+                                    <!-- Stages will be rendered here -->
+                                </div>
+
+                                <button class="btn-secondary" style="margin-top:16px;padding:8px 16px;font-size:13px" onclick="addStageRow()">+ Thêm giai đoạn</button>
+                            </div>
+                        </div>
                     </div>
-                    <div id="step-4-content" style="display:none;padding:40px;text-align:center;background:#fff;border-radius:8px;border:1px solid #e5e7eb">
-                        <h3 style="margin-bottom:16px">Đơn ứng tuyển</h3>
-                        <p style="color:#6b7280">Đang phát triển...</p>
+                    <!-- STEP 4: ĐƠN ỨNG TUYỂN -->
+                    <div id="step-4-content" style="display:none">
+                        <div class="form-section">
+                            <div class="section-header">Các trường thông tin cơ bản</div>
+                            <div class="section-body">
+                                <table class="criteria-table" style="width:100%;border-collapse:collapse">
+                                    <thead style="background:#f9fafb">
+                                        <tr>
+                                            <th>Trường thông tin</th>
+                                            <th style="width:100px;text-align:center">Hiển thị</th>
+                                            <th style="width:100px;text-align:center">Bắt buộc</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="appFieldsBody">
+                                        <!-- Fields will be rendered here -->
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+
+                        <div class="form-section">
+                            <div class="section-header">Câu hỏi tùy chỉnh</div>
+                            <div class="section-body">
+                                <div id="customQuestionsList"></div>
+                                <button class="btn-secondary" style="margin-top:16px;padding:8px 16px;font-size:13px" onclick="addCustomQuestion()">+ Thêm câu hỏi tùy chỉnh</button>
+                            </div>
+                        </div>
                     </div>
                     <div id="step-5-content" style="display:none;padding:40px;text-align:center;background:#fff;border-radius:8px;border:1px solid #e5e7eb">
                         <h3 style="margin-bottom:16px">Đơn đánh giá</h3>
@@ -305,9 +339,34 @@ body{font-family:'Inter',sans-serif;background:#f8fafc;color:#1e293b;height:100v
                         <h3 style="margin-bottom:16px">Câu hỏi phỏng vấn</h3>
                         <p style="color:#6b7280">Đang phát triển...</p>
                     </div>
-                    <div id="step-7-content" style="display:none;padding:40px;text-align:center;background:#fff;border-radius:8px;border:1px solid #e5e7eb">
-                        <h3 style="margin-bottom:16px">Hoàn tất</h3>
-                        <p style="color:#6b7280">Đang phát triển...</p>
+                    <!-- STEP 7: HOÀN TẤT -->
+                    <div id="step-7-content" style="display:none">
+                        <div class="form-section">
+                            <div class="section-header">Trạng thái tin tuyển dụng</div>
+                            <div class="section-body">
+                                <div style="display:flex;gap:12px;margin-bottom:24px">
+                                    <button class="btn-secondary" id="status-draft" onclick="updateJobStatus('draft')">Lưu nháp</button>
+                                    <button class="btn-secondary" id="status-public" onclick="updateJobStatus('public')" style="border-color:#10b981; color:#10b981">Công khai</button>
+                                    <button class="btn-secondary" id="status-private" onclick="updateJobStatus('private')" style="border-color:#f59e0b; color:#f59e0b">Nội bộ</button>
+                                    <button class="btn-secondary" id="status-closed" onclick="updateJobStatus('closed')" style="border-color:#ef4444; color:#ef4444">Đóng tin</button>
+                                </div>
+
+                                <div style="padding:20px; background:#f9fafb; border-radius:8px; border:1px solid #e5e7eb">
+                                    <h4 style="margin-bottom:12px; font-size:14px">Thông tin chung</h4>
+                                    <div id="jobSummaryContent" style="font-size:13px; line-height:1.8; color:#4b5563">
+                                        <!-- Summary will be rendered here -->
+                                    </div>
+                                </div>
+                                
+                                <div style="margin-top:24px">
+                                    <label class="form-label">Đường dẫn ứng tuyển công khai</label>
+                                    <div style="display:flex; gap:8px">
+                                        <input type="text" class="form-input" id="publicLink" readonly value="https://ahtkpi.vn/hrm/apply?id=<?=$job_id?>">
+                                        <button class="btn-secondary" style="width:auto; padding:0 16px" onclick="window.open(document.getElementById('publicLink').value)">Xem trang</button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
                     </div>
 
                     <div style="display:flex;justify-content:space-between;margin-top:24px;padding:24px 0;border-top:1px solid #e5e7eb">
@@ -371,23 +430,71 @@ body{font-family:'Inter',sans-serif;background:#f8fafc;color:#1e293b;height:100v
     </div>
 </div>
 
+<!-- Stage Settings Modal -->
+<div class="modal-overlay" id="stageModal">
+    <div class="modal" style="width:500px">
+        <div class="modal-header">
+            <h3 style="font-size:16px">Thiết lập giai đoạn</h3>
+            <button onclick="closeStageModal()" style="background:none;border:none;font-size:20px;cursor:pointer">&times;</button>
+        </div>
+        <div class="modal-body">
+            <input type="hidden" id="modalStageIndex">
+            <div class="form-group">
+                <label class="form-label">Tên giai đoạn</label>
+                <input type="text" class="form-input" id="modalStageName">
+            </div>
+            <div class="form-group">
+                <label class="form-label">Email tự động</label>
+                <select class="form-select" id="modalStageEmailId">
+                    <option value="0">-- Không gửi --</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label class="form-label">Mẫu phỏng vấn</label>
+                <select class="form-select" id="modalStageInterviewId">
+                    <option value="0">-- Không chọn --</option>
+                </select>
+            </div>
+            <div class="form-row">
+                <div class="form-group">
+                    <label class="form-label">Thời gian hoàn thành (giờ)</label>
+                    <input type="number" class="form-input" id="modalStageDuration" value="24">
+                </div>
+                <div class="form-group" style="display:flex;align-items:center;gap:8px;padding-top:24px">
+                    <input type="checkbox" id="modalStageManualReview"> <span style="font-size:12px;font-weight:600">Review trước khi gửi</span>
+                </div>
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button onclick="closeStageModal()" class="btn-secondary" style="padding:8px 16px">Hủy</button>
+            <button onclick="saveStageModal()" class="top-btn primary" style="padding:8px 24px">Lưu lại</button>
+        </div>
+    </div>
+</div>
+
 <script>
 let currentStep = 1;
 const jobId = <?=$job_id?>;
 let allCriteriaGroups = [];
 let selectedCriteria = [];
+let hiringStages = [];
+let emailTemplates = [];
+let interviewTemplates = [];
 
 async function loadAllData() {
     initEditors();
     try {
         // Load options
-        const [deptRes, officeRes, poolRes, evalRes, jobRes, critRes] = await Promise.all([
+        const [deptRes, officeRes, poolRes, evalRes, jobRes, critRes, jobStagesRes, emailTemplatesRes, interviewTemplatesRes] = await Promise.all([
             fetch('/hrm/ajax-handler?action=get_depts'),
             fetch('/hrm/ajax-handler?action=get_offices'),
             fetch('/hrm/ajax-handler?action=get_talent_pools'),
             fetch('/hrm/ajax-handler?action=get_evaluation_data'),
             fetch('/hrm/ajax-handler?action=get_jobs&id=' + jobId),
-            fetch('/hrm/ajax-handler?action=get_job_criteria&job_id=' + jobId)
+            fetch('/hrm/ajax-handler?action=get_job_criteria&job_id=' + jobId),
+            fetch('/hrm/ajax-handler?action=get_job_hiring_steps&job_id=' + jobId),
+            fetch('/hrm/ajax-handler?action=get_email_templates'),
+            fetch('/hrm/ajax-handler?action=get_interview_templates')
         ]);
 
         const depts = await deptRes.json();
@@ -430,6 +537,8 @@ async function loadAllData() {
             document.getElementById('managers').value = j.managers;
             tinymce.get('jobDescription').setContent(j.job_description || '');
             tinymce.get('notes').setContent(j.notes || '');
+            highlightStatus(j.status);
+            updateJobSummary();
         }
 
         // Populate Criteria
@@ -438,6 +547,29 @@ async function loadAllData() {
             selectedCriteria = criteriaData.criteria;
             renderSelectedCriteria();
             criteriaData.mandatory.forEach(m => addMandatoryRow(m.requirement_text));
+        }
+
+        // Populate Stages
+        const stagesData = await jobStagesRes.json();
+        if (stagesData.success) {
+            hiringStages = stagesData.data;
+            renderHiringStages();
+        }
+
+        const emailData = await emailTemplatesRes.json();
+        if (emailData.success) emailTemplates = emailData.data;
+
+        const interviewData = await interviewTemplatesRes.json();
+        if (interviewData.success) interviewTemplates = interviewData.data;
+
+        renderHiringStages();
+
+        // Load Application Form Data
+        const appRes = await fetch('/hrm/ajax-handler?action=get_job_application_form&job_id=' + jobId);
+        const appData = await appRes.json();
+        if (appData.success) {
+            renderApplicationFields(appData.fields);
+            renderCustomQuestions(appData.questions);
         }
 
     } catch (e) { console.error(e); }
@@ -470,6 +602,9 @@ async function saveCurrentStep(next) {
     let success = false;
     if (currentStep === 1) success = await saveStep1();
     else if (currentStep === 2) success = await saveStep2();
+    else if (currentStep === 3) success = await saveStep3();
+    else if (currentStep === 4) success = await saveStep4();
+    else if (currentStep === 7) success = await saveStep7();
     else success = true;
 
     if (success && next) {
@@ -506,6 +641,7 @@ async function saveStep1() {
             body: JSON.stringify(data)
         });
         const result = await res.json();
+        if (result.success) updateJobSummary();
         return result.success;
     } catch (e) { return false; }
 }
@@ -523,6 +659,37 @@ async function saveStep2() {
             body: JSON.stringify(data)
         });
         const result = await res.json();
+        return result.success;
+    } catch (e) { return false; }
+}
+
+async function saveStep3() {
+    const data = {
+        job_id: jobId,
+        steps: hiringStages.map((s, idx) => ({
+            name: document.getElementById(`stage-name-${idx}`).value,
+            email_template_id: document.getElementById(`stage-email-${idx}`).value,
+            interview_template_id: document.getElementById(`stage-interview-${idx}`).value,
+            is_locked: s.is_locked || 0,
+            stage_type: s.stage_type || 'standard'
+        }))
+    };
+    try {
+        const res = await fetch('/hrm/ajax-handler?action=save_job_hiring_steps', {
+            method: 'POST',
+            headers: {'Content-Type':'application/json'},
+            body: JSON.stringify(data)
+        });
+        const result = await res.json();
+        if (result.success) {
+            // Reload stages to get proper IDs/data
+            const refresh = await fetch('/hrm/ajax-handler?action=get_job_hiring_steps&job_id=' + jobId);
+            const refreshData = await refresh.json();
+            if (refreshData.success) {
+                hiringStages = refreshData.data;
+                renderHiringStages();
+            }
+        }
         return result.success;
     } catch (e) { return false; }
 }
@@ -554,7 +721,7 @@ function openMultiCriterionModal() {
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
                 ${g.criteria.map(c => `
                     <label style="display:flex;align-items:center;gap:10px;font-size:13px;cursor:pointer;padding:4px 0">
-                        <input type="checkbox" class="multi-crit-cb" value="${c.id}" ${selectedCriteria.find(sc => sc.criterion_id == c.id) ? 'checked' : ''}>
+                        <input type="checkbox" class="multi-crit-cb" value="${c.id}" ${selectedCriteria.find(sc => sc.id == c.id) ? 'checked' : ''}>
                         <span style="color:#4b5563">${c.criterion_text}</span>
                     </label>
                 `).join('')}
@@ -567,10 +734,10 @@ function closeMultiCriterionModal() { document.getElementById('multiCriterionMod
 
 function addSelectedCriterion() {
     const cid = document.getElementById('modalCriterionId').value;
-    if (!cid || selectedCriteria.find(c => c.criterion_id == cid)) return;
+    if (!cid || selectedCriteria.find(c => c.id == cid)) return;
     const criterion = findCriterion(cid);
     selectedCriteria.push({
-        criterion_id: cid,
+        id: cid,
         criterion_text: criterion.criterion_text,
         group_name: criterion.group_name,
         expected_score: document.getElementById('modalExpectedScore').value,
@@ -585,11 +752,11 @@ function addMultiCriteria() {
     const newCriteria = [];
     cbs.forEach(cb => {
         const cid = cb.value;
-        const existing = selectedCriteria.find(sc => sc.criterion_id == cid);
+        const existing = selectedCriteria.find(sc => sc.id == cid);
         if (existing) newCriteria.push(existing);
         else {
             const criterion = findCriterion(cid);
-            newCriteria.push({ criterion_id: cid, criterion_text: criterion.criterion_text, group_name: criterion.group_name, expected_score: '3/5', weight: 1 });
+            newCriteria.push({ id: cid, criterion_text: criterion.criterion_text, group_name: criterion.group_name, expected_score: '3/5', weight: 1 });
         }
     });
     selectedCriteria = newCriteria;
@@ -627,6 +794,367 @@ function addMandatoryRow(text = '') {
     div.className = 'mandatory-row';
     div.innerHTML = `<input type="text" class="form-input mandatory-row-input" value="${text}"><button onclick="this.parentElement.remove()" style="background:none;border:none;color:#ef4444;cursor:pointer;font-size:18px">&times;</button>`;
     container.appendChild(div);
+}
+
+function renderHiringStages() {
+    const container = document.getElementById('hiringStagesList');
+    if (!container) return;
+    
+    const standardStages = hiringStages.filter(s => !s.stage_type || s.stage_type === 'standard');
+    const qualifiedStages = hiringStages.filter(s => ['offered', 'hired'].includes(s.stage_type));
+    const rejectedStages = hiringStages.filter(s => s.stage_type === 'rejected');
+
+    const renderStageRow = (s, idx, totalIdx) => {
+        const emailName = s.email_template_id > 0 ? (emailTemplates.find(t => t.id == s.email_template_id)?.name || 'Mẫu đã chọn') : 'Nhấn để chọn mẫu';
+        
+        let iconHtml = `<div style="width:32px; height:32px; background:#f3f4f6; border-radius:50%; display:flex; align-items:center; justify-content:center; font-weight:700; color:#6b7280; font-size:13px">${totalIdx + 1}</div>`;
+        
+        if (s.stage_type === 'offered') {
+            iconHtml = `<div style="color:#10b981"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 9V5a3 3 0 0 0-3-3l-4 9v11h11.28a2 2 0 0 0 2-1.7l1.38-9a2 2 0 0 0-2-2.3zM7 22H4a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2h3"/></svg></div>`;
+        } else if (s.stage_type === 'hired') {
+            iconHtml = `<div style="color:#10b981"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg></div>`;
+        } else if (s.stage_type === 'rejected') {
+            iconHtml = `<div style="color:#ef4444"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg></div>`;
+        }
+
+        return `
+            <div class="stage-item" style="display:flex; align-items:center; gap:20px; padding:16px; background:#fff; border-bottom:1px solid #f3f4f6; transition:all 0.2s">
+                <div style="width:40px; display:flex; justify-content:center; flex-shrink:0">
+                    ${iconHtml}
+                </div>
+                <div style="width:2px; height:40px; background:#f3f4f6; margin:0 10px"></div>
+                <div style="flex:1">
+                    <div style="font-size:11px; color:#9ca3af; margin-bottom:4px">Bước ${totalIdx + 1}</div>
+                    <div style="font-weight:600; font-size:15px; color:#111827">${s.name}</div>
+                </div>
+                <div style="flex:1.5">
+                    <div style="font-size:11px; color:#9ca3af; margin-bottom:4px">Mẫu email hoặc phỏng vấn <svg style="display:inline; vertical-align:middle" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></div>
+                    <div style="color:#2563eb; cursor:pointer; font-size:13px; text-decoration:underline; text-underline-offset:4px; border-bottom:1px dotted #2563eb" onclick="openStageModal(${totalIdx})">${emailName}</div>
+                </div>
+                <div style="display:flex; gap:12px; align-items:center">
+                    ${!s.is_locked ? `
+                        <div style="display:flex; gap:4px">
+                            <button class="top-btn" style="background:#fff; border-color:#e5e7eb; color:#6b7280; padding:4px 8px; font-size:10px" onclick="moveStage(${totalIdx}, -1)">↑</button>
+                            <button class="top-btn" style="background:#fff; border-color:#e5e7eb; color:#6b7280; padding:4px 8px; font-size:10px" onclick="moveStage(${totalIdx}, 1)">↓</button>
+                        </div>
+                        <button class="top-btn" style="background:#f9fafb; border-color:#e5e7eb; color:#6b7280; padding:6px" onclick="openStageModal(${totalIdx})"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/></svg></button>
+                        <button class="top-btn" style="background:#fff; border-color:#ef4444; color:#ef4444; padding:6px" onclick="removeStage(${totalIdx})"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18"/><path d="M6 6l12 12"/></svg></button>
+                    ` : `<button class="top-btn" style="background:#f9fafb; border-color:#e5e7eb; color:#6b7280; padding:6px" onclick="openStageModal(${totalIdx})"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/></svg></button>`}
+                </div>
+            </div>
+        `;
+    };
+
+    let html = `
+        <div style="background:#fff; border:1px solid #e5e7eb; border-radius:8px; overflow:hidden">
+            <div style="padding:16px; background:#f9fafb; border-bottom:1px solid #e5e7eb; display:flex; justify-content:space-between; align-items:center">
+                <div style="font-weight:700; font-size:12px; color:#6b7280; text-transform:uppercase; letter-spacing:0.5px">Quy trình tuyển dụng tiêu chuẩn</div>
+                <button class="btn-secondary" style="font-size:11px; padding:4px 12px" onclick="resetToDefaultWorkflow()">Khôi phục quy trình chuẩn</button>
+            </div>
+            <div id="standardStagesContainer">
+                ${standardStages.map((s, idx) => renderStageRow(s, idx, hiringStages.indexOf(s))).join('')}
+            </div>
+            <div style="padding:12px; background:#fff">
+                <button class="top-btn" style="background:#fff; border:1px dashed #d1d5db; color:#374151; width:100%; padding:10px; border-radius:6px; font-weight:600; font-size:13px" onclick="addStageRow()">+ Thêm giai đoạn mới</button>
+            </div>
+            
+            <div style="padding:16px; background:#f9fafb; border-top:1px solid #e5e7eb; border-bottom:1px solid #e5e7eb; font-weight:700; font-size:12px; color:#10b981; text-transform:uppercase; letter-spacing:0.5px">Đạt yêu cầu</div>
+            <div>
+                ${qualifiedStages.map((s, idx) => renderStageRow(s, idx, hiringStages.indexOf(s))).join('')}
+            </div>
+
+            <div style="padding:16px; background:#f9fafb; border-top:1px solid #e5e7eb; border-bottom:1px solid #e5e7eb; font-weight:700; font-size:12px; color:#ef4444; text-transform:uppercase; letter-spacing:0.5px">Đã từ chối</div>
+            <div>
+                ${rejectedStages.map((s, idx) => renderStageRow(s, idx, hiringStages.indexOf(s))).join('')}
+            </div>
+        </div>
+    `;
+
+    container.innerHTML = html;
+}
+
+function openStageModal(idx) {
+    const s = hiringStages[idx];
+    document.getElementById('modalStageIndex').value = idx;
+    document.getElementById('modalStageName').value = s.name;
+    document.getElementById('modalStageDuration').value = s.duration || 24;
+    document.getElementById('modalStageManualReview').checked = s.manual_review == 1;
+    
+    // Fill emails
+    const eSelect = document.getElementById('modalStageEmailId');
+    eSelect.innerHTML = '<option value="0">-- Không gửi --</option>';
+    emailTemplates.forEach(t => {
+        eSelect.innerHTML += `<option value="${t.id}" ${s.email_template_id == t.id ? 'selected' : ''}>[Email] ${t.name}</option>`;
+    });
+    
+    // Fill interviews
+    const iSelect = document.getElementById('modalStageInterviewId');
+    iSelect.innerHTML = '<option value="0">-- Không chọn --</option>';
+    interviewTemplates.forEach(t => {
+        iSelect.innerHTML += `<option value="${t.id}" ${s.interview_template_id == t.id ? 'selected' : ''}>[Phỏng vấn] ${t.name}</option>`;
+    });
+
+    document.getElementById('stageModal').classList.add('active');
+}
+
+function closeStageModal() {
+    document.getElementById('stageModal').classList.remove('active');
+}
+
+function saveStageModal() {
+    const idx = document.getElementById('modalStageIndex').value;
+    const s = hiringStages[idx];
+    s.name = document.getElementById('modalStageName').value;
+    s.email_template_id = document.getElementById('modalStageEmailId').value;
+    s.interview_template_id = document.getElementById('modalStageInterviewId').value;
+    s.duration = document.getElementById('modalStageDuration').value;
+    s.manual_review = document.getElementById('modalStageManualReview').checked ? 1 : 0;
+    
+    renderHiringStages();
+    closeStageModal();
+}
+
+async function resetToDefaultWorkflow() {
+    if (!confirm('Bạn có chắc chắn muốn xóa quy trình hiện tại và khôi phục về quy trình chuẩn trong cài đặt?')) return;
+    
+    try {
+        const res = await fetch('/hrm/ajax-handler?action=reset_job_hiring_steps', {
+            method: 'POST',
+            body: JSON.stringify({ job_id: jobId })
+        });
+        const result = await res.json();
+        if (result.success) {
+            // Re-load steps
+            const res2 = await fetch(`/hrm/ajax-handler?action=get_job_hiring_steps&job_id=${jobId}`);
+            const result2 = await res2.json();
+            if (result2.success) {
+                hiringStages = result2.data;
+                renderHiringStages();
+                showToast('Đã khôi phục quy trình chuẩn');
+            }
+        }
+    } catch (e) {
+        console.error(e);
+        showToast('Lỗi khi khôi phục quy trình', 'error');
+    }
+}
+
+function moveStage(idx, dir) {
+    const newIdx = idx + dir;
+    if (newIdx < 0 || newIdx >= hiringStages.length) return;
+    if (hiringStages[idx].is_locked || hiringStages[newIdx].is_locked) return;
+    
+    const temp = hiringStages[idx];
+    hiringStages[idx] = hiringStages[newIdx];
+    hiringStages[newIdx] = temp;
+    renderHiringStages();
+}
+
+function addStageRow() {
+    hiringStages.splice(hiringStages.findIndex(s => s.is_locked), 0, { name: 'Giai đoạn mới', email_template_id: 0, interview_template_id: 0, is_locked: 0, stage_type: 'standard' });
+    renderHiringStages();
+}
+
+function removeStage(idx) {
+    if (hiringStages[idx].is_locked) return;
+    hiringStages.splice(idx, 1);
+    renderHiringStages();
+}
+
+function moveStage(idx, dir) {
+    const newIdx = idx + dir;
+    if (newIdx < 0 || newIdx >= hiringStages.length || hiringStages[newIdx].is_locked || hiringStages[idx].is_locked) return;
+    const temp = hiringStages[idx];
+    hiringStages[idx] = hiringStages[newIdx];
+    hiringStages[newIdx] = temp;
+    renderHiringStages();
+}
+
+function renderApplicationFields(fields) {
+    const tbody = document.getElementById('appFieldsBody');
+    const fieldLabels = {
+        'full_name': 'Họ và tên',
+        'email': 'Email',
+        'phone': 'Số điện thoại',
+        'cv': 'CV (Đính kèm file)',
+        'cover_letter': 'Thư giới thiệu (Cover Letter)',
+        'photo': 'Ảnh chân dung',
+        'linkedin': 'Link LinkedIn',
+        'github': 'Link GitHub',
+        'website': 'Website/Portfolio',
+        'address': 'Địa chỉ hiện tại',
+        'gender': 'Giới tính',
+        'dob': 'Ngày sinh',
+        'hometown': 'Quê quán',
+        'current_residence': 'Nơi ở hiện nay'
+    };
+
+    tbody.innerHTML = Object.keys(fieldLabels).map(key => {
+        const f = fields.find(field => field.field_name === key) || { is_show: 1, is_required: 0 };
+        const isAlwaysReq = (key === 'full_name' || key === 'email' || key === 'cv');
+        
+        return `
+            <tr>
+                <td style="font-size:13px;font-weight:500">${fieldLabels[key]}</td>
+                <td style="text-align:center">
+                    <input type="checkbox" class="app-field-show" data-field="${key}" ${f.is_show ? 'checked' : ''} ${isAlwaysReq ? 'disabled' : ''}>
+                </td>
+                <td style="text-align:center">
+                    <input type="checkbox" class="app-field-req" data-field="${key}" ${f.is_required ? 'checked' : ''} ${isAlwaysReq ? 'disabled' : ''}>
+                </td>
+            </tr>
+        `;
+    }).join('');
+}
+
+function renderCustomQuestions(questions) {
+    const container = document.getElementById('customQuestionsList');
+    container.innerHTML = questions.map((q, idx) => `
+        <div class="form-section" style="margin-bottom:12px; border-style:dashed" id="q-row-${idx}">
+            <div class="section-body" style="padding:16px">
+                <div class="form-group">
+                    <label class="form-label">Câu hỏi</label>
+                    <input type="text" class="form-input q-text" value="${q.question_text}" placeholder="Nhập nội dung câu hỏi">
+                </div>
+                <div class="form-row" style="margin-bottom:0">
+                    <div class="form-group">
+                        <label class="form-label">Loại câu hỏi</label>
+                        <select class="form-select q-type" onchange="toggleQOptions(${idx})">
+                            <option value="text" ${q.question_type==='text'?'selected':''}>Văn bản ngắn</option>
+                            <option value="longtext" ${q.question_type==='longtext'?'selected':''}>Văn bản dài</option>
+                            <option value="select" ${q.question_type==='select'?'selected':''}>Nhiều lựa chọn (Dropdown)</option>
+                            <option value="checkbox" ${q.question_type==='checkbox'?'selected':''}>Đánh dấu (Checkbox)</option>
+                        </select>
+                    </div>
+                    <div class="form-group q-options-group" style="display: ${['select','checkbox'].includes(q.question_type) ? 'block' : 'none'}">
+                        <label class="form-label">Các lựa chọn (phân cách bằng dấu phẩy)</label>
+                        <input type="text" class="form-input q-options" value="${q.options || ''}">
+                    </div>
+                    <div class="form-group" style="flex:0; white-space:nowrap; display:flex; align-items:center; gap:8px; padding-top:24px">
+                        <input type="checkbox" class="q-req" ${q.is_required ? 'checked' : ''}> <span style="font-size:12px">Bắt buộc</span>
+                        <button class="top-btn" style="background:#fff; border-color:#ef4444; color:#ef4444; padding:8px" onclick="this.closest('.form-section').remove()">&times;</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    `).join('');
+}
+
+function addCustomQuestion() {
+    const container = document.getElementById('customQuestionsList');
+    const idx = container.children.length;
+    const div = document.createElement('div');
+    div.className = 'form-section';
+    div.style.marginBottom = '12px';
+    div.style.borderStyle = 'dashed';
+    div.innerHTML = `
+        <div class="section-body" style="padding:16px">
+            <div class="form-group">
+                <label class="form-label">Câu hỏi</label>
+                <input type="text" class="form-input q-text" placeholder="Nhập nội dung câu hỏi">
+            </div>
+            <div class="form-row" style="margin-bottom:0">
+                <div class="form-group">
+                    <label class="form-label">Loại câu hỏi</label>
+                    <select class="form-select q-type" onchange="this.closest('.form-section').querySelector('.q-options-group').style.display = (['select','checkbox'].includes(this.value) ? 'block' : 'none')">
+                        <option value="text">Văn bản ngắn</option>
+                        <option value="longtext">Văn bản dài</option>
+                        <option value="select">Nhiều lựa chọn (Dropdown)</option>
+                        <option value="checkbox">Đánh dấu (Checkbox)</option>
+                    </select>
+                </div>
+                <div class="form-group q-options-group" style="display:none">
+                    <label class="form-label">Các lựa chọn (phân cách bằng dấu phẩy)</label>
+                    <input type="text" class="form-input q-options">
+                </div>
+                <div class="form-group" style="flex:0; white-space:nowrap; display:flex; align-items:center; gap:8px; padding-top:24px">
+                    <input type="checkbox" class="q-req"> <span style="font-size:12px">Bắt buộc</span>
+                    <button class="top-btn" style="background:#fff; border-color:#ef4444; color:#ef4444; padding:8px" onclick="this.closest('.form-section').remove()">&times;</button>
+                </div>
+            </div>
+        </div>
+    `;
+    container.appendChild(div);
+}
+
+function toggleQOptions(idx) {
+    const row = document.getElementById(`q-row-${idx}`);
+    const type = row.querySelector('.q-type').value;
+    row.querySelector('.q-options-group').style.display = (['select','checkbox'].includes(type) ? 'block' : 'none');
+}
+
+async function saveStep4() {
+    const fields = Array.from(document.querySelectorAll('.app-field-show')).map(cb => ({
+        field_name: cb.dataset.field,
+        is_show: cb.checked ? 1 : 0,
+        is_required: document.querySelector(`.app-field-req[data-field="${cb.dataset.field}"]`).checked ? 1 : 0
+    }));
+
+    const questions = Array.from(document.getElementById('customQuestionsList').children).map(div => ({
+        question_text: div.querySelector('.q-text').value,
+        question_type: div.querySelector('.q-type').value,
+        options: div.querySelector('.q-options').value,
+        is_required: div.querySelector('.q-req').checked ? 1 : 0
+    })).filter(q => q.question_text.trim() !== '');
+
+    const data = { job_id: jobId, fields, questions };
+
+    try {
+        const res = await fetch('/hrm/ajax-handler?action=save_job_application_form', {
+            method: 'POST',
+            headers: {'Content-Type':'application/json'},
+            body: JSON.stringify(data)
+        });
+        const result = await res.json();
+        return result.success;
+    } catch (e) { return false; }
+}
+
+async function saveStep7() {
+    return true; // Status is saved separately
+}
+
+function updateJobSummary() {
+    const title = document.getElementById('title').value;
+    const dept = document.getElementById('departmentId').options[document.getElementById('departmentId').selectedIndex]?.text || 'Chưa chọn';
+    const office = document.getElementById('office').value || 'Chưa chọn';
+    const deadline = document.getElementById('deadline').value || 'Không có';
+    
+    document.getElementById('jobSummaryContent').innerHTML = `
+        <div><strong>Tiêu đề:</strong> ${title}</div>
+        <div><strong>Phòng ban:</strong> ${dept}</div>
+        <div><strong>Văn phòng:</strong> ${office}</div>
+        <div><strong>Thời hạn:</strong> ${deadline}</div>
+        <div><strong>Số lượng:</strong> ${document.getElementById('quantity').value || 0}</div>
+        <div><strong>Tiêu chí:</strong> ${selectedCriteria.length} tiêu chí đã chọn</div>
+        <div><strong>Giai đoạn:</strong> ${hiringStages.length} giai đoạn đã thiết lập</div>
+    `;
+}
+
+async function updateJobStatus(status) {
+    try {
+        const res = await fetch('/hrm/ajax-handler?action=update_job_status', {
+            method: 'POST',
+            headers: {'Content-Type':'application/json'},
+            body: JSON.stringify({ id: jobId, status: status })
+        });
+        const result = await res.json();
+        if (result.success) {
+            alert('Đã cập nhật trạng thái: ' + status);
+            highlightStatus(status);
+        }
+    } catch (e) { console.error(e); }
+}
+
+function highlightStatus(status) {
+    const btns = ['draft', 'public', 'private', 'closed'];
+    btns.forEach(b => {
+        const el = document.getElementById('status-' + b);
+        if (el) {
+            el.style.background = (b === status) ? '#e5e7eb' : '#fff';
+            el.style.fontWeight = (b === status) ? '700' : '400';
+        }
+    });
 }
 
 document.addEventListener('DOMContentLoaded', loadAllData);

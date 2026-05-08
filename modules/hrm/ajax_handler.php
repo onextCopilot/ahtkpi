@@ -222,12 +222,18 @@ if ($checkJobCreator && $checkJobCreator->num_rows == 0) {
 $conn->query("CREATE TABLE IF NOT EXISTS hrm_job_evaluation_criteria (
     id INT AUTO_INCREMENT PRIMARY KEY,
     job_id INT NOT NULL,
-    criterion_id INT NOT NULL,
+    evaluation_criterion_id INT NOT NULL,
     expected_score VARCHAR(10) DEFAULT '3/5',
     weight INT DEFAULT 1,
     FOREIGN KEY (job_id) REFERENCES hrm_job_posts(id) ON DELETE CASCADE,
-    FOREIGN KEY (criterion_id) REFERENCES hrm_evaluation_criteria(id) ON DELETE CASCADE
+    FOREIGN KEY (evaluation_criterion_id) REFERENCES hrm_evaluation_criteria(id) ON DELETE CASCADE
 )");
+
+// Check if column criterion_id exists and rename it to evaluation_criterion_id
+$checkCol = $conn->query("SHOW COLUMNS FROM hrm_job_evaluation_criteria LIKE 'criterion_id'");
+if ($checkCol && $checkCol->num_rows > 0) {
+    $conn->query("ALTER TABLE hrm_job_evaluation_criteria CHANGE criterion_id evaluation_criterion_id INT NOT NULL");
+}
 
 $conn->query("CREATE TABLE IF NOT EXISTS hrm_job_mandatory_requirements (
     id INT AUTO_INCREMENT PRIMARY KEY,
@@ -251,19 +257,29 @@ $conn->query("CREATE TABLE IF NOT EXISTS hrm_hiring_steps (
     sort_order INT DEFAULT 0,
     email_count INT DEFAULT 0,
     duration DECIMAL(10,2) DEFAULT 0.00,
+    stage_type VARCHAR(50) DEFAULT 'standard', -- standard, offered, hired, rejected
+    email_template_id INT DEFAULT 0,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 )");
+
+// Ensure column stage_type exists for existing tables
+$checkStageCol = $conn->query("SHOW COLUMNS FROM hrm_hiring_steps LIKE 'stage_type'");
+if ($checkStageCol && $checkStageCol->num_rows == 0) {
+    $conn->query("ALTER TABLE hrm_hiring_steps ADD COLUMN stage_type VARCHAR(50) DEFAULT 'standard'");
+    $conn->query("ALTER TABLE hrm_hiring_steps ADD COLUMN email_template_id INT DEFAULT 0");
+}
 
 $checkSteps = $conn->query("SELECT COUNT(*) as count FROM hrm_hiring_steps");
 if ($checkSteps) {
     $rowSteps = $checkSteps->fetch_assoc();
     if ($rowSteps && $rowSteps['count'] == 0) {
-        $conn->query("INSERT INTO hrm_hiring_steps (name, code, sort_order) VALUES 
-            ('Nhận hồ sơ', 'NHAN_HO_SO', 1),
-            ('Sơ loại', 'SO_LOAI', 2),
-            ('Phỏng vấn', 'PHONG_VAN', 3),
-            ('Đề nghị tuyển dụng', 'DE_NGHI', 4),
-            ('Tiếp nhận', 'TIEP_NHAN', 5)");
+        $conn->query("INSERT INTO hrm_hiring_steps (name, code, sort_order, stage_type) VALUES 
+            ('Nhận hồ sơ', 'NHAN_HO_SO', 1, 'standard'),
+            ('Sơ loại', 'SO_LOAI', 2, 'standard'),
+            ('Phỏng vấn', 'PHONG_VAN', 3, 'standard'),
+            ('Offered', 'OFFERED', 4, 'offered'),
+            ('Hired', 'HIRED', 5, 'hired'),
+            ('Rejected', 'REJECTED', 6, 'rejected')");
     }
 }
 
@@ -326,6 +342,53 @@ $conn->query("CREATE TABLE IF NOT EXISTS hrm_email_templates (
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;");
 
+$conn->query("CREATE TABLE IF NOT EXISTS hrm_job_hiring_steps (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    job_id INT NOT NULL,
+    name VARCHAR(255) NOT NULL,
+    sort_order INT DEFAULT 0,
+    email_template_id INT DEFAULT 0,
+    interview_template_id INT DEFAULT 0,
+    is_locked TINYINT(1) DEFAULT 0,
+    stage_type VARCHAR(50) DEFAULT 'standard', -- standard, offered, hired, rejected
+    duration INT DEFAULT 0,
+    manual_review TINYINT(1) DEFAULT 0,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (job_id) REFERENCES hrm_job_posts(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;");
+
+// Ensure column stage_type exists for existing job steps table
+$checkJobStageCol = $conn->query("SHOW COLUMNS FROM hrm_job_hiring_steps LIKE 'stage_type'");
+if ($checkJobStageCol && $checkJobStageCol->num_rows == 0) {
+    $conn->query("ALTER TABLE hrm_job_hiring_steps ADD COLUMN stage_type VARCHAR(50) DEFAULT 'standard'");
+}
+$checkDurCol = $conn->query("SHOW COLUMNS FROM hrm_job_hiring_steps LIKE 'duration'");
+if ($checkDurCol && $checkDurCol->num_rows == 0) {
+    $conn->query("ALTER TABLE hrm_job_hiring_steps ADD COLUMN duration INT DEFAULT 0");
+    $conn->query("ALTER TABLE hrm_job_hiring_steps ADD COLUMN manual_review TINYINT(1) DEFAULT 0");
+}
+
+$conn->query("CREATE TABLE IF NOT EXISTS hrm_job_application_fields (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    job_id INT NOT NULL,
+    field_name VARCHAR(100) NOT NULL,
+    is_show TINYINT(1) DEFAULT 1,
+    is_required TINYINT(1) DEFAULT 0,
+    sort_order INT DEFAULT 0,
+    FOREIGN KEY (job_id) REFERENCES hrm_job_posts(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;");
+
+$conn->query("CREATE TABLE IF NOT EXISTS hrm_job_custom_questions (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    job_id INT NOT NULL,
+    question_text TEXT NOT NULL,
+    question_type VARCHAR(50) DEFAULT 'text',
+    options TEXT,
+    is_required TINYINT(1) DEFAULT 0,
+    sort_order INT DEFAULT 0,
+    FOREIGN KEY (job_id) REFERENCES hrm_job_posts(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;");
+
 // Safe column addition
 $cols = $conn->query("SHOW COLUMNS FROM hrm_company_settings");
 $existing_cols = [];
@@ -349,6 +412,85 @@ if ($checkApproverMeta && $checkApproverMeta->num_rows == 0) {
     $conn->query("ALTER TABLE hrm_proposal_approvers ADD COLUMN metadata TEXT");
 }
 
+// ── Candidate & Application Tables ──────────────────────────────────
+$conn->query("CREATE TABLE IF NOT EXISTS hrm_candidates (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    full_name VARCHAR(255) NOT NULL,
+    email VARCHAR(255),
+    phone VARCHAR(50),
+    avatar VARCHAR(255),
+    address TEXT,
+    gender VARCHAR(20),
+    dob DATE,
+    source_id INT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    INDEX (email),
+    INDEX (phone)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;");
+
+$conn->query("CREATE TABLE IF NOT EXISTS hrm_applications (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    candidate_id INT NOT NULL,
+    job_id INT NOT NULL,
+    current_step_id INT,
+    status VARCHAR(50) DEFAULT 'active',
+    rating INT DEFAULT 0,
+    owner_id INT,
+    rejection_reason_id INT,
+    rejection_note TEXT,
+    applied_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    FOREIGN KEY (candidate_id) REFERENCES hrm_candidates(id) ON DELETE CASCADE,
+    FOREIGN KEY (job_id) REFERENCES hrm_job_posts(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;");
+
+// Ensure extra columns for extended candidate list
+$candCols = $conn->query("SHOW COLUMNS FROM hrm_candidates");
+$existingCand = []; while($c = $candCols->fetch_assoc()) { $existingCand[] = $c['Field']; }
+if (!in_array('reference_contact', $existingCand)) $conn->query("ALTER TABLE hrm_candidates ADD COLUMN reference_contact TEXT");
+
+$appCols = $conn->query("SHOW COLUMNS FROM hrm_applications");
+$existingApp = []; while($c = $appCols->fetch_assoc()) { $existingApp[] = $c['Field']; }
+if (!in_array('candidate_type', $existingApp)) $conn->query("ALTER TABLE hrm_applications ADD COLUMN candidate_type VARCHAR(100)");
+if (!in_array('campaign', $existingApp)) $conn->query("ALTER TABLE hrm_applications ADD COLUMN campaign VARCHAR(255)");
+if (!in_array('medium', $existingApp)) $conn->query("ALTER TABLE hrm_applications ADD COLUMN medium VARCHAR(255)");
+if (!in_array('interview_date', $existingApp)) $conn->query("ALTER TABLE hrm_applications ADD COLUMN interview_date DATETIME");
+if (!in_array('email_tracking_status', $existingApp)) $conn->query("ALTER TABLE hrm_applications ADD COLUMN email_tracking_status VARCHAR(100)");
+if (!in_array('last_email_sent_at', $existingApp)) $conn->query("ALTER TABLE hrm_applications ADD COLUMN last_email_sent_at DATETIME");
+
+$conn->query("CREATE TABLE IF NOT EXISTS hrm_application_activities (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    application_id INT NOT NULL,
+    user_id INT,
+    action_type VARCHAR(100),
+    note TEXT,
+    metadata JSON,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (application_id) REFERENCES hrm_applications(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;");
+
+$conn->query("CREATE TABLE IF NOT EXISTS hrm_application_attachments (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    application_id INT NOT NULL,
+    file_name VARCHAR(255),
+    file_path TEXT,
+    file_type VARCHAR(50),
+    file_size INT DEFAULT 0,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (application_id) REFERENCES hrm_applications(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;");
+$attCols = $conn->query("SHOW COLUMNS FROM hrm_application_attachments");
+$existingAtt = []; while($c = $attCols->fetch_assoc()) { $existingAtt[] = $c['Field']; }
+if (!in_array('file_size', $existingAtt)) $conn->query("ALTER TABLE hrm_application_attachments ADD COLUMN file_size INT DEFAULT 0");
+
+$conn->query("CREATE TABLE IF NOT EXISTS hrm_application_tags (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    application_id INT NOT NULL,
+    tag_name VARCHAR(100),
+    FOREIGN KEY (application_id) REFERENCES hrm_applications(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;");
+
 $action = $_GET['action'] ?? '';
 $response = null;
 
@@ -365,11 +507,27 @@ if (!isset($_SESSION['user_id'])) {
         $offices = [];
         if ($result) { while ($row = $result->fetch_assoc()) { $offices[] = $row; } }
         $response = $offices;
+    } elseif ($action === 'get_job_steps') {
+        $job_id = (int)($_GET['job_id'] ?? 0);
+        $res = $conn->query("SELECT id, name FROM hrm_job_hiring_steps WHERE job_id = $job_id ORDER BY sort_order ASC");
+        $steps = [];
+        while($row = $res->fetch_assoc()) { $steps[] = $row; }
+        $response = $steps;
+    } elseif ($action === 'get_users') {
+        $res = $conn->query("SELECT id, full_name, avatar FROM users ORDER BY full_name ASC");
+        $users = [];
+        while($row = $res->fetch_assoc()) { $users[] = $row; }
+        $response = $users;
     } elseif ($action === 'get_candidate_sources') {
         $res = $conn->query("SELECT * FROM hrm_candidate_sources ORDER BY sort_order ASC, id ASC");
         $data = [];
         while($row = $res->fetch_assoc()) { $data[] = $row; }
-        $response = ['success' => true, 'data' => $data];
+        $response = $data;
+    } elseif ($action === 'get_all_tags') {
+        $res = $conn->query("SELECT DISTINCT tag_name FROM hrm_application_tags ORDER BY tag_name ASC");
+        $tags = [];
+        while($row = $res->fetch_assoc()) { $tags[] = $row['tag_name']; }
+        $response = $tags;
     } elseif ($action === 'save_candidate_source' && $_SERVER['REQUEST_METHOD'] === 'POST') {
         $data = json_decode(file_get_contents('php://input'), true);
         $id = $data['id'] ?? null;
@@ -404,15 +562,429 @@ if (!isset($_SESSION['user_id'])) {
         $data = json_decode(file_get_contents('php://input'), true);
         $type = $data['type'] ?? '';
         $order = $data['order'] ?? [];
-        if ($type === 'dept' || $type === 'office' || $type === 'source') {
-            $table = ($type === 'dept') ? 'hrm_departments' : (($type === 'office') ? 'hrm_offices' : 'hrm_candidate_sources');
-            foreach ($order as $index => $id) {
-                $id = (int)$id;
-                $idx = (int)$index;
-                $conn->query("UPDATE $table SET sort_order = $idx WHERE id = $id");
+        if ($type === 'sources') {
+            foreach ($order as $item) {
+                $id = (int)$item['id']; $sort = (int)$item['sort_order'];
+                $conn->query("UPDATE hrm_candidate_sources SET sort_order=$sort WHERE id=$id");
             }
             $response = ['success' => true];
         } else { $response = ['success' => false, 'message' => 'Invalid type']; }
+    } elseif ($action === 'get_candidates') {
+        $search = $conn->real_escape_string($_GET['search'] ?? '');
+        $job_id = (int)($_GET['job_id'] ?? 0);
+        $source_id = (int)($_GET['source_id'] ?? 0);
+        $owner_id = (int)($_GET['owner_id'] ?? 0);
+        $tag = $conn->real_escape_string($_GET['tag'] ?? '');
+        $date_from = $conn->real_escape_string($_GET['date_from'] ?? '');
+        $date_to = $conn->real_escape_string($_GET['date_to'] ?? '');
+        $sort = $_GET['sort'] ?? 'newest';
+        $status = $conn->real_escape_string($_GET['status'] ?? 'all');
+        $page = (int)($_GET['page'] ?? 1);
+        $limit = (int)($_GET['limit'] ?? 20);
+        $offset = ($page - 1) * $limit;
+
+        $where = "WHERE 1=1";
+        if (!empty($search)) {
+            $where .= " AND (c.full_name LIKE '%$search%' OR c.email LIKE '%$search%' OR c.phone LIKE '%$search%')";
+        }
+        if ($job_id > 0) $where .= " AND a.job_id = $job_id";
+        if ($source_id > 0) $where .= " AND c.source_id = $source_id";
+        if ($owner_id > 0) $where .= " AND a.owner_id = $owner_id";
+        if ($status !== 'all') $where .= " AND a.status = '$status'";
+        if (!empty($tag)) {
+            $where .= " AND EXISTS (SELECT 1 FROM hrm_application_tags WHERE application_id = a.id AND tag_name = '$tag')";
+        }
+        if (!empty($date_from)) $where .= " AND a.applied_at >= '$date_from 00:00:00'";
+        if (!empty($date_to)) $where .= " AND a.applied_at <= '$date_to 23:59:59'";
+
+        $orderBy = "ORDER BY a.applied_at DESC";
+        if ($sort === 'oldest') $orderBy = "ORDER BY a.applied_at ASC";
+        if ($sort === 'rating') $orderBy = "ORDER BY a.rating DESC, a.applied_at DESC";
+
+        // Fetch candidates with primary info
+        $sql = "SELECT a.id as application_id, a.status, a.rating, a.applied_at, a.owner_id, a.job_id, a.current_step_id,
+                       a.candidate_type, a.campaign, a.medium, a.interview_date, a.email_tracking_status, a.last_email_sent_at, a.updated_at as last_updated,
+                       a.rejection_note,
+                       c.id as candidate_id, c.full_name, c.email, c.phone, c.avatar, c.reference_contact,
+                       j.title as job_title, j.office as job_office,
+                       s.name as step_name, s.stage_type, s.sort_order as curr_step_order,
+                       src.name as source_name,
+                       u.full_name as owner_name, u.avatar as owner_avatar,
+                       (SELECT COUNT(*) FROM hrm_job_hiring_steps WHERE job_id = a.job_id) as total_steps,
+                       (SELECT GROUP_CONCAT(tag_name) FROM hrm_application_tags WHERE application_id = a.id) as tags_str
+                FROM hrm_applications a
+                JOIN hrm_candidates c ON a.candidate_id = c.id
+                LEFT JOIN hrm_job_posts j ON a.job_id = j.id
+                LEFT JOIN hrm_job_hiring_steps s ON a.current_step_id = s.id
+                LEFT JOIN hrm_candidate_sources src ON c.source_id = src.id
+                LEFT JOIN users u ON a.owner_id = u.id
+                $where $orderBy LIMIT $limit OFFSET $offset";
+
+        $res = $conn->query($sql);
+        $data = [];
+        if ($res) {
+            while ($row = $res->fetch_assoc()) {
+                $row['tags'] = $row['tags_str'] ? explode(',', $row['tags_str']) : [];
+                $row['progress_index'] = (int)$row['curr_step_order'] + 1;
+                $row['total_steps'] = (int)$row['total_steps'];
+                unset($row['tags_str'], $row['curr_step_order']);
+                $data[] = $row;
+            }
+        }
+
+        $totalCount = $conn->query("SELECT COUNT(*) FROM hrm_applications a JOIN hrm_candidates c ON a.candidate_id = c.id $where")->fetch_row()[0];
+        
+        $response = ['success' => true, 'data' => $data, 'total' => $totalCount, 'page' => $page, 'limit' => $limit];
+
+    } elseif ($action === 'get_candidate_stats') {
+        $job_id = (int)($_GET['job_id'] ?? 0);
+        $where = "WHERE 1=1";
+        if ($job_id > 0) $where .= " AND a.job_id = $job_id";
+
+        $total = $conn->query("SELECT COUNT(*) FROM hrm_applications a $where")->fetch_row()[0];
+        $active = $conn->query("SELECT COUNT(*) FROM hrm_applications a $where AND status='active'")->fetch_row()[0];
+        $hired = $conn->query("SELECT COUNT(*) FROM hrm_applications a $where AND status='hired'")->fetch_row()[0];
+        $rejected = $conn->query("SELECT COUNT(*) FROM hrm_applications a $where AND status='rejected'")->fetch_row()[0];
+
+        $response = ['total' => $total, 'active' => $active, 'hired' => $hired, 'rejected' => $rejected];
+
+    } elseif ($action === 'bulk_move_stage') {
+        $data = json_decode(file_get_contents('php://input'), true);
+        $ids = $data['ids'] ?? [];
+        $step_id = (int)($data['step_id'] ?? 0);
+        if (empty($ids) || $step_id <= 0) {
+            echo json_encode(['success' => false, 'message' => 'Dữ liệu không hợp lệ']); exit;
+        }
+        $ids_str = implode(',', array_map('intval', $ids));
+        $conn->query("UPDATE hrm_applications SET current_step_id = $step_id, status = 'active' WHERE id IN ($ids_str)");
+        
+        // Log activities
+        foreach ($ids as $id) {
+            $conn->query("INSERT INTO hrm_application_activities (application_id, user_id, action_type, note) 
+                          VALUES ($id, {$_SESSION['user_id']}, 'move_stage', 'Di chuyển hàng loạt sang bước mới')");
+        }
+        echo json_encode(['success' => true]); exit;
+
+    } elseif ($action === 'update_rating' && $_SERVER['REQUEST_METHOD'] === 'POST') {
+        $data = json_decode(file_get_contents('php://input'), true);
+        $aid = (int)$data['application_id'];
+        $rating = (int)$data['rating'];
+        if ($conn->query("UPDATE hrm_applications SET rating=$rating WHERE id=$aid")) {
+            $conn->query("INSERT INTO hrm_application_activities (application_id, action_type, note) VALUES ($aid, 'update_rating', 'Đã cập nhật đánh giá: $rating sao')");
+            $response = ['success' => true];
+        } else { $response = ['success' => false, 'message' => $conn->error]; }
+    } elseif ($action === 'add_tag' && $_SERVER['REQUEST_METHOD'] === 'POST') {
+        $data = json_decode(file_get_contents('php://input'), true);
+        $aid = (int)$data['application_id'];
+        $name = $conn->real_escape_string($data['tag_name']);
+        $conn->query("INSERT IGNORE INTO hrm_application_tags (application_id, tag_name) VALUES ($aid, '$name')");
+        $response = ['success' => true];
+    } elseif ($action === 'remove_tag' && $_SERVER['REQUEST_METHOD'] === 'POST') {
+        $data = json_decode(file_get_contents('php://input'), true);
+        $aid = (int)$data['application_id'];
+        $name = $conn->real_escape_string($data['tag_name']);
+        $conn->query("DELETE FROM hrm_application_tags WHERE application_id = $aid AND tag_name = '$name'");
+        $response = ['success' => true];
+    } elseif ($action === 'bulk_reject') {
+        $data = json_decode(file_get_contents('php://input'), true);
+        $ids = $data['ids'] ?? [];
+        $reason = $conn->real_escape_string($data['reason'] ?? '');
+        if (empty($ids)) {
+            echo json_encode(['success' => false, 'message' => 'Dữ liệu không hợp lệ']); exit;
+        }
+        $ids_str = implode(',', array_map('intval', $ids));
+        $conn->query("UPDATE hrm_applications SET status = 'rejected' WHERE id IN ($ids_str)");
+        
+        foreach ($ids as $id) {
+            $conn->query("INSERT INTO hrm_application_activities (application_id, user_id, action_type, note) 
+                          VALUES ($id, {$_SESSION['user_id']}, 'reject', 'Từ chối hàng loạt: $reason')");
+        }
+        echo json_encode(['success' => true]); exit;
+
+    } elseif ($action === 'bulk_delete') {
+        $data = json_decode(file_get_contents('php://input'), true);
+        $ids = $data['ids'] ?? [];
+        if (empty($ids)) {
+            echo json_encode(['success' => false, 'message' => 'Dữ liệu không hợp lệ']); exit;
+        }
+        $ids_str = implode(',', array_map('intval', $ids));
+        $conn->query("DELETE FROM hrm_applications WHERE id IN ($ids_str)");
+        // Note: In real app, we might want to keep history, but here we follow delete request.
+        echo json_encode(['success' => true]); exit;
+
+    } elseif ($action === 'update_rating' && $_SERVER['REQUEST_METHOD'] === 'POST') {
+        $data = json_decode(file_get_contents('php://input'), true);
+        $aid = (int)$data['application_id'];
+        $rating = (int)$data['rating'];
+        $conn->query("UPDATE hrm_applications SET rating = $rating WHERE id = $aid");
+        echo json_encode(['success' => true]); exit;
+
+    } elseif ($action === 'add_activity' && $_SERVER['REQUEST_METHOD'] === 'POST') {
+        $data = json_decode(file_get_contents('php://input'), true);
+        $aid = (int)$data['application_id'];
+        $note = $conn->real_escape_string($data['note']);
+        $type = $conn->real_escape_string($data['type'] ?? 'comment');
+        $conn->query("INSERT INTO hrm_application_activities (application_id, user_id, action_type, note) 
+                      VALUES ($aid, {$_SESSION['user_id']}, '$type', '$note')");
+        echo json_encode(['success' => true]); exit;
+
+    } elseif ($action === 'move_stage' && $_SERVER['REQUEST_METHOD'] === 'POST') {
+        $data = json_decode(file_get_contents('php://input'), true);
+        $aid = (int)$data['application_id'];
+        $step_id = (int)$data['step_id'];
+        $conn->query("UPDATE hrm_applications SET current_step_id = $step_id, status = 'active' WHERE id = $aid");
+        $conn->query("INSERT INTO hrm_application_activities (application_id, user_id, action_type, note) 
+                      VALUES ($aid, {$_SESSION['user_id']}, 'move_stage', 'Đã chuyển sang bước tuyển dụng mới')");
+        echo json_encode(['success' => true]); exit;
+
+    } elseif ($action === 'reject_candidate' && $_SERVER['REQUEST_METHOD'] === 'POST') {
+        $data = json_decode(file_get_contents('php://input'), true);
+        $aid = (int)$data['application_id'];
+        $reason = $conn->real_escape_string($data['reason'] ?? '');
+        $conn->query("UPDATE hrm_applications SET status = 'rejected' WHERE id = $aid");
+        $conn->query("INSERT INTO hrm_application_activities (application_id, user_id, action_type, note) 
+                      VALUES ($aid, {$_SESSION['user_id']}, 'reject', 'Từ chối hồ sơ. Lý do: $reason')");
+        echo json_encode(['success' => true]); exit;
+
+    } elseif ($action === 'get_import_total') {
+        $file = '/Users/hyuncao/Onext Digital/GitHub_Projects/ahtkpi/modules/hrm/data/sys4386-candidates-01032023-01042023.report.15.16.08.05.26.xlsx';
+        if (!file_exists($file)) { echo json_encode(['success' => false, 'message' => 'File không tồn tại']); exit; }
+        $zip = new ZipArchive();
+        if ($zip->open($file) !== TRUE) { echo json_encode(['success' => false, 'message' => 'Không thể mở file Excel']); exit; }
+        $xml = simplexml_load_string($zip->getFromName('xl/worksheets/sheet1.xml'));
+        $zip->close();
+        $totalRows = count($xml->sheetData->row) - 3; // Subtract headers
+        echo json_encode(['success' => true, 'total' => max(0, $totalRows)]); exit;
+
+    } elseif ($action === 'import_candidates') {
+        set_time_limit(300);
+        $start = (int)($_GET['start'] ?? 0);
+        $limit = (int)($_GET['limit'] ?? 20);
+
+        $file = '/Users/hyuncao/Onext Digital/GitHub_Projects/ahtkpi/modules/hrm/data/sys4386-candidates-01032023-01042023.report.15.16.08.05.26.xlsx';
+        if (!file_exists($file)) { echo json_encode(['success' => false, 'message' => 'File không tồn tại']); exit; }
+        $zip = new ZipArchive();
+        if ($zip->open($file) !== TRUE) { echo json_encode(['success' => false, 'message' => 'Không thể mở file Excel']); exit; }
+
+        $sharedStrings = [];
+        if ($zip->locateName('xl/sharedStrings.xml') !== false) {
+            $xmlSS = simplexml_load_string($zip->getFromName('xl/sharedStrings.xml'));
+            foreach ($xmlSS->si as $si) { $sharedStrings[] = (string)($si->t ?: $si->r->t); }
+        }
+
+        $xml = simplexml_load_string($zip->getFromName('xl/worksheets/sheet1.xml'));
+        $zip->close();
+
+        $count = 0;
+        $rowIdx = 0;
+        $processed = 0;
+        
+        foreach ($xml->sheetData->row as $row) {
+            if ($rowIdx < 3) { $rowIdx++; continue; } // Skip headers
+            
+            // Handle Start/Limit
+            if ($processed < $start) { $processed++; $rowIdx++; continue; }
+            if ($processed >= $start + $limit) break;
+
+            $cols = [];
+            foreach ($row->c as $c) {
+                $r = (string)$c['r']; 
+                $colLetter = preg_replace('/[0-9]/', '', $r);
+                $val = (string)$c->v;
+                if ((string)$c['t'] == 's') { $val = $sharedStrings[$val] ?? $val; }
+                $cols[$colLetter] = trim($val);
+            }
+
+            // Mapping based on column letters (A=0, B=1, C=2, D=3, E=4, F=5, G=6, H=7, I=8...)
+            // Col E (4) = Name, F (5) = Email, G (6) = Phone, I (8) = Source, D (3) = Job Title, AB (27) = CV URL
+            $name = $conn->real_escape_string($cols['E'] ?? '');
+            $email = $conn->real_escape_string($cols['F'] ?? '');
+            $phone = $conn->real_escape_string($cols['G'] ?? '');
+            $source_name = $conn->real_escape_string($cols['I'] ?? 'Other');
+            $job_title = $conn->real_escape_string($cols['D'] ?? '');
+            $raw_cv_url = $cols['AB'] ?? '';
+            $cv_url = $conn->real_escape_string($raw_cv_url);
+
+            if (empty($name) || empty($email)) continue;
+
+            // 1. Ensure Source exists
+            $srcRes = $conn->query("SELECT id FROM hrm_candidate_sources WHERE name = '$source_name'");
+            if ($srcRes && $srcRow = $srcRes->fetch_assoc()) {
+                $source_id = $srcRow['id'];
+            } else {
+                $conn->query("INSERT INTO hrm_candidate_sources (name, type) VALUES ('$source_name', 'external')");
+                $source_id = $conn->insert_id;
+            }
+
+            // 2. Ensure Candidate exists
+            $candRes = $conn->query("SELECT id FROM hrm_candidates WHERE email = '$email'");
+            if ($candRes && $candRow = $candRes->fetch_assoc()) {
+                $candidate_id = $candRow['id'];
+            } else {
+                $conn->query("INSERT INTO hrm_candidates (full_name, email, phone, source_id) VALUES ('$name', '$email', '$phone', $source_id)");
+                $candidate_id = $conn->insert_id;
+            }
+
+            // 3. Find Job ID
+            $job_id = 0;
+            $job_office = '';
+            if (!empty($job_title)) {
+                $jobRes = $conn->query("SELECT id, office FROM hrm_job_posts WHERE title LIKE '%$job_title%' LIMIT 1");
+                if ($jobRes && $jRow = $jobRes->fetch_assoc()) { 
+                    $job_id = $jRow['id']; 
+                    $job_office = $jRow['office'];
+                }
+            }
+
+            // Extended fields from Excel (Assume some columns or just use defaults for now)
+            $campaign = $conn->real_escape_string($cols['H'] ?? ''); // Campaign
+            $medium = $conn->real_escape_string($cols['K'] ?? ''); // Medium
+            $candidate_type = 'External';
+
+            // 4. Create or Update Application
+            $appCheck = $conn->query("SELECT id FROM hrm_applications WHERE candidate_id = $candidate_id AND job_id = $job_id");
+            if ($appCheck->num_rows == 0) {
+                $conn->query("INSERT INTO hrm_applications (candidate_id, job_id, status, campaign, medium, candidate_type) 
+                              VALUES ($candidate_id, $job_id, 'active', '$campaign', '$medium', '$candidate_type')");
+                $application_id = $conn->insert_id;
+                $count++;
+            } else {
+                $appRow = $appCheck->fetch_assoc();
+                $application_id = $appRow['id'];
+                // Update existing record with new metadata if needed
+                $conn->query("UPDATE hrm_applications SET campaign='$campaign', medium='$medium' WHERE id=$application_id");
+            }
+
+            // Check if we have a LOCAL CV file already
+            $localCheck = $conn->query("SELECT id FROM hrm_application_attachments WHERE application_id = $application_id AND file_path LIKE '/uploads%'");
+            if ($localCheck->num_rows == 0 && !empty($raw_cv_url)) {
+                $uploadDir = __DIR__ . '/../../uploads/hrm/cvs/';
+                if (!is_dir($uploadDir)) mkdir($uploadDir, 0777, true);
+
+                $fileExt = pathinfo(parse_url($raw_cv_url, PHP_URL_PATH), PATHINFO_EXTENSION) ?: 'pdf';
+                $localFileName = 'cv_app_' . $application_id . '.' . $fileExt;
+                $localFilePath = $uploadDir . $localFileName;
+
+                if (file_exists($localFilePath)) {
+                    // File already exists on disk, just register in DB if missing (already checked by localCheck)
+                    $fileSize = filesize($localFilePath);
+                    $dbPath = '/uploads/hrm/cvs/' . $localFileName;
+                    $conn->query("INSERT INTO hrm_application_attachments (application_id, file_name, file_path, file_size) 
+                                  VALUES ($application_id, 'CV_Imported.".$fileExt."', '$dbPath', $fileSize)");
+                } else {
+                    // Use CURL to bypass simple blocks
+                    $ch = curl_init($raw_cv_url);
+                curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+                curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
+                curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+                curl_setopt($ch, CURLOPT_USERAGENT, 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36');
+                curl_setopt($ch, CURLOPT_TIMEOUT, 30);
+                $fileData = curl_exec($ch);
+                $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+
+                if ($fileData && $httpCode == 200) {
+                    $fileSize = strlen($fileData);
+                    file_put_contents($localFilePath, $fileData);
+                    $dbPath = '/uploads/hrm/cvs/' . $localFileName;
+                    $conn->query("INSERT INTO hrm_application_attachments (application_id, file_name, file_path, file_size) 
+                                  VALUES ($application_id, 'CV_Imported.".$fileExt."', '$dbPath', $fileSize)");
+                }
+            }
+        }
+        $processed++;
+        $rowIdx++;
+    }
+        echo json_encode(['success' => true, 'message' => "Đã import thành công $count ứng viên"]); exit;
+
+    } elseif ($action === 'get_candidate_detail') {
+        $aid = (int)$_GET['application_id'];
+        $sql = "SELECT a.id as application_id, a.job_id, a.candidate_id, a.status, a.applied_at, a.owner_id, a.current_step_id, a.rating,
+                       c.full_name, c.email, c.phone, c.avatar, c.address, c.gender, c.dob,
+                       j.title as job_title, j.job_code,
+                       s.name as step_name, s.stage_type,
+                       src.name as source_name,
+                       u.full_name as owner_name, u.avatar as owner_avatar
+                FROM hrm_applications a
+                JOIN hrm_candidates c ON a.candidate_id = c.id
+                LEFT JOIN hrm_job_posts j ON a.job_id = j.id
+                LEFT JOIN hrm_job_hiring_steps s ON a.current_step_id = s.id
+                LEFT JOIN hrm_candidate_sources src ON c.source_id = src.id
+                LEFT JOIN users u ON a.owner_id = u.id
+                WHERE a.id = $aid";
+        
+        $res = $conn->query($sql);
+        if ($res && $row = $res->fetch_assoc()) {
+            // Activities
+            $actRes = $conn->query("SELECT act.*, u.full_name as user_name, u.avatar as user_avatar 
+                                    FROM hrm_application_activities act 
+                                    LEFT JOIN users u ON act.user_id = u.id 
+                                    WHERE act.application_id = $aid ORDER BY act.created_at DESC");
+            $activities = [];
+            while($ar = $actRes->fetch_assoc()) { $activities[] = $ar; }
+            $row['activities'] = $activities;
+
+            // Attachments
+            $attRes = $conn->query("SELECT * FROM hrm_application_attachments WHERE application_id = $aid");
+            $attachments = [];
+            while($attr = $attRes->fetch_assoc()) { $attachments[] = $attr; }
+            $row['attachments'] = $attachments;
+
+            // Tags
+            $tagRes = $conn->query("SELECT tag_name FROM hrm_application_tags WHERE application_id = $aid");
+            $tags = [];
+            while($tr = $tagRes->fetch_assoc()) { $tags[] = $tr['tag_name']; }
+            $row['tags'] = $tags;
+
+            // Job Criteria for Evaluation
+            $jid = (int)$row['job_id'];
+            $critRes = $conn->query("SELECT jc.*, c.criterion_text, g.name as group_name 
+                                     FROM hrm_job_evaluation_criteria jc 
+                                     JOIN hrm_evaluation_criteria c ON jc.evaluation_criterion_id = c.id 
+                                     JOIN hrm_evaluation_groups g ON c.group_id = g.id 
+                                     WHERE jc.job_id = $jid ORDER BY g.id, c.id");
+            $criteria = [];
+            while($cr = $critRes->fetch_assoc()) { $criteria[] = $cr; }
+            $row['job_criteria'] = $criteria;
+
+            $response = ['success' => true, 'data' => $row];
+        } else {
+            $response = ['success' => false, 'message' => 'Candidate not found'];
+        }
+
+    } elseif ($action === 'seed_test_candidates') {
+        $names = ['Nguyễn Văn A', 'Trần Thị B', 'Lê Văn C', 'Phạm Minh D', 'Hoàng Anh E', 'Đỗ Thị F', 'Bùi Văn G', 'Vũ Thị H', 'Lý Minh I', 'Đặng Văn K'];
+        $emails = ['vana@gmail.com', 'thib@yahoo.com', 'vanc@outlook.com', 'minhd@aht.tech', 'anhe@gmail.com', 'thif@hotmail.com', 'vang@gmail.com', 'thih@aht.tech', 'minhi@gmail.com', 'vank@gmail.com'];
+        $phones = ['0987654321', '0912345678', '0909090909', '0888888888', '0777777777', '0666666666', '0555555555', '0444444444', '0333333333', '0222222222'];
+        
+        $jobsRes = $conn->query("SELECT id FROM hrm_job_posts LIMIT 3");
+        $jobIds = [];
+        while($rj = $jobsRes->fetch_assoc()) { $jobIds[] = $rj['id']; }
+        
+        if (empty($jobIds)) {
+             $response = ['success' => false, 'message' => 'No jobs found. Please create a job post first.'];
+        } else {
+            foreach ($names as $idx => $name) {
+                $email = $emails[$idx];
+                $phone = $phones[$idx];
+                $jid = $jobIds[array_rand($jobIds)];
+                
+                $conn->query("INSERT INTO hrm_candidates (full_name, email, phone, source_id) VALUES ('$name', '$email', '$phone', " . rand(1, 10) . ")");
+                $cid = $conn->insert_id;
+                
+                $stepRes = $conn->query("SELECT id FROM hrm_job_hiring_steps WHERE job_id = $jid ORDER BY sort_order ASC LIMIT 1");
+                $sid = $stepRes ? $stepRes->fetch_assoc()['id'] : 0;
+                
+                $conn->query("INSERT INTO hrm_applications (candidate_id, job_id, current_step_id, rating, status) VALUES ($cid, $jid, $sid, " . rand(1, 5) . ", 'active')");
+                $aid = $conn->insert_id;
+                
+                $tags = ['Potential', 'Experienced', 'Quick Learner', 'Good Communication'];
+                $randTag = $tags[array_rand($tags)];
+                $conn->query("INSERT INTO hrm_application_tags (application_id, tag_name) VALUES ($aid, '$randTag')");
+                
+                $conn->query("INSERT INTO hrm_application_activities (application_id, action_type, content) VALUES ($aid, 'apply', 'Ứng viên nộp hồ sơ trực tuyến')");
+            }
+            $response = ['success' => true, 'message' => 'Seed 10 test candidates complete'];
+        }
     } elseif ($action === 'get_permissions') {
         $res = $conn->query("
             SELECT p.*, u.full_name, u.avatar, u.email 
@@ -653,10 +1225,10 @@ if (!isset($_SESSION['user_id'])) {
             // Update criteria
             $conn->query("DELETE FROM hrm_job_evaluation_criteria WHERE job_id = $job_id");
             foreach ($criteria as $c) {
-                $cid = (int)$c['criterion_id'];
-                $score = $conn->real_escape_string($c['expected_score']);
-                $weight = (int)$c['weight'];
-                $conn->query("INSERT INTO hrm_job_evaluation_criteria (job_id, criterion_id, expected_score, weight) VALUES ($job_id, $cid, '$score', $weight)");
+                $cid = (int)$c['id'];
+                $weight = (int)($c['weight'] ?? 1);
+                $expected = $conn->real_escape_string($c['expected_score'] ?? '');
+                $conn->query("INSERT INTO hrm_job_evaluation_criteria (job_id, evaluation_criterion_id, weight, expected_score) VALUES ($job_id, $cid, $weight, '$expected')");
             }
 
             // Update mandatory requirements
@@ -679,11 +1251,16 @@ if (!isset($_SESSION['user_id'])) {
         
         $resC = $conn->query("SELECT jc.*, c.criterion_text, g.name as group_name 
             FROM hrm_job_evaluation_criteria jc
-            JOIN hrm_evaluation_criteria c ON jc.criterion_id = c.id
+            JOIN hrm_evaluation_criteria c ON jc.evaluation_criterion_id = c.id
             JOIN hrm_evaluation_groups g ON c.group_id = g.id
             WHERE jc.job_id = $job_id");
         $criteria = [];
-        while($row = $resC->fetch_assoc()) { $criteria[] = $row; }
+        if ($resC) {
+            while($row = $resC->fetch_assoc()) { 
+                $row['id'] = $row['evaluation_criterion_id'];
+                $criteria[] = $row; 
+            }
+        }
 
         $resM = $conn->query("SELECT * FROM hrm_job_mandatory_requirements WHERE job_id = $job_id");
         $mandatory = [];
@@ -1043,6 +1620,7 @@ if (!isset($_SESSION['user_id'])) {
         ];
         
         $response = ['success' => true, 'data' => $jobs, 'counts' => $counts];
+
     } elseif ($action === 'delete_job' && $_SERVER['REQUEST_METHOD'] === 'POST') {
         $data = json_decode(file_get_contents('php://input'), true);
         $id = (int)($data['id'] ?? 0);
@@ -1051,12 +1629,150 @@ if (!isset($_SESSION['user_id'])) {
             $conn->query("DELETE FROM hrm_job_mandatory_requirements WHERE job_id = $id");
             if ($conn->query("DELETE FROM hrm_job_posts WHERE id = $id")) {
                 $response = ['success' => true];
-            } else {
-                $response = ['success' => false, 'message' => $conn->error];
-            }
-        } else {
-            $response = ['success' => false, 'message' => 'Invalid job ID'];
+            } else { $response = ['success' => false, 'message' => $conn->error]; }
+        } else { $response = ['success' => false, 'message' => 'Invalid job ID']; }
+
+    } elseif ($action === 'get_job_hiring_steps') {
+        $job_id = (int)$_GET['job_id'];
+        $res = $conn->query("SELECT * FROM hrm_job_hiring_steps WHERE job_id = $job_id ORDER BY sort_order ASC, id ASC");
+        $steps = [];
+        if ($res && $res->num_rows > 0) { 
+            while($row = $res->fetch_assoc()) { 
+                $name = strtolower($row['name']);
+                if ($name === 'offered' || $name === 'đề nghị tuyển dụng' || $name === 'mời nhận việc') $row['stage_type'] = 'offered';
+                else if ($name === 'hired' || $name === 'tiếp nhận' || $name === 'tuyển dụng' || $name === 'đạt yêu cầu') $row['stage_type'] = 'hired';
+                else if ($name === 'rejected' || $name === 'từ chối' || $name === 'loại' || $name === 'đã từ chối') $row['stage_type'] = 'rejected';
+                $steps[] = $row; 
+            } 
         }
+        
+        if (empty($steps)) {
+            // Load from global settings
+            $resGlobal = $conn->query("SELECT * FROM hrm_hiring_steps ORDER BY sort_order ASC, id ASC");
+            $defaults = [];
+            if ($resGlobal && $resGlobal->num_rows > 0) {
+                while($rowG = $resGlobal->fetch_assoc()) {
+                    $nameG = strtolower($rowG['name']);
+                    $typeG = $rowG['stage_type'] ?? 'standard';
+                    
+                    if ($nameG === 'offered' || $nameG === 'đề nghị tuyển dụng' || $nameG === 'mời nhận việc') $typeG = 'offered';
+                    else if ($nameG === 'hired' || $nameG === 'tiếp nhận' || $nameG === 'tuyển dụng' || $nameG === 'đạt yêu cầu') $typeG = 'hired';
+                    else if ($nameG === 'rejected' || $nameG === 'từ chối' || $nameG === 'loại' || $nameG === 'đã từ chối') $typeG = 'rejected';
+
+                    $defaults[] = [
+                        'name' => $rowG['name'], 
+                        'type' => $typeG, 
+                        'locked' => ($typeG !== 'standard' ? 1 : 0),
+                        'email_id' => $rowG['email_template_id'] ?? 0,
+                        'duration' => $rowG['duration'] ?? 0
+                    ];
+                }
+            } else {
+                $defaults = [
+                    ['name' => 'Nhận hồ sơ', 'type' => 'standard', 'locked' => 0],
+                    ['name' => 'Phòng vấn', 'type' => 'standard', 'locked' => 0],
+                    ['name' => 'Offered', 'type' => 'offered', 'locked' => 1],
+                    ['name' => 'Hired', 'type' => 'hired', 'locked' => 1],
+                    ['name' => 'Rejected', 'type' => 'rejected', 'locked' => 1]
+                ];
+            }
+            
+            foreach($defaults as $idx => $s) {
+                $name = $conn->real_escape_string($s['name']);
+                $type = $s['type'];
+                $locked = $s['locked'] ?? 0;
+                $email_id = (int)($s['email_id'] ?? 0);
+                $duration = (int)($s['duration'] ?? 0);
+                
+                $conn->query("INSERT INTO hrm_job_hiring_steps (job_id, name, sort_order, stage_type, is_locked, email_template_id, duration) 
+                              VALUES ($job_id, '$name', $idx, '$type', $locked, $email_id, $duration)");
+            }
+            $res = $conn->query("SELECT * FROM hrm_job_hiring_steps WHERE job_id = $job_id ORDER BY sort_order ASC, id ASC");
+            $steps = [];
+            if ($res) { while($row = $res->fetch_assoc()) { $steps[] = $row; } }
+        }
+        $response = ['success' => true, 'data' => $steps];
+
+    } elseif ($action === 'save_job_hiring_steps' && $_SERVER['REQUEST_METHOD'] === 'POST') {
+        $data = json_decode(file_get_contents('php://input'), true);
+        $job_id = (int)$data['job_id'];
+        $steps = $data['steps'] ?? [];
+
+        $conn->begin_transaction();
+        try {
+            $conn->query("DELETE FROM hrm_job_hiring_steps WHERE job_id = $job_id");
+            foreach ($steps as $idx => $s) {
+                $name = $conn->real_escape_string($s['name']);
+                $email_id = (int)($s['email_template_id'] ?? 0);
+                $interview_id = (int)($s['interview_template_id'] ?? 0);
+                $is_locked = (int)($s['is_locked'] ?? 0);
+                $type = $conn->real_escape_string($s['stage_type'] ?? 'standard');
+                $duration = (int)($s['duration'] ?? 0);
+                $manual = (int)($s['manual_review'] ?? 0);
+                $conn->query("INSERT INTO hrm_job_hiring_steps (job_id, name, email_template_id, interview_template_id, sort_order, is_locked, stage_type, duration, manual_review) 
+                              VALUES ($job_id, '$name', $email_id, $interview_id, $idx, $is_locked, '$type', $duration, $manual)");
+            }
+            $conn->commit();
+            $response = ['success' => true];
+        } catch (Exception $e) {
+            $conn->rollback();
+            $response = ['success' => false, 'message' => $e->getMessage()];
+        }
+    } elseif ($action === 'reset_job_hiring_steps' && $_SERVER['REQUEST_METHOD'] === 'POST') {
+        $data = json_decode(file_get_contents('php://input'), true);
+        $job_id = (int)$data['job_id'];
+        $conn->query("DELETE FROM hrm_job_hiring_steps WHERE job_id = $job_id");
+        $response = ['success' => true];
+    } elseif ($action === 'get_job_application_form') {
+        $job_id = (int)$_GET['job_id'];
+        $resF = $conn->query("SELECT * FROM hrm_job_application_fields WHERE job_id = $job_id ORDER BY sort_order ASC");
+        $fields = [];
+        if ($resF) { while($row = $resF->fetch_assoc()) { $fields[] = $row; } }
+        
+        $resQ = $conn->query("SELECT * FROM hrm_job_custom_questions WHERE job_id = $job_id ORDER BY sort_order ASC");
+        $questions = [];
+        if ($resQ) { while($row = $resQ->fetch_assoc()) { $questions[] = $row; } }
+        
+        $response = ['success' => true, 'fields' => $fields, 'questions' => $questions];
+    } elseif ($action === 'save_job_application_form' && $_SERVER['REQUEST_METHOD'] === 'POST') {
+        $data = json_decode(file_get_contents('php://input'), true);
+        $job_id = (int)$data['job_id'];
+        $fields = $data['fields'] ?? [];
+        $questions = $data['questions'] ?? [];
+
+        $conn->begin_transaction();
+        try {
+            $conn->query("DELETE FROM hrm_job_application_fields WHERE job_id = $job_id");
+            foreach ($fields as $idx => $f) {
+                $fname = $conn->real_escape_string($f['field_name']);
+                $ishow = (int)$f['is_show'];
+                $ireq = (int)$f['is_required'];
+                $conn->query("INSERT INTO hrm_job_application_fields (job_id, field_name, is_show, is_required, sort_order) 
+                              VALUES ($job_id, '$fname', $ishow, $ireq, $idx)");
+            }
+
+            $conn->query("DELETE FROM hrm_job_custom_questions WHERE job_id = $job_id");
+            foreach ($questions as $idx => $q) {
+                $qtext = $conn->real_escape_string($q['question_text']);
+                $qtype = $conn->real_escape_string($q['question_type']);
+                $opts = $conn->real_escape_string($q['options'] ?? '');
+                $ireq = (int)$q['is_required'];
+                $conn->query("INSERT INTO hrm_job_custom_questions (job_id, question_text, question_type, options, is_required, sort_order) 
+                              VALUES ($job_id, '$qtext', '$qtype', '$opts', $ireq, $idx)");
+            }
+            $conn->commit();
+            $response = ['success' => true];
+        } catch (Exception $e) {
+            $conn->rollback();
+            $response = ['success' => false, 'message' => $e->getMessage()];
+        }
+    } elseif ($action === 'update_job_status' && $_SERVER['REQUEST_METHOD'] === 'POST') {
+        $data = json_decode(file_get_contents('php://input'), true);
+        $id = (int)$data['id'];
+        $status = $conn->real_escape_string($data['status']);
+        if ($conn->query("UPDATE hrm_job_posts SET status = '$status' WHERE id = $id")) {
+            $response = ['success' => true];
+        } else { $response = ['success' => false, 'message' => $conn->error]; }
     }
 }
 

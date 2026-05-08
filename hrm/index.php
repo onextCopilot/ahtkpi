@@ -40,6 +40,8 @@ if ($path === '/hrm/e-hiring' || $path === '/hrm/e-hiring.php') {
     require_once __DIR__ . '/../modules/hrm/job_detail.php';
 } elseif ($path === '/hrm/job-edit' || $path === '/hrm/job-edit.php') {
     require_once __DIR__ . '/../modules/hrm/job_edit.php';
+} elseif ($path === '/hrm/candidates' || $path === '/hrm/candidates.php') {
+    require_once __DIR__ . '/../modules/hrm/candidates.php';
 } else {
     require_once __DIR__ . '/../modules/hrm/index.php';
 }

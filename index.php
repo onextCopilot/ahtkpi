@@ -15,6 +15,7 @@ ini_set('display_errors', 0); // Keep disabled in production
 $request_uri = $_SERVER['REQUEST_URI'];
 $parsed_uri = parse_url($request_uri, PHP_URL_PATH);
 $uri = strtolower(urldecode($parsed_uri));
+$base_path = '/'; // Define base path for the application
 
 // Strip any script filename prefix (e.g. /router.php, /index.php)
 $uri = preg_replace('#^/(router|index)\.php#', '', $uri);
@@ -121,6 +122,7 @@ $routes = [
     '/hrm/openings' => 'modules/hrm/openings.php',
     '/hrm/job-detail' => 'modules/hrm/job_detail.php',
     '/hrm/job-edit' => 'modules/hrm/job_edit.php',
+    '/hrm/candidates' => 'modules/hrm/candidates.php',
 ];
 
 // DEBUG: log URI + match result

@@ -483,6 +483,14 @@ $first_name = end($first_name);
                 <span class="app-sub">Tài liệu</span>
             </a>
 
+            <a href="/hrm/candidates" class="app-item">
+                <div class="app-icon icon-indigo">
+                    <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="1.8"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+                </div>
+                <span class="app-name">Candidates</span>
+                <span class="app-sub">Ứng viên</span>
+            </a>
+
             <a href="/hrm/e-hiring.php" class="app-item">
                 <div class="app-icon icon-cyan">
                     <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="1.8"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/></svg>
