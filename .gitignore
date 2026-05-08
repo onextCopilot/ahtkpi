@@ -76,3 +76,4 @@ describe.php
 desc.php
 desc_*.php
 *.db
+\n# HRM Uploads\nuploads/hrm/cvs/*\n!uploads/hrm/cvs/.gitkeep
