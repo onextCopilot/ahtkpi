@@ -118,6 +118,9 @@ $routes = [
     '/hrm/email-template-detail' => 'modules/hrm/email_template_detail.php',
     '/hrm/interview-templates' => 'modules/hrm/interview_templates.php',
     '/hrm/interview-template-detail' => 'modules/hrm/interview_template_detail.php',
+    '/hrm/openings' => 'modules/hrm/openings.php',
+    '/hrm/job-detail' => 'modules/hrm/job_detail.php',
+    '/hrm/job-edit' => 'modules/hrm/job_edit.php',
 ];
 
 // DEBUG: log URI + match result
