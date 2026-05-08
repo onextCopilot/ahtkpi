@@ -747,7 +747,7 @@ if (!isset($_SESSION['user_id'])) {
         echo json_encode(['success' => true]); exit;
 
     } elseif ($action === 'get_import_total') {
-        $file = '/Users/hyuncao/Onext Digital/GitHub_Projects/ahtkpi/modules/hrm/data/sys4386-candidates-01032023-01042023.report.15.16.08.05.26.xlsx';
+        $file = __DIR__ . '/data/sys4386-candidates-01032023-01042023.report.15.16.08.05.26.xlsx';
         if (!file_exists($file)) { echo json_encode(['success' => false, 'message' => 'File không tồn tại']); exit; }
         $zip = new ZipArchive();
         if ($zip->open($file) !== TRUE) { echo json_encode(['success' => false, 'message' => 'Không thể mở file Excel']); exit; }
@@ -761,7 +761,7 @@ if (!isset($_SESSION['user_id'])) {
         $start = (int)($_GET['start'] ?? 0);
         $limit = (int)($_GET['limit'] ?? 20);
 
-        $file = '/Users/hyuncao/Onext Digital/GitHub_Projects/ahtkpi/modules/hrm/data/sys4386-candidates-01032023-01042023.report.15.16.08.05.26.xlsx';
+        $file = __DIR__ . '/data/sys4386-candidates-01032023-01042023.report.15.16.08.05.26.xlsx';
         if (!file_exists($file)) { echo json_encode(['success' => false, 'message' => 'File không tồn tại']); exit; }
         $zip = new ZipArchive();
         if ($zip->open($file) !== TRUE) { echo json_encode(['success' => false, 'message' => 'Không thể mở file Excel']); exit; }
