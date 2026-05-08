@@ -20,13 +20,13 @@ if (isset($conn)) {
 
     <div class="sidebar-menu">
         <div class="nav-section-title">CHÍNH</div>
-        <a href="/hrm/e-hiring" class="nav-app-item <?= (strpos($current_page, 'e-hiring') !== false && strpos($current_page, 'company-info') === false && strpos($current_page, 'other-settings') === false && strpos($current_page, 'permissions') === false) ? 'active' : '' ?>">
+        <a href="/hrm/e-hiring" class="nav-app-item <?= (strpos($current_page, 'e-hiring') !== false && strpos($current_page, 'openings') === false && strpos($current_page, 'company-info') === false && strpos($current_page, 'other-settings') === false && strpos($current_page, 'permissions') === false) ? 'active' : '' ?>">
             <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
             <span class="nav-app-text">Tổng quan</span>
         </a>
-        <a href="/hrm/job-post-create" class="nav-app-item <?= (strpos($current_page, 'job-post-create') !== false) ? 'active' : '' ?>">
-            <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="9" y1="21" x2="9" y2="9"/></svg>
-            <span class="nav-app-text">Tin tuyển dụng</span>
+        <a href="/hrm/openings" class="nav-app-item <?= (strpos($current_page, 'openings') !== false || strpos($current_page, 'job-detail') !== false || strpos($current_page, 'job-edit') !== false || strpos($current_page, 'job-post-create') !== false) ? 'active' : '' ?>">
+            <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+            <span class="nav-app-text">Tin Tuyển dụng</span>
         </a>
         <a href="#" class="nav-app-item">
             <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>

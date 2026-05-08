@@ -4,6 +4,8 @@ $path = rtrim($path, '/');
 
 if ($path === '/hrm/e-hiring' || $path === '/hrm/e-hiring.php') {
     require_once __DIR__ . '/../modules/hrm/e_hiring.php';
+} elseif ($path === '/hrm/openings' || $path === '/hrm/openings.php') {
+    require_once __DIR__ . '/../modules/hrm/openings.php';
 } elseif ($path === '/hrm/company-info' || $path === '/hrm/company-info.php') {
     require_once __DIR__ . '/../modules/hrm/company_info.php';
 } elseif ($path === '/hrm/ajax-handler' || $path === '/hrm/ajax-handler.php') {
@@ -34,6 +36,10 @@ if ($path === '/hrm/e-hiring' || $path === '/hrm/e-hiring.php') {
     require_once __DIR__ . '/../modules/hrm/interview_templates.php';
 } elseif ($path === '/hrm/interview-template-detail' || $path === '/hrm/interview-template-detail.php') {
     require_once __DIR__ . '/../modules/hrm/interview_template_detail.php';
+} elseif ($path === '/hrm/job-detail' || $path === '/hrm/job-detail.php') {
+    require_once __DIR__ . '/../modules/hrm/job_detail.php';
+} elseif ($path === '/hrm/job-edit' || $path === '/hrm/job-edit.php') {
+    require_once __DIR__ . '/../modules/hrm/job_edit.php';
 } else {
     require_once __DIR__ . '/../modules/hrm/index.php';
 }

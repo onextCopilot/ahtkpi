@@ -3,12 +3,15 @@ require_once __DIR__ . '/../../config/config.php';
 if (!isset($_SESSION['user_id'])) { header("Location: /login"); exit(); }
 $full_name = $_SESSION['full_name'];
 $avatar = $_SESSION['avatar'] ?? null;
-$p = explode(' ', trim($full_name)); $first_name = end($p);
+$job_id = (int)($_GET['id'] ?? 0);
+
+if (!$job_id) { header("Location: /hrm/openings"); exit(); }
+
 ?><!DOCTYPE html>
 <html lang="vi">
 <head>
 <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Đăng tin tuyển dụng – E-Hiring</title>
+<title>Chỉnh sửa tin tuyển dụng – E-Hiring</title>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/modules/hrm/sidebar.css">
 <script src="https://cdn.jsdelivr.net/npm/tinymce@6/tinymce.min.js" referrerpolicy="origin"></script>
@@ -59,8 +62,6 @@ body{font-family:'Inter',sans-serif;background:#f8fafc;color:#1e293b;height:100v
 .salary-group{display:flex;align-items:center;gap:8px}
 .salary-group input{width:100px}
 
-.editor-placeholder{height:200px;border:1px solid #d1d5db;border-radius:6px;background:#f9fafb;display:flex;align-items:center;justify-content:center;color:#9ca3af;font-size:14px}
-
 .btn-primary{background:#2563eb;color:#fff;border:none;padding:12px 48px;border-radius:6px;font-weight:700;cursor:pointer;width:100%;font-size:14px}
 .btn-secondary{background:#f3f4f6;color:#374151;border:1px solid #d1d5db;padding:12px 32px;border-radius:6px;font-weight:600;cursor:pointer;font-size:14px}
 
@@ -87,8 +88,7 @@ body{font-family:'Inter',sans-serif;background:#f8fafc;color:#1e293b;height:100v
                 <input class="eh-search" placeholder="Tìm nhanh trong toàn hệ thống">
             </div>
             <div class="top-actions">
-                <button class="top-btn primary" onclick="location.href='/hrm/job-post-create'">⚡ Đăng tin tuyển dụng</button>
-                <button class="top-btn">✦ Tạo chiến dịch</button>
+                <button class="top-btn" onclick="location.href='/hrm/job-detail?id=<?=$job_id?>'">← Quay lại Tin chi tiết</button>
                 <div class="top-avatar"><?=strtoupper(substr($full_name,0,1))?></div>
             </div>
         </div>
@@ -96,12 +96,9 @@ body{font-family:'Inter',sans-serif;background:#f8fafc;color:#1e293b;height:100v
         <main class="eh-main">
             <div class="page-header">
                 <div class="page-title-group">
-                    <h1 class="page-title">Đăng tin tuyển dụng</h1>
-                    <p class="page-subtitle">Đăng tin tuyển dụng mới cho CÔNG TY CỔ PHẦN DỊCH VỤ VÀ PHÁT TRIỂN CÔNG NGHỆ AHT</p>
+                    <h1 class="page-title">Chỉnh sửa tin tuyển dụng</h1>
+                    <p class="page-subtitle" id="jobSubTitle">Đang tải thông tin...</p>
                 </div>
-                <select class="form-select" style="width:250px">
-                    <option>Sao chép nội dung từ tin đã đăng</option>
-                </select>
             </div>
 
             <div class="content-container">
@@ -178,14 +175,12 @@ body{font-family:'Inter',sans-serif;background:#f8fafc;color:#1e293b;height:100v
                                         <label class="form-label">Phòng ban</label>
                                         <select class="form-select" id="departmentId">
                                             <option value="0">-- Lựa chọn --</option>
-                                            <!-- Loaded via JS -->
                                         </select>
                                     </div>
                                     <div class="form-group">
                                         <label class="form-label">Văn phòng *</label>
                                         <select class="form-select" id="office">
                                             <option value="">-- Lựa chọn --</option>
-                                            <!-- Loaded via JS -->
                                         </select>
                                     </div>
                                 </div>
@@ -227,14 +222,13 @@ body{font-family:'Inter',sans-serif;background:#f8fafc;color:#1e293b;height:100v
                         <div class="form-section">
                             <div class="section-header">Miêu tả công việc</div>
                             <div class="section-body">
-                                <textarea id="jobDescription" class="form-textarea" style="height:300px" placeholder="Nhập miêu tả công việc, nhiệm vụ chính và yêu cầu..."></textarea>
+                                <textarea id="jobDescription" class="form-textarea" style="height:300px"></textarea>
                             </div>
                         </div>
 
                         <div class="form-section">
                             <div class="section-header">Talent Pool</div>
                             <div class="section-body">
-                                <label class="form-label">Các ứng viên của đơn ứng tuyển này sẽ được lưu trong các talent pool sau đây</label>
                                 <select class="form-select" id="talentPoolId">
                                     <option value="0">-- LỰA CHỌN TALENT POOL --</option>
                                 </select>
@@ -244,7 +238,6 @@ body{font-family:'Inter',sans-serif;background:#f8fafc;color:#1e293b;height:100v
                         <div class="form-section">
                             <div class="section-header">Thành viên</div>
                             <div class="section-body">
-                                <label class="form-label">Thành viên quản lý (* những người có quyền xem toàn bộ thông tin ứng viên và xử lý quy trình tuyển dụng)</label>
                                 <input type="text" class="form-input" id="managers" placeholder="gõ ID để gán thẻ">
                             </div>
                         </div>
@@ -252,41 +245,7 @@ body{font-family:'Inter',sans-serif;background:#f8fafc;color:#1e293b;height:100v
                         <div class="form-section">
                             <div class="section-header">Ghi chú</div>
                             <div class="section-body">
-                                <textarea id="notes" class="form-textarea" style="height:150px" placeholder="Ghi chú..."></textarea>
-                            </div>
-                        </div>
-
-                        <div class="form-section">
-                            <div class="section-header">Thời hạn</div>
-                            <div class="section-body">
-                                <label class="form-label">Thời hạn hoàn thành toàn bộ quá trình ứng tuyển</label>
-                                <input type="text" class="form-input" id="completionTime" placeholder="Thời hạn hoàn thành toàn bộ quá trình ứng tuyển">
-                            </div>
-                        </div>
-
-                        <div class="form-section">
-                            <div class="section-header">SEO</div>
-                            <div class="section-body">
-                                <div class="form-row">
-                                    <div class="form-group">
-                                        <label class="form-label">Tỉnh/Thành phố</label>
-                                        <input type="text" class="form-input" id="city" placeholder="Ví dụ: Hà Nội">
-                                    </div>
-                                    <div class="form-group">
-                                        <label class="form-label">Quận/Huyện</label>
-                                        <input type="text" class="form-input" id="district" placeholder="Ví dụ: Quận Thanh Xuân">
-                                    </div>
-                                </div>
-                                <div class="form-row">
-                                    <div class="form-group">
-                                        <label class="form-label">Địa chỉ cụ thể</label>
-                                        <input type="text" class="form-input" id="address" placeholder="Ví dụ: Số 47, đường Nguyễn Tuân">
-                                    </div>
-                                    <div class="form-group">
-                                        <label class="form-label">Mã bưu điện</label>
-                                        <input type="text" class="form-input" id="postalCode" placeholder="Ví dụ: 10000">
-                                    </div>
-                                </div>
+                                <textarea id="notes" class="form-textarea" style="height:150px"></textarea>
                             </div>
                         </div>
                     </div>
@@ -297,7 +256,7 @@ body{font-family:'Inter',sans-serif;background:#f8fafc;color:#1e293b;height:100v
                             <div class="section-header">Tiêu chí đánh giá</div>
                             <div class="section-body">
                                 <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:20px;gap:20px">
-                                    <p style="font-size:13px;color:#6b7280;line-height:1.5">Lựa chọn các tiêu chí để đánh giá ứng viên cho vị trí tuyển dụng này. Hệ thống sẽ dựa trên các tiêu chí này để chấm điểm hồ sơ.</p>
+                                    <p style="font-size:13px;color:#6b7280;line-height:1.5">Lựa chọn các tiêu chí để đánh giá ứng viên cho vị trí tuyển dụng này.</p>
                                     <div style="display:flex;gap:8px;flex-shrink:0">
                                         <button class="btn-secondary" style="padding:8px 16px;font-size:13px" onclick="openMultiCriterionModal()">Thêm nhiều</button>
                                         <button class="btn-primary" style="padding:8px 16px;font-size:13px;width:auto" onclick="openCriterionModal()">+ Thêm tiêu chí</button>
@@ -314,23 +273,16 @@ body{font-family:'Inter',sans-serif;background:#f8fafc;color:#1e293b;height:100v
                                         </tr>
                                     </thead>
                                     <tbody id="selectedCriteriaBody">
-                                        <!-- Selected criteria will appear here -->
-                                        <tr>
-                                            <td colspan="4" style="text-align:center;padding:40px;color:#9ca3af">
-                                                Chưa có tiêu chí nào được chọn
-                                            </td>
-                                        </tr>
+                                        <tr><td colspan="4" style="text-align:center;padding:40px;color:#9ca3af">Đang tải...</td></tr>
                                     </tbody>
                                 </table>
                             </div>
                         </div>
 
                         <div class="form-section">
-                            <div class="section-header">Các yêu cầu bắt buộc khác (Để loại nhanh ứng viên)</div>
+                            <div class="section-header">Các yêu cầu bắt buộc khác</div>
                             <div class="section-body">
-                                <div id="mandatoryRequirementsList">
-                                    <!-- Mandatory requirements will appear here -->
-                                </div>
+                                <div id="mandatoryRequirementsList"></div>
                                 <button class="btn-secondary" style="margin-top:12px;padding:8px 16px;font-size:13px" onclick="addMandatoryRow()">+ Thêm yêu cầu bắt buộc</button>
                             </div>
                         </div>
@@ -359,18 +311,21 @@ body{font-family:'Inter',sans-serif;background:#f8fafc;color:#1e293b;height:100v
                     </div>
 
                     <div style="display:flex;justify-content:space-between;margin-top:24px;padding:24px 0;border-top:1px solid #e5e7eb">
-                        <button class="btn-secondary" id="prevBtn" style="visibility:hidden" onclick="prevStep()">QUAY LẠI</button>
-                        <button class="btn-primary" id="nextBtn" style="width:auto" onclick="handleNext()">TIẾP THEO</button>
+                        <button class="btn-secondary" id="saveStayBtn" onclick="saveCurrentStep(false)">LƯU THAY ĐỔI</button>
+                        <button class="btn-primary" id="saveNextBtn" style="width:auto" onclick="saveCurrentStep(true)">LƯU & TIẾP TỤC</button>
                     </div>
                     <div style="height:100px"></div>
                 </div>
+            </div>
+        </main>
+    </div>
 </div>
 
-<!-- Modals moved to end of body for better fixed positioning -->
+<!-- Modals -->
 <div class="modal-overlay" id="criterionModal">
     <div class="modal">
         <div class="modal-header">
-            <h3 style="font-size:16px">Thêm tiêu chí cho vị trí tuyển dụng này</h3>
+            <h3 style="font-size:16px">Thêm tiêu chí</h3>
             <button onclick="closeCriterionModal()" style="background:none;border:none;font-size:20px;cursor:pointer">&times;</button>
         </div>
         <div class="modal-body">
@@ -378,18 +333,13 @@ body{font-family:'Inter',sans-serif;background:#f8fafc;color:#1e293b;height:100v
                 <label class="form-label">Chọn tiêu chí</label>
                 <select class="form-select" id="modalCriterionId">
                     <option value="">-- Chọn tiêu chí --</option>
-                    <!-- Loaded via JS -->
                 </select>
             </div>
             <div class="form-row">
                 <div class="form-group">
                     <label class="form-label">Điểm kỳ vọng</label>
                     <select class="form-select" id="modalExpectedScore">
-                        <option value="1/5">1/5</option>
-                        <option value="2/5">2/5</option>
-                        <option value="3/5" selected>3/5</option>
-                        <option value="4/5">4/5</option>
-                        <option value="5/5">5/5</option>
+                        <option value="1/5">1/5</option><option value="2/5">2/5</option><option value="3/5" selected>3/5</option><option value="4/5">4/5</option><option value="5/5">5/5</option>
                     </select>
                 </div>
                 <div class="form-group">
@@ -412,9 +362,7 @@ body{font-family:'Inter',sans-serif;background:#f8fafc;color:#1e293b;height:100v
             <button onclick="closeMultiCriterionModal()" style="background:none;border:none;font-size:20px;cursor:pointer">&times;</button>
         </div>
         <div class="modal-body" style="max-height:500px;overflow-y:auto">
-            <div id="multiCriterionList">
-                <!-- Grouped criteria with checkboxes -->
-            </div>
+            <div id="multiCriterionList"></div>
         </div>
         <div class="modal-footer">
             <button onclick="closeMultiCriterionModal()" class="btn-secondary" style="padding:8px 16px">Hủy</button>
@@ -425,71 +373,35 @@ body{font-family:'Inter',sans-serif;background:#f8fafc;color:#1e293b;height:100v
 
 <script>
 let currentStep = 1;
-let jobId = null;
+const jobId = <?=$job_id?>;
 let allCriteriaGroups = [];
 let selectedCriteria = [];
 
-function initEditors() {
-    tinymce.init({
-        selector: '#jobDescription, #notes',
-        height: 300,
-        menubar: false,
-        branding: false,
-        promotion: false,
-        plugins: [
-            'advlist', 'autolink', 'lists', 'link', 'image', 'charmap', 'preview',
-            'anchor', 'searchreplace', 'visualblocks', 'code', 'fullscreen',
-            'insertdatetime', 'media', 'table', 'help', 'wordcount'
-        ],
-        toolbar: 'undo redo | blocks | ' +
-            'bold italic underline strikethrough | alignleft aligncenter ' +
-            'alignright alignjustify | bullist numlist outdent indent | ' +
-            'removeformat | help',
-        content_style: 'body { font-family:Inter,sans-serif; font-size:14px }'
-    });
-}
-
-async function loadFormData() {
+async function loadAllData() {
     initEditors();
     try {
-        const [deptRes, officeRes, poolRes, evalRes] = await Promise.all([
+        // Load options
+        const [deptRes, officeRes, poolRes, evalRes, jobRes, critRes] = await Promise.all([
             fetch('/hrm/ajax-handler?action=get_depts'),
             fetch('/hrm/ajax-handler?action=get_offices'),
             fetch('/hrm/ajax-handler?action=get_talent_pools'),
-            fetch('/hrm/ajax-handler?action=get_evaluation_data')
+            fetch('/hrm/ajax-handler?action=get_evaluation_data'),
+            fetch('/hrm/ajax-handler?action=get_jobs&id=' + jobId),
+            fetch('/hrm/ajax-handler?action=get_job_criteria&job_id=' + jobId)
         ]);
 
         const depts = await deptRes.json();
         const dSelect = document.getElementById('departmentId');
-        if (Array.isArray(depts)) {
-            depts.forEach(d => {
-                const opt = document.createElement('option');
-                opt.value = d.id;
-                opt.innerText = d.name;
-                dSelect.appendChild(opt);
-            });
-        }
+        depts.forEach(d => { dSelect.innerHTML += `<option value="${d.id}">${d.name}</option>`; });
 
         const offices = await officeRes.json();
         const oSelect = document.getElementById('office');
-        if (Array.isArray(offices)) {
-            offices.forEach(o => {
-                const opt = document.createElement('option');
-                opt.value = o.name;
-                opt.innerText = o.name;
-                oSelect.appendChild(opt);
-            });
-        }
+        offices.forEach(o => { oSelect.innerHTML += `<option value="${o.name}">${o.name}</option>`; });
 
         const pools = await poolRes.json();
-        const pSelect = document.getElementById('talentPoolId');
-        if (pools.success && Array.isArray(pools.data)) {
-            pools.data.forEach(p => {
-                const opt = document.createElement('option');
-                opt.value = p.id;
-                opt.innerText = p.name;
-                pSelect.appendChild(opt);
-            });
+        if (pools.success) {
+            const pSelect = document.getElementById('talentPoolId');
+            pools.data.forEach(p => { pSelect.innerHTML += `<option value="${p.id}">${p.name}</option>`; });
         }
 
         const evalData = await evalRes.json();
@@ -497,71 +409,74 @@ async function loadFormData() {
             allCriteriaGroups = evalData.data;
             populateCriterionSelect();
         }
+
+        // Populate Job Data
+        const jobData = await jobRes.json();
+        if (jobData.success && jobData.data.length > 0) {
+            const j = jobData.data[0];
+            document.getElementById('jobSubTitle').innerText = j.title + ' (#' + j.id + ')';
+            document.getElementById('title').value = j.title;
+            document.getElementById('jobCode').value = j.job_code;
+            document.getElementById('departmentId').value = j.department_id;
+            document.getElementById('office').value = j.office;
+            document.getElementById('salaryFrom').value = j.salary_from;
+            document.getElementById('salaryTo').value = j.salary_to;
+            document.getElementById('currency').value = j.currency;
+            document.getElementById('showSalary').checked = j.show_salary == 1;
+            document.getElementById('quantity').value = j.quantity;
+            document.getElementById('jobType').value = j.job_type;
+            document.getElementById('deadline').value = j.deadline;
+            document.getElementById('talentPoolId').value = j.talent_pool_id;
+            document.getElementById('managers').value = j.managers;
+            tinymce.get('jobDescription').setContent(j.job_description || '');
+            tinymce.get('notes').setContent(j.notes || '');
+        }
+
+        // Populate Criteria
+        const criteriaData = await critRes.json();
+        if (criteriaData.success) {
+            selectedCriteria = criteriaData.criteria;
+            renderSelectedCriteria();
+            criteriaData.mandatory.forEach(m => addMandatoryRow(m.requirement_text));
+        }
+
     } catch (e) { console.error(e); }
 }
 
-function populateCriterionSelect() {
-    const select = document.getElementById('modalCriterionId');
-    select.innerHTML = '<option value="">-- Chọn tiêu chí --</option>';
-    allCriteriaGroups.forEach(g => {
-        const group = document.createElement('optgroup');
-        group.label = g.name;
-        g.criteria.forEach(c => {
-            const opt = document.createElement('option');
-            opt.value = c.id;
-            opt.innerText = c.criterion_text;
-            group.appendChild(opt);
-        });
-        select.appendChild(group);
+function initEditors() {
+    tinymce.init({
+        selector: '#jobDescription, #notes',
+        height: 250,
+        menubar: false,
+        branding: false,
+        plugins: ['lists', 'link', 'image', 'code', 'table'],
+        toolbar: 'undo redo | bold italic | bullist numlist | link image | code',
+        content_style: 'body { font-family:Inter,sans-serif; font-size:14px }'
     });
 }
 
-function updateStepper() {
+function goToStep(step) {
+    currentStep = step;
     document.querySelectorAll('.stepper-item').forEach((item, idx) => {
-        item.classList.remove('active');
-        if (idx + 1 === currentStep) item.classList.add('active');
+        item.classList.toggle('active', idx + 1 === currentStep);
     });
     for (let i = 1; i <= 7; i++) {
         const el = document.getElementById(`step-${i}-content`);
         if (el) el.style.display = (i === currentStep) ? 'block' : 'none';
     }
-    document.getElementById('prevBtn').style.visibility = (currentStep === 1) ? 'hidden' : 'visible';
-    document.getElementById('nextBtn').innerText = (currentStep === 7) ? 'HOÀN TẤT' : 'TIẾP THEO';
 }
 
-function goToStep(step) {
-    if (step > 1 && !jobId) {
-        alert('Vui lòng hoàn tất và lưu Thông tin tuyển dụng ở Bước 1 trước');
-        return;
-    }
-    currentStep = step;
-    updateStepper();
-}
+async function saveCurrentStep(next) {
+    let success = false;
+    if (currentStep === 1) success = await saveStep1();
+    else if (currentStep === 2) success = await saveStep2();
+    else success = true;
 
-function prevStep() {
-    if (currentStep > 1) {
-        currentStep--;
-        updateStepper();
-    }
-}
-
-async function handleNext() {
-    if (currentStep === 1) {
-        const success = await saveStep1();
-        if (success) {
-            currentStep = 2;
-            updateStepper();
-        }
-    } else if (currentStep === 2) {
-        const success = await saveStep2();
-        if (success) {
-            currentStep = 3;
-            updateStepper();
-        }
-    } else {
-        currentStep++;
-        if (currentStep > 7) currentStep = 7;
-        updateStepper();
+    if (success && next) {
+        if (currentStep < 7) goToStep(currentStep + 1);
+        else location.href = '/hrm/job-detail?id=' + jobId;
+    } else if (success) {
+        alert('Đã lưu thay đổi');
     }
 }
 
@@ -582,19 +497,8 @@ async function saveStep1() {
         job_description: tinymce.get('jobDescription').getContent(),
         talent_pool_id: document.getElementById('talentPoolId').value,
         managers: document.getElementById('managers').value,
-        notes: tinymce.get('notes').getContent(),
-        completion_time: document.getElementById('completionTime').value,
-        city: document.getElementById('city').value,
-        district: document.getElementById('district').value,
-        address: document.getElementById('address').value,
-        postal_code: document.getElementById('postalCode').value
+        notes: tinymce.get('notes').getContent()
     };
-
-    if (!data.title) {
-        alert('Vui lòng nhập tiêu đề tin tuyển dụng');
-        return false;
-    }
-
     try {
         const res = await fetch('/hrm/ajax-handler?action=save_job_post', {
             method: 'POST',
@@ -602,14 +506,8 @@ async function saveStep1() {
             body: JSON.stringify(data)
         });
         const result = await res.json();
-        if (result.success) {
-            jobId = result.id;
-            return true;
-        } else {
-            alert('Lỗi: ' + result.message);
-            return false;
-        }
-    } catch (e) { console.error(e); return false; }
+        return result.success;
+    } catch (e) { return false; }
 }
 
 async function saveStep2() {
@@ -618,7 +516,6 @@ async function saveStep2() {
         criteria: selectedCriteria,
         mandatory: Array.from(document.querySelectorAll('.mandatory-row-input')).map(input => ({requirement_text: input.value}))
     };
-
     try {
         const res = await fetch('/hrm/ajax-handler?action=save_job_criteria', {
             method: 'POST',
@@ -627,96 +524,28 @@ async function saveStep2() {
         });
         const result = await res.json();
         return result.success;
-    } catch (e) { console.error(e); return false; }
+    } catch (e) { return false; }
 }
 
-// Step 2 functions
+// Reuse helper functions from job_post_create.php logic
+function populateCriterionSelect() {
+    const select = document.getElementById('modalCriterionId');
+    select.innerHTML = '<option value="">-- Chọn tiêu chí --</option>';
+    allCriteriaGroups.forEach(g => {
+        const group = document.createElement('optgroup');
+        group.label = g.name;
+        g.criteria.forEach(c => {
+            const opt = document.createElement('option');
+            opt.value = c.id;
+            opt.innerText = c.criterion_text;
+            group.appendChild(opt);
+        });
+        select.appendChild(group);
+    });
+}
+
 function openCriterionModal() { document.getElementById('criterionModal').style.display = 'flex'; }
 function closeCriterionModal() { document.getElementById('criterionModal').style.display = 'none'; }
-
-function addSelectedCriterion() {
-    const cid = document.getElementById('modalCriterionId').value;
-    const score = document.getElementById('modalExpectedScore').value;
-    const weight = document.getElementById('modalWeight').value;
-
-    if (!cid) return alert('Vui lòng chọn tiêu chí');
-    
-    // Check if already added
-    if (selectedCriteria.find(c => c.criterion_id == cid)) return alert('Tiêu chí này đã được chọn');
-
-    const criterion = findCriterion(cid);
-    selectedCriteria.push({
-        criterion_id: cid,
-        criterion_text: criterion.criterion_text,
-        group_name: criterion.group_name,
-        expected_score: score,
-        weight: weight
-    });
-
-    renderSelectedCriteria();
-    closeCriterionModal();
-}
-
-function findCriterion(id) {
-    for (const g of allCriteriaGroups) {
-        const c = g.criteria.find(crit => crit.id == id);
-        if (c) return { ...c, group_name: g.name };
-    }
-    return null;
-}
-
-function renderSelectedCriteria() {
-    const tbody = document.getElementById('selectedCriteriaBody');
-    if (selectedCriteria.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;padding:40px;color:#9ca3af">Chưa có tiêu chí nào được chọn</td></tr>';
-        return;
-    }
-    tbody.innerHTML = selectedCriteria.map((c, idx) => `
-        <tr>
-            <td>
-                <div style="font-weight:500;color:#111827">${c.criterion_text}</div>
-                <div style="font-size:11px;color:#9ca3af">${c.group_name}</div>
-            </td>
-            <td>
-                <select class="form-select" style="padding:4px 8px" onchange="updateCriterion(${idx}, 'expected_score', this.value)">
-                    <option value="1/5" ${c.expected_score === '1/5' ? 'selected' : ''}>1/5</option>
-                    <option value="2/5" ${c.expected_score === '2/5' ? 'selected' : ''}>2/5</option>
-                    <option value="3/5" ${c.expected_score === '3/5' ? 'selected' : ''}>3/5</option>
-                    <option value="4/5" ${c.expected_score === '4/5' ? 'selected' : ''}>4/5</option>
-                    <option value="5/5" ${c.expected_score === '5/5' ? 'selected' : ''}>5/5</option>
-                </select>
-            </td>
-            <td>
-                <input type="number" class="form-input" style="padding:4px 8px" value="${c.weight}" min="1" onchange="updateCriterion(${idx}, 'weight', this.value)">
-            </td>
-            <td style="text-align:center">
-                <button onclick="removeCriterion(${idx})" style="background:none;border:none;color:#ef4444;cursor:pointer;font-size:18px">&times;</button>
-            </td>
-        </tr>
-    `).join('');
-}
-
-function updateCriterion(idx, key, val) {
-    selectedCriteria[idx][key] = val;
-}
-
-function removeCriterion(idx) {
-    selectedCriteria.splice(idx, 1);
-    renderSelectedCriteria();
-}
-
-function addMandatoryRow(text = '') {
-    const container = document.getElementById('mandatoryRequirementsList');
-    const div = document.createElement('div');
-    div.className = 'mandatory-row';
-    div.innerHTML = `
-        <input type="text" class="form-input mandatory-row-input" value="${text}" placeholder="Ví dụ: Có ít nhất 2 năm kinh nghiệm ở vị trí tương đương">
-        <button onclick="this.parentElement.remove()" style="background:none;border:none;color:#ef4444;cursor:pointer;font-size:18px">&times;</button>
-    `;
-    container.appendChild(div);
-}
-
-// Multi selection
 function openMultiCriterionModal() {
     const container = document.getElementById('multiCriterionList');
     container.innerHTML = allCriteriaGroups.map(g => `
@@ -734,8 +563,22 @@ function openMultiCriterionModal() {
     `).join('');
     document.getElementById('multiCriterionModal').style.display = 'flex';
 }
-
 function closeMultiCriterionModal() { document.getElementById('multiCriterionModal').style.display = 'none'; }
+
+function addSelectedCriterion() {
+    const cid = document.getElementById('modalCriterionId').value;
+    if (!cid || selectedCriteria.find(c => c.criterion_id == cid)) return;
+    const criterion = findCriterion(cid);
+    selectedCriteria.push({
+        criterion_id: cid,
+        criterion_text: criterion.criterion_text,
+        group_name: criterion.group_name,
+        expected_score: document.getElementById('modalExpectedScore').value,
+        weight: document.getElementById('modalWeight').value
+    });
+    renderSelectedCriteria();
+    closeCriterionModal();
+}
 
 function addMultiCriteria() {
     const cbs = document.querySelectorAll('.multi-crit-cb:checked');
@@ -743,17 +586,10 @@ function addMultiCriteria() {
     cbs.forEach(cb => {
         const cid = cb.value;
         const existing = selectedCriteria.find(sc => sc.criterion_id == cid);
-        if (existing) {
-            newCriteria.push(existing);
-        } else {
+        if (existing) newCriteria.push(existing);
+        else {
             const criterion = findCriterion(cid);
-            newCriteria.push({
-                criterion_id: cid,
-                criterion_text: criterion.criterion_text,
-                group_name: criterion.group_name,
-                expected_score: '3/5',
-                weight: 1
-            });
+            newCriteria.push({ criterion_id: cid, criterion_text: criterion.criterion_text, group_name: criterion.group_name, expected_score: '3/5', weight: 1 });
         }
     });
     selectedCriteria = newCriteria;
@@ -761,7 +597,39 @@ function addMultiCriteria() {
     closeMultiCriterionModal();
 }
 
-document.addEventListener('DOMContentLoaded', loadFormData);
+function findCriterion(id) {
+    for (const g of allCriteriaGroups) {
+        const c = g.criteria.find(crit => crit.id == id);
+        if (c) return { ...c, group_name: g.name };
+    }
+    return null;
+}
+
+function renderSelectedCriteria() {
+    const tbody = document.getElementById('selectedCriteriaBody');
+    if (selectedCriteria.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;padding:40px;color:#9ca3af">Chưa có tiêu chí nào</td></tr>';
+        return;
+    }
+    tbody.innerHTML = selectedCriteria.map((c, idx) => `
+        <tr>
+            <td><div style="font-weight:500">${c.criterion_text}</div><div style="font-size:11px;color:#9ca3af">${c.group_name}</div></td>
+            <td><select class="form-select" onchange="selectedCriteria[${idx}].expected_score=this.value"><option value="1/5" ${c.expected_score==='1/5'?'selected':''}>1/5</option><option value="2/5" ${c.expected_score==='2/5'?'selected':''}>2/5</option><option value="3/5" ${c.expected_score==='3/5'?'selected':''}>3/5</option><option value="4/5" ${c.expected_score==='4/5'?'selected':''}>4/5</option><option value="5/5" ${c.expected_score==='5/5'?'selected':''}>5/5</option></select></td>
+            <td><input type="number" class="form-input" value="${c.weight}" min="1" onchange="selectedCriteria[${idx}].weight=this.value"></td>
+            <td style="text-align:center"><button onclick="selectedCriteria.splice(${idx},1);renderSelectedCriteria()" style="background:none;border:none;color:#ef4444;cursor:pointer;font-size:18px">&times;</button></td>
+        </tr>
+    `).join('');
+}
+
+function addMandatoryRow(text = '') {
+    const container = document.getElementById('mandatoryRequirementsList');
+    const div = document.createElement('div');
+    div.className = 'mandatory-row';
+    div.innerHTML = `<input type="text" class="form-input mandatory-row-input" value="${text}"><button onclick="this.parentElement.remove()" style="background:none;border:none;color:#ef4444;cursor:pointer;font-size:18px">&times;</button>`;
+    container.appendChild(div);
+}
+
+document.addEventListener('DOMContentLoaded', loadAllData);
 </script>
 </body>
 </html>

@@ -94,7 +94,7 @@ body{font-family:'Inter',sans-serif;background:#f0f2f5;color:#1a1a2e;height:100v
         <input class="eh-search" placeholder="Tìm kiếm trong toàn hệ thống">
       </div>
       <div class="top-actions">
-        <button class="top-btn primary">⚡ Đăng tin tuyển dụng</button>
+        <button class="top-btn primary" onclick="location.href='/hrm/job-post-create'">⚡ Đăng tin tuyển dụng</button>
         <button class="top-btn">✦ Tạo chiến dịch</button>
         <button class="top-btn">🌐 Trang tuyển dụng</button>
         <button class="top-icon-btn">

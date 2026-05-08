@@ -210,7 +210,30 @@ $conn->query("CREATE TABLE IF NOT EXISTS hrm_job_posts (
     address TEXT,
     postal_code VARCHAR(20),
     status VARCHAR(50) DEFAULT 'draft',
+    created_by INT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+)");
+
+$checkJobCreator = $conn->query("SHOW COLUMNS FROM hrm_job_posts LIKE 'created_by'");
+if ($checkJobCreator && $checkJobCreator->num_rows == 0) {
+    $conn->query("ALTER TABLE hrm_job_posts ADD COLUMN created_by INT");
+}
+
+$conn->query("CREATE TABLE IF NOT EXISTS hrm_job_evaluation_criteria (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    job_id INT NOT NULL,
+    criterion_id INT NOT NULL,
+    expected_score VARCHAR(10) DEFAULT '3/5',
+    weight INT DEFAULT 1,
+    FOREIGN KEY (job_id) REFERENCES hrm_job_posts(id) ON DELETE CASCADE,
+    FOREIGN KEY (criterion_id) REFERENCES hrm_evaluation_criteria(id) ON DELETE CASCADE
+)");
+
+$conn->query("CREATE TABLE IF NOT EXISTS hrm_job_mandatory_requirements (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    job_id INT NOT NULL,
+    requirement_text TEXT NOT NULL,
+    FOREIGN KEY (job_id) REFERENCES hrm_job_posts(id) ON DELETE CASCADE
 )");
 
 $conn->query("CREATE TABLE IF NOT EXISTS hrm_talent_pools (
@@ -607,17 +630,66 @@ if (!isset($_SESSION['user_id'])) {
         $dist = $conn->real_escape_string($data['district'] ?? '');
         $addr = $conn->real_escape_string($data['address'] ?? '');
         $pcode = $conn->real_escape_string($data['postal_code'] ?? '');
+        $uid = $_SESSION['user_id'];
 
         $deadline_val = !empty($deadline) ? "'$deadline'" : "NULL";
 
         if ($id) {
             $sql = "UPDATE hrm_job_posts SET title='$title', job_code='$code', template_id=$tid, department_id=$did, office='$office', salary_from=$sfrom, salary_to=$sto, currency='$curr', show_salary=$show_s, quantity=$qty, job_type='$type', deadline=$deadline_val, job_description='$desc', talent_pool_id=$tpid, managers='$mgrs', notes='$notes', completion_time='$ctime', city='$city', district='$dist', address='$addr', postal_code='$pcode' WHERE id=$id";
         } else {
-            $sql = "INSERT INTO hrm_job_posts (title, job_code, template_id, department_id, office, salary_from, salary_to, currency, show_salary, quantity, job_type, deadline, job_description, talent_pool_id, managers, notes, completion_time, city, district, address, postal_code) VALUES ('$title', '$code', $tid, $did, '$office', $sfrom, $sto, '$curr', $show_s, $qty, '$type', $deadline_val, '$desc', $tpid, '$mgrs', '$notes', '$ctime', '$city', '$dist', '$addr', '$pcode')";
+            $sql = "INSERT INTO hrm_job_posts (title, job_code, template_id, department_id, office, salary_from, salary_to, currency, show_salary, quantity, job_type, deadline, job_description, talent_pool_id, managers, notes, completion_time, city, district, address, postal_code, created_by) VALUES ('$title', '$code', $tid, $did, '$office', $sfrom, $sto, '$curr', $show_s, $qty, '$type', $deadline_val, '$desc', $tpid, '$mgrs', '$notes', '$ctime', '$city', '$dist', '$addr', '$pcode', $uid)";
         }
         
         if ($conn->query($sql)) { $response = ['success' => true, 'id' => $id ?: $conn->insert_id]; }
         else { $response = ['success' => false, 'message' => $conn->error]; }
+    } elseif ($action === 'save_job_criteria' && $_SERVER['REQUEST_METHOD'] === 'POST') {
+        $data = json_decode(file_get_contents('php://input'), true);
+        $job_id = (int)$data['job_id'];
+        $criteria = $data['criteria'] ?? [];
+        $mandatory = $data['mandatory'] ?? [];
+
+        $conn->begin_transaction();
+        try {
+            // Update criteria
+            $conn->query("DELETE FROM hrm_job_evaluation_criteria WHERE job_id = $job_id");
+            foreach ($criteria as $c) {
+                $cid = (int)$c['criterion_id'];
+                $score = $conn->real_escape_string($c['expected_score']);
+                $weight = (int)$c['weight'];
+                $conn->query("INSERT INTO hrm_job_evaluation_criteria (job_id, criterion_id, expected_score, weight) VALUES ($job_id, $cid, '$score', $weight)");
+            }
+
+            // Update mandatory requirements
+            $conn->query("DELETE FROM hrm_job_mandatory_requirements WHERE job_id = $job_id");
+            foreach ($mandatory as $m) {
+                $text = $conn->real_escape_string($m['requirement_text']);
+                if (!empty($text)) {
+                    $conn->query("INSERT INTO hrm_job_mandatory_requirements (job_id, requirement_text) VALUES ($job_id, '$text')");
+                }
+            }
+
+            $conn->commit();
+            $response = ['success' => true];
+        } catch (Exception $e) {
+            $conn->rollback();
+            $response = ['success' => false, 'message' => $e->getMessage()];
+        }
+    } elseif ($action === 'get_job_criteria') {
+        $job_id = (int)$_GET['job_id'];
+        
+        $resC = $conn->query("SELECT jc.*, c.criterion_text, g.name as group_name 
+            FROM hrm_job_evaluation_criteria jc
+            JOIN hrm_evaluation_criteria c ON jc.criterion_id = c.id
+            JOIN hrm_evaluation_groups g ON c.group_id = g.id
+            WHERE jc.job_id = $job_id");
+        $criteria = [];
+        while($row = $resC->fetch_assoc()) { $criteria[] = $row; }
+
+        $resM = $conn->query("SELECT * FROM hrm_job_mandatory_requirements WHERE job_id = $job_id");
+        $mandatory = [];
+        while($row = $resM->fetch_assoc()) { $mandatory[] = $row; }
+
+        $response = ['success' => true, 'criteria' => $criteria, 'mandatory' => $mandatory];
     } elseif ($action === 'get_evaluation_data') {
         $groups = [];
         $resG = $conn->query("SELECT * FROM hrm_evaluation_groups ORDER BY sort_order ASC");
@@ -908,6 +980,69 @@ if (!isset($_SESSION['user_id'])) {
         $id = (int)($data['id'] ?? 0);
         if ($conn->query("DELETE FROM hrm_email_templates WHERE id=$id")) { $response = ['success' => true]; }
         else { $response = ['success' => false, 'message' => $conn->error]; }
+    } elseif ($action === 'get_jobs') {
+        $ownership = $_GET['ownership'] ?? 'all';
+        $search = $conn->real_escape_string($_GET['search'] ?? '');
+        $dept = (int)($_GET['dept'] ?? 0);
+        $office = $conn->real_escape_string($_GET['office'] ?? '');
+        $status = $conn->real_escape_string($_GET['status'] ?? '');
+        $tabStatus = $_GET['tabStatus'] ?? 'all';
+        $uid = (int)($_SESSION['user_id'] ?? 0);
+
+        $where = "WHERE 1=1";
+        if (isset($_GET['id'])) {
+            $id = (int)$_GET['id'];
+            $where .= " AND j.id = $id";
+        }
+        if ($ownership === 'managed') {
+            $where .= " AND (FIND_IN_SET('$uid', j.managers) OR j.created_by = $uid)";
+        } elseif ($ownership === 'created') {
+            $where .= " AND j.created_by = $uid";
+        }
+
+        if (!empty($search)) {
+            $where .= " AND (j.title LIKE '%$search%' OR j.job_code LIKE '%$search%')";
+        }
+        if ($dept > 0) $where .= " AND j.department_id = $dept";
+        if (!empty($office)) $where .= " AND j.office = '$office'";
+        if (!empty($status)) $where .= " AND j.status = '$status'";
+
+        if ($tabStatus === 'active') {
+            $where .= " AND j.status IN ('public', 'private') AND (j.deadline >= CURDATE() OR j.deadline IS NULL)";
+        } elseif ($tabStatus === 'closed') {
+            $where .= " AND (j.status = 'closed' OR (j.deadline < CURDATE() AND j.deadline IS NOT NULL))";
+        } elseif ($tabStatus === 'draft') {
+            $where .= " AND j.status = 'draft'";
+        }
+
+        $sql = "SELECT j.*, d.name as dept_name, u.full_name as creator_name 
+                FROM hrm_job_posts j
+                LEFT JOIN hrm_departments d ON j.department_id = d.id
+                LEFT JOIN users u ON j.created_by = u.id
+                $where ORDER BY j.created_at DESC";
+        
+        $res = $conn->query($sql);
+        $jobs = [];
+        if ($res) {
+            while($row = $res->fetch_assoc()) {
+                // Mock stats for now - in real app would join with candidates table
+                $row['total_candidates'] = rand(0, 100);
+                $row['hired_candidates'] = rand(0, 5);
+                $row['in_process'] = rand(0, 20);
+                $row['interviews'] = rand(0, 10);
+                $jobs[] = $row;
+            }
+        }
+
+        // Simplified counts
+        $counts = [
+            'all' => $conn->query("SELECT COUNT(*) FROM hrm_job_posts")->fetch_row()[0],
+            'active' => $conn->query("SELECT COUNT(*) FROM hrm_job_posts WHERE status IN ('public', 'private') AND (deadline >= CURDATE() OR deadline IS NULL)")->fetch_row()[0],
+            'closed' => $conn->query("SELECT COUNT(*) FROM hrm_job_posts WHERE status = 'closed' OR (deadline < CURDATE() AND deadline IS NOT NULL)")->fetch_row()[0],
+            'draft' => $conn->query("SELECT COUNT(*) FROM hrm_job_posts WHERE status = 'draft'")->fetch_row()[0],
+        ];
+        
+        $response = ['success' => true, 'data' => $jobs, 'counts' => $counts];
     }
 }
 
