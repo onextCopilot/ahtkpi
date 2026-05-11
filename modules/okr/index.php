@@ -1507,11 +1507,33 @@ function getLatestWeeklyProgress($id, $type, $map, $current_week, $live_fallback
                                 <?php endfor; ?>
                             </select>
                         </div>
-                        <?php if ($is_admin): ?>
-                            <button class="btn-secondary" onclick="openVisibilityModal()" title="Quản lý hiển thị Users"><i class="fas fa-users-cog"></i></button>
-                            <button class="btn-secondary" onclick="openOkrSettingsModal()" title="Cài đặt màu sắc Progress"><i class="fas fa-palette"></i></button>
-                            <button class="btn-secondary" onclick="openOkrTeamManagementModal()" title="Quản lý Team OKR"><i class="fas fa-users-class"></i> Manage Teams</button>
-                        <?php endif; ?>
+                        <style>
+                        .okr-dropdown-menu { display: none; position: absolute; right: 0; top: 100%; margin-top: 8px; background: #fff; border: 1px solid #d2d2d7; box-shadow: 0 10px 24px rgba(0,0,0,0.12); border-radius: 12px; width: 220px; z-index: 1000; padding: 8px; text-align: left; }
+                        .okr-dropdown-menu a { display: flex; align-items: center; padding: 10px 12px; color: #1d1d1f; text-decoration: none; border-radius: 8px; font-size: 14px; font-weight: 500; transition: background 0.2s; }
+                        .okr-dropdown-menu a:hover { background: #f5f5f7; }
+                        .okr-dropdown-wrapper { position: relative; }
+                        .okr-dropdown-wrapper.active .okr-dropdown-menu { display: block; }
+                        </style>
+                        <div class="okr-dropdown-wrapper" id="okrDropdownWrapper">
+                            <button class="btn-secondary" onclick="document.getElementById('okrDropdownWrapper').classList.toggle('active'); event.stopPropagation();" title="Menu Tùy chọn"><i class="fas fa-ellipsis-h"></i></button>
+                            <div class="okr-dropdown-menu" id="okrDropdownMenu">
+                                <a href="javascript:void(0)" onclick="openGuideSidebar(); document.getElementById('okrDropdownWrapper').classList.remove('active')"><i class="fas fa-book" style="width: 24px; color: #0071e3;"></i> Hướng Dẫn OKR</a>
+                                <?php if ($is_admin): ?>
+                                <div style="height: 1px; background: #f2f2f7; margin: 4px 8px;"></div>
+                                <a href="javascript:void(0)" onclick="openOkrTeamManagementModal(); document.getElementById('okrDropdownWrapper').classList.remove('active')"><i class="fas fa-users-class" style="width: 24px; color: #515154;"></i> Manage Teams</a>
+                                <a href="javascript:void(0)" onclick="openVisibilityModal(); document.getElementById('okrDropdownWrapper').classList.remove('active')"><i class="fas fa-users-cog" style="width: 24px; color: #515154;"></i> Ẩn/Hiện Users</a>
+                                <a href="javascript:void(0)" onclick="openOkrSettingsModal(); document.getElementById('okrDropdownWrapper').classList.remove('active')"><i class="fas fa-palette" style="width: 24px; color: #515154;"></i> Tùy chỉnh màu sắc</a>
+                                <?php endif; ?>
+                            </div>
+                        </div>
+                        <script>
+                        document.addEventListener('click', function(e) {
+                            var w = document.getElementById('okrDropdownWrapper');
+                            if(w && !e.target.closest('#okrDropdownWrapper')) {
+                                w.classList.remove('active');
+                            }
+                        });
+                        </script>
                         <button class="btn-apple" onclick="openCreateObjModal()"><i class="fas fa-plus"></i> Add Objective</button>
                     </div>
                 </div>
@@ -2437,6 +2459,79 @@ function getLatestWeeklyProgress($id, $type, $map, $current_week, $live_fallback
 
 
     <div class="sidebar-overlay" id="sidebarOverlay" onclick="closeExplanationSidebar()"></div>
+    
+    <!-- OKR Guide Sidebar -->
+    <div class="sidebar-overlay" id="guideSidebarOverlay" onclick="closeGuideSidebar()" style="z-index: 1049;"></div>
+    <style>
+        #guideSidebar { width: 650px; right: -650px; }
+        #guideSidebar.active { right: 0 !important; }
+        @media (max-width: 768px) {
+            #guideSidebar { width: 100%; right: -100%; }
+        }
+    </style>
+    <div class="explanation-sidebar" id="guideSidebar" style="z-index: 1050; max-width: 100%;">
+        <div class="sidebar-header">
+            <div>
+                <h3 style="margin:0; font-size:18px; font-weight:700;"><i class="fas fa-book" style="color:#0071e3; margin-right:8px;"></i>Hướng Dẫn Thiết Lập OKR</h3>
+            </div>
+            <button class="btn-delete-row" style="opacity:1; background:none;" onclick="closeGuideSidebar()">
+                <i class="fas fa-times" style="font-size:20px;"></i>
+            </button>
+        </div>
+        <div class="sidebar-body" style="padding: 24px; font-size: 14px; line-height: 1.6; color: #515154; overflow-y: auto;">
+            <p style="margin-top:0;"><strong>OKR (Objectives and Key Results)</strong> là phương pháp quản trị mục tiêu giúp tổ chức và cá nhân thiết lập các mục tiêu tham vọng (O) cùng các kết quả đo lường được (KR) và các hành động cụ thể (KA).</p>
+            
+            <div style="background: #f5f5f7; border-radius: 12px; padding: 16px; margin: 16px 0;">
+                <h4 style="margin: 0 0 8px 0; color: #1d1d1f; font-size: 15px;">Objective (Mục tiêu)</h4>
+                <p style="margin: 0 0 16px 0;">Là ĐIỀU MÀ chúng ta muốn đạt được. Truyền cảm hứng, ngắn gọn, dễ nhớ (Định tính).</p>
+                <h4 style="margin: 0 0 8px 0; color: #1d1d1f; font-size: 15px;">Key Result (Kết quả then chốt)</h4>
+                <p style="margin: 0 0 16px 0;">Là CÁCH THỨC đo lường. Phải có con số cụ thể và thời hạn rõ ràng (Định lượng).</p>
+                <h4 style="margin: 0 0 8px 0; color: #1d1d1f; font-size: 15px;">Key Activity (Hoạt động trọng tâm)</h4>
+                <p style="margin: 0;">Là CÔNG VIỆC cụ thể (Dự án, task) cần làm để đạt được con số của KR.</p>
+            </div>
+
+            <h4 style="color: #1d1d1f; margin: 24px 0 16px 0; border-bottom: 1px solid #e5e5ea; padding-bottom: 8px;">Ví dụ thực tế ngành IT / Software</h4>
+            
+            <!-- Example 1: Sales IT -->
+            <div style="border-left: 3px solid #0071e3; background: #f0f7ff; padding: 16px; border-radius: 0 12px 12px 0; margin-bottom: 16px;">
+                <h5 style="color: #0058b0; font-size: 14px; margin: 0 0 8px 0; text-transform: uppercase;">1. Dành cho team Sales (Phát triển kinh doanh IT)</h5>
+                <p style="color: #1d1d1f; font-weight: 600; margin: 0 0 8px 0;">[O] Đạt doanh thu kỷ lục ở mảng dịch vụ Outsource / SaaS trong Quý 3</p>
+                
+                <p style="margin: 0 0 4px 16px;">↳ <strong style="color:#1d1d1f;">[KR 1]</strong> Ký hợp đồng mới đạt doanh số $150,000</p>
+                <p style="margin: 0 0 4px 32px; font-size: 13px;">→ [KA] Gửi báo giá (proposal) cho ít nhất 20 khách hàng tiềm năng cao</p>
+                <p style="margin: 0 0 8px 32px; font-size: 13px;">→ [KA] Tổ chức 10 buổi demo giải pháp phần mềm trực tiếp</p>
+                
+                <p style="margin: 0 0 4px 16px;">↳ <strong style="color:#1d1d1f;">[KR 2]</strong> Chốt deal thành công với 3 khách hàng Enterprise</p>
+                <p style="margin: 0 0 0 32px; font-size: 13px;">→ [KA] Xây dựng bộ tài liệu Case Study chuyên sâu về bảo mật cho Enterprise</p>
+            </div>
+
+            <!-- Example 2: Marketing IT -->
+            <div style="border-left: 3px solid #ff9500; background: #fff8eb; padding: 16px; border-radius: 0 12px 12px 0; margin-bottom: 16px;">
+                <h5 style="color: #cc7700; font-size: 14px; margin: 0 0 8px 0; text-transform: uppercase;">2. Dành cho team Marketing IT</h5>
+                <p style="color: #1d1d1f; font-weight: 600; margin: 0 0 8px 0;">[O] Trở thành thương hiệu giải pháp công nghệ dẫn đầu về nhận diện tại VN</p>
+                
+                <p style="margin: 0 0 4px 16px;">↳ <strong style="color:#1d1d1f;">[KR 1]</strong> Thu hút 2,000 MQLs (Marketing Qualified Leads) từ các chiến dịch Inbound</p>
+                <p style="margin: 0 0 4px 32px; font-size: 13px;">→ [KA] Xuất bản 4 bài Technical Blog chuyên sâu về AI & Cloud</p>
+                <p style="margin: 0 0 8px 32px; font-size: 13px;">→ [KA] Chạy chiến dịch Google Ads với ngân sách $2000 tập trung vào chuyển đổi</p>
+                
+                <p style="margin: 0 0 4px 16px;">↳ <strong style="color:#1d1d1f;">[KR 2]</strong> Đạt 10,000 lượt tải E-book "Xu hướng chuyển đổi số 2026"</p>
+                <p style="margin: 0 0 0 32px; font-size: 13px;">→ [KA] Hợp tác với 3 KOL/Tech Blogger để chia sẻ E-book</p>
+            </div>
+
+            <h4 style="color: #1d1d1f; margin: 24px 0 12px 0; border-bottom: 1px solid #e5e5ea; padding-bottom: 8px;">Best Practices</h4>
+            <ul style="padding-left: 16px; margin: 0;">
+                <li style="margin-bottom: 8px;"><strong>Tập trung (Less is more):</strong> Mỗi cá nhân chỉ nên có 3-5 Objectives mỗi quý để không bị loãng.</li>
+                <li style="margin-bottom: 8px;"><strong>Kết nối nhân quả:</strong> Key Activity tốt sẽ dẫn đến Key Result tốt. Nếu làm hết KA mà KR không tăng, cần phải thay đổi chiến thuật KA ngay.</li>
+                <li><strong>Giải trình (Explanation):</strong> Cập nhật số liệu hàng tuần và <em>bắt buộc ghi chú lý do</em> vì sao tuần này số tăng/giảm để team nắm bắt kịp thời.</li>
+            </ul>
+        </div>
+        <div class="sidebar-footer" style="text-align: center;">
+            <button class="btn-apple" style="width: 100%; justify-content: center;" onclick="closeGuideSidebar()">
+                Đã hiểu <i class="fas fa-check" style="margin-left:8px;"></i>
+            </button>
+        </div>
+    </div>
+
     <div class="explanation-sidebar" id="explanationSidebar">
         <div class="sidebar-header">
             <div>
@@ -2535,6 +2630,16 @@ function getLatestWeeklyProgress($id, $type, $map, $current_week, $live_fallback
                     }
                 }
             }, 'json');
+        }
+
+        function openGuideSidebar() {
+            document.getElementById('guideSidebar').classList.add('active');
+            document.getElementById('guideSidebarOverlay').style.display = 'block';
+        }
+
+        function closeGuideSidebar() {
+            document.getElementById('guideSidebar').classList.remove('active');
+            document.getElementById('guideSidebarOverlay').style.display = 'none';
         }
 
         function closeExplanationSidebar() {
