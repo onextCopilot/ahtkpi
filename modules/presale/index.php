@@ -531,6 +531,11 @@ if ($check_col2 && $check_col2->num_rows == 0) {
             border-color: #94a3b8;
             color: #0f172a;
         }
+        .quick-action-btn.active {
+            background: #4f46e5;
+            color: white !important;
+            border-color: #4f46e5;
+        }
         .attach-btn.recording {
             color: #ef4444;
             animation: pulse 1.5s infinite;
@@ -893,31 +898,18 @@ if ($check_col2 && $check_col2->num_rows == 0) {
 
                     <!-- Chat Area -->
                     <div class="chat-area">
-                        <!-- Quick Actions -->
-                        <div class="quick-actions">
-                            <?php
-                            try {
-                                $prompts = $conn->query("SELECT action_key, title FROM presale_prompts ORDER BY id ASC");
-                                if ($prompts && $prompts->num_rows > 0) {
-                                    while ($p = $prompts->fetch_assoc()) {
-                                        echo "<button class='quick-action-btn' data-action='{$p['action_key']}'>" . htmlspecialchars($p['title']) . "</button>";
-                                    }
-                                } else {
-                                    echo "<button class='quick-action-btn' data-action='qna'>Q&A Presale</button>";
-                                    echo "<button class='quick-action-btn' data-action='create_sow'>Tạo SOW / Proposal Draft</button>";
-                                }
-                            } catch (Exception $e) {
-                                echo "<button class='quick-action-btn' data-action='qna'>Q&A Presale</button>";
-                                echo "<button class='quick-action-btn' data-action='create_sow'>Tạo SOW / Proposal Draft</button>";
-                            }
-                            ?>
-                        </div>
 
                         <!-- Project Header -->
                         <div id="project-workspace-header" style="display: none; padding: 16px 24px; border-bottom: 1px solid #e2e8f0; background: #f8fafc;">
                             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
                                 <h3 id="current-project-title" style="margin: 0; font-size: 16px; color: #0f172a;"></h3>
-                                <div style="display: flex; gap: 8px;">
+                                <div style="display: flex; gap: 8px; align-items: center;">
+                                    <select id="doc-type-select" class="settings-input" style="height: 32px; padding: 0 10px; font-size: 13px; width: auto; background: #fff; margin-right: 4px;">
+                                        <option value="Xây dựng tài liệu báo giá">Xây dựng tài liệu báo giá</option>
+                                        <option value="Xây dựng Sale Pitch">Xây dựng Sale Pitch</option>
+                                        <option value="Xây dựng Tài liệu giải pháp">Xây dựng Tài liệu giải pháp</option>
+                                        <option value="Phân tích & Tóm tắt RFP">Phân tích & Tóm tắt RFP</option>
+                                    </select>
                                     <button class="quick-action-btn" style="height: 32px; display: flex; align-items: center;" onclick="shareProject()">🔗 Chia sẻ</button>
                                     <input type="file" id="project-file-upload" style="display: none;" accept=".pdf,.doc,.docx,.txt" multiple>
                                     <button class="send-btn" style="height: 32px; padding: 0 12px; font-size: 13px;" onclick="document.getElementById('project-file-upload').click()">+ Tải tài liệu lên</button>
@@ -942,6 +934,25 @@ if ($check_col2 && $check_col2->num_rows == 0) {
 
                         <!-- Input -->
                         <div class="chat-input-area">
+                            <!-- Quick Actions -->
+                            <div class="quick-actions" style="padding: 0 0 12px 0; border: none; background: transparent;">
+                                <?php
+                                try {
+                                    $prompts = $conn->query("SELECT action_key, title FROM presale_prompts ORDER BY id ASC");
+                                    if ($prompts && $prompts->num_rows > 0) {
+                                        while ($p = $prompts->fetch_assoc()) {
+                                            echo "<button class='quick-action-btn' data-action='{$p['action_key']}'>" . htmlspecialchars($p['title']) . "</button>";
+                                        }
+                                    } else {
+                                        echo "<button class='quick-action-btn' data-action='qna'>Q&A Presale</button>";
+                                        echo "<button class='quick-action-btn' data-action='create_sow'>Tạo SOW / Proposal Draft</button>";
+                                    }
+                                } catch (Exception $e) {
+                                    echo "<button class='quick-action-btn' data-action='qna'>Q&A Presale</button>";
+                                    echo "<button class='quick-action-btn' data-action='create_sow'>Tạo SOW / Proposal Draft</button>";
+                                }
+                                ?>
+                            </div>
                             <!-- Hiển thị tên file đã đính kèm -->
                             <div id="attachment-preview" style="display: none; padding-bottom: 8px; font-size: 13px; color: #4f46e5; align-items: center; gap: 6px;">
                                 📎 <span id="attachment-name"></span>
@@ -1713,6 +1724,9 @@ if ($check_col2 && $check_col2->num_rows == 0) {
                     const hourlyRate = document.getElementById('hourly-rate-select')?.value || '15';
                     const budget = document.getElementById('budget-input')?.value || '0';
                     const customerName = document.getElementById('customer-select')?.value || '';
+                    const docType = document.getElementById('doc-type-select')?.value || '';
+                    const figmaSummary = document.getElementById('figma-summary-input')?.value || '';
+                    const visionSummary = document.getElementById('vision-summary-input')?.value || '';
 
                     formData.append('action', 'send_message');
                     formData.append('content', text);
@@ -1721,6 +1735,9 @@ if ($check_col2 && $check_col2->num_rows == 0) {
                     
                     formData.append('platform', platform);
                     formData.append('project_type', projectType);
+                    formData.append('doc_type', docType);
+                    formData.append('figma_summary', figmaSummary);
+                    formData.append('vision_summary', visionSummary);
                     formData.append('hourly_rate', hourlyRate);
                     formData.append('budget', budget);
                     formData.append('customer_name', customerName);
@@ -1823,9 +1840,11 @@ if ($check_col2 && $check_col2->num_rows == 0) {
             document.querySelectorAll('.quick-action-btn').forEach(btn => {
                 btn.addEventListener('click', function() {
                     const action = this.getAttribute('data-action');
-                    currentActionKey = action;
-                    chatInput.value = "Tôi muốn " + this.textContent + ": \n";
-                    chatInput.focus();
+                    if (action) {
+                        currentActionKey = action;
+                        chatInput.value = "Tôi muốn " + this.textContent.trim() + ": \n";
+                        chatInput.focus();
+                    }
                 });
             });
 
@@ -2005,6 +2024,115 @@ if ($check_col2 && $check_col2->num_rows == 0) {
             }
 
             window.allCustomers = <?php echo json_encode($customers); ?>;
+
+            window.fetchFigmaData = async function() {
+                const url = document.getElementById('figma-url').value;
+                const token = document.getElementById('figma-token').value;
+                const status = document.getElementById('figma-status');
+                const btn = document.getElementById('btn-fetch-figma');
+
+                if (!url || !token) return alert('Vui lòng nhập đầy đủ URL và Token!');
+
+                status.style.display = 'block';
+                status.innerHTML = '⏳ Đang kết nối Figma API...';
+                btn.disabled = true;
+
+                try {
+                    const fd = new FormData();
+                    fd.append('action', 'fetch_figma_data');
+                    fd.append('figma_url', url);
+                    fd.append('figma_token', token);
+
+                    const response = await fetch('/presale/ajax-handler', {
+                        method: 'POST',
+                        body: fd
+                    });
+                    const res = await response.json();
+
+                    if (res.success) {
+                        let totalScreens = 0;
+                        res.data.pages.forEach(p => totalScreens += p.screens.length);
+                        
+                        status.innerHTML = `✅ Thành công: Tìm thấy <b>${res.data.pages.length}</b> trang, <b>${totalScreens}</b> màn hình.`;
+                        document.getElementById('figma-summary-input').value = JSON.stringify(res.data);
+                        
+                        // Hiển thị danh sách chi tiết để người dùng xem
+                        const preview = document.getElementById('figma-preview-list');
+                        preview.style.display = 'block';
+                        let html = '<div style="font-weight: 600; margin-bottom: 8px; border-bottom: 1px solid #e2e8f0; padding-bottom: 4px;">Chi tiết thiết kế:</div>';
+                        res.data.pages.forEach(p => {
+                            html += `<div style="color: #4f46e5; font-weight: 600; font-size: 11px; margin-top: 8px;">📄 ${p.name}</div>`;
+                            p.screens.forEach(s => {
+                                html += `<div style="padding-left: 10px; margin-top: 4px;">• <b>${s.name}</b></div>`;
+                                if (s.sections && s.sections.length > 0) {
+                                    html += `<div style="padding-left: 20px; font-size: 11px; color: #64748b;">└ ${s.sections.join(', ')}</div>`;
+                                }
+                            });
+                        });
+                        preview.innerHTML = html;
+                        
+                        // Thông báo vào ô chat để người dùng biết
+                        chatInput.value = `Dữ liệu thiết kế Figma đã được tải: "${res.data.name}". Có ${res.data.pages.length} trang và ${totalScreens} màn hình chi tiết. Hãy lập SOW dựa trên cấu trúc này.`;
+                        chatInput.focus();
+                    } else {
+                        status.innerHTML = `❌ Lỗi: ${res.message}`;
+                    }
+                } catch (e) {
+                    status.innerHTML = '❌ Lỗi kết nối.';
+                    console.error(e);
+                } finally {
+                    btn.disabled = false;
+                }
+            };
+
+            window.analyzeMockupImage = async function() {
+                const fileInput = document.getElementById('mockup-image-upload');
+                const file = fileInput.files[0];
+                const status = document.getElementById('vision-status');
+                const btn = document.getElementById('btn-analyze-mockup');
+
+                if (!file) return alert('Vui lòng chọn ảnh Mockup!');
+
+                status.style.display = 'block';
+                status.innerHTML = '⏳ Đang chạy YOLOv8 & OCR (Local)...';
+                btn.disabled = true;
+
+                try {
+                    const fd = new FormData();
+                    fd.append('action', 'analyze_design_image');
+                    fd.append('mockup_image', file);
+
+                    const response = await fetch('/presale/ajax-handler', {
+                        method: 'POST',
+                        body: fd
+                    });
+                    const res = await response.json();
+
+                    if (res.success) {
+                        status.innerHTML = `✅ Phân tích xong: Tìm thấy <b>${res.data.length}</b> khối nội dung.`;
+                        document.getElementById('vision-summary-input').value = JSON.stringify(res.data);
+                        
+                        const preview = document.getElementById('vision-preview-list');
+                        preview.style.display = 'block';
+                        let html = '<div style="font-weight: 600; margin-bottom: 8px; border-bottom: 1px solid #e2e8f0; padding-bottom: 4px;">Kết quả Vision (Local):</div>';
+                        res.data.forEach(v => {
+                            html += `<div style="margin-top: 8px;">• <b>${v.name}</b></div>`;
+                            html += `<div style="font-size: 11px; color: #64748b; padding-left: 10px;">${v.summary}</div>`;
+                        });
+                        preview.innerHTML = html;
+
+                        chatInput.value = `Đã phân tích ảnh Mockup: Tìm thấy ${res.data.length} khối chức năng. Hãy lập SOW dựa trên các thành phần này.`;
+                        chatInput.focus();
+                    } else {
+                        status.innerHTML = `❌ Lỗi: ${res.message}`;
+                    }
+                } catch (e) {
+                    status.innerHTML = '❌ Lỗi kết nối Python.';
+                    console.error(e);
+                } finally {
+                    btn.disabled = false;
+                }
+            };
         });
     </script>
     <!-- Sidebar Overlay -->
@@ -2063,6 +2191,32 @@ if ($check_col2 && $check_col2->num_rows == 0) {
                     <option value="35">35 $ / h</option>
                     <option value="40">40 $ / h</option>
                 </select>
+            </div>
+
+            <!-- Figma Integration -->
+            <div class="settings-group" style="border-top: 1px solid #e2e8f0; padding-top: 15px; margin-top: 15px;">
+                <label style="color: #4f46e5; display: flex; align-items: center; gap: 6px; font-weight: 600;">
+                    <svg width="14" height="14" viewBox="0 0 38 57" fill="none"><path d="M19 28.5C19 25.8478 20.0536 23.3043 21.9289 21.4289C23.8043 19.5536 26.3478 18.5 29 18.5C31.6522 18.5 34.1957 19.5536 36.0711 21.4289C37.9464 23.3043 39 25.8478 39 28.5C39 31.1522 37.9464 33.6957 36.0711 35.5711C34.1957 37.4464 31.6522 38.5 29 38.5C26.3478 38.5 23.8043 37.4464 21.9289 35.5711C20.0536 33.6957 19 31.1522 19 28.5Z" fill="#1ABCFE"/><path d="M0 47.5C0 44.8478 1.05357 42.3043 2.92893 40.4289C4.8043 38.5536 7.34784 37.5 10 37.5C12.6522 37.5 15.1957 38.5536 17.0711 40.4289C18.9464 42.3043 20 44.8478 20 47.5C20 50.1522 18.9464 52.6957 17.0711 54.5711C15.1957 56.4464 12.6522 57.5 10 57.5C7.34784 57.5 4.8043 56.4464 2.92893 54.5711C1.05357 52.6957 0 50.1522 0 47.5Z" fill="#0ACF83"/><path d="M0 28.5C0 25.8478 1.05357 23.3043 2.92893 21.4289C4.8043 19.5536 7.34784 18.5 10 18.5H19V38.5H10C7.34784 38.5 4.8043 37.4464 2.92893 35.5711C1.05357 33.6957 0 31.1522 0 28.5Z" fill="#A259FF"/><path d="M0 9.5C0 6.84784 1.05357 4.3043 2.92893 2.42893C4.8043 0.553571 7.34784 -4.76837e-07 10 0H19V19H10C7.34784 19 4.8043 18.4464 2.92893 16.5711C1.05357 14.6957 0 12.1522 0 9.5Z" fill="#F24E1E"/><path d="M19 0H28C30.6522 0 33.1957 1.05357 35.0711 2.92893C36.9464 4.8043 38 7.34784 38 9.5C38 12.1522 36.9464 14.6957 35.0711 16.5711C33.1957 18.4464 30.6522 19 28 19H19V0Z" fill="#FF7262"/></svg>
+                    Nhập dữ liệu từ Figma
+                </label>
+                <input type="text" id="figma-url" class="settings-input" placeholder="URL file Figma..." style="margin-top: 8px;">
+                <input type="password" id="figma-token" class="settings-input" placeholder="Personal Access Token..." style="margin-top: 8px;">
+                <button onclick="fetchFigmaData()" id="btn-fetch-figma" class="send-btn" style="width: 100%; margin-top: 8px; height: 36px; background: #000;">Phân tích thiết kế</button>
+                <div id="figma-status" style="margin-top: 8px; font-size: 12px; color: #64748b; display: none;"></div>
+                <div id="figma-preview-list" style="margin-top: 12px; font-size: 12px; background: #f8fafc; border: 1px solid #e2e8f0; padding: 10px; border-radius: 6px; max-height: 300px; overflow-y: auto; display: none;"></div>
+                <input type="hidden" id="figma-summary-input">
+            </div>
+
+            <!-- Vision Analysis (Local Mockup) -->
+            <div class="settings-group" style="border-top: 1px solid #e2e8f0; padding-top: 15px; margin-top: 15px;">
+                <label style="color: #10b981; display: flex; align-items: center; gap: 6px; font-weight: 600;">
+                    🖼️ Phân tích ảnh Mockup (Local)
+                </label>
+                <input type="file" id="mockup-image-upload" class="settings-input" accept="image/*" style="margin-top: 8px;">
+                <button onclick="analyzeMockupImage()" id="btn-analyze-mockup" class="send-btn" style="width: 100%; margin-top: 8px; height: 36px; background: #10b981;">Phân tích bằng YOLOv8</button>
+                <div id="vision-status" style="margin-top: 8px; font-size: 12px; color: #64748b; display: none;"></div>
+                <div id="vision-preview-list" style="margin-top: 12px; font-size: 12px; background: #f0fdf4; border: 1px solid #bbf7d0; padding: 10px; border-radius: 6px; max-height: 300px; overflow-y: auto; display: none;"></div>
+                <input type="hidden" id="vision-summary-input">
             </div>
 
             <!-- Target Budget -->

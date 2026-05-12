@@ -147,9 +147,34 @@ if ($action === 'send_message') {
         $project_type = $_POST['project_type'] ?? 'N/A';
         $budget = $_POST['budget'] ?? '0';
         $customer_name = $_POST['customer_name'] ?? 'N/A';
+        $doc_type = $_POST['doc_type'] ?? 'Xây dựng tài liệu báo giá';
+        $figma_summary = $_POST['figma_summary'] ?? '';
+        $vision_summary = $_POST['vision_summary'] ?? '';
 
         $project_context = "### CẤU HÌNH DỰ ÁN (PROJECT CONFIGURATION):\n";
         $project_context .= "- Khách hàng (Client): $customer_name\n";
+        $project_context .= "- Loại tài liệu/Mục tiêu: **$doc_type**\n";
+        
+        if (!empty($figma_summary)) {
+            $figma = json_decode($figma_summary, true);
+            $project_context .= "- DỮ LIỆU THIẾT KẾ (FIGMA): Dự án \"{$figma['name']}\"\n";
+            foreach ($figma['pages'] as $page) {
+                $project_context .= "  + Trang (Page): {$page['name']}\n";
+                foreach ($page['screens'] as $screen) {
+                    $sections = !empty($screen['sections']) ? " (Gồm các phần: " . implode(', ', $screen['sections']) . ")" : "";
+                    $project_context .= "    - Màn hình (Screen): {$screen['name']}$sections\n";
+                }
+            }
+        }
+
+        if (!empty($vision_summary)) {
+            $vision = json_decode($vision_summary, true);
+            $project_context .= "- DỮ LIỆU PHÂN TÍCH ẢNH MOCKUP (LOCAL VISION):\n";
+            foreach ($vision as $v) {
+                $project_context .= "  + " . $v['name'] . ": " . $v['summary'] . "\n";
+            }
+            $project_context .= "  + CHỈ THỊ: Đây là cấu trúc bóc tách từ ảnh thiết kế thực tế. Hãy lập SOW dựa trên các khối nội dung này.\n";
+        }
         $project_context .= "- Nền tảng: $platform | Loại hình: $project_type | Rate: $hourly_rate USD/h\n";
         if (floatval($budget) > 0) {
             $project_context .= "- NGÂN SÁCH CỦA KHÁCH HÀNG: $budget USD\n";
@@ -157,10 +182,25 @@ if ($action === 'send_message') {
         }
         $project_context .= "\n";
 
+        // Specific instructions based on Document Type
+        if ($doc_type === 'Xây dựng tài liệu báo giá') {
+            $project_context .= "### CHỈ THỊ VỀ TÀI LIỆU BÁO GIÁ:\n";
+            $project_context .= "Tập trung vào tính chính xác của Estimation và SOW. Đảm bảo các bảng từ I đến VI đầy đủ và chuyên nghiệp theo định dạng quy chuẩn.\n\n";
+        } else if ($doc_type === 'Xây dựng Sale Pitch') {
+             $project_context .= "### CHỈ THỊ VỀ SALE PITCH:\n";
+             $project_context .= "Tập trung vào lợi ích (benefits), giải pháp giá trị (value proposition), và tại sao khách hàng nên chọn AHT cho dự án này. Giọng văn nên thuyết phục, tự tin và nhấn mạnh vào thế mạnh cạnh tranh.\n\n";
+        } else if ($doc_type === 'Xây dựng Tài liệu giải pháp') {
+             $project_context .= "### CHỈ THỊ VỀ GIẢI PHÁP KỸ THUẬT:\n";
+             $project_context .= "Tập trung vào kiến trúc hệ thống (Architecture), sơ đồ luồng dữ liệu (Data Flow), và các giải pháp kỹ thuật chi tiết để giải quyết triệt để các bài toán của khách hàng.\n\n";
+        } else if ($doc_type === 'Phân tích & Tóm tắt RFP') {
+             $project_context .= "### CHỈ THỊ VỀ PHÂN TÍCH RFP:\n";
+             $project_context .= "Tập trung vào việc trích xuất các yêu cầu cốt lõi, các điểm cần làm rõ (clarifications), các rủi ro tiềm ẩn và các mốc thời gian quan trọng từ tài liệu RFP của khách hàng.\n\n";
+        }
+
         $project_context .= "### QUY TẮC PHẢI TUÂN THỦ:\n";
         $project_context .= "1. Đọc kỹ dữ liệu 'KNOWLEDGE BASE' bên dưới để trích xuất scope. KHÔNG hỏi lại những gì đã có.\n";
         $project_context .= "2. Bắt buộc sử dụng đúng Platform ($platform) để tư vấn Tech Stack và rủi ro.\n";
-        $project_context .= "3. Output PHẢI luôn bao gồm đủ 6 phần (I đến VI) theo định dạng bảng Markdown.\n\n";
+        $project_context .= "3. Nếu là tài liệu báo giá, Output PHẢI luôn bao gồm đủ 6 phần (I đến VI) theo định dạng bảng Markdown.\n\n";
 
         $project_context .= "#### I. Development Scope\n[# | Process | Apply or Not | Remarks]\n\n";
         $project_context .= "#### II. Development Estimation\n[No | Screen/Function | Children function | Note | Time (h) | AHT's questions | Client's answers]\n\n";
@@ -708,6 +748,104 @@ if ($action === 'delete_project_file') {
         echo json_encode(['success' => true]);
     } catch (Exception $e) {
         echo json_encode(['success' => false, 'message' => $e->getMessage()]);
+    }
+    exit;
+}
+
+if ($action === 'fetch_figma_data') {
+    $figma_url = $_POST['figma_url'] ?? '';
+    $figma_token = $_POST['figma_token'] ?? '';
+    
+    if (empty($figma_url) || empty($figma_token)) {
+        echo json_encode(['success' => false, 'message' => 'Vui lòng cung cấp URL và Token.']);
+        exit;
+    }
+    
+    preg_match('/(?:file|design)\/([^\/]+)/', $figma_url, $matches);
+    $file_key = $matches[1] ?? '';
+    
+    if (empty($file_key)) {
+        echo json_encode(['success' => false, 'message' => 'URL Figma không hợp lệ.']);
+        exit;
+    }
+    
+    $ch = curl_init("https://api.figma.com/v1/files/$file_key?depth=3");
+    curl_setopt($ch, CURLOPT_HTTPHEADER, ["X-Figma-Token: $figma_token"]);
+    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+    $response = curl_exec($ch);
+    $http_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    
+    if ($http_code !== 200) {
+        $err = json_decode($response, true);
+        echo json_encode(['success' => false, 'message' => $err['err'] ?? "Lỗi API Figma (HTTP $http_code)"]);
+        exit;
+    }
+    
+    $data = json_decode($response, true);
+    $summary = [
+        'name' => $data['name'] ?? 'Dự án Figma',
+        'pages' => []
+    ];
+    
+    if (isset($data['document']['children'])) {
+        foreach ($data['document']['children'] as $page) {
+            if ($page['type'] === 'CANVAS') {
+                $pageData = [
+                    'name' => $page['name'],
+                    'screens' => []
+                ];
+                
+                if (isset($page['children'])) {
+                    foreach ($page['children'] as $frame) {
+                        // Only capture large frames that are likely screens
+                        if (($frame['type'] === 'FRAME' || $frame['type'] === 'GROUP') && ($frame['visible'] ?? true) !== false) {
+                            $screenData = [
+                                'name' => $frame['name'],
+                                'sections' => []
+                            ];
+                            
+                            // Look for sub-sections inside the screen
+                            if (isset($frame['children'])) {
+                                foreach ($frame['children'] as $sub) {
+                                    if (($sub['type'] === 'FRAME' || $sub['type'] === 'GROUP' || $sub['type'] === 'COMPONENT') && ($sub['visible'] ?? true) !== false) {
+                                        $screenData['sections'][] = $sub['name'];
+                                    }
+                                }
+                            }
+                            $pageData['screens'][] = $screenData;
+                        }
+                    }
+                }
+                
+                if (!empty($pageData['screens'])) {
+                    $summary['pages'][] = $pageData;
+                }
+            }
+        }
+    }
+    
+    echo json_encode(['success' => true, 'data' => $summary]);
+    exit;
+}
+
+if ($action === 'analyze_design_image') {
+    if (!isset($_FILES['mockup_image'])) {
+        echo json_encode(['success' => false, 'message' => 'Không có ảnh được tải lên']);
+        exit;
+    }
+
+    $tmpPath = $_FILES['mockup_image']['tmp_name'];
+    $pythonPath = __DIR__ . "/vision/venv/bin/python3";
+    $scriptPath = __DIR__ . "/vision/ui_analyzer.py";
+
+    $command = escapeshellarg($pythonPath) . " " . escapeshellarg($scriptPath) . " " . escapeshellarg($tmpPath) . " 2>&1";
+    $output = shell_exec($command);
+    
+    $res = json_decode($output, true);
+    if ($res) {
+        echo json_encode($res);
+    } else {
+        echo json_encode(['success' => false, 'message' => 'Lỗi thực thi script Python: ' . $output]);
     }
     exit;
 }
