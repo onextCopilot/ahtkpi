@@ -13,10 +13,6 @@ RewriteRule ^config/ - [F,L]
 RewriteCond %{ENV:REDIRECT_STATUS} ^$
 RewriteRule ^includes/ - [F,L]
 
-# Protect modules directory from direct access
-RewriteCond %{ENV:REDIRECT_STATUS} ^$
-RewriteRule ^modules/ - [F,L]
-
 # ============================================
 # URL Rewriting Rules - Clean URLs
 # ============================================
@@ -45,6 +41,7 @@ RewriteRule ^settings/teams/?$ modules/settings/teams/index.php [L]
 RewriteRule ^settings/sale-levels/?$ modules/settings/sale-levels/index.php [L]
 RewriteRule ^settings/odoo-rates/?$ modules/settings/odoo_rates/index.php [L]
 RewriteRule ^settings/backup/?$ modules/settings/backup/index.php [L]
+RewriteRule ^settings/workflow/?$ modules/settings/workflow/index.php [L]
 
 # Application Modules
 RewriteRule ^debt/?$ modules/debt/index.php [L]
@@ -61,10 +58,29 @@ RewriteRule ^sale-reports/?$ modules/sale_reports/index.php [L]
 RewriteRule ^sale_reports/?$ modules/sale_reports/index.php [L]
 RewriteRule ^sale-reports-admin/?$ modules/sale_reports_admin/index.php [L]
 
+# HRM Module
+RewriteRule ^hrm/?$ modules/hrm/index.php [L]
+RewriteRule ^hrm/e-hiring/?$ modules/hrm/e_hiring.php [L]
+RewriteRule ^hrm/company-info/?$ modules/hrm/company_info.php [L]
+RewriteRule ^hrm/permissions/?$ modules/hrm/permissions.php [L]
+RewriteRule ^hrm/proposal-settings/?$ modules/hrm/proposal_settings.php [L]
+RewriteRule ^hrm/other-settings/?$ modules/hrm/other_settings.php [L]
+RewriteRule ^hrm/candidate-sources/?$ modules/hrm/candidate_sources.php [L]
+RewriteRule ^hrm/rejection-reasons/?$ modules/hrm/rejection_reasons.php [L]
+RewriteRule ^hrm/expired-job-settings/?$ modules/hrm/expired_job_settings.php [L]
+RewriteRule ^hrm/evaluation-criteria/?$ modules/hrm/evaluation_criteria.php [L]
+RewriteRule ^hrm/job-post-create/?$ modules/hrm/job_post_create.php [L]
+RewriteRule ^hrm/system-settings/?$ modules/hrm/system_settings.php [L]
+RewriteRule ^hrm/ajax-handler/?$ modules/hrm/ajax_handler.php [L]
+
 # APIs
 RewriteRule ^api/kpi_tab_order/?$ api/kpi_tab_order.php [L]
 RewriteRule ^api/kpi_monthly_save/?$ api/kpi_monthly_save.php [L]
 RewriteRule ^api/kpi_quarterly_save/?$ api/kpi_quarterly_save.php [L]
+
+# Protect modules directory from direct access (MUST be after all rewrite rules)
+RewriteCond %{ENV:REDIRECT_STATUS} ^$
+RewriteRule ^modules/ - [F,L]
 
 # Home/Index: / -> index.php
 DirectoryIndex index.php

@@ -841,11 +841,18 @@ if ($action === 'analyze_design_image') {
     $command = escapeshellarg($pythonPath) . " " . escapeshellarg($scriptPath) . " " . escapeshellarg($tmpPath) . " 2>&1";
     $output = shell_exec($command);
     
-    $res = json_decode($output, true);
-    if ($res) {
-        echo json_encode($res);
+    // Tìm phần JSON trong output (đề phòng YOLO in log)
+    $jsonStart = strpos($output, '{"success"');
+    if ($jsonStart !== false) {
+        $cleanJson = substr($output, $jsonStart);
+        $res = json_decode($cleanJson, true);
+        if ($res) {
+            echo json_encode($res);
+        } else {
+            echo json_encode(['success' => false, 'message' => 'Lỗi parse JSON: ' . $output]);
+        }
     } else {
-        echo json_encode(['success' => false, 'message' => 'Lỗi thực thi script Python: ' . $output]);
+        echo json_encode(['success' => false, 'message' => 'Không tìm thấy dữ liệu JSON: ' . $output]);
     }
     exit;
 }

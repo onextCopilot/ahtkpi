@@ -598,6 +598,69 @@ if ($check_col2 && $check_col2->num_rows == 0) {
             margin-bottom: 40px;
             letter-spacing: 2px;
         }
+
+        /* Workspace Tab System */
+        .workspace-tabs {
+            display: flex;
+            gap: 2px;
+            padding: 0 24px;
+            background: #f8fafc;
+            border-bottom: 1px solid #e2e8f0;
+        }
+        .workspace-tab {
+            padding: 12px 24px;
+            font-size: 14px;
+            font-weight: 600;
+            color: #64748b;
+            cursor: pointer;
+            border-bottom: 2px solid transparent;
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .workspace-tab:hover {
+            color: #0f172a;
+            background: #f1f5f9;
+        }
+        .workspace-tab.active {
+            color: #4f46e5;
+            border-bottom-color: #4f46e5;
+            background: white;
+        }
+        .tab-content {
+            display: none;
+            flex: 1;
+            flex-direction: column;
+            overflow: hidden;
+            background: white;
+        }
+        .tab-content.active {
+            display: flex;
+        }
+        .design-container {
+            padding: 30px;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 24px;
+            max-width: 900px;
+        }
+        .design-card {
+            background: white;
+            border: 1px solid #e2e8f0;
+            border-radius: 12px;
+            padding: 24px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+        }
+        .design-card h4 {
+            margin: 0 0 15px 0;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 17px;
+            color: #1e293b;
+        }
         .cover-info {
             margin-top: 0;
             background: #f8fafc;
@@ -847,7 +910,7 @@ if ($check_col2 && $check_col2->num_rows == 0) {
                             <button id="dark-mode-toggle" style="background: none; border: none; cursor: pointer; font-size: 18px;" title="Chuyển chế độ Sáng/Tối">🌓</button>
                         </div>
                         <div class="sidebar-search">
-                            <input type="text" id="project-search" placeholder="Tìm kiếm dự án...">
+                            <input type="text" id="project-search" placeholder="Tìm kiếm dự án..." autocomplete="off">
                         </div>
                         <div style="padding: 16px; border-bottom: 1px solid var(--border-color); display: flex; flex-direction: column; gap: 8px;">
                             <a href="javascript:void(0)" class="new-chat-btn" id="new-chat-btn" onclick="handleNewChat()" style="margin: 0; width: 100%;">+ Chat mới</a>
@@ -926,55 +989,96 @@ if ($check_col2 && $check_col2->num_rows == 0) {
                         </div>
 
                         <!-- Messages -->
-                        <div class="chat-messages" id="chat-messages">
-                            <div class="message assistant">
-                                Xin chào! Tôi là trợ lý AI Sale/Presale. Tôi có thể giúp bạn trả lời câu hỏi nghiệp vụ, viết nháp Proposal/SOW, gợi ý Tech Stack, hoặc tìm kiếm Case Study tương tự.
-                            </div>
+                        <div class="workspace-tabs" id="workspace-tabs" style="display: none;">
+                            <div class="workspace-tab active" onclick="switchTab('chat')">💬 Hội thoại</div>
+                            <div class="workspace-tab" onclick="switchTab('design')">🎨 Thiết kế (Figma/Vision)</div>
                         </div>
 
-                        <!-- Input -->
-                        <div class="chat-input-area">
-                            <!-- Quick Actions -->
-                            <div class="quick-actions" style="padding: 0 0 12px 0; border: none; background: transparent;">
-                                <?php
-                                try {
-                                    $prompts = $conn->query("SELECT action_key, title FROM presale_prompts ORDER BY id ASC");
-                                    if ($prompts && $prompts->num_rows > 0) {
-                                        while ($p = $prompts->fetch_assoc()) {
-                                            echo "<button class='quick-action-btn' data-action='{$p['action_key']}'>" . htmlspecialchars($p['title']) . "</button>";
+                        <!-- Tab: Chat -->
+                        <div id="tab-chat" class="tab-content active">
+                            <div class="chat-messages" id="chat-messages">
+                                <div class="message assistant">
+                                    Xin chào! Tôi là trợ lý AI Sale/Presale. Tôi có thể giúp bạn trả lời câu hỏi nghiệp vụ, viết nháp Proposal/SOW, gợi ý Tech Stack, hoặc tìm kiếm Case Study tương tự.
+                                </div>
+                            </div>
+
+                            <div class="chat-input-area">
+                                <!-- Quick Actions -->
+                                <div class="quick-actions" style="padding: 0 0 12px 0; border: none; background: transparent;">
+                                    <?php
+                                    try {
+                                        $prompts = $conn->query("SELECT action_key, title FROM presale_prompts ORDER BY id ASC");
+                                        if ($prompts && $prompts->num_rows > 0) {
+                                            while ($p = $prompts->fetch_assoc()) {
+                                                echo "<button class='quick-action-btn' data-action='{$p['action_key']}'>" . htmlspecialchars($p['title']) . "</button>";
+                                            }
+                                        } else {
+                                            echo "<button class='quick-action-btn' data-action='qna'>Q&A Presale</button>";
+                                            echo "<button class='quick-action-btn' data-action='create_sow'>Tạo SOW / Proposal Draft</button>";
                                         }
-                                    } else {
+                                    } catch (Exception $e) {
                                         echo "<button class='quick-action-btn' data-action='qna'>Q&A Presale</button>";
                                         echo "<button class='quick-action-btn' data-action='create_sow'>Tạo SOW / Proposal Draft</button>";
                                     }
-                                } catch (Exception $e) {
-                                    echo "<button class='quick-action-btn' data-action='qna'>Q&A Presale</button>";
-                                    echo "<button class='quick-action-btn' data-action='create_sow'>Tạo SOW / Proposal Draft</button>";
-                                }
-                                ?>
+                                    ?>
+                                </div>
+                                <div id="attachment-preview" style="display: none; padding-bottom: 8px; font-size: 13px; color: #4f46e5; align-items: center; gap: 6px;">
+                                    📎 <span id="attachment-name"></span>
+                                    <button type="button" id="remove-attachment" style="background: none; border: none; color: #ef4444; cursor: pointer; font-size: 14px;">&times;</button>
+                                </div>
+                                
+                                <div class="chat-input-box">
+                                    <div id="mention-dropdown" class="mention-dropdown" style="display:none;"></div>
+                                    <input type="file" id="file-upload" style="display: none;" accept=".pdf,.doc,.docx,.txt" />
+                                    <button class="attach-btn" id="attach-btn" title="Đính kèm tài liệu RFP/RFQ">
+                                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
+                                    </button>
+                                    <button class="attach-btn" id="voice-btn" title="Nhập liệu bằng giọng nói" style="margin-right: 8px;">
+                                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                            <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path>
+                                            <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
+                                            <line x1="12" y1="19" x2="12" y2="23"></line>
+                                            <line x1="8" y1="23" x2="16" y2="23"></line>
+                                        </svg>
+                                    </button>
+                                    <textarea id="chat-input" placeholder="Nhập câu hỏi hoặc yêu cầu của bạn..." rows="1"></textarea>
+                                    <button class="send-btn" id="send-btn">Gửi</button>
+                                </div>
                             </div>
-                            <!-- Hiển thị tên file đã đính kèm -->
-                            <div id="attachment-preview" style="display: none; padding-bottom: 8px; font-size: 13px; color: #4f46e5; align-items: center; gap: 6px;">
-                                📎 <span id="attachment-name"></span>
-                                <button type="button" id="remove-attachment" style="background: none; border: none; color: #ef4444; cursor: pointer; font-size: 14px;">&times;</button>
-                            </div>
-                            
-                            <div class="chat-input-box">
-                                <div id="mention-dropdown" class="mention-dropdown" style="display:none;"></div>
-                                <input type="file" id="file-upload" style="display: none;" accept=".pdf,.doc,.docx,.txt" />
-                                <button class="attach-btn" id="attach-btn" title="Đính kèm tài liệu RFP/RFQ">
-                                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
-                                </button>
-                                <button class="attach-btn" id="voice-btn" title="Nhập liệu bằng giọng nói" style="margin-right: 8px;">
-                                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                        <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path>
-                                        <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
-                                        <line x1="12" y1="19" x2="12" y2="23"></line>
-                                        <line x1="8" y1="23" x2="16" y2="23"></line>
-                                    </svg>
-                                </button>
-                                <textarea id="chat-input" placeholder="Nhập câu hỏi hoặc yêu cầu của bạn..." rows="1"></textarea>
-                                <button class="send-btn" id="send-btn">Gửi</button>
+                        </div>
+
+                        <!-- Tab: Design -->
+                        <div id="tab-design" class="tab-content">
+                            <div class="design-container">
+                                <div class="design-card">
+                                    <h4><span style="color:#4f46e5;">🎨</span> Nhập dữ liệu từ Figma</h4>
+                                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px;">
+                                        <div>
+                                            <label style="font-size: 12px; color: #64748b;">Figma File URL</label>
+                                            <input type="text" id="figma-url" class="settings-input" placeholder="https://www.figma.com/file/..." style="margin-top: 4px;">
+                                        </div>
+                                        <div>
+                                            <label style="font-size: 12px; color: #64748b;">Personal Access Token</label>
+                                            <input type="password" id="figma-token" class="settings-input" placeholder="Token..." style="margin-top: 4px;">
+                                        </div>
+                                    </div>
+                                    <button onclick="fetchFigmaData()" id="btn-fetch-figma" class="send-btn" style="width: 200px; height: 36px; background: #000;">Phân tích thiết kế Figma</button>
+                                    <div id="figma-status" style="margin-top: 8px; font-size: 12px; color: #64748b; display: none;"></div>
+                                    <div id="figma-preview-list" style="margin-top: 12px; font-size: 12px; background: #f8fafc; border: 1px solid #e2e8f0; padding: 15px; border-radius: 8px; max-height: 400px; overflow-y: auto; display: none;"></div>
+                                    <input type="hidden" id="figma-summary-input">
+                                </div>
+
+                                <div class="design-card">
+                                    <h4><span style="color:#10b981;">🖼️</span> Phân tích ảnh Mockup (Local Vision)</h4>
+                                    <div style="margin-bottom: 15px;">
+                                        <label style="font-size: 12px; color: #64748b;">Chọn ảnh thiết kế của bạn (PNG/JPG)</label>
+                                        <input type="file" id="mockup-image-upload" class="settings-input" accept="image/*" style="margin-top: 4px; padding: 6px;">
+                                    </div>
+                                    <button onclick="analyzeMockupImage()" id="btn-analyze-mockup" class="send-btn" style="width: 250px; height: 36px; background: #10b981;">Phân tích bằng AI Vision (Local)</button>
+                                    <div id="vision-status" style="margin-top: 8px; font-size: 12px; color: #64748b; display: none;"></div>
+                                    <div id="vision-preview-list" style="margin-top: 12px; font-size: 12px; background: #f0fdf4; border: 1px solid #bbf7d0; padding: 15px; border-radius: 8px; max-height: 400px; overflow-y: auto; display: none;"></div>
+                                    <input type="hidden" id="vision-summary-input">
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -1103,7 +1207,24 @@ if ($check_col2 && $check_col2->num_rows == 0) {
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <script>
+        // Tab switching logic
+        window.switchTab = function(tabName) {
+            document.querySelectorAll('.workspace-tab').forEach(t => t.classList.remove('active'));
+            document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+            
+            if (tabName === 'chat') {
+                document.querySelector('.workspace-tab:nth-child(1)').classList.add('active');
+                document.getElementById('tab-chat').classList.add('active');
+            } else {
+                document.querySelector('.workspace-tab:nth-child(2)').classList.add('active');
+                document.getElementById('tab-design').classList.add('active');
+            }
+        };
+
         document.addEventListener('DOMContentLoaded', function() {
+            const projectSearchInput = document.getElementById('project-search');
+            if (projectSearchInput) projectSearchInput.value = ''; // Xóa trắng ô tìm kiếm khi load lại trang
+            
             const sendBtn = document.getElementById('send-btn');
             const chatInput = document.getElementById('chat-input');
             const chatMessages = document.getElementById('chat-messages');
@@ -1915,6 +2036,8 @@ if ($check_col2 && $check_col2->num_rows == 0) {
                 localStorage.setItem('presale_active_project', projectId); // Đảm bảo ghi nhớ dự án đang xem chat
                 document.getElementById('current-project-title').textContent = projectTitle;
                 document.getElementById('project-workspace-header').style.display = 'block';
+                document.getElementById('workspace-tabs').style.display = 'flex';
+                switchTab('chat'); // Luôn bắt đầu ở tab chat
                 loadProjectFiles(projectId);
 
                 chatMessages.innerHTML = '<div style="text-align:center; padding: 20px; color:#64748b;">Đang tải dữ liệu...</div>';
@@ -2025,65 +2148,6 @@ if ($check_col2 && $check_col2->num_rows == 0) {
 
             window.allCustomers = <?php echo json_encode($customers); ?>;
 
-            window.fetchFigmaData = async function() {
-                const url = document.getElementById('figma-url').value;
-                const token = document.getElementById('figma-token').value;
-                const status = document.getElementById('figma-status');
-                const btn = document.getElementById('btn-fetch-figma');
-
-                if (!url || !token) return alert('Vui lòng nhập đầy đủ URL và Token!');
-
-                status.style.display = 'block';
-                status.innerHTML = '⏳ Đang kết nối Figma API...';
-                btn.disabled = true;
-
-                try {
-                    const fd = new FormData();
-                    fd.append('action', 'fetch_figma_data');
-                    fd.append('figma_url', url);
-                    fd.append('figma_token', token);
-
-                    const response = await fetch('/presale/ajax-handler', {
-                        method: 'POST',
-                        body: fd
-                    });
-                    const res = await response.json();
-
-                    if (res.success) {
-                        let totalScreens = 0;
-                        res.data.pages.forEach(p => totalScreens += p.screens.length);
-                        
-                        status.innerHTML = `✅ Thành công: Tìm thấy <b>${res.data.pages.length}</b> trang, <b>${totalScreens}</b> màn hình.`;
-                        document.getElementById('figma-summary-input').value = JSON.stringify(res.data);
-                        
-                        // Hiển thị danh sách chi tiết để người dùng xem
-                        const preview = document.getElementById('figma-preview-list');
-                        preview.style.display = 'block';
-                        let html = '<div style="font-weight: 600; margin-bottom: 8px; border-bottom: 1px solid #e2e8f0; padding-bottom: 4px;">Chi tiết thiết kế:</div>';
-                        res.data.pages.forEach(p => {
-                            html += `<div style="color: #4f46e5; font-weight: 600; font-size: 11px; margin-top: 8px;">📄 ${p.name}</div>`;
-                            p.screens.forEach(s => {
-                                html += `<div style="padding-left: 10px; margin-top: 4px;">• <b>${s.name}</b></div>`;
-                                if (s.sections && s.sections.length > 0) {
-                                    html += `<div style="padding-left: 20px; font-size: 11px; color: #64748b;">└ ${s.sections.join(', ')}</div>`;
-                                }
-                            });
-                        });
-                        preview.innerHTML = html;
-                        
-                        // Thông báo vào ô chat để người dùng biết
-                        chatInput.value = `Dữ liệu thiết kế Figma đã được tải: "${res.data.name}". Có ${res.data.pages.length} trang và ${totalScreens} màn hình chi tiết. Hãy lập SOW dựa trên cấu trúc này.`;
-                        chatInput.focus();
-                    } else {
-                        status.innerHTML = `❌ Lỗi: ${res.message}`;
-                    }
-                } catch (e) {
-                    status.innerHTML = '❌ Lỗi kết nối.';
-                    console.error(e);
-                } finally {
-                    btn.disabled = false;
-                }
-            };
 
             window.analyzeMockupImage = async function() {
                 const fileInput = document.getElementById('mockup-image-upload');
@@ -2116,8 +2180,13 @@ if ($check_col2 && $check_col2->num_rows == 0) {
                         preview.style.display = 'block';
                         let html = '<div style="font-weight: 600; margin-bottom: 8px; border-bottom: 1px solid #e2e8f0; padding-bottom: 4px;">Kết quả Vision (Local):</div>';
                         res.data.forEach(v => {
-                            html += `<div style="margin-top: 8px;">• <b>${v.name}</b></div>`;
-                            html += `<div style="font-size: 11px; color: #64748b; padding-left: 10px;">${v.summary}</div>`;
+                            html += `<div style="margin-top: 12px; border-left: 3px solid #10b981; padding-left: 10px;">`;
+                            html += `<div style="font-weight: 700; color: #065f46;">• ${v.name}</div>`;
+                            if (v.components && v.components.length > 0) {
+                                html += `<div style="font-size: 10px; background: #dcfce7; color: #166534; display: inline-block; padding: 2px 6px; border-radius: 4px; margin: 4px 0;">Thành phần: ${v.components.join(', ')}</div>`;
+                            }
+                            html += `<div style="font-size: 11px; color: #64748b; line-height: 1.4;">${v.summary}</div>`;
+                            html += `</div>`;
                         });
                         preview.innerHTML = html;
 
@@ -2193,31 +2262,6 @@ if ($check_col2 && $check_col2->num_rows == 0) {
                 </select>
             </div>
 
-            <!-- Figma Integration -->
-            <div class="settings-group" style="border-top: 1px solid #e2e8f0; padding-top: 15px; margin-top: 15px;">
-                <label style="color: #4f46e5; display: flex; align-items: center; gap: 6px; font-weight: 600;">
-                    <svg width="14" height="14" viewBox="0 0 38 57" fill="none"><path d="M19 28.5C19 25.8478 20.0536 23.3043 21.9289 21.4289C23.8043 19.5536 26.3478 18.5 29 18.5C31.6522 18.5 34.1957 19.5536 36.0711 21.4289C37.9464 23.3043 39 25.8478 39 28.5C39 31.1522 37.9464 33.6957 36.0711 35.5711C34.1957 37.4464 31.6522 38.5 29 38.5C26.3478 38.5 23.8043 37.4464 21.9289 35.5711C20.0536 33.6957 19 31.1522 19 28.5Z" fill="#1ABCFE"/><path d="M0 47.5C0 44.8478 1.05357 42.3043 2.92893 40.4289C4.8043 38.5536 7.34784 37.5 10 37.5C12.6522 37.5 15.1957 38.5536 17.0711 40.4289C18.9464 42.3043 20 44.8478 20 47.5C20 50.1522 18.9464 52.6957 17.0711 54.5711C15.1957 56.4464 12.6522 57.5 10 57.5C7.34784 57.5 4.8043 56.4464 2.92893 54.5711C1.05357 52.6957 0 50.1522 0 47.5Z" fill="#0ACF83"/><path d="M0 28.5C0 25.8478 1.05357 23.3043 2.92893 21.4289C4.8043 19.5536 7.34784 18.5 10 18.5H19V38.5H10C7.34784 38.5 4.8043 37.4464 2.92893 35.5711C1.05357 33.6957 0 31.1522 0 28.5Z" fill="#A259FF"/><path d="M0 9.5C0 6.84784 1.05357 4.3043 2.92893 2.42893C4.8043 0.553571 7.34784 -4.76837e-07 10 0H19V19H10C7.34784 19 4.8043 18.4464 2.92893 16.5711C1.05357 14.6957 0 12.1522 0 9.5Z" fill="#F24E1E"/><path d="M19 0H28C30.6522 0 33.1957 1.05357 35.0711 2.92893C36.9464 4.8043 38 7.34784 38 9.5C38 12.1522 36.9464 14.6957 35.0711 16.5711C33.1957 18.4464 30.6522 19 28 19H19V0Z" fill="#FF7262"/></svg>
-                    Nhập dữ liệu từ Figma
-                </label>
-                <input type="text" id="figma-url" class="settings-input" placeholder="URL file Figma..." style="margin-top: 8px;">
-                <input type="password" id="figma-token" class="settings-input" placeholder="Personal Access Token..." style="margin-top: 8px;">
-                <button onclick="fetchFigmaData()" id="btn-fetch-figma" class="send-btn" style="width: 100%; margin-top: 8px; height: 36px; background: #000;">Phân tích thiết kế</button>
-                <div id="figma-status" style="margin-top: 8px; font-size: 12px; color: #64748b; display: none;"></div>
-                <div id="figma-preview-list" style="margin-top: 12px; font-size: 12px; background: #f8fafc; border: 1px solid #e2e8f0; padding: 10px; border-radius: 6px; max-height: 300px; overflow-y: auto; display: none;"></div>
-                <input type="hidden" id="figma-summary-input">
-            </div>
-
-            <!-- Vision Analysis (Local Mockup) -->
-            <div class="settings-group" style="border-top: 1px solid #e2e8f0; padding-top: 15px; margin-top: 15px;">
-                <label style="color: #10b981; display: flex; align-items: center; gap: 6px; font-weight: 600;">
-                    🖼️ Phân tích ảnh Mockup (Local)
-                </label>
-                <input type="file" id="mockup-image-upload" class="settings-input" accept="image/*" style="margin-top: 8px;">
-                <button onclick="analyzeMockupImage()" id="btn-analyze-mockup" class="send-btn" style="width: 100%; margin-top: 8px; height: 36px; background: #10b981;">Phân tích bằng YOLOv8</button>
-                <div id="vision-status" style="margin-top: 8px; font-size: 12px; color: #64748b; display: none;"></div>
-                <div id="vision-preview-list" style="margin-top: 12px; font-size: 12px; background: #f0fdf4; border: 1px solid #bbf7d0; padding: 10px; border-radius: 6px; max-height: 300px; overflow-y: auto; display: none;"></div>
-                <input type="hidden" id="vision-summary-input">
-            </div>
 
             <!-- Target Budget -->
             <div class="settings-group">

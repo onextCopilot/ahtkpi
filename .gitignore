@@ -83,3 +83,5 @@ desc_*.php
 uploads/hrm/cvs/*
 !uploads/hrm/cvs/.gitkeep
 \nuploads/hrm/temp/*\n!uploads/hrm/temp/.gitkeep
+modules/presale/vision/venv/
+modules/presale/vision/venv/
