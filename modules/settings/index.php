@@ -398,6 +398,53 @@ if ($res) {
                             </svg>
                         </div>
                     </a>
+
+                    <!-- AI Hive Configuration Module -->
+                    <a href="/settings/aihive" class="setting-card" style="border-color: #6366f1;">
+                        <div class="setting-icon" style="color: #6366f1; background: #eef2ff;">
+                            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path>
+                                <circle cx="12" cy="12" r="3"></circle>
+                            </svg>
+                        </div>
+                        <div class="setting-info">
+                            <h3>AI Hive (Presale)</h3>
+                            <p>Configure API Key and Model for the Sale/Presale AI Assistant.</p>
+                        </div>
+                        <div class="setting-arrow" style="color: #6366f1;">
+                            Configure AI Hive
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <line x1="5" y1="12" x2="19" y2="12"></line>
+                                <polyline points="12 5 19 12 12 19"></polyline>
+                            </svg>
+                        </div>
+                    </a>
+
+                    <!-- Presale Prompts Management Module -->
+                    <a href="/settings/presale-prompts" class="setting-card" style="border-color: #f59e0b;">
+                        <div class="setting-icon" style="color: #f59e0b; background: #fef3c7;">
+                            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
+                                <line x1="9" y1="10" x2="15" y2="10"></line>
+                                <line x1="9" y1="14" x2="15" y2="14"></line>
+                            </svg>
+                        </div>
+                        <div class="setting-info">
+                            <h3>Presale Prompts</h3>
+                            <p>Manage system prompts and quick actions for the Presale AI Assistant.</p>
+                        </div>
+                        <div class="setting-arrow" style="color: #f59e0b;">
+                            Manage Prompts
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <line x1="5" y1="12" x2="19" y2="12"></line>
+                                <polyline points="12 5 19 12 12 19"></polyline>
+                            </svg>
+                        </div>
+                    </a>
                 </div>
 
                 <!-- Online Users Block -->

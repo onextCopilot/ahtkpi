@@ -35,6 +35,8 @@ $routes = [
     '/settings/smtp' => 'modules/settings/smtp/index.php',
     '/settings/odoo' => 'modules/settings/odoo/index.php',
     '/settings/jira' => 'modules/settings/jira/index.php',
+    '/settings/aihive' => 'modules/settings/aihive/index.php',
+    '/settings/presale-prompts' => 'modules/settings/presale-prompts/index.php',
     '/settings/teams' => 'modules/settings/teams/index.php',
     '/settings/sale-levels' => 'modules/settings/sale-levels/index.php',
     '/settings/odoo-rates' => 'modules/settings/odoo_rates/index.php',
@@ -79,6 +81,8 @@ $routes = [
     '/hrm/email-template-detail' => 'modules/hrm/email_template_detail.php',
     '/hrm/interview-templates' => 'modules/hrm/interview_templates.php',
     '/hrm/interview-template-detail' => 'modules/hrm/interview_template_detail.php',
+    '/presale' => 'modules/presale/index.php',
+    '/presale/ajax-handler' => 'modules/presale/ajax_handler.php',
 ];
 
 // DEBUG: log URI + match result
