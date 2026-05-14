@@ -256,6 +256,59 @@ $pb_data = $pb_res->fetch_assoc();
 $dashboard_total_plan = (float)($pb_data['total_plan'] ?? 0);
 $dashboard_total_actual = (float)($pb_data['total_actual'] ?? 0);
 
+// ── Break-even chart data ─────────────────────────────────────────────────────
+$bev_year = (int)date('Y');
+if ($filter_year > 0) $bev_year = $filter_year;
+
+$conn->query("CREATE TABLE IF NOT EXISTS budget_quarterly_status (year INT, quarter INT, rec_status INT DEFAULT 0, inv_status INT DEFAULT 0, plan_status INT DEFAULT 0, PRIMARY KEY(year, quarter))");
+$conn->query("SET @col_bev = (SELECT COUNT(*) FROM information_schema.columns WHERE table_name='budget_quarterly_status' AND table_schema=DATABASE() AND column_name='plan_status')");
+$conn->query("SET @sql_bev = IF(@col_bev=0,'ALTER TABLE budget_quarterly_status ADD COLUMN plan_status INT DEFAULT 0','SELECT 1')");
+$conn->query("PREPARE stmt_bev FROM @sql_bev");
+$conn->query("EXECUTE stmt_bev");
+
+$bev_owner_filter = ($role !== 'admin') ? " AND s.owner = '" . $conn->real_escape_string($full_name) . "'" : "";
+
+$bev_ps_map = [];
+$res_bev_ps = $conn->query("SELECT quarter, plan_status FROM budget_quarterly_status WHERE year = $bev_year");
+if ($res_bev_ps) while ($r = $res_bev_ps->fetch_assoc()) $bev_ps_map[$r['quarter']] = intval($r['plan_status']);
+
+$bev_revenue = [0,0,0,0];
+$bev_expense = [0,0,0,0];
+$bev_actual  = [0,0,0,0];
+
+for ($q = 1; $q <= 4; $q++) {
+    $ps = $bev_ps_map[$q] ?? 2; if ($ps == 0) $ps = 2;
+    $rec_col = ($ps==1?'rec_rev_good':($ps==3?'rec_rev_bad':'rec_rev_avg'));
+    $inv_col = ($ps==1?'inv_rev_good':($ps==3?'inv_rev_bad':'inv_rev_avg'));
+    $p_key   = ($ps==1?'planned_good':($ps==3?'planned_bad':'planned_avg'));
+
+    // Revenue
+    $res_r = $conn->query("SELECT SUM(IFNULL(s.$rec_col,0) + IFNULL(s.$inv_col,0)) as total 
+                           FROM budget_structure s 
+                           WHERE s.year=$bev_year AND s.quarter=$q AND s.type='item' $bev_owner_filter");
+    $bev_revenue[$q-1] = floatval($res_r ? ($res_r->fetch_assoc()['total'] ?? 0) : 0);
+
+    // Planned Expense
+    $res_e = $conn->query("SELECT SUM(v.amount) as total 
+                           FROM budget_values v 
+                           JOIN budget_structure s ON v.item_id=s.id AND s.year=$bev_year AND s.quarter=$q 
+                           WHERE v.year=$bev_year AND v.quarter=$q AND v.month=0 AND v.value_type='$p_key' $bev_owner_filter");
+    $bev_expense[$q-1] = floatval($res_e ? ($res_e->fetch_assoc()['total'] ?? 0) : 0);
+
+    // Actual Expense
+    $months_q = [1=>[1,2,3],2=>[4,5,6],3=>[7,8,9],4=>[10,11,12]][$q];
+    $m_in = implode(',', $months_q);
+    $res_a = $conn->query("SELECT SUM(v.amount) as total 
+                           FROM budget_values v 
+                           JOIN budget_structure s ON v.item_id=s.id AND s.year=$bev_year AND s.quarter=$q 
+                           WHERE v.year=$bev_year AND v.quarter=$q AND v.month IN($m_in) AND v.value_type IN('actual_salary','actual_other') $bev_owner_filter");
+    $bev_actual[$q-1] = floatval($res_a ? ($res_a->fetch_assoc()['total'] ?? 0) : 0);
+}
+
+// Find BEP quarter
+$bev_cum_r=0; $bev_cum_e=0; $bep_quarter=null;
+for($q=0;$q<4;$q++) { $bev_cum_r+=$bev_revenue[$q]; $bev_cum_e+=$bev_expense[$q]; if($bep_quarter===null && $bev_cum_r>=$bev_cum_e && $bev_cum_e>0) $bep_quarter=$q+1; }
+
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -465,6 +518,31 @@ $dashboard_total_actual = (float)($pb_data['total_actual'] ?? 0);
                     </div>
                 </div>
 
+                <!-- Break-even Chart -->
+                <div style="background:white; padding:20px; border-radius:12px; border:1px solid #e2e8f0; box-shadow:0 4px 6px -1px rgba(0,0,0,0.05); margin-bottom:24px;">
+                    <div style="display:flex; justify-content:space-between; align-items:flex-start; flex-wrap:wrap; gap:12px; margin-bottom:16px;">
+                        <div>
+                            <h3 style="margin:0; color:#0f172a; font-size:1.05rem;">📈 Break-even Analysis — <?php echo $bev_year; ?></h3>
+                            <p style="margin:4px 0 0; font-size:12px; color:#64748b;">Điểm giao nhau giữa doanh thu và chi phí kế hoạch lũy kế theo quý.</p>
+                        </div>
+                        <?php if ($bep_quarter): ?>
+                        <div style="background:#f0fdf4; border:1px solid #86efac; border-radius:10px; padding:10px 18px; text-align:center;">
+                            <div style="font-size:10px; font-weight:700; color:#15803d; text-transform:uppercase; letter-spacing:.5px;">Điểm hòa vốn</div>
+                            <div style="font-size:20px; font-weight:800; color:#15803d;">Quý <?php echo $bep_quarter; ?></div>
+                        </div>
+                        <?php else: ?>
+                        <div style="background:#fef2f2; border:1px solid #fca5a5; border-radius:10px; padding:10px 18px; text-align:center;">
+                            <div style="font-size:10px; font-weight:700; color:#b91c1c; text-transform:uppercase;">Chưa hòa vốn</div>
+                            <div style="font-size:13px; font-weight:700; color:#b91c1c;"><?php echo $bev_year; ?></div>
+                        </div>
+                        <?php endif; ?>
+                    </div>
+                    <div id="chart-breakeven-dash"></div>
+                    <div style="text-align:right; margin-top:8px;">
+                        <a href="/plan-budgeting/report" style="font-size:12px; color:#3b82f6; text-decoration:none;">→ Xem báo cáo chi tiết</a>
+                    </div>
+                </div>
+
                 <!-- New Customers Section -->
                 <div id="new-customers-section"
                     style="background: white; padding: 20px; border-radius: 12px; border: 1px solid #e2e8f0; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05); margin-bottom: 24px;">
@@ -616,10 +694,49 @@ $dashboard_total_actual = (float)($pb_data['total_actual'] ?? 0);
                     chart: { type: 'bar', height: 350 },
                     plotOptions: { bar: { borderRadius: 4, distributed: true, dataLabels: { position: 'top' } } },
                     dataLabels: { enabled: true, formatter: function (val) { return val + "%" }, style: { fontSize: '12px', colors: ["#304758"] } },
-                    xaxis: { categories: kpiDeptNames, labels: { show: false } }, // Hide x-axis labels to save space since we have legend/tooltip
+                    xaxis: { categories: kpiDeptNames, labels: { show: false } },
                     colors: ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#14b8a6', '#f97316'],
                     tooltip: { theme: 'light', y: { formatter: val => val + "%" } }
                 }).render();
+
+                // Break-even Chart
+                (function() {
+                    const revenue = <?php echo json_encode(array_map('floatval', $bev_revenue)); ?>;
+                    const expense = <?php echo json_encode(array_map('floatval', $bev_expense)); ?>;
+                    const actual  = <?php echo json_encode(array_map('floatval', $bev_actual)); ?>;
+                    const labels  = ['Q1','Q2','Q3','Q4'];
+                    
+                    const cumRev = revenue.map((_,i) => revenue.slice(0,i+1).reduce((a,b)=>a+b,0));
+                    const cumExp = expense.map((_,i) => expense.slice(0,i+1).reduce((a,b)=>a+b,0));
+                    const cumAct = actual.map((_,i)  => actual.slice(0,i+1).reduce((a,b)=>a+b,0));
+                    
+                    let bepAnnot = [];
+                    for (let i=0;i<4;i++) {
+                        if (cumRev[i]>=cumExp[i] && cumExp[i]>0 && (i===0||cumRev[i-1]<cumExp[i-1])) {
+                            bepAnnot.push({ x: labels[i], borderColor:'#f59e0b', strokeDashArray:4,
+                                label:{borderColor:'#f59e0b',style:{color:'#fff',background:'#f59e0b',fontWeight:700},text:'🎯 Hòa vốn'} });
+                        }
+                    }
+
+                    new ApexCharts(document.querySelector('#chart-breakeven-dash'), {
+                        series: [
+                            { name: 'Doanh thu KH (lũy kế)', data: cumRev },
+                            { name: 'Chi phí KH (lũy kế)', data: cumExp },
+                            { name: 'Chi phí thực tế (lũy kế)', data: cumAct }
+                        ],
+                        chart: { type: 'line', height: 320, toolbar: { show: false }, zoom: { enabled: false } },
+                        stroke: { curve: 'smooth', width: 1.5, dashArray: [0, 5, 0] },
+                        colors: ['#10b981','#3b82f6','#ef4444'],
+                        markers: { size: 3, strokeWidth: 0, hover: { size: 5 } },
+                        xaxis: { categories: labels, axisBorder: { show: true } },
+                        yaxis: { labels: { formatter: v => (v/1e9).toFixed(1)+' Tỷ' } },
+                        annotations: { xaxis: bepAnnot },
+                        tooltip: { shared: true, intersect: false, y: { formatter: val => val.toLocaleString('vi-VN')+' đ' } },
+                        legend: { position: 'top', horizontalAlign: 'left' },
+                        grid: { borderColor: '#f1f5f9', strokeDashArray: 3 },
+                        fill: { type: 'solid', opacity: 1 }
+                    }).render();
+                })();
             </script>
     </div>
     </main>

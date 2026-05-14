@@ -25,57 +25,80 @@ function format_vnd($val) {
     return number_format($val, 0, ',', '.') . ' đ';
 }
 
-// 1. Fetch Aggregated Monthly Data
+// Ensure plan_status column exists (migration for older MySQL)
+$conn->query("CREATE TABLE IF NOT EXISTS budget_quarterly_status (year INT, quarter INT, rec_status INT DEFAULT 0, inv_status INT DEFAULT 0, plan_status INT DEFAULT 0, PRIMARY KEY(year, quarter))");
+$conn->query("SET @col_exists = (SELECT COUNT(*) FROM information_schema.columns WHERE table_name='budget_quarterly_status' AND table_schema=DATABASE() AND column_name='plan_status')");
+$conn->query("SET @sql = IF(@col_exists=0,'ALTER TABLE budget_quarterly_status ADD COLUMN plan_status INT DEFAULT 0','SELECT 1')");
+$conn->query("PREPARE stmt FROM @sql");
+$conn->query("EXECUTE stmt");
+
+// 1. Fetch plan_status to determine which scenario is active per quarter
+$plan_status_map = [];
+$res_ps = $conn->query("SELECT quarter, plan_status FROM budget_quarterly_status WHERE year = $current_year");
+if ($res_ps) while ($r = $res_ps->fetch_assoc()) $plan_status_map[$r['quarter']] = intval($r['plan_status']);
+
+function get_planned_key($plan_status_map, $q) {
+    $ps = $plan_status_map[$q] ?? 2;
+    if ($ps == 0) $ps = 2; // default to avg
+    return ($ps == 1 ? 'planned_good' : ($ps == 3 ? 'planned_bad' : 'planned_avg'));
+}
+
+// 2. Fetch Aggregated Monthly Data
 $monthly_data = [];
 $months_full = [1,2,3,4,5,6,7,8,9,10,11,12];
 foreach($months_full as $m) $monthly_data[$m] = ['planned' => 0, 'actual' => 0];
 
-// Get planned totals per quarter (Filtered)
-$res_pq = $conn->query("SELECT v.quarter, SUM(v.amount) as total 
-                        FROM budget_values v 
-                        JOIN budget_structure s ON v.item_id = s.id
-                        WHERE v.year = $current_year AND v.value_type='planned' $owner_filter
-                        GROUP BY v.quarter");
+// Get planned totals per quarter from the active scenario (stored at month=0)
 $planned_q = [1=>0, 2=>0, 3=>0, 4=>0];
-while($r = $res_pq->fetch_assoc()) $planned_q[$r['quarter']] = $r['total'];
+for ($q = 1; $q <= 4; $q++) {
+    $p_key = get_planned_key($plan_status_map, $q);
+    $res_pq = $conn->query("SELECT SUM(v.amount) as total 
+                            FROM budget_values v 
+                            JOIN budget_structure s ON v.item_id = s.id AND s.year = $current_year AND s.quarter = $q
+                            WHERE v.year = $current_year AND v.quarter = $q AND v.month = 0 AND v.value_type = '$p_key'
+                            $owner_filter");
+    $row_pq = $res_pq ? $res_pq->fetch_assoc() : null;
+    $planned_q[$q] = floatval($row_pq['total'] ?? 0);
+}
 
-// Get actuals and top over-budget items (Filtered)
+// Get actuals and top over-budget items for the current quarter
 $over_budget_items = [];
+$p_key_cur = get_planned_key($plan_status_map, $current_quarter);
 $sql = "SELECT * FROM (
             SELECT s.id, s.item_name, s.division, 
-                   (SELECT amount FROM budget_values WHERE item_id = s.id AND year = $current_year AND quarter = $current_quarter AND value_type = 'planned') as planned_val,
-                   SUM(CASE WHEN v.value_type != 'planned' THEN v.amount ELSE 0 END) as actual_val
+                   (SELECT SUM(amount) FROM budget_values WHERE item_id = s.id AND year = $current_year AND quarter = $current_quarter AND month = 0 AND value_type = '$p_key_cur') as planned_val,
+                   (SELECT SUM(amount) FROM budget_values WHERE item_id = s.id AND year = $current_year AND quarter = $current_quarter AND value_type IN ('actual_salary','actual_other')) as actual_val
             FROM budget_structure s
-            LEFT JOIN budget_values v ON s.id = v.item_id AND v.year = $current_year AND v.quarter = $current_quarter
-            WHERE s.type = 'item' $owner_filter
-            GROUP BY s.id
+            WHERE s.year = $current_year AND s.quarter = $current_quarter AND s.type = 'item' $owner_filter
         ) as sub
         WHERE actual_val > planned_val AND planned_val > 0
         ORDER BY (actual_val - planned_val) DESC LIMIT 5";
 $res_over = $conn->query($sql);
 while($r = $res_over->fetch_assoc()) $over_budget_items[] = $r;
 
-// Monthly Trend (Filtered)
+// Monthly Trend: sum actual_salary + actual_other per month for the full year
 $res_v = $conn->query("SELECT v.month, SUM(v.amount) as total 
                        FROM budget_values v 
-                       JOIN budget_structure s ON v.item_id = s.id
-                       WHERE v.year = $current_year AND v.value_type != 'planned' $owner_filter
+                       JOIN budget_structure s ON v.item_id = s.id AND s.year = $current_year
+                       WHERE v.year = $current_year AND v.month > 0 AND v.value_type IN ('actual_salary','actual_other')
+                       $owner_filter
                        GROUP BY v.month");
 while($r = $res_v->fetch_assoc()) $monthly_data[$r['month']]['actual'] = $r['total'];
 
-// Quarter Actuals for Summary Table
+// Quarter Actuals for Summary Table — derive from monthly actuals
 $actual_q = [1=>0, 2=>0, 3=>0, 4=>0];
 foreach($months_full as $m) {
     $q = ceil($m/3);
     $actual_q[$q] += $monthly_data[$m]['actual'];
 }
 
-// Division Breakdown
+// Division Breakdown for current quarter
 $division_data = [];
 $sql_div = "SELECT s.division, SUM(v.amount) as total 
             FROM budget_values v 
-            JOIN budget_structure s ON v.item_id = s.id 
-            WHERE v.year = $current_year AND v.quarter = $current_quarter AND v.value_type != 'planned' $owner_filter
+            JOIN budget_structure s ON v.item_id = s.id AND s.year = $current_year AND s.quarter = $current_quarter
+            WHERE v.year = $current_year AND v.quarter = $current_quarter AND v.month > 0 AND v.value_type IN ('actual_salary','actual_other')
+            $owner_filter
             GROUP BY s.division";
 $res_div = $conn->query($sql_div);
 while ($row = $res_div->fetch_assoc()) if($row['division']) $division_data[] = ['label' => $row['division'], 'value' => $row['total']];
@@ -84,6 +107,35 @@ $total_q_planned = $planned_q[$current_quarter];
 $total_q_actual = $actual_q[$current_quarter];
 
 $exec_rate = ($total_q_planned > 0) ? ($total_q_actual / $total_q_planned) * 100 : 0;
+
+// ── Break-even chart data (all 4 quarters of the year) ───────────────────────
+// Revenue per quarter: SUM of (rec_rev_avg + inv_rev_avg) from budget_structure
+// Uses the active scenario per quarter
+$breakeven_labels = ['Q1', 'Q2', 'Q3', 'Q4'];
+$breakeven_revenue = [0, 0, 0, 0];
+$breakeven_expense = [0, 0, 0, 0];
+$breakeven_actual  = [0, 0, 0, 0];
+
+for ($q = 1; $q <= 4; $q++) {
+    $ps = $plan_status_map[$q] ?? 2;
+    if ($ps == 0) $ps = 2;
+    $rec_col = ($ps == 1 ? 'rec_rev_good' : ($ps == 3 ? 'rec_rev_bad' : 'rec_rev_avg'));
+    $inv_col = ($ps == 1 ? 'inv_rev_good' : ($ps == 3 ? 'inv_rev_bad' : 'inv_rev_avg'));
+    $p_key   = get_planned_key($plan_status_map, $q);
+
+    // Revenue from budget_structure for this quarter
+    $res_rev = $conn->query("SELECT SUM(s.$rec_col + s.$inv_col) as total
+                             FROM budget_structure s
+                             WHERE s.year = $current_year AND s.quarter = $q AND s.type='item'
+                             $owner_filter");
+    $breakeven_revenue[$q - 1] = floatval($res_rev ? $res_rev->fetch_assoc()['total'] ?? 0 : 0);
+
+    // Planned expense (active scenario, month=0)
+    $breakeven_expense[$q - 1] = floatval($planned_q[$q]);
+
+    // Actual expense for this quarter
+    $breakeven_actual[$q - 1] = floatval($actual_q[$q]);
+}
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -254,6 +306,39 @@ $exec_rate = ($total_q_planned > 0) ? ($total_q_actual / $total_q_planned) * 100
                         <div id="chart-compare"></div>
                     </div>
                 </div>
+
+                <!-- Break-even Chart -->
+                <div class="report-card" style="margin-bottom:24px;">
+                    <div style="display:flex; justify-content:space-between; align-items:flex-start; flex-wrap:wrap; gap:12px; margin-bottom:20px;">
+                        <div>
+                            <h3 style="margin:0; font-size:16px;">📈 Biểu đồ Điểm Hòa Vốn (Break-even) — <?php echo $current_year; ?></h3>
+                            <p style="margin:6px 0 0; font-size:12px; color:#64748b;">Giao điểm giữa đường Doanh thu và đường Chi phí kế hoạch là điểm hòa vốn dự kiến.</p>
+                        </div>
+                        <?php
+                        // Find break-even quarter (where cumulative revenue >= cumulative expense)
+                        $cum_rev = 0; $cum_exp = 0; $bep_q = null;
+                        for ($q = 0; $q < 4; $q++) {
+                            $cum_rev += $breakeven_revenue[$q];
+                            $cum_exp += $breakeven_expense[$q];
+                            if ($bep_q === null && $cum_rev >= $cum_exp && $cum_exp > 0) {
+                                $bep_q = $q + 1;
+                            }
+                        }
+                        ?>
+                        <?php if ($bep_q): ?>
+                        <div style="background:#f0fdf4; border:1px solid #86efac; border-radius:10px; padding:12px 20px; text-align:center;">
+                            <div style="font-size:11px; font-weight:600; color:#15803d; text-transform:uppercase; letter-spacing:.5px;">Điểm hòa vốn</div>
+                            <div style="font-size:22px; font-weight:800; color:#15803d;">Quý <?php echo $bep_q; ?></div>
+                        </div>
+                        <?php else: ?>
+                        <div style="background:#fef2f2; border:1px solid #fca5a5; border-radius:10px; padding:12px 20px; text-align:center;">
+                            <div style="font-size:11px; font-weight:600; color:#b91c1c; text-transform:uppercase;">Chưa đạt hòa vốn</div>
+                            <div style="font-size:13px; font-weight:700; color:#b91c1c;">Trong năm <?php echo $current_year; ?></div>
+                        </div>
+                        <?php endif; ?>
+                    </div>
+                    <div id="chart-breakeven"></div>
+                </div>
             </div>
         </main>
     </div>
@@ -289,6 +374,60 @@ $exec_rate = ($total_q_planned > 0) ? ($total_q_actual / $total_q_planned) * 100
             yaxis: { labels: { formatter: v => (v/1000000).toFixed(0) + 'M đ' } },
             tooltip: { y: { formatter: val => val.toLocaleString('vi-VN') + ' đ' } }
         }).render();
+
+        // Break-even Chart
+        (function() {
+            const revenue = <?php echo json_encode(array_map('floatval', $breakeven_revenue)); ?>;
+            const expense = <?php echo json_encode(array_map('floatval', $breakeven_expense)); ?>;
+            const actual  = <?php echo json_encode(array_map('floatval', $breakeven_actual)); ?>;
+            const labels  = <?php echo json_encode($breakeven_labels); ?>;
+
+            // Cumulative series
+            const cumRev = revenue.map((_, i) => revenue.slice(0, i+1).reduce((a,b) => a+b, 0));
+            const cumExp = expense.map((_, i) => expense.slice(0, i+1).reduce((a,b) => a+b, 0));
+            const cumAct = actual.map((_, i) => actual.slice(0, i+1).reduce((a,b) => a+b, 0));
+
+            // Find intersection (BEP)
+            let bepAnnotations = [];
+            for (let i = 0; i < 4; i++) {
+                if (cumRev[i] >= cumExp[i] && cumExp[i] > 0 && (i === 0 || cumRev[i-1] < cumExp[i-1])) {
+                    bepAnnotations.push({
+                        x: labels[i],
+                        borderColor: '#f59e0b',
+                        strokeDashArray: 4,
+                        label: { borderColor: '#f59e0b', style: { color: '#fff', background: '#f59e0b', fontWeight: 700 }, text: '🎯 Hòa vốn' }
+                    });
+                }
+            }
+
+            new ApexCharts(document.querySelector('#chart-breakeven'), {
+                series: [
+                    { name: 'Doanh thu kế hoạch (lũy kế)', data: cumRev },
+                    { name: 'Chi phí kế hoạch (lũy kế)', data: cumExp },
+                    { name: 'Chi phí thực tế (lũy kế)', data: cumAct }
+                ],
+                chart: { type: 'line', height: 380, toolbar: { show: false }, zoom: { enabled: false } },
+                stroke: { curve: 'smooth', width: [3, 3, 2], dashArray: [0, 6, 0] },
+                colors: ['#10b981', '#3b82f6', '#ef4444'],
+                markers: { size: 6, hover: { sizeOffset: 3 } },
+                xaxis: { categories: labels },
+                yaxis: {
+                    labels: { formatter: v => (v / 1000000000).toFixed(1) + ' Tỷ' },
+                    title: { text: 'Giá trị lũy kế (Tỷ đồng)', style: { fontSize: '12px', color: '#64748b' } }
+                },
+                annotations: { xaxis: bepAnnotations },
+                tooltip: {
+                    shared: true, intersect: false,
+                    y: { formatter: val => val.toLocaleString('vi-VN') + ' đ' }
+                },
+                legend: { position: 'top', horizontalAlign: 'left' },
+                grid: { borderColor: '#f1f5f9', strokeDashArray: 3 },
+                fill: {
+                    type: ['gradient', 'solid', 'solid'],
+                    gradient: { shadeIntensity: 1, opacityFrom: 0.2, opacityTo: 0.0, stops: [0, 100] }
+                }
+            }).render();
+        })();
     </script>
 </body>
 </html>

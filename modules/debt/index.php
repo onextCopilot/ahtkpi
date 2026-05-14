@@ -337,6 +337,11 @@ $dashboardData = []; // team_id => [status_class => [pay_status => total_vnd]]
 $total_amount_usd = 0;
 $total_amount_vnd = 0;
 
+// New Aggregators for Charts
+$aging_data = ['0-30' => 0, '31-60' => 0, '61-90' => 0, '90+' => 0];
+$debtor_totals = [];
+$am_performance = [];
+
 $res = $conn->query("SELECT d.*, st.name as team_name 
                     FROM debts d 
                     LEFT JOIN sale_teams st ON d.sale_team_id = st.id 
@@ -441,7 +446,26 @@ if ($res) {
         $row['currency'] = 'VND';
 
         $mKey = !empty($row['invoice_date']) ? date('m/Y', strtotime($row['invoice_date'])) : 'No Date';
+        // Aging calculation (unpaid only)
+        if (!$is_paid_status) {
+            $inv_date = !empty($row['invoice_date']) ? $row['invoice_date'] : date('Y-m-d');
+            $diff = (time() - strtotime($inv_date)) / (60 * 60 * 24);
+            if ($diff <= 30) $aging_data['0-30'] += $vnd_value;
+            else if ($diff <= 60) $aging_data['31-60'] += $vnd_value;
+            else if ($diff <= 90) $aging_data['61-90'] += $vnd_value;
+            else $aging_data['90+'] += $vnd_value;
+
+            // Top Debtors (unpaid only)
+            $client = $row['client_name'] ?: 'Khách hàng ẩn danh';
+            $debtor_totals[$client] = ($debtor_totals[$client] ?? 0) + $vnd_value;
+        }
+
+        // AM Performance
         $amKey = !empty($row['am']) ? $row['am'] : 'No AM';
+        if (!isset($am_performance[$amKey])) $am_performance[$amKey] = ['paid' => 0, 'total' => 0];
+        if ($is_paid_status) $am_performance[$amKey]['paid'] += $vnd_value;
+        $am_performance[$amKey]['total'] += $vnd_value;
+
         $groupedDebts[$mKey][$amKey][] = $row;
 
         if (!isset($monthTotals[$mKey]))
@@ -463,6 +487,97 @@ if (!empty($groupedDebts)) {
         }
     }
 }
+
+// Sort and slice Top 5 Debtors
+arsort($debtor_totals);
+$top_debtors = array_slice($debtor_totals, 0, 5, true);
+
+// Calculate AM Efficiency
+$am_efficiency_labels = [];
+$am_efficiency_values = [];
+foreach ($am_performance as $am => $stats) {
+    if ($stats['total'] > 0) {
+        $am_efficiency_labels[] = $am;
+        $am_efficiency_values[] = round(($stats['paid'] / $stats['total']) * 100, 1);
+    }
+}
+
+// ── Break-even chart data ─────────────────────────────────────────────────────
+$bev_year = (int)date('Y');
+if (!empty($_GET['year']) && !is_array($_GET['year'])) $bev_year = (int)$_GET['year'];
+else if (!empty($_GET['year']) && is_array($_GET['year'])) $bev_year = (int)$_GET['year'][0];
+
+$conn->query("CREATE TABLE IF NOT EXISTS budget_quarterly_status (year INT, quarter INT, rec_status INT DEFAULT 0, inv_status INT DEFAULT 0, plan_status INT DEFAULT 0, PRIMARY KEY(year, quarter))");
+$conn->query("SET @col_bev = (SELECT COUNT(*) FROM information_schema.columns WHERE table_name='budget_quarterly_status' AND table_schema=DATABASE() AND column_name='plan_status')");
+$conn->query("SET @sql_bev = IF(@col_bev=0,'ALTER TABLE budget_quarterly_status ADD COLUMN plan_status INT DEFAULT 0','SELECT 1')");
+$conn->query("PREPARE stmt_bev FROM @sql_bev");
+$conn->query("EXECUTE stmt_bev");
+
+$bev_owner_filter = "";
+if (!empty($_GET['am'])) {
+    $vals = is_array($_GET['am']) ? $_GET['am'] : [$_GET['am']];
+    $clean = [];
+    foreach ($vals as $v) if ($v !== '') $clean[] = "'" . $conn->real_escape_string($v) . "'";
+    if (count($clean) > 0) $bev_owner_filter .= " AND s.owner IN (" . implode(',', $clean) . ")";
+} else if ($role !== 'admin') {
+    $bev_owner_filter .= " AND s.owner = '" . $conn->real_escape_string($full_name) . "'";
+}
+
+// Sale Team filter mapping (if applicable to budget_structure)
+if (!empty($_GET['team'])) {
+    $vals = is_array($_GET['team']) ? $_GET['team'] : [$_GET['team']];
+    $clean_teams = [];
+    foreach ($vals as $v) {
+        $t_id = intval($v);
+        // Map team ID to name/division if needed, or if budget_structure has team_id
+        $res_t = $conn->query("SELECT name FROM sale_teams WHERE id = $t_id");
+        if ($res_t && $rt = $res_t->fetch_assoc()) {
+            $clean_teams[] = "'" . $conn->real_escape_string($rt['name']) . "'";
+        }
+    }
+    if (count($clean_teams) > 0) {
+        $bev_owner_filter .= " AND s.division IN (" . implode(',', $clean_teams) . ")";
+    }
+}
+
+$bev_ps_map = [];
+$res_bev_ps = $conn->query("SELECT quarter, plan_status FROM budget_quarterly_status WHERE year = $bev_year");
+if ($res_bev_ps) while ($r = $res_bev_ps->fetch_assoc()) $bev_ps_map[$r['quarter']] = intval($r['plan_status']);
+
+$bev_revenue = [0,0,0,0];
+$bev_expense = [0,0,0,0];
+$bev_actual  = [0,0,0,0];
+
+for ($q = 1; $q <= 4; $q++) {
+    $ps = $bev_ps_map[$q] ?? 2; if ($ps == 0) $ps = 2;
+    $rec_col = ($ps==1?'rec_rev_good':($ps==3?'rec_rev_bad':'rec_rev_avg'));
+    $inv_col = ($ps==1?'inv_rev_good':($ps==3?'inv_rev_bad':'inv_rev_avg'));
+    $p_key   = ($ps==1?'planned_good':($ps==3?'planned_bad':'planned_avg'));
+
+    // Improved query with IFNULL and consistent filtering
+    $res_r = $conn->query("SELECT SUM(IFNULL(s.$rec_col,0) + IFNULL(s.$inv_col,0)) as total 
+                           FROM budget_structure s 
+                           WHERE s.year=$bev_year AND s.quarter=$q AND s.type='item' $bev_owner_filter");
+    $bev_revenue[$q-1] = floatval($res_r ? ($res_r->fetch_assoc()['total'] ?? 0) : 0);
+
+    $res_e = $conn->query("SELECT SUM(v.amount) as total 
+                           FROM budget_values v 
+                           JOIN budget_structure s ON v.item_id=s.id AND s.year=$bev_year AND s.quarter=$q 
+                           WHERE v.year=$bev_year AND v.quarter=$q AND v.month=0 AND v.value_type='$p_key' $bev_owner_filter");
+    $bev_expense[$q-1] = floatval($res_e ? ($res_e->fetch_assoc()['total'] ?? 0) : 0);
+
+    $months_q = [1=>[1,2,3],2=>[4,5,6],3=>[7,8,9],4=>[10,11,12]][$q];
+    $m_in = implode(',', $months_q);
+    $res_a = $conn->query("SELECT SUM(v.amount) as total 
+                           FROM budget_values v 
+                           JOIN budget_structure s ON v.item_id=s.id AND s.year=$bev_year AND s.quarter=$q 
+                           WHERE v.year=$bev_year AND v.quarter=$q AND v.month IN($m_in) AND v.value_type IN('actual_salary','actual_other') $bev_owner_filter");
+    $bev_actual[$q-1] = floatval($res_a ? ($res_a->fetch_assoc()['total'] ?? 0) : 0);
+}
+
+// Find BEP quarter
+$bev_cum_r=0; $bev_cum_e=0; $bep_quarter=null;
+for($q=0;$q<4;$q++) { $bev_cum_r+=$bev_revenue[$q]; $bev_cum_e+=$bev_expense[$q]; if($bep_quarter===null && $bev_cum_r>=$bev_cum_e && $bev_cum_e>0) $bep_quarter=$q+1; }
 
 // Helper for formatting currency
 function formatCurrency($amount, $curr = 'USD')
@@ -562,6 +677,7 @@ if ($res_am && $res_am->num_rows > 0) {
     <script src="https://cdn.jsdelivr.net/npm/tom-select@2.3.1/dist/js/tom-select.complete.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.0.0"></script>
+    <script src="https://cdn.jsdelivr.net/npm/apexcharts"></script>
     <style>
         /* Prevent horizontal scroll on page */
         body {
@@ -2015,6 +2131,48 @@ if ($res_am && $res_am->num_rows > 0) {
                                     <div style="height:380px;"><canvas id="globalFlowChart"></canvas></div>
                                 </div>
                             </div>
+                            
+                            <!-- New Debt Analytics Row -->
+                            <div style="display:grid; grid-template-columns: 1fr 1fr; gap:20px; margin-bottom:20px; margin-top:16px;">
+                                <div style="background: white; border: 1px solid #e8e8e8; border-radius: 8px; padding: 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.04);">
+                                    <h5 style="margin:0 0 16px 0; font-size:13px; color:#262626; font-weight:700; border-left:4px solid #1890ff; padding-left:12px; text-transform:uppercase;">Tỷ lệ Tuổi nợ (Phải thu)</h5>
+                                    <div id="chart-debt-aging-pie" style="min-height: 280px;"></div>
+                                </div>
+                                <div style="background: white; border: 1px solid #e8e8e8; border-radius: 8px; padding: 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.04);">
+                                    <h5 style="margin:0 0 16px 0; font-size:13px; color:#262626; font-weight:700; border-left:4px solid #f5222d; padding-left:12px; text-transform:uppercase;">Top 5 Khách hàng nợ</h5>
+                                    <div id="chart-top-debtors-bar" style="min-height: 280px;"></div>
+                                </div>
+                            </div>
+                            
+                            <div style="background: white; border: 1px solid #e8e8e8; border-radius: 8px; padding: 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.04); margin-bottom:32px;">
+                                <h5 style="margin:0 0 16px 0; font-size:13px; color:#262626; font-weight:700; border-left:4px solid #52c41a; padding-left:12px; text-transform:uppercase;">Hiệu suất thu hồi AM (%)</h5>
+                                <div id="chart-am-efficiency-bar" style="min-height: 280px;"></div>
+                            </div>
+
+                            <!-- Break-even Chart Section -->
+                            <div style="background:white; border: 1px solid #e8e8e8; border-radius: 8px; padding: 24px; box-shadow: 0 2px 8px rgba(0,0,0,0.04); margin-bottom: 32px; margin-top: 16px;">
+                                <div style="display:flex; justify-content:space-between; align-items:flex-start; flex-wrap:wrap; gap:12px; margin-bottom:20px;">
+                                    <div>
+                                        <h5 style="margin:0; color:#0f172a; font-size:14px; font-weight:700; border-left:4px solid #f59e0b; padding-left:12px; text-transform:uppercase; letter-spacing:0.5px;">📈 Break-even Analysis — <?php echo $bev_year; ?></h5>
+                                        <p style="margin:4px 0 0 16px; font-size:12px; color:#64748b;">Điểm giao nhau giữa doanh thu và chi phí kế hoạch lũy kế theo quý.</p>
+                                    </div>
+                                    <?php if ($bep_quarter): ?>
+                                    <div style="background:#fff7e6; border:1px solid #ffd591; border-radius:8px; padding:8px 20px; text-align:center;">
+                                        <div style="font-size:10px; font-weight:700; color:#d48806; text-transform:uppercase; letter-spacing:.5px;">Điểm hòa vốn</div>
+                                        <div style="font-size:18px; font-weight:800; color:#d48806;">Quý <?php echo $bep_quarter; ?></div>
+                                    </div>
+                                    <?php else: ?>
+                                    <div style="background:#fff1f0; border:1px solid #ffa39e; border-radius:8px; padding:8px 20px; text-align:center;">
+                                        <div style="font-size:10px; font-weight:700; color:#cf1322; text-transform:uppercase;">Chưa hòa vốn</div>
+                                        <div style="font-size:14px; font-weight:700; color:#cf1322;"><?php echo $bev_year; ?></div>
+                                    </div>
+                                    <?php endif; ?>
+                                </div>
+                                <div id="chart-breakeven-debt" style="min-height: 350px;"></div>
+                                <div style="text-align:right; margin-top:12px;">
+                                    <a href="/plan-budgeting/report" style="font-size:12px; color:#1890ff; text-decoration:none; font-weight:500;">→ Xem báo cáo ngân sách chi tiết</a>
+                                </div>
+                            </div>
 
                             <!-- Detailed Breakdown Table -->
                             <div
@@ -2161,6 +2319,8 @@ if ($res_am && $res_am->num_rows > 0) {
                                 </div>
                             </div>
                         </div>
+
+
 
 
                         <!-- Team Cards Grid (Ant Design Enhanced) -->
@@ -3317,6 +3477,103 @@ if ($res_am && $res_am->num_rows > 0) {
                         }
                     }
                 });
+
+                // Break-even Chart
+                (function() {
+                    const revenue = <?php echo json_encode(array_map('floatval', $bev_revenue)); ?>;
+                    const expense = <?php echo json_encode(array_map('floatval', $bev_expense)); ?>;
+                    const actual  = <?php echo json_encode(array_map('floatval', $bev_actual)); ?>;
+                    const labels  = ['Q1','Q2','Q3','Q4'];
+                    
+                    const cumRev = revenue.map((_,i) => revenue.slice(0,i+1).reduce((a,b)=>a+b,0));
+                    const cumExp = expense.map((_,i) => expense.slice(0,i+1).reduce((a,b)=>a+b,0));
+                    const cumAct = actual.map((_,i)  => actual.slice(0,i+1).reduce((a,b)=>a+b,0));
+                    
+                    let bepAnnot = [];
+                    for (let i=0;i<4;i++) {
+                        if (cumRev[i]>=cumExp[i] && cumExp[i]>0 && (i===0||cumRev[i-1]<cumExp[i-1])) {
+                            bepAnnot.push({ x: labels[i], borderColor:'#f59e0b', strokeDashArray:4,
+                                label:{borderColor:'#f59e0b',style:{color:'#fff',background:'#f59e0b',fontWeight:700},text:'🎯 Hòa vốn'} });
+                        }
+                    }
+
+                    new ApexCharts(document.querySelector('#chart-breakeven-debt'), {
+                        series: [
+                            { name: 'Doanh thu KH (lũy kế)', data: cumRev },
+                            { name: 'Chi phí KH (lũy kế)', data: cumExp },
+                            { name: 'Chi phí thực tế (lũy kế)', data: cumAct }
+                        ],
+                        chart: { type: 'line', height: 350, toolbar: { show: false }, zoom: { enabled: false } },
+                        stroke: { curve: 'smooth', width: 1.5, dashArray: [0, 5, 0] },
+                        colors: ['#10b981', '#3b82f6', '#ef4444'],
+                        markers: { size: 3, strokeWidth: 0, hover: { size: 5 } },
+                        xaxis: { categories: labels, axisBorder: { show: true } },
+                        yaxis: { labels: { formatter: v => (v/1e9).toFixed(1)+' Tỷ' } },
+                        annotations: { xaxis: bepAnnot },
+                        tooltip: { shared: true, intersect: false, y: { formatter: val => val.toLocaleString('vi-VN')+' đ' } },
+                        legend: { position: 'top', horizontalAlign: 'left' },
+                        grid: { borderColor: '#f1f5f9', strokeDashArray: 3 },
+                        fill: { type: 'solid', opacity: 1 }
+                    }).render();
+                    // New Debt Analytics Charts
+                    (function() {
+                        // 1. Aging Pie
+                        new ApexCharts(document.querySelector("#chart-debt-aging-pie"), {
+                            series: <?php echo json_encode(array_values($aging_data)); ?>,
+                            chart: { type: 'donut', height: 280 },
+                            labels: ['0-30 Ngày', '31-60 Ngày', '61-90 Ngày', '90+ Ngày'],
+                            colors: ['#52c41a', '#1890ff', '#faad14', '#f5222d'],
+                            legend: { position: 'bottom', fontSize: '11px' },
+                            dataLabels: { 
+                                enabled: true, 
+                                formatter: (val, opts) => opts.w.config.series[opts.seriesIndex] > 0 ? val.toFixed(1) + '%' : ''
+                            },
+                            tooltip: { y: { formatter: val => val.toLocaleString('vi-VN') + ' đ' } }
+                        }).render();
+
+                        // 2. Top Debtors Bar
+                        new ApexCharts(document.querySelector("#chart-top-debtors-bar"), {
+                            series: [{ name: 'Số dư nợ', data: <?php echo json_encode(array_values($top_debtors)); ?> }],
+                            chart: { type: 'bar', height: 280, toolbar: { show: false } },
+                            plotOptions: { 
+                                bar: { 
+                                    borderRadius: 4, 
+                                    horizontal: true,
+                                    dataLabels: { position: 'top' }
+                                } 
+                            },
+                            dataLabels: {
+                                enabled: true,
+                                formatter: val => (val/1e9).toFixed(1) + ' Tỷ đ',
+                                offsetX: 40,
+                                style: { fontSize: '11px', fontWeight: '700', colors: ['#334155'] }
+                            },
+                            colors: ['#f5222d'],
+                            xaxis: { 
+                                categories: <?php echo json_encode(array_keys($top_debtors)); ?>, 
+                                labels: { formatter: v => (v/1e9).toFixed(1) + ' Tỷ' } 
+                            },
+                            tooltip: { y: { formatter: val => val.toLocaleString('vi-VN') + ' đ' } }
+                        }).render();
+
+                        // 3. AM Efficiency Bar
+                        new ApexCharts(document.querySelector("#chart-am-efficiency-bar"), {
+                            series: [{ name: 'Tỷ lệ thu hồi', data: <?php echo json_encode($am_efficiency_values); ?> }],
+                            chart: { type: 'bar', height: 280, toolbar: { show: false } },
+                            plotOptions: { bar: { borderRadius: 4, columnWidth: '50%', dataLabels: { position: 'top' } } },
+                            dataLabels: {
+                                enabled: true,
+                                formatter: val => val + '%',
+                                offsetY: -20,
+                                style: { fontSize: '11px', fontWeight: '700', colors: ["#1e293b"] }
+                            },
+                            colors: ['#52c41a'],
+                            xaxis: { categories: <?php echo json_encode($am_efficiency_labels); ?>, labels: { style: { fontSize: '10px' } } },
+                            yaxis: { max: 100, labels: { formatter: v => v + '%' } },
+                            tooltip: { y: { formatter: val => val + '%' } }
+                        }).render();
+                    })();
+                })();
             }
         });
     </script>
