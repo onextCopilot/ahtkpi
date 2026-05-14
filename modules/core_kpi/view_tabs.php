@@ -1,3 +1,8 @@
+<?php
+// Roles available to all tab filters
+$roles = array_unique(array_filter(array_column($members, 'job_title')));
+sort($roles);
+?>
 <?php /* ═══════════════════════════════ TAB: DASHBOARD ═══════════════════════════════ */ if($tab==='dashboard'): ?>
 
 <?php
@@ -34,11 +39,7 @@ $reviewed_count = count(array_filter($dash_stats, fn($d)=>!empty($d['review'])))
     </select>
     <select class="kpi-filter-role" data-target="dashboard-table" style="padding:8px 12px; border:1px solid #D1D5DB; border-radius:6px; font-size:13px; background:#fff;">
       <option value="">Tất cả vai trò</option>
-      <?php 
-        $roles = array_unique(array_filter(array_column($members, 'job_title')));
-        sort($roles);
-        foreach($roles as $r) echo "<option value='".htmlspecialchars($r)."'>".htmlspecialchars($r)."</option>";
-      ?>
+      <?php foreach($roles as $r) echo "<option value='".htmlspecialchars($r)."'>".htmlspecialchars($r)."</option>"; ?>
     </select>
   </div>
 </div>
