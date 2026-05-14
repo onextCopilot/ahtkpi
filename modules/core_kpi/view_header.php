@@ -88,7 +88,20 @@
 .tbl tr:hover .lock-toggle{opacity:1;}
 .is-locked .inline-edit:not(.admin-edit){background:#F8FAFC!important;color:#94A3B8!important;cursor:not-allowed;pointer-events:none;}
 .is-locked-badge{background:#F1F5F9;color:#64748B;font-size:9px;padding:1px 4px;border-radius:4px;margin-left:4px;display:inline-flex;align-items:center;gap:2px;}
+.group-header td{cursor:pointer;user-select:none;transition:background 0.2s;background:#F1F5F9!important;padding:10px 16px!important;}
+.group-header:hover td{background:#E2E8F0!important;}
+.group-header .chevron{transition:transform 0.3s;font-size:12px;color:#94A3B8;}
+
+.group-header.collapsed .chevron{transform:rotate(-90deg);}
+.group-item{transition:all 0.3s ease-in-out;}
+.group-item.hidden{display:none;}
+  .group-header { cursor: grab; }
+  .group-header:active { cursor: grabbing; }
+  .sortable-ghost { opacity: 0.4; background: #E0F2FE !important; }
+  .sortable-chosen { background: #F1F5F9 !important; }
+  .mtype-separator td { background: #1E293B !important; color: #fff !important; padding: 12px 16px !important; font-weight: 700; text-transform: uppercase; font-size: 11px; letter-spacing: 1.5px; }
 </style>
+<script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script>
 <script>
 async function autoSaveKpi(input) {
   const row = input.closest('tr');
@@ -155,6 +168,54 @@ async function toggleRecordLock(btn, aid, year, month, currentLock) {
   btn.style.opacity = '1';
   btn.style.pointerEvents = 'auto';
 }
+
+function toggleGroup(header) {
+  const gid = header.getAttribute('data-group-id');
+  const items = document.querySelectorAll(`.group-item[data-group="${gid}"]`);
+  const chevron = header.querySelector('.chevron');
+  
+  items.forEach(item => {
+    item.classList.toggle('hidden');
+  });
+  
+  if (chevron) {
+    chevron.innerText = items[0].classList.contains('hidden') ? '▶' : '▼';
+  }
+}
+
+function saveGroupOrder(sortable) {
+  const order = sortable.toArray();
+  const formData = new FormData();
+  formData.append('action', 'save_group_order');
+  formData.append('order', JSON.stringify(order));
+  
+  fetch(window.location.href, {
+    method: 'POST',
+    body: formData
+  })
+  .then(res => res.json())
+  .then(data => {
+    if (data.success) {
+      console.log('Order saved');
+    }
+  });
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  const table = document.querySelector('.tbl-sortable');
+  if (table && "<?=($_SESSION['role'] === 'admin') ? '1' : '0'?>" === '1') {
+    new Sortable(table, {
+      draggable: "tbody.group-section",
+      handle: ".group-header",
+      animation: 150,
+      ghostClass: 'sortable-ghost',
+      chosenClass: 'sortable-chosen',
+      onEnd: function() {
+        saveGroupOrder(this);
+      }
+    });
+  }
+});
 </script>
 </head>
 <body>

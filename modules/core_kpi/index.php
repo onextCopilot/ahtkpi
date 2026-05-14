@@ -40,9 +40,36 @@ $r = $conn->query("
     JOIN users u ON m.user_id = u.id
     LEFT JOIN departments d ON u.department_id = d.id
     WHERE m.is_active = 1
-    ORDER BY m.member_type, u.full_name
+    ORDER BY u.job_title, u.full_name
 ");
 if ($r) while ($row = $r->fetch_assoc()) $members[] = $row;
+
+// --- Apply custom job order ---
+$job_order_res = $conn->query("SELECT setting_value FROM system_settings WHERE setting_key = 'core_kpi_job_order'");
+$job_order = [];
+if ($job_order_res && $row = $job_order_res->fetch_assoc()) {
+    $job_order = json_decode($row['setting_value'], true) ?: [];
+}
+
+if (!empty($job_order) || true) { // Always sort by type first
+    usort($members, function($a, $b) use ($job_order) {
+        // Priority 1: Member Type (Core > Key)
+        if ($a['member_type'] !== $b['member_type']) {
+            return ($a['member_type'] === 'Core') ? -1 : 1;
+        }
+
+        // Priority 2: Custom Job Order
+        $pos_a = array_search(md5($a['job_title'] ?: 'N/A'), $job_order);
+        $pos_b = array_search(md5($b['job_title'] ?: 'N/A'), $job_order);
+        
+        if ($pos_a === false && $pos_b === false) return strcmp($a['job_title'] ?: '', $b['job_title'] ?: '');
+        if ($pos_a === false) return 1;
+        if ($pos_b === false) return -1;
+        
+        if ($pos_a === $pos_b) return strcmp($a['full_name'] ?: '', $b['full_name'] ?: '');
+        return $pos_a - $pos_b;
+    });
+}
 
 // For non-admin members: restrict visible members list to self only
 if (!$is_admin && $is_member) {
@@ -83,6 +110,18 @@ if ($r) while ($row = $r->fetch_assoc()) $kpi_defs[] = $row;
 // ── POST Handler ─────────────────────────────────────────
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $action = $_POST['action'] ?? '';
+
+    // --- Save group order (AJAX) ---
+    if ($action === 'save_group_order' && $is_admin) {
+        header('Content-Type: application/json');
+        $new_order = json_decode($_POST['order'] ?? '[]', true);
+        $order_json = json_encode($new_order);
+        $stmt = $conn->prepare("INSERT INTO system_settings (setting_key, setting_value) VALUES ('core_kpi_job_order', ?) ON DUPLICATE KEY UPDATE setting_value=VALUES(setting_value)");
+        $stmt->bind_param("s", $order_json);
+        $stmt->execute();
+        echo json_encode(['success' => true]);
+        exit();
+    }
 
     // --- Add member from system user ---
     if ($action === 'add_member' && $is_admin) {

@@ -23,10 +23,11 @@ $reviewed_count = count(array_filter($dash_stats, fn($d)=>!empty($d['review'])))
 <!-- Member scoreCards/List -->
 <div class="panel">
   <div class="tbl-wrap">
-  <table class="tbl">
+  <table class="tbl tbl-sortable">
     <thead>
       <tr>
-        <th style="padding-left:16px;">Thành viên</th>
+        <th style="padding-left:16px; width:40px; text-align:center;">#</th>
+        <th>Thành viên</th>
         <th style="text-align:center;">KPI</th>
         <th style="text-align:center;">Trọng số</th>
         <th style="text-align:center;">Điểm TB</th>
@@ -35,15 +36,36 @@ $reviewed_count = count(array_filter($dash_stats, fn($d)=>!empty($d['review'])))
         <th style="text-align:center;padding-right:16px;">Thao tác</th>
       </tr>
     </thead>
-    <tbody>
-    <?php foreach($members as $mem):
+    <?php 
+    $cur_mtype = '';
+    $cur_group = '';
+    $grp_idx = 0;
+    foreach($members as $mem):
       $muid=$mem['id']; $ds=$dash_stats[$muid]??['count'=>0,'score'=>null,'review'=>null,'total_weight'=>0];
       $score=$ds['score']; $review=$ds['review'];
       $ini=mb_strtoupper(mb_substr($mem['full_name']??'?',0,1,'UTF-8'),'UTF-8');
       $sc_color=$score===null?'#9CA3AF':($score>=80?'#16A34A':($score>=60?'#D97706':'#DC2626'));
       $rating_label=$review['rating']??null;
+
+      if ($cur_mtype !== $mem['member_type']) {
+        if ($cur_group !== '') echo "</tbody>";
+        $cur_mtype = $mem['member_type'];
+        $cur_group = '';
+        echo "<tbody><tr class='mtype-separator'><td colspan='8'>".htmlspecialchars($cur_mtype)." Members</td></tr></tbody>";
+      }
+
+      if ($cur_group !== $mem['job_title']) {
+        if ($cur_group !== '') echo "</tbody>";
+        $cur_group = $mem['job_title'];
+        $gid = md5($cur_group ?: 'N/A');
+        $grp_idx = 0;
+        echo "<tbody class='group-section' data-id='$gid'>";
+        echo "<tr class='group-header' onclick='toggleGroup(this)' data-group-id='$gid'><td colspan='8' style='border-bottom:1px solid #E2E8F0;'><div style='display:flex; align-items:center; justify-content:space-between;'><strong style='color:#1E293B; font-size:13px; text-transform:uppercase; letter-spacing:1px;'>".htmlspecialchars($cur_group ?: 'N/A')."</strong><span class='chevron'>▼</span></div></td></tr>";
+      }
+      $grp_idx++;
     ?>
-    <tr>
+    <tr class="group-item" data-group="<?=md5($cur_group ?: 'N/A')?>">
+      <td style="text-align:center; color:#9CA3AF; padding-left:16px;"><?=$grp_idx?></td>
       <td style="padding-left:16px;">
         <div style="display:flex;gap:10px;align-items:center;">
           <?php if($mem['avatar']): ?>
@@ -103,13 +125,14 @@ $reviewed_count = count(array_filter($dash_stats, fn($d)=>!empty($d['review'])))
     </tr>
     <?php endforeach; ?>
     <?php if(empty($members)): ?>
-    <tr><td colspan="7" style="text-align:center;padding:60px;">
+    <tbody>
+    <tr><td colspan="8" style="text-align:center;padding:60px;">
       <div style="font-size:48px;margin-bottom:12px;">👥</div>
       <h3 style="color:#374151;margin-bottom:8px;">Chưa có Core/Key Member nào</h3>
       <?php if($is_admin): ?><a href="?tab=employees&cycle=<?=$sel_cycle?>" class="btn btn-primary">+ Thêm thành viên</a><?php endif; ?>
     </td></tr>
-    <?php endif; ?>
     </tbody>
+    <?php else: echo "</tbody>"; endif; ?>
   </table>
   </div>
 </div>
@@ -241,12 +264,33 @@ $reviewed_count = count(array_filter($dash_stats, fn($d)=>!empty($d['review'])))
   <div style="padding:30px;text-align:center;color:#9CA3AF;">Không có user nào trong hệ thống.</div>
   <?php else: ?>
   <div class="tbl-wrap">
-  <table class="tbl">
-    <thead><tr><th>#</th><th>Họ tên</th><th>Loại Member</th><th>Chức danh</th><th>Phòng ban</th><th>Email</th><th>Trạng thái</th><?php if($is_admin): ?><th>Xoá khỏi nhóm</th><?php endif; ?></tr></thead>
-    <tbody>
-    <?php foreach($members as $idx=>$m): ?>
-    <tr>
-      <td style="color:#9CA3AF;"><?=$idx+1?></td>
+  <table class="tbl tbl-sortable">
+    <thead><tr><th style="width:40px; text-align:center;">#</th><th>Họ tên</th><th>Loại Member</th><th>Chức danh</th><th>Phòng ban</th><th>Email</th><th>Trạng thái</th><?php if($is_admin): ?><th>Xoá khỏi nhóm</th><?php endif; ?></tr></thead>
+    <?php 
+    $cur_mtype = '';
+    $cur_group = '';
+    $grp_idx = 0;
+    foreach($members as $m): 
+      if ($cur_mtype !== $m['member_type']) {
+        if ($cur_group !== '') echo "</tbody>";
+        $cur_mtype = $m['member_type'];
+        $cur_group = '';
+        echo "<tbody><tr class='mtype-separator'><td colspan='".($is_admin?8:7)."'>".htmlspecialchars($cur_mtype)." Members</td></tr></tbody>";
+      }
+
+      if ($cur_group !== $m['job_title']) {
+        if ($cur_group !== '') echo "</tbody>";
+        $cur_group = $m['job_title'];
+        $gid = md5($cur_group ?: 'N/A');
+        $grp_idx = 0;
+        echo "<tbody class='group-section' data-id='$gid'>";
+        echo "<tr class='group-header' onclick='toggleGroup(this)' data-group-id='$gid'><td colspan='".($is_admin?8:7)."' style='border-bottom:1px solid #E2E8F0;'><div style='display:flex; align-items:center; justify-content:space-between;'><strong style='color:#1E293B; font-size:13px; text-transform:uppercase; letter-spacing:1px;'>".htmlspecialchars($cur_group ?: 'N/A')."</strong><span class='chevron'>▼</span></div></td></tr>";
+      }
+      $grp_idx++;
+    ?>
+    <tr class="group-item" data-group="<?=md5($cur_group ?: 'N/A')?>">
+      <td style="color:#9CA3AF;"><?=$grp_idx?></td>
+
       <td>
         <div style="display:flex;align-items:center;gap:8px;">
           <?php if($m['avatar']): ?><img src="<?=htmlspecialchars($m['avatar'])?>" style="width:30px;height:30px;border-radius:50%;object-fit:cover;">
@@ -267,8 +311,7 @@ $reviewed_count = count(array_filter($dash_stats, fn($d)=>!empty($d['review'])))
       </td>
       <?php endif; ?>
     </tr>
-    <?php endforeach; ?>
-    </tbody>
+    <?php endforeach; if($cur_group !== '') echo "</tbody>"; ?>
   </table>
   </div>
   <?php endif; ?>
@@ -349,15 +392,36 @@ $reviewed_count = count(array_filter($dash_stats, fn($d)=>!empty($d['review'])))
     <h3>🏆 Tổng kết quý&nbsp;<small style="font-weight:500;color:#6B7280;"><?=$cur_cycle?'— '.htmlspecialchars($cur_cycle['name']):''?></small></h3>
   </div>
   <div class="tbl-wrap">
-  <table class="tbl">
-    <thead><tr><th>Nhân viên</th><th style="text-align:center;">Điểm tổng</th><th style="text-align:center;">Xếp loại</th><th>Nhận xét</th><th>Trạng thái</th><th>Người đánh giá</th><?php if($is_admin): ?><th></th><?php endif; ?></tr></thead>
-    <tbody>
-    <?php foreach($members as $mem):
+  <table class="tbl tbl-sortable">
+    <thead><tr><th style="width:40px; text-align:center;">#</th><th>Nhân viên</th><th style="text-align:center;">Điểm tổng</th><th style="text-align:center;">Xếp loại</th><th>Nhận xét</th><th>Trạng thái</th><th>Người đánh giá</th><?php if($is_admin): ?><th></th><?php endif; ?></tr></thead>
+    <?php 
+    $cur_mtype = '';
+    $cur_group = '';
+    $grp_idx = 0;
+    foreach($members as $mem):
       $muid=$mem['id']; $rv=$reviews_map[$muid]??null;
       $ds=$dash_stats[$muid]??['score'=>null];
       $sc_color=$ds['score']===null?'#9CA3AF':($ds['score']>=80?'#16A34A':($ds['score']>=60?'#D97706':'#DC2626'));
+
+      if ($cur_mtype !== $mem['member_type']) {
+        if ($cur_group !== '') echo "</tbody>";
+        $cur_mtype = $mem['member_type'];
+        $cur_group = '';
+        echo "<tbody><tr class='mtype-separator'><td colspan='".($is_admin?8:7)."'>".htmlspecialchars($cur_mtype)." Members</td></tr></tbody>";
+      }
+
+      if ($cur_group !== $mem['job_title']) {
+        if ($cur_group !== '') echo "</tbody>";
+        $cur_group = $mem['job_title'];
+        $gid = md5($cur_group ?: 'N/A');
+        $grp_idx = 0;
+        echo "<tbody class='group-section' data-id='$gid'>";
+        echo "<tr class='group-header' onclick='toggleGroup(this)' data-group-id='$gid'><td colspan='".($is_admin?8:7)."' style='border-bottom:1px solid #E2E8F0;'><div style='display:flex; align-items:center; justify-content:space-between;'><strong style='color:#1E293B; font-size:13px; text-transform:uppercase; letter-spacing:1px;'>".htmlspecialchars($cur_group ?: 'N/A')."</strong><span class='chevron'>▼</span></div></td></tr>";
+      }
+      $grp_idx++;
     ?>
-    <tr>
+    <tr class="group-item" data-group="<?=md5($cur_group ?: 'N/A')?>">
+      <td style="text-align:center; color:#9CA3AF;"><?=$grp_idx?></td>
       <td>
         <div style="display:flex;align-items:center;gap:8px;">
           <div style="width:28px;height:28px;border-radius:50%;background:linear-gradient(135deg,#6366F1,#8B5CF6);display:flex;align-items:center;justify-content:center;color:#fff;font-size:12px;font-weight:700;flex-shrink:0;"><?=mb_strtoupper(mb_substr($mem['full_name'],0,1,'UTF-8'),'UTF-8')?></div>
@@ -381,8 +445,7 @@ $reviewed_count = count(array_filter($dash_stats, fn($d)=>!empty($d['review'])))
       <td><button class="btn <?=($muid===$uid && !$is_admin)?'btn-success':'btn-primary'?> btn-sm" onclick="openReviewModal(<?=$muid?>,<?=htmlspecialchars(json_encode($rv??new stdClass),ENT_QUOTES)?>, '<?=htmlspecialchars($mem['full_name'],ENT_QUOTES)?>')">✏️ <?=($muid===$uid && !$is_admin)?'Xem/Phản hồi':'Đánh giá'?></button></td>
       <?php endif; ?>
     </tr>
-    <?php endforeach; ?>
-    </tbody>
+    <?php endforeach; if($cur_group !== '') echo "</tbody>"; ?>
   </table>
   </div>
 </div>
@@ -406,24 +469,46 @@ $reviewed_count = count(array_filter($dash_stats, fn($d)=>!empty($d['review'])))
     </div>
   </div>
   <div class="tbl-wrap">
-  <table class="tbl">
+  <table class="tbl tbl-sortable">
     <thead>
       <tr>
+        <th style="width:40px; text-align:center;">#</th>
         <th style="min-width:180px;">Nhân viên</th>
         <th style="width:70px;text-align:center;">Phân loại</th>
         <?php for($m=1;$m<=12;$m++): ?><th style="text-align:center;width:60px;">T<?=$m?></th><?php endfor; ?>
         <th style="text-align:center;width:80px;background:#EEF2FF;color:#3730A3;">TB Năm</th>
       </tr>
     </thead>
-    <tbody>
-    <?php foreach($members as $m): 
+    <?php 
+    $cur_mtype = '';
+    $cur_group = '';
+    $grp_idx = 0;
+    foreach($members as $m): 
       $muid=$m['id']; 
       $scores=$yearly_scores[$muid]??[];
       $mo_count=0; $mo_sum=0;
       for($i=1;$i<=12;$i++) if(isset($scores[$i])) { $mo_count++; $mo_sum+=$scores[$i]; }
       $avg_y = ($mo_count>0) ? round($mo_sum/$mo_count,1) : null;
+
+      if ($cur_mtype !== $m['member_type']) {
+        if ($cur_group !== '') echo "</tbody>";
+        $cur_mtype = $m['member_type'];
+        $cur_group = '';
+        echo "<tbody><tr class='mtype-separator'><td colspan='16'>".htmlspecialchars($cur_mtype)." Members</td></tr></tbody>";
+      }
+
+      if ($cur_group !== $m['job_title']) {
+        if ($cur_group !== '') echo "</tbody>";
+        $cur_group = $m['job_title'];
+        $gid = md5($cur_group ?: 'N/A');
+        $grp_idx = 0;
+        echo "<tbody class='group-section' data-id='$gid'>";
+        echo "<tr class='group-header' onclick='toggleGroup(this)' data-group-id='$gid'><td colspan='16' style='border-bottom:1px solid #E2E8F0;'><div style='display:flex; align-items:center; justify-content:space-between;'><strong style='color:#1E293B; font-size:13px; text-transform:uppercase; letter-spacing:1px;'>".htmlspecialchars($cur_group ?: 'N/A')."</strong><span class='chevron'>▼</span></div></td></tr>";
+      }
+      $grp_idx++;
     ?>
-    <tr>
+    <tr class="group-item" data-group="<?=md5($cur_group ?: 'N/A')?>">
+      <td style="text-align:center; color:#9CA3AF;"><?=$grp_idx?></td>
       <td>
         <div style="display:flex;align-items:center;gap:8px;">
           <div class="emp-av" style="width:28px;height:28px;font-size:12px;"><?=mb_substr($m['full_name'],0,1)?></div>
@@ -445,8 +530,7 @@ $reviewed_count = count(array_filter($dash_stats, fn($d)=>!empty($d['review'])))
       <?php endfor; ?>
       <td style="text-align:center;font-weight:800;background:#F8FAFF;color:#1E1B4B;font-size:14px;"><?=$avg_y!==null?$avg_y:'—'?></td>
     </tr>
-    <?php endforeach; ?>
-    </tbody>
+    <?php endforeach; if($cur_group !== '') echo "</tbody>"; ?>
   </table>
   </div>
 </div>
