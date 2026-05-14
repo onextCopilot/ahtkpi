@@ -20,10 +20,33 @@ $reviewed_count = count(array_filter($dash_stats, fn($d)=>!empty($d['review'])))
   </div>
 </div>
 
+<!-- Filter Bar -->
+<div class="panel" style="padding:12px; margin-bottom:16px;">
+  <div style="display:flex; gap:12px; align-items:center; flex-wrap:wrap;">
+    <div style="position:relative; flex:1; min-width:200px;">
+      <input type="text" class="kpi-filter-input" data-target="dashboard-table" placeholder="Tìm kiếm tên nhân viên..." style="width:100%; padding:8px 12px 8px 32px; border:1px solid #D1D5DB; border-radius:6px; font-size:13px;">
+      <span style="position:absolute; left:10px; top:50%; transform:translateY(-50%); color:#9CA3AF;">🔍</span>
+    </div>
+    <select class="kpi-filter-type" data-target="dashboard-table" style="padding:8px 12px; border:1px solid #D1D5DB; border-radius:6px; font-size:13px; background:#fff;">
+      <option value="">Tất cả loại member</option>
+      <option value="Core">Core Member</option>
+      <option value="Key">Key Member</option>
+    </select>
+    <select class="kpi-filter-role" data-target="dashboard-table" style="padding:8px 12px; border:1px solid #D1D5DB; border-radius:6px; font-size:13px; background:#fff;">
+      <option value="">Tất cả vai trò</option>
+      <?php 
+        $roles = array_unique(array_filter(array_column($members, 'job_title')));
+        sort($roles);
+        foreach($roles as $r) echo "<option value='".htmlspecialchars($r)."'>".htmlspecialchars($r)."</option>";
+      ?>
+    </select>
+  </div>
+</div>
+
 <!-- Member scoreCards/List -->
 <div class="panel">
   <div class="tbl-wrap">
-  <table class="tbl tbl-sortable">
+  <table class="tbl tbl-sortable" id="dashboard-table">
     <thead>
       <tr>
         <th style="padding-left:16px; width:40px; text-align:center;">#</th>
@@ -64,7 +87,7 @@ $reviewed_count = count(array_filter($dash_stats, fn($d)=>!empty($d['review'])))
       }
       $grp_idx++;
     ?>
-    <tr class="group-item" data-group="<?=md5($cur_group ?: 'N/A')?>">
+    <tr class="group-item" data-group="<?=md5($cur_group ?: 'N/A')?>" data-role="<?=htmlspecialchars(($m['job_title']??$mem['job_title'])??'')?>" data-type="<?=htmlspecialchars(($m['member_type']??$mem['member_type'])??'')?>">
       <td style="text-align:center; color:#9CA3AF; padding-left:16px;"><?=$grp_idx?></td>
       <td style="padding-left:16px;">
         <div style="display:flex;gap:10px;align-items:center;">
@@ -260,11 +283,26 @@ $reviewed_count = count(array_filter($dash_stats, fn($d)=>!empty($d['review'])))
     <button class="btn btn-primary btn-sm" onclick="document.getElementById('m-add-member').classList.add('show')">+ Thêm từ danh sách user</button>
     <?php endif; ?>
   </div>
+  
+  <div style="padding:12px 20px; border-bottom:1px solid #F3F4F6;">
+    <div style="display:flex; gap:12px; align-items:center; flex-wrap:wrap;">
+      <div style="position:relative; flex:1; min-width:200px;">
+        <input type="text" class="kpi-filter-input" data-target="employees-table" placeholder="Tìm kiếm tên hoặc email..." style="width:100%; padding:8px 12px 8px 32px; border:1px solid #D1D5DB; border-radius:6px; font-size:13px;">
+        <span style="position:absolute; left:10px; top:50%; transform:translateY(-50%); color:#9CA3AF;">🔍</span>
+      </div>
+      <select class="kpi-filter-type" data-target="employees-table" style="padding:8px 12px; border:1px solid #D1D5DB; border-radius:6px; font-size:13px; background:#fff;">
+        <option value="">Tất cả loại member</option>
+        <option value="Core">Core Member</option>
+        <option value="Key">Key Member</option>
+      </select>
+    </div>
+  </div>
+
   <?php if(empty($members) && empty($non_members)): ?>
   <div style="padding:30px;text-align:center;color:#9CA3AF;">Không có user nào trong hệ thống.</div>
   <?php else: ?>
   <div class="tbl-wrap">
-  <table class="tbl tbl-sortable">
+  <table class="tbl tbl-sortable" id="employees-table">
     <thead><tr><th style="width:40px; text-align:center;">#</th><th>Họ tên</th><th>Loại Member</th><th>Chức danh</th><th>Phòng ban</th><th>Email</th><th>Trạng thái</th><?php if($is_admin): ?><th>Xoá khỏi nhóm</th><?php endif; ?></tr></thead>
     <?php 
     $cur_mtype = '';
@@ -288,7 +326,7 @@ $reviewed_count = count(array_filter($dash_stats, fn($d)=>!empty($d['review'])))
       }
       $grp_idx++;
     ?>
-    <tr class="group-item" data-group="<?=md5($cur_group ?: 'N/A')?>">
+    <tr class="group-item" data-group="<?=md5($cur_group ?: 'N/A')?>" data-role="<?=htmlspecialchars(($m['job_title']??$mem['job_title'])??'')?>" data-type="<?=htmlspecialchars(($m['member_type']??$mem['member_type'])??'')?>">
       <td style="color:#9CA3AF;"><?=$grp_idx?></td>
 
       <td>
@@ -391,8 +429,20 @@ $reviewed_count = count(array_filter($dash_stats, fn($d)=>!empty($d['review'])))
   <div class="panel-hd">
     <h3>🏆 Tổng kết quý&nbsp;<small style="font-weight:500;color:#6B7280;"><?=$cur_cycle?'— '.htmlspecialchars($cur_cycle['name']):''?></small></h3>
   </div>
+  <div style="padding:12px 20px; border-bottom:1px solid #F3F4F6;">
+    <div style="display:flex; gap:12px; align-items:center; flex-wrap:wrap;">
+      <div style="position:relative; flex:1; min-width:200px;">
+        <input type="text" class="kpi-filter-input" data-target="reviews-table" placeholder="Tìm kiếm tên nhân viên..." style="width:100%; padding:8px 12px 8px 32px; border:1px solid #D1D5DB; border-radius:6px; font-size:13px;">
+        <span style="position:absolute; left:10px; top:50%; transform:translateY(-50%); color:#9CA3AF;">🔍</span>
+      </div>
+      <select class="kpi-filter-role" data-target="reviews-table" style="padding:8px 12px; border:1px solid #D1D5DB; border-radius:6px; font-size:13px; background:#fff;">
+        <option value="">Tất cả vai trò</option>
+        <?php foreach($roles as $r) echo "<option value='".htmlspecialchars($r)."'>".htmlspecialchars($r)."</option>"; ?>
+      </select>
+    </div>
+  </div>
   <div class="tbl-wrap">
-  <table class="tbl tbl-sortable">
+  <table class="tbl tbl-sortable" id="reviews-table">
     <thead><tr><th style="width:40px; text-align:center;">#</th><th>Nhân viên</th><th style="text-align:center;">Điểm tổng</th><th style="text-align:center;">Xếp loại</th><th>Nhận xét</th><th>Trạng thái</th><th>Người đánh giá</th><?php if($is_admin): ?><th></th><?php endif; ?></tr></thead>
     <?php 
     $cur_mtype = '';
@@ -420,7 +470,7 @@ $reviewed_count = count(array_filter($dash_stats, fn($d)=>!empty($d['review'])))
       }
       $grp_idx++;
     ?>
-    <tr class="group-item" data-group="<?=md5($cur_group ?: 'N/A')?>">
+    <tr class="group-item" data-group="<?=md5($cur_group ?: 'N/A')?>" data-role="<?=htmlspecialchars(($m['job_title']??$mem['job_title'])??'')?>" data-type="<?=htmlspecialchars(($m['member_type']??$mem['member_type'])??'')?>">
       <td style="text-align:center; color:#9CA3AF;"><?=$grp_idx?></td>
       <td>
         <div style="display:flex;align-items:center;gap:8px;">
@@ -468,8 +518,20 @@ $reviewed_count = count(array_filter($dash_stats, fn($d)=>!empty($d['review'])))
        </form>
     </div>
   </div>
+  <div style="padding:12px 20px; border-bottom:1px solid #F3F4F6;">
+    <div style="display:flex; gap:12px; align-items:center; flex-wrap:wrap;">
+      <div style="position:relative; flex:1; min-width:200px;">
+        <input type="text" class="kpi-filter-input" data-target="yearly-table" placeholder="Tìm kiếm tên nhân viên..." style="width:100%; padding:8px 12px 8px 32px; border:1px solid #D1D5DB; border-radius:6px; font-size:13px;">
+        <span style="position:absolute; left:10px; top:50%; transform:translateY(-50%); color:#9CA3AF;">🔍</span>
+      </div>
+      <select class="kpi-filter-role" data-target="yearly-table" style="padding:8px 12px; border:1px solid #D1D5DB; border-radius:6px; font-size:13px; background:#fff;">
+        <option value="">Tất cả vai trò</option>
+        <?php foreach($roles as $r) echo "<option value='".htmlspecialchars($r)."'>".htmlspecialchars($r)."</option>"; ?>
+      </select>
+    </div>
+  </div>
   <div class="tbl-wrap">
-  <table class="tbl tbl-sortable">
+  <table class="tbl tbl-sortable" id="yearly-table">
     <thead>
       <tr>
         <th style="width:40px; text-align:center;">#</th>
@@ -507,7 +569,7 @@ $reviewed_count = count(array_filter($dash_stats, fn($d)=>!empty($d['review'])))
       }
       $grp_idx++;
     ?>
-    <tr class="group-item" data-group="<?=md5($cur_group ?: 'N/A')?>">
+    <tr class="group-item" data-group="<?=md5($cur_group ?: 'N/A')?>" data-role="<?=htmlspecialchars($m['job_title']??'')?>" data-type="<?=htmlspecialchars($m['member_type']??'')?>">
       <td style="text-align:center; color:#9CA3AF;"><?=$grp_idx?></td>
       <td>
         <div style="display:flex;align-items:center;gap:8px;">

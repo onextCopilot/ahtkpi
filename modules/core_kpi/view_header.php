@@ -201,7 +201,76 @@ function saveGroupOrder(sortable) {
   });
 }
 
+function applyKpiFilters(tableId) {
+  const table = document.getElementById(tableId);
+  if (!table) return;
+
+  const searchInput = document.querySelector(`.kpi-filter-input[data-target="${tableId}"]`);
+  const typeSelect = document.querySelector(`.kpi-filter-type[data-target="${tableId}"]`);
+  const roleSelect = document.querySelector(`.kpi-filter-role[data-target="${tableId}"]`);
+
+  const query = (searchInput?.value || "").toLowerCase();
+  const typeFilter = typeSelect?.value || "";
+  const roleFilter = roleSelect?.value || "";
+
+  const sections = table.querySelectorAll('tbody.group-section');
+  
+  sections.forEach(section => {
+    const items = section.querySelectorAll('.group-item');
+    let sectionVisibleCount = 0;
+
+    items.forEach(item => {
+      const text = item.innerText.toLowerCase();
+      const rowType = (item.getAttribute('data-type') || "").trim();
+      const rowRole = (item.getAttribute('data-role') || "").trim();
+      
+      // Fallback: search for role text in the row if data-role is missing
+      const roleText = item.querySelector('small, div[style*="color:#6B7280"]')?.innerText || "";
+
+      const matchesSearch = text.includes(query);
+      const matchesType = !typeFilter || rowType === typeFilter.trim() || (item.innerText.includes(typeFilter));
+      const matchesRole = !roleFilter || rowRole === roleFilter.trim() || (roleText.includes(roleFilter));
+
+      if (matchesSearch && matchesType && matchesRole) {
+        item.classList.remove('hidden');
+        sectionVisibleCount++;
+      } else {
+        item.classList.add('hidden');
+      }
+    });
+
+    const header = section.querySelector('.group-header');
+    if (sectionVisibleCount > 0) {
+      header?.classList.remove('hidden');
+      section.style.display = '';
+      console.log(`Section shown: ${section.getAttribute('data-id')} (matches: ${sectionVisibleCount})`);
+    } else {
+      header?.classList.add('hidden');
+      section.style.display = 'none';
+    }
+  });
+
+  // Handle mtype-separator visibility
+  const separators = table.querySelectorAll('.mtype-separator');
+  separators.forEach(sep => {
+    const sepTbody = sep.closest('tbody');
+    let hasVisibleContent = false;
+    let next = sepTbody.nextElementSibling;
+    
+    while (next && !next.querySelector('.mtype-separator')) {
+      if (next.style.display !== 'none' && next.classList.contains('group-section')) {
+        hasVisibleContent = true;
+        break;
+      }
+      next = next.nextElementSibling;
+    }
+    
+    sepTbody.style.display = hasVisibleContent ? '' : 'none';
+  });
+}
+
 document.addEventListener('DOMContentLoaded', () => {
+  // Existing Sortable init
   const table = document.querySelector('.tbl-sortable');
   if (table && "<?=($_SESSION['role'] === 'admin') ? '1' : '0'?>" === '1') {
     new Sortable(table, {
@@ -210,11 +279,19 @@ document.addEventListener('DOMContentLoaded', () => {
       animation: 150,
       ghostClass: 'sortable-ghost',
       chosenClass: 'sortable-chosen',
-      onEnd: function() {
+      onEnd: function(evt) {
         saveGroupOrder(this);
       }
     });
   }
+
+  // Filter Event Listeners
+  document.querySelectorAll('.kpi-filter-input, .kpi-filter-type, .kpi-filter-role').forEach(el => {
+    el.addEventListener('input', () => {
+      const target = el.getAttribute('data-target');
+      applyKpiFilters(target);
+    });
+  });
 });
 </script>
 </head>
@@ -250,16 +327,7 @@ document.addEventListener('DOMContentLoaded', () => {
       <?php endforeach; ?>
     </select>
     
-    <?php if ($is_admin): ?>
-    <select name="emp" onchange="this.form.submit()" style="padding:5px 10px;border:1px solid #D1D5DB;border-radius:6px;font-size:13px;">
-      <option value="0">-- Tất cả nhân viên --</option>
-      <?php foreach($members as $e): ?>
-      <option value="<?=$e['id']?>" <?=$sel_user==$e['id']?'selected':''?>><?=htmlspecialchars($e['full_name'])?></option>
-      <?php endforeach; ?>
-    </select>
-    <?php else: ?>
-      <input type="hidden" name="emp" value="<?=$sel_user?>">
-    <?php endif; ?>
+    <input type="hidden" name="emp" value="<?=$sel_user?>">
     <input type="hidden" name="year" value="<?=$sel_year?>">
   </form>
 </div>
