@@ -94,7 +94,7 @@
 
 .group-header.collapsed .chevron{transform:rotate(-90deg);}
 .group-item{transition:all 0.3s ease-in-out;}
-.group-item.hidden{display:none;}
+.group-item.hidden{display:none !important;}
   .group-header { cursor: grab; }
   .group-header:active { cursor: grabbing; }
   .sortable-ghost { opacity: 0.4; background: #E0F2FE !important; }
@@ -221,15 +221,26 @@ function applyKpiFilters(tableId) {
 
     items.forEach(item => {
       const text = item.innerText.toLowerCase();
-      const rowType = (item.getAttribute('data-type') || "").trim();
-      const rowRole = (item.getAttribute('data-role') || "").trim();
+      const rowType = (item.getAttribute('data-type') || "").trim().toLowerCase();
+      const rowRole = (item.getAttribute('data-role') || "").trim().toLowerCase();
+      const fType = typeFilter.trim().toLowerCase();
+      const fRole = roleFilter.trim().toLowerCase();
       
-      // Fallback: search for role text in the row if data-role is missing
-      const roleText = item.querySelector('small, div[style*="color:#6B7280"]')?.innerText || "";
+      const roleLabel = (item.querySelector('small, div[style*="color:#6B7280"]')?.innerText || "").toLowerCase();
 
-      const matchesSearch = text.includes(query);
-      const matchesType = !typeFilter || rowType === typeFilter.trim() || (item.innerText.includes(typeFilter));
-      const matchesRole = !roleFilter || rowRole === roleFilter.trim() || (roleText.includes(roleFilter));
+      const matchesSearch = !query || text.includes(query);
+      
+      // Strict Type Match: only use data-type attribute
+      let matchesType = true;
+      if (fType) {
+        matchesType = (rowType === fType);
+      }
+
+      // Strict Role Match
+      let matchesRole = true;
+      if (fRole) {
+        matchesRole = (rowRole === fRole || roleLabel.includes(fRole));
+      }
 
       if (matchesSearch && matchesType && matchesRole) {
         item.classList.remove('hidden');
@@ -242,8 +253,7 @@ function applyKpiFilters(tableId) {
     const header = section.querySelector('.group-header');
     if (sectionVisibleCount > 0) {
       header?.classList.remove('hidden');
-      section.style.display = '';
-      console.log(`Section shown: ${section.getAttribute('data-id')} (matches: ${sectionVisibleCount})`);
+      section.style.display = 'table-row-group'; // Use explicit display for tbody
     } else {
       header?.classList.add('hidden');
       section.style.display = 'none';
@@ -258,14 +268,14 @@ function applyKpiFilters(tableId) {
     let next = sepTbody.nextElementSibling;
     
     while (next && !next.querySelector('.mtype-separator')) {
-      if (next.style.display !== 'none' && next.classList.contains('group-section')) {
+      if (next.classList.contains('group-section') && next.style.display !== 'none') {
         hasVisibleContent = true;
         break;
       }
       next = next.nextElementSibling;
     }
     
-    sepTbody.style.display = hasVisibleContent ? '' : 'none';
+    sepTbody.style.display = hasVisibleContent ? 'table-row-group' : 'none';
   });
 }
 
@@ -285,12 +295,12 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
-  // Filter Event Listeners
-  document.querySelectorAll('.kpi-filter-input, .kpi-filter-type, .kpi-filter-role').forEach(el => {
-    el.addEventListener('input', () => {
-      const target = el.getAttribute('data-target');
-      applyKpiFilters(target);
-    });
+  // Filter Event Listeners — 'change' for selects, 'input' for text fields
+  document.querySelectorAll('.kpi-filter-input').forEach(el => {
+    el.addEventListener('input', () => applyKpiFilters(el.getAttribute('data-target')));
+  });
+  document.querySelectorAll('.kpi-filter-type, .kpi-filter-role').forEach(el => {
+    el.addEventListener('change', () => applyKpiFilters(el.getAttribute('data-target')));
   });
 });
 </script>

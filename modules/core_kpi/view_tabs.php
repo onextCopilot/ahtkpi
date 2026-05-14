@@ -87,7 +87,7 @@ $reviewed_count = count(array_filter($dash_stats, fn($d)=>!empty($d['review'])))
       }
       $grp_idx++;
     ?>
-    <tr class="group-item" data-group="<?=md5($cur_group ?: 'N/A')?>" data-role="<?=htmlspecialchars(($m['job_title']??$mem['job_title'])??'')?>" data-type="<?=htmlspecialchars(($m['member_type']??$mem['member_type'])??'')?>">
+    <tr class="group-item" data-group="<?=md5($cur_group ?: 'N/A')?>" data-role="<?=htmlspecialchars($mem['job_title']??'')?>" data-type="<?=htmlspecialchars($mem['member_type']??'')?>">
       <td style="text-align:center; color:#9CA3AF; padding-left:16px;"><?=$grp_idx?></td>
       <td style="padding-left:16px;">
         <div style="display:flex;gap:10px;align-items:center;">
@@ -326,7 +326,7 @@ $reviewed_count = count(array_filter($dash_stats, fn($d)=>!empty($d['review'])))
       }
       $grp_idx++;
     ?>
-    <tr class="group-item" data-group="<?=md5($cur_group ?: 'N/A')?>" data-role="<?=htmlspecialchars(($m['job_title']??$mem['job_title'])??'')?>" data-type="<?=htmlspecialchars(($m['member_type']??$mem['member_type'])??'')?>">
+    <tr class="group-item" data-group="<?=md5($cur_group ?: 'N/A')?>" data-role="<?=htmlspecialchars($m['job_title']??'')?>" data-type="<?=htmlspecialchars($m['member_type']??'')?>">
       <td style="color:#9CA3AF;"><?=$grp_idx?></td>
 
       <td>
@@ -470,7 +470,7 @@ $reviewed_count = count(array_filter($dash_stats, fn($d)=>!empty($d['review'])))
       }
       $grp_idx++;
     ?>
-    <tr class="group-item" data-group="<?=md5($cur_group ?: 'N/A')?>" data-role="<?=htmlspecialchars(($m['job_title']??$mem['job_title'])??'')?>" data-type="<?=htmlspecialchars(($m['member_type']??$mem['member_type'])??'')?>">
+    <tr class="group-item" data-group="<?=md5($cur_group ?: 'N/A')?>" data-role="<?=htmlspecialchars($mem['job_title']??'')?>" data-type="<?=htmlspecialchars($mem['member_type']??'')?>">
       <td style="text-align:center; color:#9CA3AF;"><?=$grp_idx?></td>
       <td>
         <div style="display:flex;align-items:center;gap:8px;">
