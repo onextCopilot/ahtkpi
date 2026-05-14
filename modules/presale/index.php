@@ -23,7 +23,7 @@ try {
     $customer_res = $odoo->getCustomers(1000, 0); // Get first 1000 customers from cache
     $customers = $customer_res['customers'] ?? [];
     // Sort customers by name
-    usort($customers, function($a, $b) {
+    usort($customers, function ($a, $b) {
         return strcmp($a['name'], $b['name']);
     });
 } catch (Exception $e) {
@@ -99,6 +99,7 @@ if ($check_col2 && $check_col2->num_rows == 0) {
 ?>
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -112,6 +113,7 @@ if ($check_col2 && $check_col2->num_rows == 0) {
             --text-primary: #0f172a;
             --border-color: #e2e8f0;
         }
+
         body.dark-mode {
             --bg-sidebar: #0f172a;
             --bg-chat: #1e293b;
@@ -120,6 +122,7 @@ if ($check_col2 && $check_col2->num_rows == 0) {
             background: #0f172a;
             color: #f8fafc;
         }
+
         .assistant-container {
             background: var(--bg-chat);
             border-radius: 12px;
@@ -130,6 +133,7 @@ if ($check_col2 && $check_col2->num_rows == 0) {
             overflow: hidden;
             margin-bottom: 24px;
         }
+
         .chat-sidebar {
             width: 250px;
             border-right: 1px solid var(--border-color);
@@ -137,20 +141,58 @@ if ($check_col2 && $check_col2->num_rows == 0) {
             display: flex;
             flex-direction: column;
         }
-        .dark-mode .assistant-container { background: #1e293b; border-color: #334155; }
-        .dark-mode .chat-sidebar { background: #0f172a; border-right-color: #334155; }
-        .dark-mode .chat-sidebar-header, .dark-mode .project-header { color: #f8fafc; }
-        .dark-mode .chat-area { background: #1e293b; }
-        .dark-mode .chat-input-area, .dark-mode .quick-actions { background: #0f172a; border-color: #334155; }
-        .dark-mode .message.assistant { background: #334155; color: #f8fafc; border-color: #475569; }
-        .dark-mode .message.user { background: #475569; color: #fff; }
-        .dark-mode .chat-input-box textarea { background: #334155; color: #fff; border-color: #475569; }
-        .dark-mode .project-header:hover { background: #334155; }
-        
+
+        .dark-mode .assistant-container {
+            background: #1e293b;
+            border-color: #334155;
+        }
+
+        .dark-mode .chat-sidebar {
+            background: #0f172a;
+            border-right-color: #334155;
+        }
+
+        .dark-mode .chat-sidebar-header,
+        .dark-mode .project-header {
+            color: #f8fafc;
+        }
+
+        .dark-mode .chat-area {
+            background: #1e293b;
+        }
+
+        .dark-mode .chat-input-area,
+        .dark-mode .quick-actions {
+            background: #0f172a;
+            border-color: #334155;
+        }
+
+        .dark-mode .message.assistant {
+            background: #334155;
+            color: #f8fafc;
+            border-color: #475569;
+        }
+
+        .dark-mode .message.user {
+            background: #475569;
+            color: #fff;
+        }
+
+        .dark-mode .chat-input-box textarea {
+            background: #334155;
+            color: #fff;
+            border-color: #475569;
+        }
+
+        .dark-mode .project-header:hover {
+            background: #334155;
+        }
+
         .sidebar-search {
             padding: 8px 16px;
             border-bottom: 1px solid var(--border-color);
         }
+
         .sidebar-search input {
             width: 100%;
             padding: 6px 10px;
@@ -171,8 +213,9 @@ if ($check_col2 && $check_col2->num_rows == 0) {
             top: 0;
             width: 100%;
             height: 100%;
-            background-color: rgba(0,0,0,0.5);
+            background-color: rgba(0, 0, 0, 0.5);
         }
+
         .modal-content {
             background-color: var(--bg-chat);
             margin: 5% auto;
@@ -184,6 +227,7 @@ if ($check_col2 && $check_col2->num_rows == 0) {
             display: flex;
             flex-direction: column;
         }
+
         .modal-header {
             display: flex;
             justify-content: space-between;
@@ -192,6 +236,7 @@ if ($check_col2 && $check_col2->num_rows == 0) {
             padding-bottom: 10px;
             margin-bottom: 15px;
         }
+
         .modal-body {
             overflow-y: auto;
             white-space: pre-wrap;
@@ -199,28 +244,35 @@ if ($check_col2 && $check_col2->num_rows == 0) {
             line-height: 1.6;
             color: var(--text-primary);
         }
+
         .close-modal {
             color: #aaa;
             font-size: 28px;
             font-weight: bold;
             cursor: pointer;
         }
-        .close-modal:hover { color: #000; }
+
+        .close-modal:hover {
+            color: #000;
+        }
 
         .drop-zone {
             border: 2px dashed transparent;
             transition: all 0.2s;
         }
+
         .drop-zone.dragover {
             border-color: #4f46e5;
             background: rgba(79, 70, 229, 0.05);
         }
+
         .chat-sidebar-header {
             padding: 16px;
             border-bottom: 1px solid #e2e8f0;
             font-weight: 600;
             color: #0f172a;
         }
+
         .new-chat-btn {
             display: block;
             width: calc(100% - 32px);
@@ -234,40 +286,125 @@ if ($check_col2 && $check_col2->num_rows == 0) {
             font-size: 14px;
             font-weight: 500;
         }
-        .new-chat-btn:hover { background: #1e293b; }
+
+        .new-chat-btn:hover {
+            background: #1e293b;
+        }
+
         .history-list {
             flex: 1;
             overflow-y: auto;
             padding: 10px 16px;
         }
-        .project-item { margin-bottom: 8px; }
+
+        .project-item {
+            margin-bottom: 8px;
+        }
+
         .project-header {
-            padding: 10px; font-size: 14px; font-weight: 500; color: #1e293b;
-            cursor: pointer; border-radius: 6px; display: flex; justify-content: space-between; align-items: center;
+            padding: 10px;
+            font-size: 14px;
+            font-weight: 500;
+            color: #1e293b;
+            cursor: pointer;
+            border-radius: 6px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
         }
-        .project-header:hover { background: #e2e8f0; }
-        .project-header.active { background: #e0e7ff; color: #3730a3; }
-        .project-title { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex: 1; }
-        .project-header .delete-btn { color: #94a3b8; font-size: 16px; padding: 0 4px; display: none; }
-        .project-header:hover .delete-btn { display: block; }
-        .project-header .delete-btn:hover { color: #ef4444; }
-        .chat-list { padding-left: 20px; margin-top: 4px; display: none; }
-        .chat-item { 
-            padding: 8px 10px; font-size: 13px; color: #475569; cursor: pointer; border-radius: 6px; margin-bottom: 2px;
-            display: flex; justify-content: space-between; align-items: center; transition: all 0.2s;
+
+        .project-header:hover {
+            background: #e2e8f0;
         }
-        .chat-item:hover, .chat-item.active { background: #e2e8f0; color: #0f172a; }
-        .chat-item .delete-chat-btn { opacity: 0; color: #94a3b8; padding: 0 4px; transition: all 0.2s; }
-        .chat-item:hover .delete-chat-btn { opacity: 1; }
-        .chat-item .delete-chat-btn:hover { color: #ef4444; background: #fee2e2; border-radius: 4px; }
-        .new-chat-in-project { padding: 8px 10px; font-size: 13px; color: #4f46e5; cursor: pointer; font-weight: 500; }
-        .new-chat-in-project:hover { text-decoration: underline; }
+
+        .project-header.active {
+            background: #e0e7ff;
+            color: #3730a3;
+        }
+
+        .project-title {
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            flex: 1;
+        }
+
+        .project-header .delete-btn {
+            color: #94a3b8;
+            font-size: 16px;
+            padding: 0 4px;
+            display: none;
+        }
+
+        .project-header:hover .delete-btn {
+            display: block;
+        }
+
+        .project-header .delete-btn:hover {
+            color: #ef4444;
+        }
+
+        .chat-list {
+            padding-left: 20px;
+            margin-top: 4px;
+            display: none;
+        }
+
+        .chat-item {
+            padding: 8px 10px;
+            font-size: 13px;
+            color: #475569;
+            cursor: pointer;
+            border-radius: 6px;
+            margin-bottom: 2px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            transition: all 0.2s;
+        }
+
+        .chat-item:hover,
+        .chat-item.active {
+            background: #e2e8f0;
+            color: #0f172a;
+        }
+
+        .chat-item .delete-chat-btn {
+            opacity: 0;
+            color: #94a3b8;
+            padding: 0 4px;
+            transition: all 0.2s;
+        }
+
+        .chat-item:hover .delete-chat-btn {
+            opacity: 1;
+        }
+
+        .chat-item .delete-chat-btn:hover {
+            color: #ef4444;
+            background: #fee2e2;
+            border-radius: 4px;
+        }
+
+        .new-chat-in-project {
+            padding: 8px 10px;
+            font-size: 13px;
+            color: #4f46e5;
+            cursor: pointer;
+            font-weight: 500;
+        }
+
+        .new-chat-in-project:hover {
+            text-decoration: underline;
+        }
+
         .chat-area {
             flex: 1;
             display: flex;
             flex-direction: column;
             background: #fff;
         }
+
         .chat-messages {
             flex: 1;
             padding: 24px;
@@ -276,6 +413,7 @@ if ($check_col2 && $check_col2->num_rows == 0) {
             flex-direction: column;
             gap: 16px;
         }
+
         .message {
             max-width: 80%;
             padding: 12px 16px;
@@ -284,6 +422,7 @@ if ($check_col2 && $check_col2->num_rows == 0) {
             line-height: 1.5;
             word-break: break-word;
         }
+
         .message.user {
             background: #f1f5f9;
             color: #0f172a;
@@ -291,6 +430,7 @@ if ($check_col2 && $check_col2->num_rows == 0) {
             border-bottom-right-radius: 2px;
             white-space: pre-wrap;
         }
+
         .message.assistant {
             background: #eef2ff;
             color: #1e3a8a;
@@ -299,11 +439,37 @@ if ($check_col2 && $check_col2->num_rows == 0) {
             border: 1px solid #c7d2fe;
             white-space: normal;
         }
-        .message.assistant p { margin: 0 0 10px 0; }
-        .message.assistant p:last-child { margin-bottom: 0; }
-        .message.assistant ul, .message.assistant ol { margin: 0 0 10px 20px; padding: 0; }
-        .message.assistant pre { background: #1e293b; color: #fff; padding: 10px; border-radius: 6px; overflow-x: auto; font-size: 13px; }
-        .message.assistant code { font-family: monospace; background: rgba(0,0,0,0.1); padding: 2px 4px; border-radius: 3px; font-size: 13px; }
+
+        .message.assistant p {
+            margin: 0 0 10px 0;
+        }
+
+        .message.assistant p:last-child {
+            margin-bottom: 0;
+        }
+
+        .message.assistant ul,
+        .message.assistant ol {
+            margin: 0 0 10px 20px;
+            padding: 0;
+        }
+
+        .message.assistant pre {
+            background: #1e293b;
+            color: #fff;
+            padding: 10px;
+            border-radius: 6px;
+            overflow-x: auto;
+            font-size: 13px;
+        }
+
+        .message.assistant code {
+            font-family: monospace;
+            background: rgba(0, 0, 0, 0.1);
+            padding: 2px 4px;
+            border-radius: 3px;
+            font-size: 13px;
+        }
 
         /* Settings Sidebar */
         .settings-sidebar {
@@ -313,14 +479,18 @@ if ($check_col2 && $check_col2->num_rows == 0) {
             width: 400px;
             height: 100vh;
             background: #fff;
-            box-shadow: -4px 0 15px rgba(0,0,0,0.1);
+            box-shadow: -4px 0 15px rgba(0, 0, 0, 0.1);
             z-index: 2000;
             transition: right 0.3s cubic-bezier(0.4, 0, 0.2, 1);
             display: flex;
             flex-direction: column;
             border-left: 1px solid var(--border-color);
         }
-        .settings-sidebar.active { right: 0; }
+
+        .settings-sidebar.active {
+            right: 0;
+        }
+
         .settings-sidebar-header {
             padding: 20px;
             border-bottom: 1px solid var(--border-color);
@@ -329,12 +499,17 @@ if ($check_col2 && $check_col2->num_rows == 0) {
             align-items: center;
             background: #f8fafc;
         }
+
         .settings-sidebar-body {
             padding: 24px;
             flex: 1;
             overflow-y: auto;
         }
-        .settings-group { margin-bottom: 24px; }
+
+        .settings-group {
+            margin-bottom: 24px;
+        }
+
         .settings-group label {
             display: block;
             font-size: 13px;
@@ -342,6 +517,7 @@ if ($check_col2 && $check_col2->num_rows == 0) {
             color: #64748b;
             margin-bottom: 8px;
         }
+
         .settings-input {
             width: 100%;
             padding: 10px 12px;
@@ -351,10 +527,17 @@ if ($check_col2 && $check_col2->num_rows == 0) {
             outline: none;
             transition: border-color 0.2s;
         }
-        .settings-input:focus { border-color: #4f46e5; box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.1); }
-        
+
+        .settings-input:focus {
+            border-color: #4f46e5;
+            box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.1);
+        }
+
         /* Custom Customer Search */
-        .customer-search-container { position: relative; }
+        .customer-search-container {
+            position: relative;
+        }
+
         .customer-dropdown {
             position: absolute;
             top: 100%;
@@ -370,14 +553,23 @@ if ($check_col2 && $check_col2->num_rows == 0) {
             display: none;
             margin-top: 4px;
         }
+
         .customer-option {
             padding: 10px 12px;
             cursor: pointer;
             font-size: 13px;
             transition: background 0.2s;
         }
-        .customer-option:hover { background: #f1f5f9; color: #4f46e5; }
-        .customer-option.no-results { color: #94a3b8; cursor: default; }
+
+        .customer-option:hover {
+            background: #f1f5f9;
+            color: #4f46e5;
+        }
+
+        .customer-option.no-results {
+            color: #94a3b8;
+            cursor: default;
+        }
 
         .sidebar-overlay {
             position: fixed;
@@ -389,17 +581,34 @@ if ($check_col2 && $check_col2->num_rows == 0) {
             z-index: 1999;
             display: none;
         }
-        .sidebar-overlay.active { display: block; }
-        .message.assistant h1, .message.assistant h2, .message.assistant h3, .message.assistant h4 { 
-            margin: 20px 0 12px 0; 
-            font-size: 16px; 
+
+        .sidebar-overlay.active {
+            display: block;
+        }
+
+        .message.assistant h1,
+        .message.assistant h2,
+        .message.assistant h3,
+        .message.assistant h4 {
+            margin: 20px 0 12px 0;
+            font-size: 16px;
             font-weight: 700;
-            color: #1e293b; 
+            color: #1e293b;
             letter-spacing: -0.01em;
         }
 
-        .message.assistant h1:first-child, .message.assistant h2:first-child, .message.assistant h3:first-child { margin-top: 0; }
-        .message.assistant table { width: 100%; border-collapse: collapse; margin-bottom: 10px; }
+        .message.assistant h1:first-child,
+        .message.assistant h2:first-child,
+        .message.assistant h3:first-child {
+            margin-top: 0;
+        }
+
+        .message.assistant table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 10px;
+        }
+
         .message.assistant th {
             background: #1e293b;
             color: #ffffff;
@@ -411,6 +620,7 @@ if ($check_col2 && $check_col2->num_rows == 0) {
             letter-spacing: 0.05em;
             border: 1px solid #1e293b;
         }
+
         .message.assistant td {
             padding: 10px 14px;
             border: 1px solid #e2e8f0;
@@ -424,12 +634,14 @@ if ($check_col2 && $check_col2->num_rows == 0) {
             border-top: 1px solid #e2e8f0;
             background: #fff;
         }
+
         .chat-input-box {
             display: flex;
             gap: 12px;
             align-items: center;
             position: relative;
         }
+
         .attach-btn {
             background: transparent;
             border: 1px solid #cbd5e1;
@@ -443,7 +655,12 @@ if ($check_col2 && $check_col2->num_rows == 0) {
             cursor: pointer;
             transition: all 0.2s;
         }
-        .attach-btn:hover { background: #f1f5f9; border-color: #94a3b8; }
+
+        .attach-btn:hover {
+            background: #f1f5f9;
+            border-color: #94a3b8;
+        }
+
         .chat-input-box textarea {
             flex: 1;
             padding: 12px;
@@ -456,13 +673,18 @@ if ($check_col2 && $check_col2->num_rows == 0) {
             height: 48px;
             transition: all 0.2s;
         }
-        .chat-input-box textarea:focus { border-color: #6366f1; box-shadow: 0 0 0 2px rgba(99,102,241,0.2); }
-        
+
+        .chat-input-box textarea:focus {
+            border-color: #6366f1;
+            box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.2);
+        }
+
         /* CSS cho Mention Dropdown */
         .mention-dropdown {
             position: absolute;
             bottom: calc(100% + 10px);
-            left: 110px; /* Căn chỉnh với textarea */
+            left: 110px;
+            /* Căn chỉnh với textarea */
             width: 300px;
             max-height: 200px;
             overflow-y: auto;
@@ -472,10 +694,12 @@ if ($check_col2 && $check_col2->num_rows == 0) {
             box-shadow: 0 -4px 6px -1px rgba(0, 0, 0, 0.1), 0 -2px 4px -1px rgba(0, 0, 0, 0.06);
             z-index: 1000;
         }
+
         .dark-mode .mention-dropdown {
             background: #1e293b;
             border-color: #334155;
         }
+
         .mention-item {
             padding: 10px 12px;
             font-size: 13px;
@@ -486,16 +710,22 @@ if ($check_col2 && $check_col2->num_rows == 0) {
             align-items: center;
             gap: 8px;
         }
+
         .dark-mode .mention-item {
             color: #e2e8f0;
             border-bottom-color: #334155;
         }
-        .mention-item:hover, .mention-item.active {
+
+        .mention-item:hover,
+        .mention-item.active {
             background: #f1f5f9;
         }
-        .dark-mode .mention-item:hover, .dark-mode .mention-item.active {
+
+        .dark-mode .mention-item:hover,
+        .dark-mode .mention-item.active {
             background: #334155;
         }
+
         .send-btn {
             background: #4f46e5;
             color: white;
@@ -507,7 +737,11 @@ if ($check_col2 && $check_col2->num_rows == 0) {
             transition: 0.2s;
             height: 48px;
         }
-        .send-btn:hover { background: #4338ca; }
+
+        .send-btn:hover {
+            background: #4338ca;
+        }
+
         .quick-actions {
             display: flex;
             gap: 10px;
@@ -516,6 +750,23 @@ if ($check_col2 && $check_col2->num_rows == 0) {
             background: #f8fafc;
             overflow-x: auto;
         }
+
+        .chat-list {
+            max-height: 0;
+            overflow: hidden;
+            opacity: 0;
+            transition: max-height 0.4s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.3s ease;
+            background: #f8fafc;
+            border-left: 2px solid #e2e8f0;
+            margin-left: 10px;
+        }
+
+        .chat-list.open {
+            max-height: 1000px;
+            opacity: 1;
+            padding-bottom: 8px;
+        }
+
         .quick-action-btn {
             padding: 6px 12px;
             background: white;
@@ -526,25 +777,39 @@ if ($check_col2 && $check_col2->num_rows == 0) {
             cursor: pointer;
             white-space: nowrap;
         }
+
         .quick-action-btn:hover {
             background: #f1f5f9;
             border-color: #94a3b8;
             color: #0f172a;
         }
+
         .quick-action-btn.active {
             background: #4f46e5;
             color: white !important;
             border-color: #4f46e5;
         }
+
         .attach-btn.recording {
             color: #ef4444;
             animation: pulse 1.5s infinite;
         }
+
         @keyframes pulse {
-            0% { transform: scale(1); }
-            50% { transform: scale(1.1); box-shadow: 0 0 10px rgba(239, 68, 68, 0.5); }
-            100% { transform: scale(1); }
+            0% {
+                transform: scale(1);
+            }
+
+            50% {
+                transform: scale(1.1);
+                box-shadow: 0 0 10px rgba(239, 68, 68, 0.5);
+            }
+
+            100% {
+                transform: scale(1);
+            }
         }
+
         /* AHT Proposal Template Styles - Premium Version */
         .quotation-container {
             background: white;
@@ -553,11 +818,11 @@ if ($check_col2 && $check_col2->num_rows == 0) {
             max-width: 1000px;
             margin: 0 auto;
             font-family: 'Inter', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
-            box-shadow: 0 10px 25px rgba(0,0,0,0.1);
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
             border-radius: 4px;
             position: relative;
         }
-        
+
         /* Cover Page */
         .quote-cover {
             height: 900px;
@@ -566,11 +831,13 @@ if ($check_col2 && $check_col2->num_rows == 0) {
             background: #fff;
             overflow: hidden;
         }
+
         .cover-sidebar {
             width: 120px;
             background: #1e293b;
             height: 100%;
         }
+
         .cover-content {
             flex: 1;
             padding: 80px 80px;
@@ -578,11 +845,16 @@ if ($check_col2 && $check_col2->num_rows == 0) {
             flex-direction: column;
             position: relative;
         }
+
         .cover-logo {
             text-align: right;
             margin-bottom: 40px;
         }
-        .cover-logo img { height: 50px; }
+
+        .cover-logo img {
+            height: 50px;
+        }
+
         .cover-main-title {
             font-size: 72px;
             font-weight: 900;
@@ -591,6 +863,7 @@ if ($check_col2 && $check_col2->num_rows == 0) {
             letter-spacing: -2px;
             line-height: 1;
         }
+
         .cover-sub-title {
             font-size: 24px;
             color: #64748b;
@@ -607,6 +880,7 @@ if ($check_col2 && $check_col2->num_rows == 0) {
             background: #f8fafc;
             border-bottom: 1px solid #e2e8f0;
         }
+
         .workspace-tab {
             padding: 12px 24px;
             font-size: 14px;
@@ -619,25 +893,31 @@ if ($check_col2 && $check_col2->num_rows == 0) {
             align-items: center;
             gap: 8px;
         }
+
         .workspace-tab:hover {
             color: #0f172a;
             background: #f1f5f9;
         }
+
         .workspace-tab.active {
             color: #4f46e5;
             border-bottom-color: #4f46e5;
             background: white;
         }
+
         .tab-content {
             display: none;
             flex: 1;
             flex-direction: column;
-            overflow: hidden;
+            overflow-y: auto;
             background: white;
+            padding: 20px 24px;
         }
+
         .tab-content.active {
             display: flex;
         }
+
         .design-container {
             padding: 30px;
             overflow-y: auto;
@@ -646,13 +926,15 @@ if ($check_col2 && $check_col2->num_rows == 0) {
             gap: 24px;
             max-width: 900px;
         }
+
         .design-card {
             background: white;
             border: 1px solid #e2e8f0;
             border-radius: 12px;
             padding: 24px;
-            box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
         }
+
         .design-card h4 {
             margin: 0 0 15px 0;
             display: flex;
@@ -661,6 +943,7 @@ if ($check_col2 && $check_col2->num_rows == 0) {
             font-size: 17px;
             color: #1e293b;
         }
+
         .cover-info {
             margin-top: 0;
             background: #f8fafc;
@@ -668,8 +951,18 @@ if ($check_col2 && $check_col2->num_rows == 0) {
             border-radius: 8px;
             border: 1px solid #e2e8f0;
         }
-        .cover-info p { margin: 6px 0; font-size: 14px; color: #475569; }
-        .cover-info strong { color: #1e293b; font-size: 16px; }
+
+        .cover-info p {
+            margin: 6px 0;
+            font-size: 14px;
+            color: #475569;
+        }
+
+        .cover-info strong {
+            color: #1e293b;
+            font-size: 16px;
+        }
+
         .cover-footer-info {
             margin-top: auto;
             padding-top: 25px;
@@ -682,8 +975,14 @@ if ($check_col2 && $check_col2->num_rows == 0) {
 
 
         /* Content Pages */
-        .quote-content-body { padding: 60px 80px; }
-        .quotation-section { margin-bottom: 50px; }
+        .quote-content-body {
+            padding: 60px 80px;
+        }
+
+        .quotation-section {
+            margin-bottom: 50px;
+        }
+
         .quotation-section h2 {
             font-size: 22px;
             color: #1e293b;
@@ -693,6 +992,7 @@ if ($check_col2 && $check_col2->num_rows == 0) {
             align-items: center;
             gap: 12px;
         }
+
         .quotation-section h2::before {
             content: "";
             display: block;
@@ -701,7 +1001,13 @@ if ($check_col2 && $check_col2->num_rows == 0) {
             background: #4f46e5;
             border-radius: 2px;
         }
-        .quote-table { width: 100%; border-collapse: collapse; margin-bottom: 30px; }
+
+        .quote-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 30px;
+        }
+
         .quote-table th {
             background: #1e293b;
             color: white;
@@ -713,6 +1019,7 @@ if ($check_col2 && $check_col2->num_rows == 0) {
             letter-spacing: 0.05em;
             border: 1px solid #1e293b;
         }
+
         .quote-table td {
             padding: 10px 14px;
             border: 1px solid #e2e8f0;
@@ -720,7 +1027,10 @@ if ($check_col2 && $check_col2->num_rows == 0) {
             color: #334155;
             line-height: 1.5;
         }
-        .quote-table tr:nth-child(even) { background: #f8fafc; }
+
+        .quote-table tr:nth-child(even) {
+            background: #f8fafc;
+        }
 
 
         /* Summary Table Specifics - Handled by JS for better control */
@@ -736,6 +1046,7 @@ if ($check_col2 && $check_col2->num_rows == 0) {
             font-size: 13px !important;
             border: 1px solid #e2e8f0 !important;
         }
+
         .quotation-container table th {
             background-color: #1e293b !important;
             color: white !important;
@@ -746,17 +1057,20 @@ if ($check_col2 && $check_col2->num_rows == 0) {
             -webkit-print-color-adjust: exact !important;
             print-color-adjust: exact !important;
         }
+
         .quotation-container table td {
             padding: 12px 15px !important;
             border: 1px solid #e2e8f0 !important;
             vertical-align: top !important;
             color: #334155 !important;
         }
+
         .quotation-container table tr:nth-child(even) {
             background-color: #f8fafc !important;
             -webkit-print-color-adjust: exact !important;
             print-color-adjust: exact !important;
         }
+
         .quotation-container h4 {
             margin-top: 30px !important;
             margin-bottom: 15px !important;
@@ -772,10 +1086,15 @@ if ($check_col2 && $check_col2->num_rows == 0) {
                 size: auto;
                 margin: 0;
             }
-            *, *:before, *:after {
+
+            *,
+            *:before,
+            *:after {
                 box-sizing: border-box !important;
             }
-            html, body {
+
+            html,
+            body {
                 height: auto !important;
                 overflow: visible !important;
                 margin: 0 !important;
@@ -784,9 +1103,11 @@ if ($check_col2 && $check_col2->num_rows == 0) {
                 -webkit-print-color-adjust: exact !important;
                 print-color-adjust: exact !important;
             }
-            body > *:not(#quotation-modal) {
+
+            body>*:not(#quotation-modal) {
                 display: none !important;
             }
+
             #quotation-modal {
                 display: block !important;
                 position: relative !important;
@@ -796,6 +1117,7 @@ if ($check_col2 && $check_col2->num_rows == 0) {
                 background: white !important;
                 overflow: visible !important;
             }
+
             #quotation-modal .modal-content {
                 display: block !important;
                 width: 100% !important;
@@ -809,14 +1131,17 @@ if ($check_col2 && $check_col2->num_rows == 0) {
                 padding: 0 !important;
                 overflow: visible !important;
             }
+
             #quotation-print-area {
                 display: block !important;
                 overflow: visible !important;
                 height: auto !important;
             }
+
             .no-print {
                 display: none !important;
             }
+
             .quotation-container {
                 display: block !important;
                 width: 100% !important;
@@ -827,7 +1152,8 @@ if ($check_col2 && $check_col2->num_rows == 0) {
                 background: white !important;
                 border: none !important;
             }
-            .quote-cover { 
+
+            .quote-cover {
                 height: 100vh !important;
                 display: flex !important;
                 overflow: hidden !important;
@@ -836,12 +1162,14 @@ if ($check_col2 && $check_col2->num_rows == 0) {
                 page-break-after: always;
                 page-break-inside: avoid;
             }
+
             .cover-sidebar {
                 width: 100px !important;
                 background: #1e293b !important;
                 height: 100% !important;
                 -webkit-print-color-adjust: exact !important;
             }
+
             .cover-content {
                 flex: 1 !important;
                 padding: 30px 50px !important;
@@ -852,20 +1180,28 @@ if ($check_col2 && $check_col2->num_rows == 0) {
             }
 
             .cover-main-title {
-                font-size: 60px !important; /* Thu nhỏ font cho landscape */
+                font-size: 60px !important;
+                /* Thu nhỏ font cho landscape */
                 margin: 20px 0 10px 0 !important;
                 color: #1e293b !important;
                 -webkit-print-color-adjust: exact !important;
             }
+
             .cover-sub-title {
                 font-size: 18px !important;
                 margin-bottom: 20px !important;
             }
-            .cover-logo { margin-bottom: 20px !important; }
-            .cover-info { padding: 15px !important; }
-            
-            .quotation-section { 
-                page-break-inside: avoid; 
+
+            .cover-logo {
+                margin-bottom: 20px !important;
+            }
+
+            .cover-info {
+                padding: 15px !important;
+            }
+
+            .quotation-section {
+                page-break-inside: avoid;
                 display: block !important;
                 width: 100% !important;
                 margin-left: 0 !important;
@@ -873,25 +1209,27 @@ if ($check_col2 && $check_col2->num_rows == 0) {
                 padding: 40px !important;
                 border-bottom: 1px solid #f1f5f9;
             }
+
             .quote-content-body {
                 padding: 0 !important;
             }
-            table { 
-                page-break-inside: auto !important; 
+
+            table {
+                page-break-inside: auto !important;
                 width: 100% !important;
             }
-            tr { page-break-inside: avoid !important; }
-            thead { display: table-header-group !important; }
+
+            tr {
+                page-break-inside: avoid !important;
+            }
+
+            thead {
+                display: table-header-group !important;
+            }
         }
-
-
-
-
-
-
-
     </style>
 </head>
+
 <body>
     <div class="dashboard-container">
         <?php include __DIR__ . '/../includes/sidebar.php'; ?>
@@ -905,21 +1243,29 @@ if ($check_col2 && $check_col2->num_rows == 0) {
                 <div class="assistant-container">
                     <!-- Sidebar -->
                     <div class="chat-sidebar">
-                        <div style="padding: 16px; border-bottom: 1px solid var(--border-color); display: flex; align-items: center; justify-content: space-between;">
+                        <div
+                            style="padding: 16px; border-bottom: 1px solid var(--border-color); display: flex; align-items: center; justify-content: space-between;">
                             <span style="font-weight: 600; font-size: 14px;">Presale AI</span>
-                            <button id="dark-mode-toggle" style="background: none; border: none; cursor: pointer; font-size: 18px;" title="Chuyển chế độ Sáng/Tối">🌓</button>
+                            <button id="dark-mode-toggle"
+                                style="background: none; border: none; cursor: pointer; font-size: 18px;"
+                                title="Chuyển chế độ Sáng/Tối">🌓</button>
                         </div>
                         <div class="sidebar-search">
-                            <input type="text" id="project-search" placeholder="Tìm kiếm dự án..." autocomplete="off">
+                            <input type="text" id="project-search" placeholder="Tìm kiếm dự án..." autocomplete="off"
+                                readonly onfocus="this.removeAttribute('readonly')">
                         </div>
-                        <div style="padding: 16px; border-bottom: 1px solid var(--border-color); display: flex; flex-direction: column; gap: 8px;">
-                            <a href="javascript:void(0)" class="new-chat-btn" id="new-chat-btn" onclick="handleNewChat()" style="margin: 0; width: 100%;">+ Chat mới</a>
-                            <a href="javascript:void(0)" onclick="createNewProject()" style="font-size: 13px; color: #475569; text-align: center; text-decoration: none; border: 1px dashed #cbd5e1; padding: 6px; border-radius: 6px;">📁 Dự án mới</a>
+                        <div
+                            style="padding: 16px; border-bottom: 1px solid var(--border-color); display: flex; flex-direction: column; gap: 8px;">
+                            <a href="javascript:void(0)" class="new-chat-btn" id="new-chat-btn"
+                                onclick="handleNewChat()" style="margin: 0; width: 100%;">+ Chat mới</a>
+                            <a href="javascript:void(0)" onclick="createNewProject()"
+                                style="font-size: 13px; color: #475569; text-align: center; text-decoration: none; border: 1px dashed #cbd5e1; padding: 6px; border-radius: 6px;">📁
+                                Dự án mới</a>
                         </div>
                         <div class="history-list" id="history-list">
                             <?php
                             try {
-                                $user_id_safe = (int)$_SESSION['user_id'];
+                                $user_id_safe = (int) $_SESSION['user_id'];
                                 $projects = $conn->query("
                                     SELECT DISTINCT p.id, p.name, p.user_id 
                                     FROM presale_projects p 
@@ -931,9 +1277,9 @@ if ($check_col2 && $check_col2->num_rows == 0) {
                                     while ($p = $projects->fetch_assoc()) {
                                         $title = $p['name'] ? htmlspecialchars($p['name']) : 'New Project';
                                         $shared_badge = ($p['user_id'] != $user_id_safe) ? " <span style='font-size:10px;color:#f59e0b;border:1px solid #f59e0b;padding:1px 4px;border-radius:4px;'>Shared</span>" : "";
-                                        
+
                                         echo "<div class='project-item' data-id='{$p['id']}'>";
-                                        echo "  <div class='project-header' onclick='toggleProject({$p['id']}, this)'>";
+                                        echo "  <div class='project-header' data-title='{$title}' onclick='toggleProject({$p['id']}, this)'>";
                                         echo "      <span class='project-title'>📁 {$title}{$shared_badge}</span>";
                                         echo "      <span class='delete-btn' onclick='deleteProject(event, {$p['id']})' title='Xoá Dự án'>&times;</span>";
                                         echo "  </div>";
@@ -954,7 +1300,8 @@ if ($check_col2 && $check_col2->num_rows == 0) {
                                         echo "</div>";
                                     }
                                 }
-                            } catch (Exception $e) {}
+                            } catch (Exception $e) {
+                            }
                             ?>
                         </div>
                     </div>
@@ -963,22 +1310,33 @@ if ($check_col2 && $check_col2->num_rows == 0) {
                     <div class="chat-area">
 
                         <!-- Project Header -->
-                        <div id="project-workspace-header" style="display: none; padding: 16px 24px; border-bottom: 1px solid #e2e8f0; background: #f8fafc;">
-                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+                        <div id="project-workspace-header"
+                            style="display: none; padding: 16px 24px; border-bottom: 1px solid #e2e8f0; background: #f8fafc;">
+                            <div
+                                style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
                                 <h3 id="current-project-title" style="margin: 0; font-size: 16px; color: #0f172a;"></h3>
                                 <div style="display: flex; gap: 8px; align-items: center;">
-                                    <select id="doc-type-select" class="settings-input" style="height: 32px; padding: 0 10px; font-size: 13px; width: auto; background: #fff; margin-right: 4px;">
+                                    <select id="doc-type-select" class="settings-input"
+                                        style="height: 32px; padding: 0 10px; font-size: 13px; width: auto; background: #fff; margin-right: 4px;">
                                         <option value="Xây dựng tài liệu báo giá">Xây dựng tài liệu báo giá</option>
                                         <option value="Xây dựng Sale Pitch">Xây dựng Sale Pitch</option>
                                         <option value="Xây dựng Tài liệu giải pháp">Xây dựng Tài liệu giải pháp</option>
                                         <option value="Phân tích & Tóm tắt RFP">Phân tích & Tóm tắt RFP</option>
                                     </select>
-                                    <button class="quick-action-btn" style="height: 32px; display: flex; align-items: center;" onclick="shareProject()">🔗 Chia sẻ</button>
-                                    <input type="file" id="project-file-upload" style="display: none;" accept=".pdf,.doc,.docx,.txt" multiple>
-                                    <button class="send-btn" style="height: 32px; padding: 0 12px; font-size: 13px;" onclick="document.getElementById('project-file-upload').click()">+ Tải tài liệu lên</button>
-                                    
-                                    <div style="display: flex; align-items: center; gap: 8px; margin-left: 15px; border-left: 1px solid #e2e8f0; padding-left: 15px;">
-                                        <button class="quick-action-btn" style="height: 32px; display: flex; align-items: center; background: #f1f5f9; color: #475569; border-color: #cbd5e1;" onclick="toggleSettingsSidebar()">
+                                    <button class="quick-action-btn"
+                                        style="height: 32px; display: flex; align-items: center;"
+                                        onclick="shareProject()">🔗 Chia sẻ</button>
+                                    <input type="file" id="project-file-upload" style="display: none;"
+                                        accept=".pdf,.doc,.docx,.txt" multiple>
+                                    <button class="send-btn" style="height: 32px; padding: 0 12px; font-size: 13px;"
+                                        onclick="document.getElementById('project-file-upload').click()">+ Tải tài liệu
+                                        lên</button>
+
+                                    <div
+                                        style="display: flex; align-items: center; gap: 8px; margin-left: 15px; border-left: 1px solid #e2e8f0; padding-left: 15px;">
+                                        <button class="quick-action-btn"
+                                            style="height: 32px; display: flex; align-items: center; background: #f1f5f9; color: #475569; border-color: #cbd5e1;"
+                                            onclick="toggleSettingsSidebar()">
                                             ⚙️ Thiết lập Dự án
                                         </button>
                                     </div>
@@ -998,13 +1356,15 @@ if ($check_col2 && $check_col2->num_rows == 0) {
                         <div id="tab-chat" class="tab-content active">
                             <div class="chat-messages" id="chat-messages">
                                 <div class="message assistant">
-                                    Xin chào! Tôi là trợ lý AI Sale/Presale. Tôi có thể giúp bạn trả lời câu hỏi nghiệp vụ, viết nháp Proposal/SOW, gợi ý Tech Stack, hoặc tìm kiếm Case Study tương tự.
+                                    Xin chào! Tôi là trợ lý AI Sale/Presale. Tôi có thể giúp bạn trả lời câu hỏi nghiệp
+                                    vụ, viết nháp Proposal/SOW, gợi ý Tech Stack, hoặc tìm kiếm Case Study tương tự.
                                 </div>
                             </div>
 
                             <div class="chat-input-area">
                                 <!-- Quick Actions -->
-                                <div class="quick-actions" style="padding: 0 0 12px 0; border: none; background: transparent;">
+                                <div class="quick-actions"
+                                    style="padding: 0 0 12px 0; border: none; background: transparent;">
                                     <?php
                                     try {
                                         $prompts = $conn->query("SELECT action_key, title FROM presale_prompts ORDER BY id ASC");
@@ -1022,26 +1382,36 @@ if ($check_col2 && $check_col2->num_rows == 0) {
                                     }
                                     ?>
                                 </div>
-                                <div id="attachment-preview" style="display: none; padding-bottom: 8px; font-size: 13px; color: #4f46e5; align-items: center; gap: 6px;">
+                                <div id="attachment-preview"
+                                    style="display: none; padding-bottom: 8px; font-size: 13px; color: #4f46e5; align-items: center; gap: 6px;">
                                     📎 <span id="attachment-name"></span>
-                                    <button type="button" id="remove-attachment" style="background: none; border: none; color: #ef4444; cursor: pointer; font-size: 14px;">&times;</button>
+                                    <button type="button" id="remove-attachment"
+                                        style="background: none; border: none; color: #ef4444; cursor: pointer; font-size: 14px;">&times;</button>
                                 </div>
-                                
+
                                 <div class="chat-input-box">
                                     <div id="mention-dropdown" class="mention-dropdown" style="display:none;"></div>
-                                    <input type="file" id="file-upload" style="display: none;" accept=".pdf,.doc,.docx,.txt" />
+                                    <input type="file" id="file-upload" style="display: none;"
+                                        accept=".pdf,.doc,.docx,.txt" />
                                     <button class="attach-btn" id="attach-btn" title="Đính kèm tài liệu RFP/RFQ">
-                                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
+                                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none"
+                                            stroke="currentColor" stroke-width="2">
+                                            <path
+                                                d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48" />
+                                        </svg>
                                     </button>
-                                    <button class="attach-btn" id="voice-btn" title="Nhập liệu bằng giọng nói" style="margin-right: 8px;">
-                                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <button class="attach-btn" id="voice-btn" title="Nhập liệu bằng giọng nói"
+                                        style="margin-right: 8px;">
+                                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none"
+                                            stroke="currentColor" stroke-width="2">
                                             <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path>
                                             <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
                                             <line x1="12" y1="19" x2="12" y2="23"></line>
                                             <line x1="8" y1="23" x2="16" y2="23"></line>
                                         </svg>
                                     </button>
-                                    <textarea id="chat-input" placeholder="Nhập câu hỏi hoặc yêu cầu của bạn..." rows="1"></textarea>
+                                    <textarea id="chat-input" placeholder="Nhập câu hỏi hoặc yêu cầu của bạn..."
+                                        rows="1"></textarea>
                                     <button class="send-btn" id="send-btn">Gửi</button>
                                 </div>
                             </div>
@@ -1049,35 +1419,64 @@ if ($check_col2 && $check_col2->num_rows == 0) {
 
                         <!-- Tab: Design -->
                         <div id="tab-design" class="tab-content">
-                            <div class="design-container">
-                                <div class="design-card">
-                                    <h4><span style="color:#4f46e5;">🎨</span> Nhập dữ liệu từ Figma</h4>
-                                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px;">
-                                        <div>
-                                            <label style="font-size: 12px; color: #64748b;">Figma File URL</label>
-                                            <input type="text" id="figma-url" class="settings-input" placeholder="https://www.figma.com/file/..." style="margin-top: 4px;">
+                            <div style="display: flex; gap: 20px; align-items: flex-start;">
+                                <!-- Left: Analysis and Table -->
+                                <div style="flex: 1; min-width: 0;">
+                                    <div class="design-card">
+                                        <h4><span style="color:#10b981;">🖼️</span> Phân tích ảnh Mockup (AI Vision)
+                                        </h4>
+                                        <div style="margin-bottom: 15px;">
+                                            <label style="font-size: 12px; color: #64748b;">Chọn ảnh thiết kế của bạn
+                                                (PNG/JPG)</label>
+                                            <input type="file" id="mockup-image-upload" class="settings-input"
+                                                accept="image/*" style="margin-top: 4px; padding: 6px;">
                                         </div>
-                                        <div>
-                                            <label style="font-size: 12px; color: #64748b;">Personal Access Token</label>
-                                            <input type="password" id="figma-token" class="settings-input" placeholder="Token..." style="margin-top: 4px;">
+                                        <button onclick="analyzeMockupImage()" id="btn-analyze-mockup" class="send-btn"
+                                            style="width: 250px; height: 36px; background: #10b981;">✨ Phân tích bằng AI
+                                            Vision</button>
+
+                                        <!-- Progress Bar Container -->
+                                        <div id="vision-progress-container" style="display: none; margin-top: 15px;">
+                                            <div
+                                                style="display: flex; justify-content: space-between; margin-bottom: 6px;">
+                                                <span id="vision-progress-status"
+                                                    style="font-size: 12px; color: #475569;">Đang tải ảnh...</span>
+                                                <span id="vision-progress-percent"
+                                                    style="font-size: 12px; font-weight: 600; color: #10b981;">0%</span>
+                                            </div>
+                                            <div
+                                                style="width: 100%; height: 8px; background: #e2e8f0; border-radius: 4px; overflow: hidden;">
+                                                <div id="vision-progress-bar"
+                                                    style="width: 0%; height: 100%; background: #10b981; transition: width 0.3s ease; border-radius: 4px;">
+                                                </div>
+                                            </div>
                                         </div>
+
+                                        <div id="vision-status"
+                                            style="margin-top: 8px; font-size: 12px; color: #64748b; display: none;">
+                                        </div>
+
+                                        <div id="vision-preview-list" style="margin-top: 15px; display: none;">
+                                            <!-- Results table will appear here -->
+                                        </div>
+                                        <input type="hidden" id="vision-summary-input">
                                     </div>
-                                    <button onclick="fetchFigmaData()" id="btn-fetch-figma" class="send-btn" style="width: 200px; height: 36px; background: #000;">Phân tích thiết kế Figma</button>
-                                    <div id="figma-status" style="margin-top: 8px; font-size: 12px; color: #64748b; display: none;"></div>
-                                    <div id="figma-preview-list" style="margin-top: 12px; font-size: 12px; background: #f8fafc; border: 1px solid #e2e8f0; padding: 15px; border-radius: 8px; max-height: 400px; overflow-y: auto; display: none;"></div>
-                                    <input type="hidden" id="figma-summary-input">
                                 </div>
 
-                                <div class="design-card">
-                                    <h4><span style="color:#10b981;">🖼️</span> Phân tích ảnh Mockup (Local Vision)</h4>
-                                    <div style="margin-bottom: 15px;">
-                                        <label style="font-size: 12px; color: #64748b;">Chọn ảnh thiết kế của bạn (PNG/JPG)</label>
-                                        <input type="file" id="mockup-image-upload" class="settings-input" accept="image/*" style="margin-top: 4px; padding: 6px;">
+                                <!-- Right: Image Sticky Preview -->
+                                <div id="mockup-sticky-preview"
+                                    style="width: 400px; flex-shrink: 0; position: sticky; top: 10px;">
+                                    <div class="design-card" style="padding: 10px;">
+                                        <div
+                                            style="font-weight: 600; font-size: 13px; color: #1e293b; margin-bottom: 10px; display: flex; align-items: center; gap: 6px;">
+                                            <span>👁️</span> Xem trước thiết kế (Cuộn để xem hết)
+                                        </div>
+                                        <div id="mockup-img-wrapper"
+                                            style="border: 1px solid #e2e8f0; border-radius: 8px; background: #f8fafc; overflow-y: auto; max-height: 75vh; display: flex; flex-direction: column; align-items: center;">
+                                            <span style="color: #94a3b8; font-size: 12px; padding: 40px;">Chưa có ảnh
+                                                thiết kế</span>
+                                        </div>
                                     </div>
-                                    <button onclick="analyzeMockupImage()" id="btn-analyze-mockup" class="send-btn" style="width: 250px; height: 36px; background: #10b981;">Phân tích bằng AI Vision (Local)</button>
-                                    <div id="vision-status" style="margin-top: 8px; font-size: 12px; color: #64748b; display: none;"></div>
-                                    <div id="vision-preview-list" style="margin-top: 12px; font-size: 12px; background: #f0fdf4; border: 1px solid #bbf7d0; padding: 15px; border-radius: 8px; max-height: 400px; overflow-y: auto; display: none;"></div>
-                                    <input type="hidden" id="vision-summary-input">
                                 </div>
                             </div>
                         </div>
@@ -1100,25 +1499,34 @@ if ($check_col2 && $check_col2->num_rows == 0) {
 
     <!-- Quotation View Modal (AHT Style) -->
     <div id="quotation-modal" class="modal">
-        <div class="modal-content" style="max-width: 1000px; padding: 0; background: #f1f5f9; overflow: hidden; display: flex; flex-direction: column;">
-            <div class="no-print" style="padding: 12px 20px; background: white; border-bottom: 1px solid #e2e8f0; display: flex; justify-content: space-between; align-items: center;">
+        <div class="modal-content"
+            style="max-width: 1000px; padding: 0; background: #f1f5f9; overflow: hidden; display: flex; flex-direction: column;">
+            <div class="no-print"
+                style="padding: 12px 20px; background: white; border-bottom: 1px solid #e2e8f0; display: flex; justify-content: space-between; align-items: center;">
                 <h3 style="margin: 0; font-size: 14px; color: #64748b;">Xem trước bản báo giá AHT TECH JSC</h3>
                 <div style="display: flex; gap: 10px;">
-                    <button class="send-btn" style="background: #64748b; height: 36px;" onclick="window.print()">🖨️ In / Xuất PDF</button>
-                    <button class="send-btn" style="background: #ef4444; height: 36px;" onclick="closeQuoteModal()">Đóng</button>
+                    <button class="send-btn" style="background: #64748b; height: 36px;" onclick="window.print()">🖨️ In
+                        / Xuất PDF</button>
+                    <button class="send-btn" style="background: #ef4444; height: 36px;"
+                        onclick="closeQuoteModal()">Đóng</button>
                 </div>
             </div>
-            
+
             <div id="quotation-print-area" style="overflow-y: auto; flex: 1;">
                 <div class="quotation-container">
                     <!-- Cover Page -->
                     <div class="quote-cover">
                         <div class="cover-sidebar"></div>
                         <div class="cover-content">
-                                <div class="cover-logo" style="display: flex; align-items: center; justify-content: flex-end; gap: 10px;">
-                                    <img src="https://aht.tech/wp-content/uploads/2021/04/logo-aht.png" alt="AHT Logo" style="height: 50px;" onerror="this.style.display='none'; this.nextElementSibling.style.display='block';">
-                                    <div style="display: none; font-size: 32px; font-weight: 800; color: #333c4d; letter-spacing: -1px;">AHT<span style="color: #4f46e5;">.</span>TECH</div>
-                                </div>
+                            <div class="cover-logo"
+                                style="display: flex; align-items: center; justify-content: flex-end; gap: 10px;">
+                                <img src="https://aht.tech/wp-content/uploads/2021/04/logo-aht.png" alt="AHT Logo"
+                                    style="height: 50px;"
+                                    onerror="this.style.display='none'; this.nextElementSibling.style.display='block';">
+                                <div
+                                    style="display: none; font-size: 32px; font-weight: 800; color: #333c4d; letter-spacing: -1px;">
+                                    AHT<span style="color: #4f46e5;">.</span>TECH</div>
+                            </div>
                             <div class="cover-main-title">PROPOSAL</div>
                             <div class="cover-sub-title">SOFTWARE DEVELOPMENT SERVICES</div>
                             <div class="cover-info">
@@ -1126,7 +1534,8 @@ if ($check_col2 && $check_col2->num_rows == 0) {
                                 <p>Proposal ID: <strong>#QT-<?php echo date('Ymd'); ?></strong></p>
                                 <div style="margin-top: 25px; padding-top: 20px; border-top: 1px solid #e2e8f0;">
                                     <p>Prepared by: <strong>AHT TECH JSC</strong></p>
-                                    <p>Proposed to: <strong id="quote-client-name-cover" style="color: #1e293b;">CLIENT NAME</strong></p>
+                                    <p>Proposed to: <strong id="quote-client-name-cover" style="color: #1e293b;">CLIENT
+                                            NAME</strong></p>
                                 </div>
                             </div>
                             <div class="cover-footer-info">
@@ -1153,31 +1562,47 @@ if ($check_col2 && $check_col2->num_rows == 0) {
                         <div class="quotation-section">
                             <h2>VII - TIMELINE</h2>
                             <p style="font-size: 13px; color: #374151;">
-                                AHT can complete it within <strong id="quote-total-days">...</strong> working days on the development site. It does not include time for testing and fixing bugs after UAT.<br><br>
-                                The maximum time for UAT is <strong>01 month</strong>. The time for testing and fixing bugs after UAT might take <strong>... working days</strong>, depending on the amount of feedback. This does not include time for waiting for feedback from the Client.<br><br>
-                                Within <strong>1 month</strong> since AHT provides the completed pages on the development server, if the Client does not do the reviewing and provides feedback for the pages/functions, the project will be considered completed.
+                                AHT can complete it within <strong id="quote-total-days">...</strong> working days on
+                                the development site. It does not include time for testing and fixing bugs after
+                                UAT.<br><br>
+                                The maximum time for UAT is <strong>01 month</strong>. The time for testing and fixing
+                                bugs after UAT might take <strong>... working days</strong>, depending on the amount of
+                                feedback. This does not include time for waiting for feedback from the Client.<br><br>
+                                Within <strong>1 month</strong> since AHT provides the completed pages on the
+                                development server, if the Client does not do the reviewing and provides feedback for
+                                the pages/functions, the project will be considered completed.
                             </p>
                         </div>
 
                         <!-- V - PAYMENT TERM -->
                         <div class="quotation-section">
                             <h2>VIII - PAYMENT TERM</h2>
-                            <p style="font-size: 13px; color: #374151; font-weight: 600;">The payment is divided into 3 milestones:</p>
+                            <p style="font-size: 13px; color: #374151; font-weight: 600;">The payment is divided into 3
+                                milestones:</p>
                             <ul style="font-size: 13px; color: #374151; padding-left: 20px; line-height: 1.8;">
-                                <li><strong>First payment:</strong> 50% of the total Contract value shall be made before starting the work.</li>
-                                <li><strong>Second payment:</strong> 40% of the total Contract value shall be made when the work is completed on the development server. The second payment shall be made within 7 days since invoice receipt.</li>
-                                <li><strong>Final payment:</strong> 10% of the total Contract value shall be made when the work is completed on the live server, OR after 1.5 months since all the tasks/pages are completed on development/staging server, whichever comes first.</li>
+                                <li><strong>First payment:</strong> 50% of the total Contract value shall be made before
+                                    starting the work.</li>
+                                <li><strong>Second payment:</strong> 40% of the total Contract value shall be made when
+                                    the work is completed on the development server. The second payment shall be made
+                                    within 7 days since invoice receipt.</li>
+                                <li><strong>Final payment:</strong> 10% of the total Contract value shall be made when
+                                    the work is completed on the live server, OR after 1.5 months since all the
+                                    tasks/pages are completed on development/staging server, whichever comes first.</li>
                             </ul>
                         </div>
 
                         <!-- VI - WARRANTY -->
                         <div class="quotation-section">
                             <h2>IX - WARRANTY</h2>
-                            <p style="font-size: 13px; color: #374151;">AHT will provide <strong>3 months of support</strong> after the tasks are implemented on the live site for free bugs or fixing any issues related to the listed tasks but not include:</p>
+                            <p style="font-size: 13px; color: #374151;">AHT will provide <strong>3 months of
+                                    support</strong> after the tasks are implemented on the live site for free bugs or
+                                fixing any issues related to the listed tasks but not include:</p>
                             <ul style="font-size: 13px; color: #374151; padding-left: 20px; list-style-type: '- ';">
                                 <li>Any changes or additional updates.</li>
-                                <li>Any issues/errors caused by versions upgrade (both the CMS and add-ons, etc) that are not done by us.</li>
-                                <li>Any issues/conflicts/errors caused by new features or extensions or updates on the site that are not added or integrated by us.</li>
+                                <li>Any issues/errors caused by versions upgrade (both the CMS and add-ons, etc) that
+                                    are not done by us.</li>
+                                <li>Any issues/conflicts/errors caused by new features or extensions or updates on the
+                                    site that are not added or integrated by us.</li>
                                 <li>Server/hosting issues.</li>
                                 <li>Issues related to content updates made from other sides, not from AHT.</li>
                             </ul>
@@ -1186,16 +1611,23 @@ if ($check_col2 && $check_col2->num_rows == 0) {
                         <!-- VII - RIGHTS AND OBLIGATIONS -->
                         <div class="quotation-section">
                             <h2>X - RIGHTS AND OBLIGATIONS OF CLIENT AND AHT TECH JSC</h2>
-                            <p style="font-size: 13px; color: #374151; font-weight: 600;">1. Rights and obligations of the Client</p>
+                            <p style="font-size: 13px; color: #374151; font-weight: 600;">1. Rights and obligations of
+                                the Client</p>
                             <ul style="font-size: 13px; color: #374151; padding-left: 20px; list-style-type: '- ';">
-                                <li>The Client has the right to know and monitor the progress of the development of the platform.</li>
-                                <li>The Client shall pay the project expenses to AHT Tech JSC according to the Contract.</li>
-                                <li>The Client has the right to urge AHT Tech JSC to complete the project development according to the prescribed time.</li>
+                                <li>The Client has the right to know and monitor the progress of the development of the
+                                    platform.</li>
+                                <li>The Client shall pay the project expenses to AHT Tech JSC according to the Contract.
+                                </li>
+                                <li>The Client has the right to urge AHT Tech JSC to complete the project development
+                                    according to the prescribed time.</li>
                             </ul>
-                            <p style="font-size: 13px; color: #374151; font-weight: 600; margin-top: 10px;">2. Rights and obligations of AHT Tech JSC</p>
+                            <p style="font-size: 13px; color: #374151; font-weight: 600; margin-top: 10px;">2. Rights
+                                and obligations of AHT Tech JSC</p>
                             <ul style="font-size: 13px; color: #374151; padding-left: 20px; list-style-type: '- ';">
-                                <li>AHT Tech JSC should report the progress of its work to the Client via mail or Jira system every 2 days.</li>
-                                <li>AHT Tech JSC shall complete the agreed tasks within the time stipulated in the Contract.</li>
+                                <li>AHT Tech JSC should report the progress of its work to the Client via mail or Jira
+                                    system every 2 days.</li>
+                                <li>AHT Tech JSC shall complete the agreed tasks within the time stipulated in the
+                                    Contract.</li>
                             </ul>
                         </div>
                     </div>
@@ -1208,10 +1640,10 @@ if ($check_col2 && $check_col2->num_rows == 0) {
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <script>
         // Tab switching logic
-        window.switchTab = function(tabName) {
+        window.switchTab = function (tabName) {
             document.querySelectorAll('.workspace-tab').forEach(t => t.classList.remove('active'));
             document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
-            
+
             if (tabName === 'chat') {
                 document.querySelector('.workspace-tab:nth-child(1)').classList.add('active');
                 document.getElementById('tab-chat').classList.add('active');
@@ -1221,10 +1653,13 @@ if ($check_col2 && $check_col2->num_rows == 0) {
             }
         };
 
-        document.addEventListener('DOMContentLoaded', function() {
+        document.addEventListener('DOMContentLoaded', function () {
             const projectSearchInput = document.getElementById('project-search');
-            if (projectSearchInput) projectSearchInput.value = ''; // Xóa trắng ô tìm kiếm khi load lại trang
-            
+            if (projectSearchInput) {
+                projectSearchInput.value = '';
+                // Timeout để đảm bảo clear SAU khi browser autofill (Chrome điền sau ~50ms)
+                setTimeout(() => { projectSearchInput.value = ''; }, 150);
+            }
             const sendBtn = document.getElementById('send-btn');
             const chatInput = document.getElementById('chat-input');
             const chatMessages = document.getElementById('chat-messages');
@@ -1232,16 +1667,16 @@ if ($check_col2 && $check_col2->num_rows == 0) {
             let mentionStartIndex = -1;
             window.projectFilesList = []; // Array lưu danh sách file hiện tại
 
-            window.formatPremiumSummaryTable = function(table) {
+            window.formatPremiumSummaryTable = function (table) {
 
                 const rows = table.querySelectorAll('tr');
                 if (rows.length === 0 || rows[0].cells.length !== 2) return false;
-                
+
                 const hasSummaryKeywords = Array.from(rows).some(r => {
                     const txt = r.cells[0].textContent.toLowerCase();
                     return txt.includes('total time') || txt.includes('working days') || txt.includes('hourly rate');
                 });
-                
+
                 if (!hasSummaryKeywords) return false;
 
                 table.classList.add('summary-table-premium');
@@ -1249,18 +1684,18 @@ if ($check_col2 && $check_col2->num_rows == 0) {
                 table.style.borderCollapse = 'collapse'; // Chuyển về collapse để grid chuẩn hơn
                 table.style.marginTop = '15px';
                 table.style.border = '1px solid #e2e8f0';
-                
+
                 const currentRate = parseFloat(document.getElementById('hourly-rate-select')?.value) || 15;
 
                 rows.forEach((row, idx) => {
                     const labelCell = row.cells[0];
                     const valueCell = row.cells[1];
                     const labelText = labelCell.textContent.toLowerCase();
-                    
+
                     labelCell.style.padding = '12px 15px';
                     labelCell.style.fontSize = '13px';
                     labelCell.style.border = '1px solid #e2e8f0'; // Thêm border cho mọi ô
-                    
+
                     valueCell.style.padding = '12px 15px';
                     valueCell.style.textAlign = 'right';
                     valueCell.style.fontSize = '14px';
@@ -1276,7 +1711,7 @@ if ($check_col2 && $check_col2->num_rows == 0) {
                         labelCell.style.textTransform = 'uppercase';
                         labelCell.style.fontSize = '11px';
                         labelCell.style.border = '1px solid #1e293b';
-                        
+
                         valueCell.style.color = '#ffffff';
                         valueCell.style.background = '#1e293b';
                         valueCell.style.border = '1px solid #1e293b';
@@ -1291,10 +1726,10 @@ if ($check_col2 && $check_col2->num_rows == 0) {
                         labelCell.style.fontWeight = '700';
                         labelCell.style.borderTop = '2px solid #1e293b';
                         labelCell.style.borderBottom = '1px solid #e2e8f0';
-                        
+
                         valueCell.style.color = '#000000'; // Đổi sang màu Đen theo yêu cầu
                         valueCell.style.background = '#ffffff';
-                        valueCell.style.fontSize = '20px'; 
+                        valueCell.style.fontSize = '20px';
                         valueCell.style.fontWeight = '800';
                         valueCell.style.borderTop = '2px solid #1e293b';
                         valueCell.style.borderBottom = '1px solid #e2e8f0';
@@ -1322,16 +1757,16 @@ if ($check_col2 && $check_col2->num_rows == 0) {
 
 
             // Logic xử lý tag tên file (@mention)
-            chatInput.addEventListener('input', function(e) {
+            chatInput.addEventListener('input', function (e) {
                 const cursorPosition = this.selectionStart;
                 const textBeforeCursor = this.value.substring(0, cursorPosition);
-                
+
                 // Tìm ký tự @ gần nhất trước con trỏ
                 const lastAtSymbol = textBeforeCursor.lastIndexOf('@');
-                
+
                 if (lastAtSymbol !== -1 && (lastAtSymbol === 0 || textBeforeCursor[lastAtSymbol - 1] === ' ' || textBeforeCursor[lastAtSymbol - 1] === '\n')) {
                     const query = textBeforeCursor.substring(lastAtSymbol + 1);
-                    
+
                     // Cho phép chữ, số, khoảng trắng, dấu gạch ngang, dấu chấm...
                     if (/^[\w\s.-]*$/.test(query)) {
                         mentionStartIndex = lastAtSymbol;
@@ -1339,7 +1774,7 @@ if ($check_col2 && $check_col2->num_rows == 0) {
                         return;
                     }
                 }
-                
+
                 hideMentionDropdown();
             });
 
@@ -1351,7 +1786,7 @@ if ($check_col2 && $check_col2->num_rows == 0) {
 
                 // Lọc các file theo từ khóa
                 const filteredFiles = window.projectFilesList.filter(f => f.file_name.toLowerCase().includes(query.toLowerCase()));
-                
+
                 if (filteredFiles.length === 0) {
                     hideMentionDropdown();
                     return;
@@ -1362,14 +1797,14 @@ if ($check_col2 && $check_col2->num_rows == 0) {
                     const item = document.createElement('div');
                     item.className = 'mention-item' + (index === 0 ? ' active' : '');
                     item.innerHTML = `📄 <span>${f.file_name}</span>`;
-                    
+
                     item.addEventListener('click', () => {
                         insertMention(f.file_name);
                     });
-                    
+
                     mentionDropdown.appendChild(item);
                 });
-                
+
                 mentionDropdown.style.display = 'block';
             }
 
@@ -1380,42 +1815,42 @@ if ($check_col2 && $check_col2->num_rows == 0) {
 
             function insertMention(fileName) {
                 if (mentionStartIndex === -1) return;
-                
+
                 const before = chatInput.value.substring(0, mentionStartIndex);
                 const after = chatInput.value.substring(chatInput.selectionStart);
-                
+
                 // Chèn @tên_file và thêm dấu cách
                 const insertText = `@${fileName} `;
-                
+
                 chatInput.value = before + insertText + after;
-                
+
                 // Đưa con trỏ chuột về đúng vị trí sau khi chèn
                 const newCursorPos = mentionStartIndex + insertText.length;
                 chatInput.focus();
                 chatInput.setSelectionRange(newCursorPos, newCursorPos);
-                
+
                 hideMentionDropdown();
             }
 
             // Xử lý phím mũi tên và phím Enter trong dropdown
-            chatInput.addEventListener('keydown', function(e) {
+            chatInput.addEventListener('keydown', function (e) {
                 if (mentionDropdown.style.display === 'block') {
                     const items = mentionDropdown.querySelectorAll('.mention-item');
                     let activeIndex = Array.from(items).findIndex(item => item.classList.contains('active'));
-                    
+
                     if (e.key === 'ArrowDown') {
                         e.preventDefault();
                         if (activeIndex < items.length - 1) {
                             items[activeIndex]?.classList.remove('active');
                             items[activeIndex + 1].classList.add('active');
-                            items[activeIndex + 1].scrollIntoView({block: 'nearest'});
+                            items[activeIndex + 1].scrollIntoView({ block: 'nearest' });
                         }
                     } else if (e.key === 'ArrowUp') {
                         e.preventDefault();
                         if (activeIndex > 0) {
                             items[activeIndex]?.classList.remove('active');
                             items[activeIndex - 1].classList.add('active');
-                            items[activeIndex - 1].scrollIntoView({block: 'nearest'});
+                            items[activeIndex - 1].scrollIntoView({ block: 'nearest' });
                         }
                     } else if (e.key === 'Enter') {
                         e.preventDefault();
@@ -1427,14 +1862,14 @@ if ($check_col2 && $check_col2->num_rows == 0) {
                     }
                 }
             });
-            
+
             function addMessage(content, role) {
                 const div = document.createElement('div');
                 div.className = `message ${role}`;
-                
+
                 if (role === 'assistant') {
                     div.innerHTML = marked.parse(content);
-                    
+
                     if (div.querySelector('table')) {
                         const tables = div.querySelectorAll('table');
                         tables.forEach(table => {
@@ -1446,7 +1881,7 @@ if ($check_col2 && $check_col2->num_rows == 0) {
                         const exportBtn = document.createElement('button');
                         exportBtn.innerHTML = '📥 Tải xuống Excel (.xlsx)';
                         exportBtn.style.cssText = 'margin-top: 10px; padding: 6px 12px; background: #10b981; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 13px; font-weight: 600; display: flex; align-items: center; gap: 6px;';
-                        exportBtn.onclick = function() {
+                        exportBtn.onclick = function () {
                             const wb = XLSX.utils.book_new();
                             const tables = div.querySelectorAll('table');
                             tables.forEach((table, index) => {
@@ -1465,7 +1900,7 @@ if ($check_col2 && $check_col2->num_rows == 0) {
                         const viewQuoteBtn = document.createElement('button');
                         viewQuoteBtn.innerHTML = '📄 Xem bản báo giá chuyên nghiệp';
                         viewQuoteBtn.style.cssText = 'margin-top: 10px; margin-left: 8px; padding: 6px 12px; background: #4f46e5; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 13px; font-weight: 600;';
-                        viewQuoteBtn.onclick = function() {
+                        viewQuoteBtn.onclick = function () {
                             showQuotation(content);
                         };
                         div.appendChild(viewQuoteBtn);
@@ -1473,28 +1908,28 @@ if ($check_col2 && $check_col2->num_rows == 0) {
                 } else {
                     div.textContent = content;
                 }
-                
+
                 chatMessages.appendChild(div);
                 chatMessages.scrollTop = chatMessages.scrollHeight;
             }
 
-            window.showQuotation = function(aiContent) {
+            window.showQuotation = function (aiContent) {
                 const modal = document.getElementById('quotation-modal');
                 const container = document.getElementById('quote-sections-container');
                 const coverClient = document.getElementById('quote-client-name-cover');
-                
+
                 // Update Cover Page
                 let projectTitle = document.getElementById('current-project-title').textContent || "Valued Customer";
                 // Loại bỏ icon thư mục nếu có
                 projectTitle = projectTitle.replace(/📁\s*/, '').trim();
                 coverClient.textContent = projectTitle;
-                
+
                 const tempDiv = document.createElement('div');
                 // Loại bỏ các đoạn văn không cần thiết ở đầu (ví dụ: "Dưới đây là báo giá...")
                 const cleanContent = aiContent.replace(/^(Dưới đây|Sau đây|Đây là).*\n+/i, '');
                 tempDiv.innerHTML = marked.parse(cleanContent);
                 container.innerHTML = '';
-                
+
                 let currentSection = null;
                 Array.from(tempDiv.children).forEach(child => {
                     // Apply classes to tables
@@ -1523,7 +1958,7 @@ if ($check_col2 && $check_col2->num_rows == 0) {
                         container.appendChild(introSection);
                     }
                 });
-                
+
                 // Cập nhật Timeline nếu tìm thấy số ngày làm việc
                 const allText = tempDiv.textContent;
                 const daysMatch = allText.match(/(\d+)\s*(working days|ngày làm việc)/i);
@@ -1535,7 +1970,7 @@ if ($check_col2 && $check_col2->num_rows == 0) {
                 modal.style.display = 'flex';
             };
 
-            window.closeQuoteModal = function() {
+            window.closeQuoteModal = function () {
                 document.getElementById('quotation-modal').style.display = 'none';
             };
 
@@ -1568,7 +2003,7 @@ if ($check_col2 && $check_col2->num_rows == 0) {
 
             if (attachBtn) attachBtn.addEventListener('click', () => fileUpload.click());
 
-            if (fileUpload) fileUpload.addEventListener('change', function() {
+            if (fileUpload) fileUpload.addEventListener('change', function () {
                 if (this.files && this.files[0]) {
                     selectedFile = this.files[0];
                     attachmentName.textContent = selectedFile.name;
@@ -1576,195 +2011,198 @@ if ($check_col2 && $check_col2->num_rows == 0) {
                 }
             });
 
-            if (removeAttachment) removeAttachment.addEventListener('click', function() {
+            if (removeAttachment) removeAttachment.addEventListener('click', function () {
                 selectedFile = null;
                 fileUpload.value = '';
                 attachmentPreview.style.display = 'none';
             });
 
-            window.createNewProject = function() {
+            window.createNewProject = function () {
                 const name = prompt("Nhập tên dự án mới:");
                 if (!name) return;
-                
+
                 const fd = new FormData();
                 fd.append('action', 'create_project');
                 fd.append('name', name);
-                
+
                 fetch('/presale/ajax-handler', { method: 'POST', body: fd })
-                .then(r => r.json())
-                .then(data => {
-                    if(data.success) {
-                        if (data.project_id) localStorage.setItem('presale_active_project', data.project_id);
-                        location.reload();
-                    } else {
-                        alert(data.message);
-                    }
-                });
+                    .then(r => r.json())
+                    .then(data => {
+                        if (data.success) {
+                            if (data.project_id) localStorage.setItem('presale_active_project', data.project_id);
+                            location.reload();
+                        } else {
+                            alert(data.message);
+                        }
+                    });
             };
             // ------------------------------------
 
-            window.toggleProject = function(projectId, el) {
+            window.toggleProject = function (projectId, el) {
                 const chatList = document.getElementById('chat-list-' + projectId);
-                const isAlreadyOpen = chatList.style.display === 'block';
-                
-                document.querySelectorAll('.chat-list').forEach(list => list.style.display = 'none');
+                const isAlreadyOpen = chatList.classList.contains('open');
+
+                // Đóng tất cả các dự án khác
+                document.querySelectorAll('.chat-list').forEach(list => list.classList.remove('open'));
                 document.querySelectorAll('.project-header').forEach(header => header.classList.remove('active'));
-                
+
                 if (!isAlreadyOpen) {
-                    chatList.style.display = 'block';
+                    chatList.classList.add('open');
                     el.classList.add('active');
-                    localStorage.setItem('presale_active_project', projectId);
-                } else {
-                    localStorage.removeItem('presale_active_project');
                 }
+
+                // TỰ ĐỘNG MỞ DỰ ÁN
+                currentProjectId = projectId;
+                localStorage.setItem('presale_active_project', projectId);
+                openChat(el, projectId, null);
             };
 
-            window.createNewChat = function(projectId) {
+            window.createNewChat = function (projectId) {
                 localStorage.setItem('presale_active_project', projectId);
                 const fd = new FormData();
                 fd.append('action', 'create_chat');
                 fd.append('project_id', projectId);
                 fetch('/presale/ajax-handler', { method: 'POST', body: fd })
-                .then(r => r.json())
-                .then(data => {
-                    if(data.success) location.reload();
-                    else alert(data.message);
-                });
+                    .then(r => r.json())
+                    .then(data => {
+                        if (data.success) location.reload();
+                        else alert(data.message);
+                    });
             };
 
-            window.deleteChat = function(e, sessionId) {
+            window.deleteChat = function (e, sessionId) {
                 e.stopPropagation();
-                if(!confirm('Bạn có chắc chắn muốn xoá lịch sử chat này không?')) return;
-                
+                if (!confirm('Bạn có chắc chắn muốn xoá lịch sử chat này không?')) return;
+
                 const fd = new FormData();
                 fd.append('action', 'delete_chat');
                 fd.append('session_id', sessionId);
-                
+
                 fetch('/presale/ajax-handler', { method: 'POST', body: fd })
-                .then(r => r.json())
-                .then(data => {
-                    if(data.success) {
-                        location.reload();
-                    } else {
-                        alert(data.message);
-                    }
-                });
+                    .then(r => r.json())
+                    .then(data => {
+                        if (data.success) {
+                            location.reload();
+                        } else {
+                            alert(data.message);
+                        }
+                    });
             };
 
-            window.deleteProject = function(e, id) {
+            window.deleteProject = function (e, id) {
                 e.stopPropagation();
-                if(!confirm('Bạn có chắc chắn muốn xoá dự án này cùng toàn bộ file và lịch sử chat không?')) return;
-                
+                if (!confirm('Bạn có chắc chắn muốn xoá dự án này cùng toàn bộ file và lịch sử chat không?')) return;
+
                 const fd = new FormData();
                 fd.append('action', 'delete_project');
                 fd.append('project_id', id);
-                
+
                 fetch('/presale/ajax-handler', { method: 'POST', body: fd })
-                .then(r => r.json())
-                .then(data => {
-                    if(data.success) {
-                        location.reload();
-                    } else {
-                        alert(data.message);
-                    }
-                });
+                    .then(r => r.json())
+                    .then(data => {
+                        if (data.success) {
+                            location.reload();
+                        } else {
+                            alert(data.message);
+                        }
+                    });
             };
 
-            window.shareProject = function() {
-                if(!currentProjectId) return alert('Vui lòng chọn một dự án!');
+            window.shareProject = function () {
+                if (!currentProjectId) return alert('Vui lòng chọn một dự án!');
                 const fd = new FormData();
                 fd.append('action', 'get_users');
                 fetch('/presale/ajax-handler', { method: 'POST', body: fd })
-                .then(r => r.json())
-                .then(data => {
-                    if(data.success && data.users.length > 0) {
-                        let msg = "Nhập ID của User bạn muốn chia sẻ:\n\n";
-                        data.users.forEach(u => msg += `[ID: ${u.id}] - ${u.username}\n`);
-                        const targetId = prompt(msg);
-                        if(targetId && !isNaN(targetId)) {
-                            const fdShare = new FormData();
-                            fdShare.append('action', 'share_project');
-                            fdShare.append('project_id', currentProjectId);
-                            fdShare.append('user_id', targetId);
-                            fetch('/presale/ajax-handler', { method: 'POST', body: fdShare })
-                            .then(r => r.json())
-                            .then(shareData => {
-                                if(shareData.success) alert("Đã chia sẻ thành công!");
-                                else alert(shareData.message || "Lỗi khi chia sẻ");
-                            });
+                    .then(r => r.json())
+                    .then(data => {
+                        if (data.success && data.users.length > 0) {
+                            let msg = "Nhập ID của User bạn muốn chia sẻ:\n\n";
+                            data.users.forEach(u => msg += `[ID: ${u.id}] - ${u.username}\n`);
+                            const targetId = prompt(msg);
+                            if (targetId && !isNaN(targetId)) {
+                                const fdShare = new FormData();
+                                fdShare.append('action', 'share_project');
+                                fdShare.append('project_id', currentProjectId);
+                                fdShare.append('user_id', targetId);
+                                fetch('/presale/ajax-handler', { method: 'POST', body: fdShare })
+                                    .then(r => r.json())
+                                    .then(shareData => {
+                                        if (shareData.success) alert("Đã chia sẻ thành công!");
+                                        else alert(shareData.message || "Lỗi khi chia sẻ");
+                                    });
+                            }
+                        } else {
+                            alert("Không lấy được danh sách User");
                         }
-                    } else {
-                        alert("Không lấy được danh sách User");
-                    }
-                });
+                    });
             };
 
             // Xử lý upload tài liệu dự án
-            document.getElementById('project-file-upload').addEventListener('change', function() {
-                if(!currentProjectId) return alert('Vui lòng chọn một dự án trước!');
-                if(!this.files.length) return;
-                
+            document.getElementById('project-file-upload').addEventListener('change', function () {
+                if (!currentProjectId) return alert('Vui lòng chọn một dự án trước!');
+                if (!this.files.length) return;
+
                 const file = this.files[0];
                 const fd = new FormData();
                 fd.append('action', 'upload_project_file');
                 fd.append('project_id', currentProjectId);
                 fd.append('file', file);
-                
+
                 const btn = this.nextElementSibling;
                 const oldText = btn.innerHTML;
                 btn.innerHTML = 'Đang tải...';
-                
+
                 fetch('/presale/ajax-handler', { method: 'POST', body: fd })
-                .then(r => r.json())
-                .then(data => {
-                    btn.innerHTML = oldText;
-                    if(data.success) {
-                        loadProjectFiles(currentProjectId);
-                    } else {
-                        alert(data.message);
-                    }
-                });
+                    .then(r => r.json())
+                    .then(data => {
+                        btn.innerHTML = oldText;
+                        if (data.success) {
+                            loadProjectFiles(currentProjectId);
+                        } else {
+                            alert(data.message);
+                        }
+                    });
             });
 
             function loadProjectFiles(projectId) {
                 const fd = new FormData();
                 fd.append('action', 'get_project_files');
                 fd.append('project_id', projectId);
-                
+
                 fetch('/presale/ajax-handler', { method: 'POST', body: fd })
-                .then(r => r.json())
-                .then(data => {
-                    if(data.success) {
-                        window.projectFilesList = data.files; // Lưu vào biến global
-                        const list = document.getElementById('project-files-list');
-                        list.innerHTML = '';
-                        data.files.forEach(f => {
-                            const tag = document.createElement('div');
-                            tag.style.cssText = 'padding: 4px 10px; background: #e0e7ff; color: #3730a3; border-radius: 4px; font-size: 12px; display: flex; align-items: center; gap: 6px;';
-                            tag.innerHTML = `<span style="cursor:pointer;" onclick="previewFile(${f.id})">📄 ${f.file_name}</span> <span style="cursor:pointer; color:#ef4444;" onclick="deleteProjectFile(${f.id})">&times;</span>`;
-                            list.appendChild(tag);
-                        });
-                    }
-                });
+                    .then(r => r.json())
+                    .then(data => {
+                        if (data.success) {
+                            window.projectFilesList = data.files; // Lưu vào biến global
+                            const list = document.getElementById('project-files-list');
+                            list.innerHTML = '';
+                            data.files.forEach(f => {
+                                const tag = document.createElement('div');
+                                tag.style.cssText = 'padding: 4px 10px; background: #e0e7ff; color: #3730a3; border-radius: 4px; font-size: 12px; display: flex; align-items: center; gap: 6px;';
+                                tag.innerHTML = `<span style="cursor:pointer;" onclick="previewFile(${f.id})">📄 ${f.file_name}</span> <span style="cursor:pointer; color:#ef4444;" onclick="deleteProjectFile(${f.id})">&times;</span>`;
+                                list.appendChild(tag);
+                            });
+                        }
+                    });
             }
 
-            window.previewFile = function(fileId) {
+            window.previewFile = function (fileId) {
                 const fd = new FormData();
                 fd.append('action', 'get_file_content');
                 fd.append('file_id', fileId);
-                
+
                 fetch('/presale/ajax-handler', { method: 'POST', body: fd })
-                .then(r => r.json())
-                .then(data => {
-                    if(data.success) {
-                        document.getElementById('preview-filename').textContent = data.file_name;
-                        document.getElementById('preview-content').textContent = data.content;
-                        document.getElementById('file-preview-modal').style.display = 'block';
-                    }
-                });
+                    .then(r => r.json())
+                    .then(data => {
+                        if (data.success) {
+                            document.getElementById('preview-filename').textContent = data.file_name;
+                            document.getElementById('preview-content').textContent = data.content;
+                            document.getElementById('file-preview-modal').style.display = 'block';
+                        }
+                    });
             };
 
-            window.closeModal = function() {
+            window.closeModal = function () {
                 document.getElementById('file-preview-modal').style.display = 'none';
             };
 
@@ -1786,13 +2224,13 @@ if ($check_col2 && $check_col2->num_rows == 0) {
                 }
             });
 
-            window.deleteProjectFile = function(fileId) {
-                if(!confirm('Xoá tài liệu này?')) return;
+            window.deleteProjectFile = function (fileId) {
+                if (!confirm('Xoá tài liệu này?')) return;
                 const fd = new FormData();
                 fd.append('action', 'delete_project_file');
                 fd.append('file_id', fileId);
                 fetch('/presale/ajax-handler', { method: 'POST', body: fd })
-                .then(() => loadProjectFiles(currentProjectId));
+                    .then(() => loadProjectFiles(currentProjectId));
             };
 
             // Toggle Dark Mode
@@ -1810,7 +2248,7 @@ if ($check_col2 && $check_col2->num_rows == 0) {
             // Search Projects
             const projectSearch = document.getElementById('project-search');
             if (projectSearch) {
-                projectSearch.addEventListener('input', function() {
+                projectSearch.addEventListener('input', function () {
                     const term = this.value.toLowerCase();
                     document.querySelectorAll('.project-item').forEach(item => {
                         const title = item.querySelector('.project-title').textContent.toLowerCase();
@@ -1827,7 +2265,7 @@ if ($check_col2 && $check_col2->num_rows == 0) {
                 let displayMsg = text;
                 if (selectedFile) displayMsg = "📎 Đã gửi tệp: " + selectedFile.name + "\n" + displayMsg;
                 addMessage(displayMsg, 'user');
-                
+
                 chatInput.value = '';
                 chatInput.style.height = '48px';
 
@@ -1853,7 +2291,7 @@ if ($check_col2 && $check_col2->num_rows == 0) {
                     formData.append('content', text);
                     formData.append('action_key', currentActionKey);
                     formData.append('stream', 'true');
-                    
+
                     formData.append('platform', platform);
                     formData.append('project_type', projectType);
                     formData.append('doc_type', docType);
@@ -1862,7 +2300,7 @@ if ($check_col2 && $check_col2->num_rows == 0) {
                     formData.append('hourly_rate', hourlyRate);
                     formData.append('budget', budget);
                     formData.append('customer_name', customerName);
-                    
+
                     if (currentProjectId) formData.append('project_id', currentProjectId);
                     if (currentSessionId) formData.append('session_id', currentSessionId);
                     if (selectedFile) formData.append('file', selectedFile);
@@ -1882,15 +2320,15 @@ if ($check_col2 && $check_col2->num_rows == 0) {
                     while (true) {
                         const { done, value } = await reader.read();
                         if (done) break;
-                        
+
                         const chunk = decoder.decode(value, { stream: true });
                         const lines = chunk.split('\n');
-                        
+
                         for (const line of lines) {
                             if (line.startsWith('data: ')) {
                                 const dataStr = line.slice(6).trim();
                                 if (dataStr === '[DONE]') continue;
-                                
+
                                 try {
                                     const data = JSON.parse(dataStr);
                                     if (data.text) {
@@ -1902,7 +2340,7 @@ if ($check_col2 && $check_col2->num_rows == 0) {
                             }
                         }
                     }
-                    
+
                     // Format Premium cho các bảng (nếu có)
                     const allTables = assistantDiv.querySelectorAll('table');
                     allTables.forEach(t => {
@@ -1916,7 +2354,7 @@ if ($check_col2 && $check_col2->num_rows == 0) {
                         const exportBtn = document.createElement('button');
                         exportBtn.innerHTML = '📥 Tải xuống Excel (.xlsx)';
                         exportBtn.style.cssText = 'margin-top: 10px; padding: 6px 12px; background: #10b981; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 13px; font-weight: 600; display: flex; align-items: center; gap: 6px;';
-                        exportBtn.onclick = function() {
+                        exportBtn.onclick = function () {
                             const wb = XLSX.utils.book_new();
                             const tables = assistantDiv.querySelectorAll('table');
                             tables.forEach((table, index) => {
@@ -1940,7 +2378,7 @@ if ($check_col2 && $check_col2->num_rows == 0) {
             }
 
             sendBtn.addEventListener('click', sendMessage);
-            chatInput.addEventListener('keypress', function(e) {
+            chatInput.addEventListener('keypress', function (e) {
                 if (e.key === 'Enter' && !e.shiftKey) {
                     e.preventDefault();
                     sendMessage();
@@ -1948,7 +2386,7 @@ if ($check_col2 && $check_col2->num_rows == 0) {
             });
 
             // Auto-resize textarea
-            chatInput.addEventListener('input', function() {
+            chatInput.addEventListener('input', function () {
                 this.style.height = '48px';
                 if (this.scrollHeight > 48 && this.scrollHeight < 150) {
                     this.style.height = this.scrollHeight + 'px';
@@ -1959,7 +2397,7 @@ if ($check_col2 && $check_col2->num_rows == 0) {
 
             // Quick actions
             document.querySelectorAll('.quick-action-btn').forEach(btn => {
-                btn.addEventListener('click', function() {
+                btn.addEventListener('click', function () {
                     const action = this.getAttribute('data-action');
                     if (action) {
                         currentActionKey = action;
@@ -2026,43 +2464,200 @@ if ($check_col2 && $check_col2->num_rows == 0) {
                 }
             });
 
-            window.openChat = function(el, projectId, sessionId) {
-                const projectTitle = el.getAttribute('data-title');
-                document.querySelectorAll('.chat-item').forEach(item => item.classList.remove('active'));
-                el.classList.add('active');
+            window.openChat = function (el, projectId, sessionId) {
+                const workspace = document.getElementById('presale-workspace');
+                const welcome = document.getElementById('welcome-screen');
+
+                // HIỆN WORKSPACE
+                if (workspace) workspace.style.display = 'flex';
+                if (welcome) welcome.style.display = 'none';
+
+                if (el) {
+                    const projectTitle = el.getAttribute('data-title');
+                    if (projectTitle) document.getElementById('current-project-title').textContent = projectTitle;
+                    document.querySelectorAll('.chat-item').forEach(item => item.classList.remove('active'));
+                    el.classList.add('active');
+                }
 
                 currentProjectId = projectId;
                 currentSessionId = sessionId;
-                localStorage.setItem('presale_active_project', projectId); // Đảm bảo ghi nhớ dự án đang xem chat
-                document.getElementById('current-project-title').textContent = projectTitle;
-                document.getElementById('project-workspace-header').style.display = 'block';
-                document.getElementById('workspace-tabs').style.display = 'flex';
-                switchTab('chat'); // Luôn bắt đầu ở tab chat
+                localStorage.setItem('presale_active_project', projectId);
+
+                const tabsHeader = document.getElementById('project-workspace-header');
+                const tabsBar = document.getElementById('workspace-tabs');
+                if (tabsHeader) tabsHeader.style.display = 'block';
+                if (tabsBar) tabsBar.style.display = 'flex';
+
+                // Tải dữ liệu thiết kế đã lưu
+                fetch('/presale/ajax-handler', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                    body: `action=get_project_data&project_id=${projectId}`
+                })
+                    .then(r => r.json())
+                    .then(res => {
+                        if (res.success && res.vision_data) {
+                            displayVisionResults(res.vision_data, true);
+                        } else {
+                            const preview = document.getElementById('vision-preview-list');
+                            if (preview) preview.style.display = 'none';
+                            const status = document.getElementById('vision-status');
+                            if (status) status.style.display = 'none';
+                        }
+                    });
+
                 loadProjectFiles(projectId);
 
-                chatMessages.innerHTML = '<div style="text-align:center; padding: 20px; color:#64748b;">Đang tải dữ liệu...</div>';
-                
-                const formData = new FormData();
-                formData.append('action', 'load_history');
-                formData.append('session_id', sessionId);
+                if (sessionId) {
+                    chatMessages.innerHTML = '<div style="text-align:center; padding: 20px; color:#64748b;">Đang tải dữ liệu...</div>';
+                    const formData = new FormData();
+                    formData.append('action', 'load_history');
+                    formData.append('session_id', sessionId);
 
-                fetch('/presale/ajax-handler', { method: 'POST', body: formData })
-                .then(res => res.json())
-                .then(data => {
-                    chatMessages.innerHTML = '';
-                    if (data.success && data.messages.length > 0) {
-                        data.messages.forEach(msg => addMessage(msg.content, msg.role));
-                    } else {
-                        chatMessages.innerHTML = '<div style="text-align:center; padding: 20px; color:#64748b;">Chưa có tin nhắn nào.</div>';
-                    }
-                })
-                .catch(err => {
-                    chatMessages.innerHTML = '<div style="text-align:center; padding: 20px; color:#ef4444;">Lỗi kết nối.</div>';
-                    console.error(err);
-                });
+                    fetch('/presale/ajax-handler', { method: 'POST', body: formData })
+                        .then(res => res.json())
+                        .then(data => {
+                            chatMessages.innerHTML = '';
+                            if (data.success && data.messages.length > 0) {
+                                data.messages.forEach(msg => addMessage(msg.content, msg.role));
+                            } else {
+                                chatMessages.innerHTML = '<div style="text-align:center; padding: 20px; color:#64748b;">Chưa có tin nhắn nào.</div>';
+                            }
+                        });
+                    switchTab('chat');
+                } else {
+                    chatMessages.innerHTML = '<div style="text-align:center; padding: 20px; color:#64748b;">Hệ thống đã sẵn sàng cho dự án này. Hãy bắt đầu phân tích thiết kế hoặc tạo Chat mới.</div>';
+                    switchTab('design'); // Mặc định mở tab thiết kế khi vừa click vào dự án
+                }
             };
 
-            window.handleNewChat = function() {
+            window.displayVisionResults = function (data, isFromHistory = false) {
+                const preview = document.getElementById('vision-preview-list');
+                const status = document.getElementById('vision-status');
+
+                if (isFromHistory) {
+                    status.style.display = 'block';
+                    status.innerHTML = `✅ Đã tải dữ liệu thiết kế cũ (<b>${data.length}</b> khối).`;
+                }
+
+                preview.style.display = 'block';
+                preview.style.padding = '0';
+                preview.style.background = 'transparent';
+                preview.style.border = 'none';
+
+                let html = `<div style="font-weight:700;margin-bottom:12px;color:#065f46;font-size:13px;display:flex;justify-content:space-between;align-items:center;">
+                    <span>🔍 Phân tích bố cục: ${data.length} sections</span>
+                    <span style="background:#dbeafe;color:#1d4ed8;font-size:10px;padding:2px 8px;border-radius:10px;">✨ AI Vision</span>
+                </div>`;
+
+                html += `<table style="width:100%;border-collapse:collapse;font-size:12px;">
+                    <thead>
+                        <tr style="background:#f0fdf4;border-bottom:2px solid #bbf7d0;">
+                            <th style="padding:8px 6px;text-align:center;width:28px;color:#065f46;">#</th>
+                            <th style="padding:8px 6px;text-align:left;width:160px;color:#065f46;">Thành phần khối</th>
+                            <th style="padding:8px 6px;text-align:left;color:#065f46;">Mô tả phạm vi</th>
+                        </tr>
+                    </thead>
+                    <tbody>`;
+
+                data.forEach((v, idx) => {
+                    const rowBg = idx % 2 === 0 ? '#fff' : '#f9fefe';
+                    const name = v.name || 'Khối nội dung';
+                    const desc = v.description || (v.summary ? v.summary.replace(v.name + ': ', '') : 'Không có mô tả');
+
+                    html += `<tr style="background:${rowBg};border-bottom:1px solid #dcfce7;vertical-align:top;">
+                        <td style="padding:10px 6px;text-align:center;font-weight:700;color:#6b7280;">${idx + 1}</td>
+                        <td style="padding:10px 6px;font-weight:600;color:#065f46;">${name}</td>
+                        <td style="padding:10px 6px;color:#374151;line-height:1.5;">${desc}`;
+
+                    if (v.components && v.components.length > 0) {
+                        html += `<div style="margin-top:4px;">`;
+                        v.components.forEach(c => {
+                            html += `<span style="font-size:10px;background:#dcfce7;color:#166534;padding:1px 7px;border-radius:8px;margin-right:3px;margin-top:3px;display:inline-block;">${c}</span>`;
+                        });
+                        html += `</div>`;
+                    }
+
+                    if (v.features && v.features.length > 0) {
+                        html += `<ul style="margin: 8px 0 0 0; padding-left: 18px; font-size: 12px; color: #1e293b; list-style-type: disc;">`;
+                        v.features.forEach(f => {
+                            html += `<li style="margin-bottom: 2px;">${f}</li>`;
+                        });
+                        html += `</ul>`;
+                    }
+
+                    html += `</td></tr>`;
+
+                    if (v.style) {
+                        html += `<tr style="background:${rowBg};border-bottom:1px solid #dcfce7;font-size:11px;">
+                            <td style="padding:4px 6px; border-right:none;"></td>
+                            <td style="padding:4px 6px;color:#64748b;font-style:italic;text-align:right; border-left:none;">🎨 Style:</td>
+                            <td style="padding:4px 6px;color:#64748b;">${v.style}</td>
+                        </tr>`;
+                    }
+                });
+
+                html += `</tbody></table>`;
+
+                html += `<div style="margin-top:15px; text-align:right;">
+                    <button onclick="syncVisionToSow()" class="send-btn" style="width:auto; padding:0 15px; height:32px; background:#4f46e5; font-size:12px;">
+                        📝 Đẩy vào bảng báo giá (SOW)
+                    </button>
+                </div>`;
+
+                preview.innerHTML = html;
+            };
+
+            window.syncVisionToSow = function () {
+                const visionData = document.getElementById('vision-summary-input').value;
+                if (!visionData) return alert('Chưa có dữ liệu phân tích thiết kế!');
+
+                const data = JSON.parse(visionData);
+                if (!data || data.length === 0) return alert('Dữ liệu phân tích trống!');
+
+                // Chuyển sang tab chat
+                switchTab('chat');
+
+                // Tạo prompt chi tiết
+                let prompt = `Chào AI, tôi đã hoàn thành bước phân tích thiết kế (AI Vision) cho dự án này. \n`;
+                prompt += `Dựa trên ${data.length} khối chức năng đã bóc tách được từ mockup dưới đây, hãy đóng vai một Senior Presale Manager để lập **Bảng Phạm vi công việc (SOW)** và **Bảng Ước tính nỗ lực (Estimation)** chi tiết nhất.\n\n`;
+                prompt += `Yêu cầu về cấu trúc bảng:\n`;
+                prompt += `1. **Hạng mục chính**: Tên khối chức năng.\n`;
+                prompt += `2. **Mô tả giải pháp**: Đề xuất giải pháp kỹ thuật cụ thể (ví dụ: CMS Shopify, custom coding, API integration...).\n`;
+                prompt += `3. **Tính năng chi tiết**: Liệt kê các bullet points các sub-features.\n`;
+                prompt += `4. **Nhân sự & Effort**: Phân bổ (Frontend/Backend/QC) và số ngày công (Man-days) hợp lý.\n\n`;
+                prompt += `DỮ LIỆU ĐẦU VÀO TỪ THIẾT KẾ:\n`;
+
+                data.forEach((v, i) => {
+                    prompt += `### ${i + 1}. ${v.name.toUpperCase()}\n`;
+                    prompt += `- **Mô tả**: ${v.description}\n`;
+                    if (v.features && v.features.length > 0) {
+                        prompt += `- **Tính năng**: ${v.features.join(', ')}\n`;
+                    }
+                    if (v.components && v.components.length > 0) {
+                        prompt += `- **UI Components**: ${v.components.join(', ')}\n`;
+                    }
+                    if (v.style) {
+                        prompt += `- **Ghi chú Style**: ${v.style}\n`;
+                    }
+                    prompt += `\n`;
+                });
+
+                prompt += `\nHãy trình bày bằng bảng Markdown chuyên nghiệp, thẩm mỹ và có tính thuyết phục cao để gửi cho khách hàng.`;
+
+                // Điền vào ô chat và tự động gửi
+                chatInput.value = prompt;
+                chatInput.style.height = 'auto';
+                chatInput.style.height = chatInput.scrollHeight + 'px';
+
+                // Giả lập click gửi
+                setTimeout(() => {
+                    const sendBtn = document.getElementById('send-btn');
+                    if (sendBtn) sendBtn.click();
+                }, 300);
+            };
+
+            window.handleNewChat = function () {
                 if (currentProjectId) {
                     createNewChat(currentProjectId);
                 } else {
@@ -2071,11 +2666,11 @@ if ($check_col2 && $check_col2->num_rows == 0) {
             };
 
             // Nút New Chat (Tổng quát ngoài Project)
-            document.getElementById('new-chat-btn').addEventListener('click', function() {
+            document.getElementById('new-chat-btn').addEventListener('click', function () {
                 handleNewChat();
             });
             // Settings Sidebar Toggle
-            window.toggleSettingsSidebar = function() {
+            window.toggleSettingsSidebar = function () {
                 const sidebar = document.getElementById('settingsSidebar');
                 const overlay = document.getElementById('sidebarOverlay');
                 sidebar.classList.toggle('active');
@@ -2104,12 +2699,12 @@ if ($check_col2 && $check_col2->num_rows == 0) {
                 });
             }
 
-            window.renderCustomerDropdown = function(query) {
+            window.renderCustomerDropdown = function (query) {
                 const term = query.toLowerCase().trim();
                 const filtered = allCustomers.filter(c => c.name.toLowerCase().includes(term)).slice(0, 50);
-                
+
                 customerDropdown.innerHTML = '';
-                
+
                 if (filtered.length > 0) {
                     filtered.forEach(c => {
                         const div = document.createElement('div');
@@ -2128,7 +2723,7 @@ if ($check_col2 && $check_col2->num_rows == 0) {
                     div.textContent = 'Không tìm thấy khách hàng. Nhấn Enter để dùng tên này.';
                     customerDropdown.appendChild(div);
                 }
-                
+
                 customerDropdown.style.display = filtered.length > 0 || term.length > 0 ? 'block' : 'none';
             };
 
@@ -2149,59 +2744,130 @@ if ($check_col2 && $check_col2->num_rows == 0) {
             window.allCustomers = <?php echo json_encode($customers); ?>;
 
 
-            window.analyzeMockupImage = async function() {
-                const fileInput = document.getElementById('mockup-image-upload');
-                const file = fileInput.files[0];
-                const status = document.getElementById('vision-status');
-                const btn = document.getElementById('btn-analyze-mockup');
-
-                if (!file) return alert('Vui lòng chọn ảnh Mockup!');
-
-                status.style.display = 'block';
-                status.innerHTML = '⏳ Đang chạy YOLOv8 & OCR (Local)...';
-                btn.disabled = true;
-
-                try {
-                    const fd = new FormData();
-                    fd.append('action', 'analyze_design_image');
-                    fd.append('mockup_image', file);
-
-                    const response = await fetch('/presale/ajax-handler', {
-                        method: 'POST',
-                        body: fd
-                    });
-                    const res = await response.json();
-
-                    if (res.success) {
-                        status.innerHTML = `✅ Phân tích xong: Tìm thấy <b>${res.data.length}</b> khối nội dung.`;
-                        document.getElementById('vision-summary-input').value = JSON.stringify(res.data);
-                        
-                        const preview = document.getElementById('vision-preview-list');
-                        preview.style.display = 'block';
-                        let html = '<div style="font-weight: 600; margin-bottom: 8px; border-bottom: 1px solid #e2e8f0; padding-bottom: 4px;">Kết quả Vision (Local):</div>';
-                        res.data.forEach(v => {
-                            html += `<div style="margin-top: 12px; border-left: 3px solid #10b981; padding-left: 10px;">`;
-                            html += `<div style="font-weight: 700; color: #065f46;">• ${v.name}</div>`;
-                            if (v.components && v.components.length > 0) {
-                                html += `<div style="font-size: 10px; background: #dcfce7; color: #166534; display: inline-block; padding: 2px 6px; border-radius: 4px; margin: 4px 0;">Thành phần: ${v.components.join(', ')}</div>`;
-                            }
-                            html += `<div style="font-size: 11px; color: #64748b; line-height: 1.4;">${v.summary}</div>`;
-                            html += `</div>`;
-                        });
-                        preview.innerHTML = html;
-
-                        chatInput.value = `Đã phân tích ảnh Mockup: Tìm thấy ${res.data.length} khối chức năng. Hãy lập SOW dựa trên các thành phần này.`;
-                        chatInput.focus();
-                    } else {
-                        status.innerHTML = `❌ Lỗi: ${res.message}`;
-                    }
-                } catch (e) {
-                    status.innerHTML = '❌ Lỗi kết nối Python.';
-                    console.error(e);
-                } finally {
-                    btn.disabled = false;
-                }
+            // Lightbox để xem ảnh thumbnail phóng to
+            window.openVisionLightbox = function (url) {
+                let lb = document.getElementById('vision-lightbox');
+                if (!lb) return;
+                document.getElementById('vision-lightbox-img').src = url;
+                lb.style.display = 'flex';
             };
+
+            // Xử lý xem trước ảnh ngay khi chọn file
+            const mockupUpload = document.getElementById('mockup-image-upload');
+            if (mockupUpload) {
+                mockupUpload.addEventListener('change', function () {
+                    const file = this.files[0];
+                    const wrapper = document.getElementById('mockup-img-wrapper');
+                    if (file) {
+                        const reader = new FileReader();
+                        reader.onload = function (e) {
+                            wrapper.innerHTML = `<img src="${e.target.result}" style="max-width:100%; height:auto; display:block;">`;
+                        };
+                        reader.readAsDataURL(file);
+                    }
+                });
+            }
+
+            window.analyzeMockupImage = function () {
+                const fileInput = document.getElementById('mockup-image-upload');
+                const btn = document.getElementById('btn-analyze-mockup');
+                const progressContainer = document.getElementById('vision-progress-container');
+                const progressBar = document.getElementById('vision-progress-bar');
+                const progressStatus = document.getElementById('vision-progress-status');
+                const progressPercent = document.getElementById('vision-progress-percent');
+                const status = document.getElementById('vision-status');
+                const preview = document.getElementById('vision-preview-list');
+
+                if (!fileInput.files || fileInput.files.length === 0) {
+                    return alert('Vui lòng chọn ảnh thiết kế!');
+                }
+
+                const file = fileInput.files[0];
+                const formData = new FormData();
+                formData.append('action', 'analyze_design_image');
+                formData.append('mockup_image', file);
+                if (currentProjectId) formData.append('project_id', currentProjectId);
+
+                // Reset UI
+                btn.disabled = true;
+                btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Đang xử lý...';
+                status.style.display = 'none';
+                preview.style.display = 'none';
+
+                // Khởi tạo Progress Bar
+                progressContainer.style.display = 'block';
+                progressBar.style.width = '0%';
+                progressPercent.innerText = '0%';
+                progressStatus.innerText = 'Đang tải ảnh lên hệ thống...';
+
+                let progress = 0;
+                const progressInterval = setInterval(() => {
+                    if (progress < 95) {
+                        progress += (95 - progress) / 25;
+                        const rounded = Math.round(progress);
+                        progressBar.style.width = rounded + '%';
+                        progressPercent.innerText = rounded + '%';
+
+                        if (rounded > 20 && rounded < 60) {
+                            progressStatus.innerText = 'AI đang đọc nội dung hình ảnh...';
+                        } else if (rounded >= 60) {
+                            progressStatus.innerText = 'Đang bóc tách các khối chức năng...';
+                        }
+                    }
+                }, 400);
+
+                fetch('/modules/presale/ajax_handler.php', {
+                    method: 'POST',
+                    body: formData
+                })
+                    .then(async res => {
+                        const text = await res.text();
+                        try {
+                            return JSON.parse(text);
+                        } catch (e) {
+                            console.error('Server returned non-JSON:', text);
+                            throw new Error('Server trả về lỗi (không phải JSON). Vui lòng kiểm tra log.');
+                        }
+                    })
+                    .then(res => {
+                        clearInterval(progressInterval);
+                        if (res.success) {
+                            progressBar.style.width = '100%';
+                            progressPercent.innerText = '100%';
+                            progressStatus.innerText = 'Hoàn tất phân tích!';
+
+                            setTimeout(() => {
+                                progressContainer.style.display = 'none';
+                                status.style.display = 'block';
+                                status.innerHTML = `✅ Phân tích xong: Tìm thấy <b>${res.data.length}</b> khối nội dung.`;
+
+                                document.getElementById('vision-summary-input').value = JSON.stringify(res.data);
+                                displayVisionResults(res.data);
+
+                                // Tự động chuẩn bị câu lệnh cho chat
+                                const sectionList = res.data.map((v, i) => `${i + 1}. ${v.name}`).join('\n');
+                                const chatInput = document.getElementById('chat-input');
+                                if (chatInput) {
+                                    chatInput.value = `Tôi vừa tải lên mockup thiết kế, AI đã tìm thấy ${res.data.length} khối:\n${sectionList}\n\nHãy tư vấn giải pháp và lập bảng báo giá SOW chi tiết cho dự án này.`;
+                                    chatInput.focus();
+                                }
+
+                                btn.disabled = false;
+                                btn.innerHTML = '✨ Phân tích bằng AI Vision';
+                            }, 500);
+                        } else {
+                            throw new Error(res.message);
+                        }
+                    })
+                    .catch(err => {
+                        clearInterval(progressInterval);
+                        progressContainer.style.display = 'none';
+                        btn.disabled = false;
+                        btn.innerHTML = '✨ Phân tích bằng AI Vision';
+                        alert('Lỗi: ' + (err.message || 'Kết nối thất bại'));
+                    });
+            };
+
         });
     </script>
     <!-- Sidebar Overlay -->
@@ -2211,14 +2877,16 @@ if ($check_col2 && $check_col2->num_rows == 0) {
     <div class="settings-sidebar" id="settingsSidebar">
         <div class="settings-sidebar-header">
             <h3 style="margin: 0; font-size: 18px; color: #0f172a;">Thiết lập Dự án</h3>
-            <button onclick="toggleSettingsSidebar()" style="background: none; border: none; font-size: 24px; cursor: pointer; color: #94a3b8;">&times;</button>
+            <button onclick="toggleSettingsSidebar()"
+                style="background: none; border: none; font-size: 24px; cursor: pointer; color: #94a3b8;">&times;</button>
         </div>
         <div class="settings-sidebar-body">
             <!-- Client Selection -->
             <div class="settings-group">
                 <label>Khách hàng (Client)</label>
                 <div class="customer-search-container">
-                    <input type="text" id="customer-search-input" class="settings-input" placeholder="Tìm kiếm hoặc nhập tên khách hàng..." autocomplete="off">
+                    <input type="text" id="customer-search-input" class="settings-input"
+                        placeholder="Tìm kiếm hoặc nhập tên khách hàng..." autocomplete="off">
                     <input type="hidden" id="customer-select">
                     <div id="customer-dropdown" class="customer-dropdown"></div>
                 </div>
@@ -2273,10 +2941,12 @@ if ($check_col2 && $check_col2->num_rows == 0) {
             </div>
 
             <div style="margin-top: 32px; padding-top: 24px; border-top: 1px solid #e2e8f0;">
-                <button class="send-btn" style="width: 100%; height: 44px; font-size: 15px;" onclick="toggleSettingsSidebar()">Lưu thiết lập</button>
+                <button class="send-btn" style="width: 100%; height: 44px; font-size: 15px;"
+                    onclick="toggleSettingsSidebar()">Lưu thiết lập</button>
             </div>
         </div>
     </div>
 
 </body>
+
 </html>

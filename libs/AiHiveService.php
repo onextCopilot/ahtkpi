@@ -3,22 +3,29 @@
 class AiHiveService {
     private $apiKey;
     private $baseUrl;
-    private $agentId; // If using a specific Agent ID on aihive
+    private $agentId;
+    private $visionApiKey;
+    private $visionBaseUrl;
 
     public function __construct() {
-        global $conn; // Dùng connection global của hệ thống
+        global $conn;
 
-        // Lấy từ config trong Database
-        $this->apiKey = 'YOUR_AIHIVE_API_KEY';
+        $this->apiKey  = 'YOUR_AIHIVE_API_KEY';
         $this->baseUrl = 'https://api.aihive.ai/v1';
         $this->agentId = 'gpt-3.5-turbo';
+
+        // Vision-specific defaults (fallback to main settings)
+        $this->visionApiKey  = null;
+        $this->visionBaseUrl = null;
 
         if ($conn) {
             $result = $conn->query("SELECT * FROM aihive_settings ORDER BY id DESC LIMIT 1");
             if ($result && $result->num_rows > 0) {
                 $settings = $result->fetch_assoc();
-                if (!empty($settings['api_key'])) $this->apiKey = $settings['api_key'];
-                if (!empty($settings['base_url'])) $this->baseUrl = $settings['base_url'];
+                if (!empty($settings['api_key']))        $this->apiKey       = $settings['api_key'];
+                if (!empty($settings['base_url']))       $this->baseUrl      = $settings['base_url'];
+                if (!empty($settings['vision_api_key'])) $this->visionApiKey = $settings['vision_api_key'];
+                if (!empty($settings['vision_base_url']))$this->visionBaseUrl= $settings['vision_base_url'];
             }
         }
     }
@@ -28,6 +35,148 @@ class AiHiveService {
      */
     public function isConfigured() {
         return !empty($this->apiKey) && $this->apiKey !== 'YOUR_AIHIVE_API_KEY';
+    }
+
+    /**
+     * Kiểm tra Vision AI đã được cấu hình riêng chưa
+     */
+    public function isVisionConfigured() {
+        return !empty($this->visionApiKey) || $this->isConfigured();
+    }
+
+    /**
+     * Upload ảnh lên Dify Vision App (dùng vision_api_key riêng)
+     */
+    public function uploadVisionFile($filePath, $filename, $mimeType) {
+        $apiKey  = !empty($this->visionApiKey) ? $this->visionApiKey : $this->apiKey;
+        $baseUrl = !empty($this->visionBaseUrl) ? $this->visionBaseUrl : 'https://api.dify.ai/v1/chat-messages';
+
+        // Extract base (strip /chat-messages path để lấy /v1)
+        $uploadUrl = preg_replace('#/chat-messages.*$#', '', $baseUrl) . '/files/upload';
+
+        $cfile = new CURLFile($filePath, $mimeType, $filename);
+        $ch = curl_init($uploadUrl);
+        curl_setopt_array($ch, [
+            CURLOPT_POST           => true,
+            CURLOPT_POSTFIELDS     => ['file' => $cfile, 'user' => 'vision_user'],
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_TIMEOUT        => 60,
+            CURLOPT_HTTPHEADER     => ['Authorization: Bearer ' . $apiKey]
+        ]);
+        $response = curl_exec($ch);
+        $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        $error    = curl_error($ch);
+        if ($error) return ['success' => false, 'message' => 'Upload CURL: ' . $error];
+        $data = json_decode($response, true);
+        if ($httpCode >= 200 && $httpCode < 300 && !empty($data['id'])) {
+            return ['success' => true, 'data' => $data];
+        }
+        return ['success' => false, 'message' => "Upload HTTP $httpCode - " . ($data['message'] ?? mb_substr($response, 0, 200))];
+    }
+
+    /**
+     * Gửi ảnh + prompt và tự động parse JSON kết quả
+     */
+    public function runVisionAnalysis($fileId, $prompt) {
+        $res = $this->callVisionChat($prompt, $fileId);
+        if (!$res['success']) return $res;
+
+        $aiText = "";
+        $d = $res['data'] ?? [];
+        
+        // Trích xuất text từ các định dạng Dify/AiHive khác nhau
+        if (isset($d['data']['outputs']['text']))       $aiText = $d['data']['outputs']['text'];
+        elseif (isset($d['data']['outputs']['answer'])) $aiText = $d['data']['outputs']['answer'];
+        elseif (isset($d['outputs']['text']))           $aiText = $d['outputs']['text'];
+        elseif (isset($d['outputs']['answer']))         $aiText = $d['outputs']['answer'];
+        elseif (isset($d['answer']))                    $aiText = $d['answer'];
+        else                                            $aiText = json_encode($d);
+
+        // Parse JSON từ Markdown hoặc chuỗi text
+        preg_match('/```(?:json)?\s*([\s\S]*?)\s*```/i', $aiText, $matches);
+        $jsonStr = $matches[1] ?? $aiText;
+        $p = strpos($jsonStr, '{');
+        if ($p !== false) $jsonStr = substr($jsonStr, $p);
+        
+        $parsed = json_decode($jsonStr, true);
+        if (!$parsed) {
+            return ['success' => false, 'message' => 'AI trả về không phải JSON: ' . mb_substr($aiText, 0, 200)];
+        }
+
+        return ['success' => true, 'data' => $parsed];
+    }
+
+    /**
+     * Gửi ảnh + prompt đến Dify Vision App (Core)
+     */
+    public function callVisionChat($prompt, $fileId) {
+        $apiKey  = !empty($this->visionApiKey)  ? $this->visionApiKey  : $this->apiKey;
+        $baseUrl = !empty($this->visionBaseUrl) ? $this->visionBaseUrl : '';
+
+        // Nếu không có vision_base_url, fallback sang main base_url
+        if (empty($baseUrl)) {
+            $baseUrl = $this->baseUrl;
+        }
+
+        $isWorkflow = strpos($baseUrl, '/workflows/run') !== false;
+        $isChat     = strpos($baseUrl, '/chat-messages') !== false;
+
+        // Nếu URL chưa có path cụ thể, mặc định dùng workflow (theo screenshot)
+        if (!$isWorkflow && !$isChat) {
+            $baseUrl = rtrim($baseUrl, '/') . '/workflows/run';
+            $isWorkflow = true;
+        }
+
+        // === WORKFLOW format ===
+        if ($isWorkflow) {
+            $payload = [
+                'inputs'        => ['query' => $prompt],
+                'files'         => [[
+                    'type'            => 'image',
+                    'transfer_method' => 'local_file',
+                    'upload_file_id'  => $fileId
+                ]],
+                'response_mode' => 'blocking',
+                'user'          => 'vision_user'
+            ];
+        }
+        // === CHAT format ===
+        else {
+            $payload = [
+                'query'         => $prompt,
+                'inputs'        => [],
+                'files'         => [[
+                    'type'            => 'image',
+                    'transfer_method' => 'local_file',
+                    'upload_file_id'  => $fileId
+                ]],
+                'response_mode' => 'blocking',
+                'user'          => 'vision_user'
+            ];
+        }
+
+        $ch = curl_init($baseUrl);
+        curl_setopt_array($ch, [
+            CURLOPT_POST           => true,
+            CURLOPT_POSTFIELDS     => json_encode($payload),
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_TIMEOUT        => 120,
+            CURLOPT_HTTPHEADER     => [
+                'Content-Type: application/json',
+                'Authorization: Bearer ' . $apiKey
+            ]
+        ]);
+        $response = curl_exec($ch);
+        $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        $error    = curl_error($ch);
+
+        if ($error) return ['success' => false, 'message' => 'CURL: ' . $error];
+
+        $data = json_decode($response, true);
+        if ($httpCode >= 200 && $httpCode < 300) {
+            return ['success' => true, 'data' => $data, 'mode' => $isWorkflow ? 'workflow' : 'chat'];
+        }
+        return ['success' => false, 'message' => "HTTP $httpCode - " . ($data['message'] ?? mb_substr($response, 0, 200))];
     }
 
     /**
