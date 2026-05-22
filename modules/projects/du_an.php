@@ -10,10 +10,16 @@ $user_id = $_SESSION['user_id'];
 $role    = $_SESSION['role'] ?? 'user';
 
 // ── Migrate: ensure new columns exist ────────────────────────────────────────
-$conn->query("ALTER TABLE pakd ADD COLUMN IF NOT EXISTS assignment_date  DATETIME DEFAULT NULL");
-$conn->query("ALTER TABLE pakd ADD COLUMN IF NOT EXISTS expected_closing  DATE     DEFAULT NULL");
-$conn->query("ALTER TABLE pakd ADD COLUMN IF NOT EXISTS odoo_stage_id    INT      DEFAULT NULL");
-$conn->query("ALTER TABLE pakd ADD COLUMN IF NOT EXISTS division_names   VARCHAR(500) DEFAULT NULL");
+foreach ([
+    'assignment_date' => 'DATETIME DEFAULT NULL',
+    'expected_closing'=> 'DATE DEFAULT NULL',
+    'odoo_stage_id'   => 'INT DEFAULT NULL',
+    'division_names'  => 'VARCHAR(500) DEFAULT NULL',
+] as $_col => $_def) {
+    $r = $conn->query("SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='pakd' AND COLUMN_NAME='$_col'");
+    if ($r && $r->num_rows === 0) $conn->query("ALTER TABLE pakd ADD COLUMN `$_col` $_def");
+}
+unset($_col, $_def, $r);
 
 // ── Load won stage from settings ─────────────────────────────────────────────
 $wonStageId = null;
