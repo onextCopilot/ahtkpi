@@ -21,6 +21,24 @@ $conn->query("CREATE TABLE IF NOT EXISTS quy_trinh_files (
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 )");
 
+// Check and add allowed_departments column if it doesn't exist
+$chk_dept = $conn->query("SHOW COLUMNS FROM quy_trinh_files LIKE 'allowed_departments'");
+if ($chk_dept && $chk_dept->num_rows === 0) {
+    $conn->query("ALTER TABLE quy_trinh_files ADD COLUMN allowed_departments TEXT DEFAULT NULL");
+}
+
+// Check and add allowed_users column if it doesn't exist
+$chk_users = $conn->query("SHOW COLUMNS FROM quy_trinh_files LIKE 'allowed_users'");
+if ($chk_users && $chk_users->num_rows === 0) {
+    $conn->query("ALTER TABLE quy_trinh_files ADD COLUMN allowed_users TEXT DEFAULT NULL");
+}
+
+// Check and add allowed_roles column if it doesn't exist
+$chk_roles = $conn->query("SHOW COLUMNS FROM quy_trinh_files LIKE 'allowed_roles'");
+if ($chk_roles && $chk_roles->num_rows === 0) {
+    $conn->query("ALTER TABLE quy_trinh_files ADD COLUMN allowed_roles TEXT DEFAULT NULL");
+}
+
 // Handle POST Upload
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['html_file'])) {
     header('Content-Type: application/json');
@@ -74,8 +92,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['html_file'])) {
         $file_name_esc = $conn->real_escape_string($file_name);
         $file_size = (int)$file['size'];
         
-        $sql = "INSERT INTO quy_trinh_files (title, file_path, file_name, file_size, uploaded_by) 
-                VALUES ('$title_esc', '$file_url_esc', '$file_name_esc', $file_size, $user_id)";
+        $allowed_roles_arr = isset($_POST['roles']) && is_array($_POST['roles']) ? array_filter(array_map(function($r) {
+            return preg_replace('/[^a-zA-Z0-9_-]/', '', $r);
+        }, $_POST['roles'])) : [];
+        $allowed_roles = implode(',', $allowed_roles_arr);
+        $allowed_usrs = isset($_POST['users']) && is_array($_POST['users']) ? implode(',', array_map('intval', $_POST['users'])) : '';
+        
+        $allowed_roles_esc = $conn->real_escape_string($allowed_roles);
+        $allowed_usrs_esc = $conn->real_escape_string($allowed_usrs);
+        
+        $sql = "INSERT INTO quy_trinh_files (title, file_path, file_name, file_size, uploaded_by, allowed_roles, allowed_users) 
+                VALUES ('$title_esc', '$file_url_esc', '$file_name_esc', $file_size, $user_id, " . 
+                ($allowed_roles === '' ? "NULL" : "'$allowed_roles_esc'") . ", " . 
+                ($allowed_usrs === '' ? "NULL" : "'$allowed_usrs_esc'") . ")";
         if ($conn->query($sql)) {
             echo json_encode(['status' => 'success']);
         } else {
@@ -113,23 +142,131 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
     exit();
 }
 
-// Fetch all HTML documents
-$search_q = isset($_GET['search']) ? $conn->real_escape_string($_GET['search']) : '';
-$where_clause = "";
-if (!empty($search_q)) {
-    $where_clause = " WHERE q.title LIKE '%$search_q%' OR q.file_name LIKE '%$search_q%' ";
+// Handle POST get_permissions
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'get_permissions') {
+    header('Content-Type: application/json');
+    if ($role !== 'admin' && $role !== 'manager') {
+        echo json_encode(['status' => 'error', 'message' => 'Bạn không có quyền thực hiện chức năng này.']);
+        exit();
+    }
+    
+    $file_id = (int)($_POST['id'] ?? 0);
+    $res = $conn->query("SELECT allowed_roles, allowed_users FROM quy_trinh_files WHERE id = $file_id");
+    if ($res && $row = $res->fetch_assoc()) {
+        $roles_list = $row['allowed_roles'] ? explode(',', $row['allowed_roles']) : [];
+        $users = $row['allowed_users'] ? explode(',', $row['allowed_users']) : [];
+        echo json_encode([
+            'status' => 'success',
+            'roles' => $roles_list,
+            'users' => array_map('intval', $users)
+        ]);
+    } else {
+        echo json_encode(['status' => 'error', 'message' => 'Không tìm thấy tài liệu.']);
+    }
+    exit();
 }
 
-$query = "SELECT q.*, u.full_name as uploader 
-          FROM quy_trinh_files q 
-          LEFT JOIN users u ON q.uploaded_by = u.id 
-          $where_clause 
-          ORDER BY q.created_at DESC";
-$res = $conn->query($query);
+// Handle POST save_permissions
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'save_permissions') {
+    header('Content-Type: application/json');
+    if ($role !== 'admin' && $role !== 'manager') {
+        echo json_encode(['status' => 'error', 'message' => 'Bạn không có quyền thực hiện chức năng này.']);
+        exit();
+    }
+    
+    $file_id = (int)($_POST['id'] ?? 0);
+    $allowed_roles_arr = isset($_POST['roles']) && is_array($_POST['roles']) ? array_filter(array_map(function($r) {
+        return preg_replace('/[^a-zA-Z0-9_-]/', '', $r);
+    }, $_POST['roles'])) : [];
+    $allowed_roles = implode(',', $allowed_roles_arr);
+    $allowed_usrs = isset($_POST['users']) && is_array($_POST['users']) ? implode(',', array_map('intval', $_POST['users'])) : '';
+    
+    $allowed_roles_esc = $conn->real_escape_string($allowed_roles);
+    $allowed_usrs_esc = $conn->real_escape_string($allowed_usrs);
+    
+    $sql = "UPDATE quy_trinh_files 
+            SET allowed_roles = " . ($allowed_roles === '' ? "NULL" : "'$allowed_roles_esc'") . ", 
+                allowed_users = " . ($allowed_usrs === '' ? "NULL" : "'$allowed_usrs_esc'") . " 
+            WHERE id = $file_id";
+            
+    if ($conn->query($sql)) {
+        echo json_encode(['status' => 'success']);
+    } else {
+        echo json_encode(['status' => 'error', 'message' => 'Lỗi lưu phân quyền: ' . $conn->error]);
+    }
+    exit();
+}
+
+// Fetch all HTML documents (filtered by permissions)
+$search_q = isset($_GET['search']) ? trim($_GET['search']) : '';
+$params = [];
+$types = '';
+
+if ($role === 'admin' || $role === 'manager') {
+    // Admin and manager can see everything
+    $query = "SELECT q.*, u.full_name as uploader 
+              FROM quy_trinh_files q 
+              LEFT JOIN users u ON q.uploaded_by = u.id";
+    if (!empty($search_q)) {
+        $query .= " WHERE q.title LIKE ? OR q.file_name LIKE ?";
+        $like_val = "%$search_q%";
+        $params[] = $like_val;
+        $params[] = $like_val;
+        $types .= 'ss';
+    }
+} else {
+    // Normal user: can only see public OR allowed roles OR allowed users
+    $query = "SELECT q.*, u.full_name as uploader 
+              FROM quy_trinh_files q 
+              LEFT JOIN users u ON q.uploaded_by = u.id 
+              WHERE (
+                  ((q.allowed_roles IS NULL OR q.allowed_roles = '') 
+                   AND (q.allowed_users IS NULL OR q.allowed_users = ''))
+                  OR FIND_IN_SET(?, q.allowed_roles) > 0
+                  OR FIND_IN_SET(?, q.allowed_users) > 0
+              )";
+    $params[] = $role;
+    $params[] = $user_id;
+    $types .= 'si';
+    
+    if (!empty($search_q)) {
+        $query .= " AND (q.title LIKE ? OR q.file_name LIKE ?)";
+        $like_val = "%$search_q%";
+        $params[] = $like_val;
+        $params[] = $like_val;
+        $types .= 'ss';
+    }
+}
+$query .= " ORDER BY q.created_at DESC";
+
+$stmt = $conn->prepare($query);
 $files = [];
-if ($res) {
-    while ($row = $res->fetch_assoc()) {
-        $files[] = $row;
+if ($stmt) {
+    if (!empty($params)) {
+        $stmt->bind_param($types, ...$params);
+    }
+    $stmt->execute();
+    $res = $stmt->get_result();
+    if ($res) {
+        while ($row = $res->fetch_assoc()) {
+            $files[] = $row;
+        }
+    }
+}
+
+// Fetch roles and users list for permission management
+$roles_list_avail = [
+    'admin' => 'Quản trị viên (Admin)',
+    'manager' => 'Quản lý (Manager)',
+    'user' => 'Nhân viên (User)'
+];
+$users_list = [];
+if ($role === 'admin' || $role === 'manager') {
+    $users_res = $conn->query("SELECT id, full_name, username FROM users ORDER BY full_name ASC");
+    if ($users_res) {
+        while ($row = $users_res->fetch_assoc()) {
+            $users_list[] = $row;
+        }
     }
 }
 ?>
@@ -376,6 +513,45 @@ if ($res) {
             box-shadow: 0 1px 3px rgba(0,0,0,0.1);
         }
 
+        /* Permission Selectors Styling */
+        .checkbox-scrollbox {
+            border: 1px solid #E2E8F0;
+            border-radius: var(--radius-lg);
+            max-height: 150px;
+            overflow-y: auto;
+            padding: 8px 12px;
+            background: #F8FAFC;
+            box-sizing: border-box;
+        }
+        .checkbox-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 6px 0;
+            cursor: pointer;
+            font-size: 13px;
+            color: var(--apple-slate);
+            border-bottom: 1px solid rgba(0,0,0,0.02);
+            user-select: none;
+        }
+        .checkbox-item:last-child {
+            border-bottom: none;
+        }
+        .checkbox-item input[type="checkbox"] {
+            width: 16px;
+            height: 16px;
+            accent-color: var(--apple-blue);
+            cursor: pointer;
+            margin: 0;
+        }
+        .form-label {
+            display: block;
+            font-size: 13px;
+            font-weight: 600;
+            color: var(--apple-slate);
+            margin-bottom: 6px;
+        }
+
         /* List View Styling */
         .doc-list {
             display: flex;
@@ -615,6 +791,23 @@ if ($res) {
 
         .btn-delete:hover {
             background: rgba(255, 59, 48, 0.08);
+        }
+
+        .btn-permission {
+            color: var(--apple-blue);
+            background: transparent;
+            border: none;
+            padding: 6px;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: all 0.2s;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .btn-permission:hover {
+            background: rgba(0, 122, 255, 0.08);
         }
 
         .btn-download-file {
@@ -981,6 +1174,9 @@ if ($res) {
                                             </div>
                                             
                                             <?php if ($role === 'admin' || $role === 'manager'): ?>
+                                                <button class="btn-permission" onclick="openPermissionsModal(<?= $file['id'] ?>)" title="Phân quyền tài liệu này">
+                                                    <i class="fas fa-user-shield"></i>
+                                                </button>
                                                 <button class="btn-delete" onclick="deleteDocument(<?= $file['id'] ?>)" title="Xóa tài liệu này">
                                                     <i class="fas fa-trash-can"></i>
                                                 </button>
@@ -1052,9 +1248,92 @@ if ($res) {
                     </div>
                 </div>
                 
-                <button type="submit" class="btn-premium" id="submitBtn">
+                <div class="form-group" style="margin-top: 20px;">
+                    <label class="form-label"><i class="fas fa-user-shield"></i> Phân quyền hiển thị (Để trống nếu muốn công khai)</label>
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 10px;">
+                        <div>
+                            <label class="form-label" style="font-weight: 500; font-size: 12px; color: var(--apple-gray);">Theo vai trò</label>
+                            <div class="checkbox-scrollbox">
+                                <?php foreach ($roles_list_avail as $r_key => $r_name): ?>
+                                    <label class="checkbox-item">
+                                        <input type="checkbox" name="roles[]" value="<?= htmlspecialchars($r_key) ?>">
+                                        <span><?= htmlspecialchars($r_name) ?></span>
+                                    </label>
+                                <?php endforeach; ?>
+                            </div>
+                        </div>
+                        <div>
+                            <label class="form-label" style="font-weight: 500; font-size: 12px; color: var(--apple-gray);">Theo nhân viên</label>
+                            <div class="checkbox-scrollbox">
+                                <?php foreach ($users_list as $usr): ?>
+                                    <label class="checkbox-item">
+                                        <input type="checkbox" name="users[]" value="<?= $usr['id'] ?>">
+                                        <span><?= htmlspecialchars($usr['full_name']) ?> (<?= htmlspecialchars($usr['username']) ?>)</span>
+                                    </label>
+                                <?php endforeach; ?>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <button type="submit" class="btn-premium" id="submitBtn" style="margin-top: 20px;">
                     <i class="fas fa-cloud-arrow-up"></i>
                     Tải tài liệu lên
+                </button>
+            </form>
+        </div>
+    </div>
+    
+    <!-- Permissions Edit Modal -->
+    <div id="permissionsModal" class="upload-modal">
+        <div class="upload-modal-content">
+            <div class="upload-modal-header">
+                <h3 class="upload-form-title" style="margin: 0;">
+                    <i class="fas fa-user-shield" style="color: var(--apple-blue);"></i>
+                    Phân quyền tài liệu
+                </h3>
+                <button class="btn-close-modal" onclick="closePermissionsModal()">&times;</button>
+            </div>
+            
+            <form id="permissionsForm">
+                <input type="hidden" name="action" value="save_permissions">
+                <input type="hidden" name="id" id="permFileId" value="">
+                
+                <div class="form-group">
+                    <label class="form-label" id="permFileTitle" style="font-size: 14px; font-weight: 500; color: var(--apple-slate); margin-bottom: 12px;"></label>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label"><i class="fas fa-user-shield"></i> Phân quyền hiển thị (Để trống nếu muốn công khai)</label>
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 10px;">
+                        <div>
+                            <label class="form-label" style="font-weight: 500; font-size: 12px; color: var(--apple-gray);">Theo vai trò</label>
+                            <div class="checkbox-scrollbox">
+                                <?php foreach ($roles_list_avail as $r_key => $r_name): ?>
+                                    <label class="checkbox-item">
+                                        <input type="checkbox" name="roles[]" value="<?= htmlspecialchars($r_key) ?>" class="perm-role-checkbox">
+                                        <span><?= htmlspecialchars($r_name) ?></span>
+                                    </label>
+                                <?php endforeach; ?>
+                            </div>
+                        </div>
+                        <div>
+                            <label class="form-label" style="font-weight: 500; font-size: 12px; color: var(--apple-gray);">Theo nhân viên</label>
+                            <div class="checkbox-scrollbox">
+                                <?php foreach ($users_list as $usr): ?>
+                                    <label class="checkbox-item">
+                                        <input type="checkbox" name="users[]" value="<?= $usr['id'] ?>" class="perm-user-checkbox">
+                                        <span><?= htmlspecialchars($usr['full_name']) ?> (<?= htmlspecialchars($usr['username']) ?>)</span>
+                                    </label>
+                                <?php endforeach; ?>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <button type="submit" class="btn-premium" id="savePermBtn" style="margin-top: 16px;">
+                    <i class="fas fa-floppy-disk"></i>
+                    Lưu phân quyền
                 </button>
             </form>
         </div>
@@ -1419,6 +1698,132 @@ if ($res) {
                 if (e.target === this) {
                     closeUploadModal();
                 }
+            });
+        }
+
+        // Permissions Modal Controls
+        function openPermissionsModal(fileId) {
+            const modal = document.getElementById('permissionsModal');
+            if (!modal) return;
+            
+            document.body.style.overflow = 'hidden'; // Lock scrolling
+            document.getElementById('permFileId').value = fileId;
+            
+            // Extract document title from UI
+            let title = '';
+            const cards = document.querySelectorAll('.doc-card');
+            cards.forEach(card => {
+                const btn = card.querySelector(`.btn-permission[onclick*="(${fileId})"]`);
+                if (btn) {
+                    const titleEl = card.querySelector('.doc-title');
+                    if (titleEl) {
+                        const clone = titleEl.cloneNode(true);
+                        const badge = clone.querySelector('.badge-type');
+                        if (badge) badge.remove();
+                        title = clone.textContent.trim();
+                    }
+                }
+            });
+            document.getElementById('permFileTitle').innerText = 'Tài liệu: ' + title;
+            
+            // Reset checklists
+            document.querySelectorAll('.perm-role-checkbox').forEach(cb => cb.checked = false);
+            document.querySelectorAll('.perm-user-checkbox').forEach(cb => cb.checked = false);
+            
+            const formData = new FormData();
+            formData.append('action', 'get_permissions');
+            formData.append('id', fileId);
+            
+            fetch(window.location.href, {
+                method: 'POST',
+                body: formData
+            })
+            .then(res => res.json())
+            .then(data => {
+                if (data.status === 'success') {
+                    if (data.roles && Array.isArray(data.roles)) {
+                        data.roles.forEach(roleKey => {
+                            const cb = document.querySelector(`.perm-role-checkbox[value="${roleKey}"]`);
+                            if (cb) cb.checked = true;
+                        });
+                    }
+                    if (data.users && Array.isArray(data.users)) {
+                        data.users.forEach(userId => {
+                            const cb = document.querySelector(`.perm-user-checkbox[value="${userId}"]`);
+                            if (cb) cb.checked = true;
+                        });
+                    }
+                    modal.style.display = 'flex';
+                    modal.offsetHeight;
+                    modal.classList.add('active');
+                } else {
+                    alert(data.message || 'Lỗi khi lấy thông tin phân quyền.');
+                    document.body.style.overflow = '';
+                }
+            })
+            .catch(err => {
+                console.error(err);
+                alert('Có lỗi mạng xảy ra khi lấy thông tin phân quyền.');
+                document.body.style.overflow = '';
+            });
+        }
+        
+        function closePermissionsModal() {
+            const modal = document.getElementById('permissionsModal');
+            if (modal) {
+                modal.classList.remove('active');
+                setTimeout(() => {
+                    modal.style.display = 'none';
+                }, 300);
+                document.body.style.overflow = ''; // Unlock scrolling
+                
+                const form = document.getElementById('permissionsForm');
+                if (form) form.reset();
+            }
+        }
+        
+        const permissionsModal = document.getElementById('permissionsModal');
+        if (permissionsModal) {
+            permissionsModal.addEventListener('click', function(e) {
+                if (e.target === this) {
+                    closePermissionsModal();
+                }
+            });
+        }
+        
+        const permissionsForm = document.getElementById('permissionsForm');
+        if (permissionsForm) {
+            permissionsForm.addEventListener('submit', function(e) {
+                e.preventDefault();
+                
+                const saveBtn = document.getElementById('savePermBtn');
+                saveBtn.disabled = true;
+                saveBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Đang lưu...';
+                
+                const formData = new FormData(this);
+                
+                fetch(window.location.href, {
+                    method: 'POST',
+                    body: formData
+                })
+                .then(res => res.json())
+                .then(data => {
+                    if (data.status === 'success') {
+                        alert('Lưu phân quyền thành công!');
+                        closePermissionsModal();
+                        window.location.reload();
+                    } else {
+                        alert(data.message || 'Có lỗi xảy ra khi lưu phân quyền.');
+                        saveBtn.disabled = false;
+                        saveBtn.innerHTML = '<i class="fas fa-floppy-disk"></i> Lưu phân quyền';
+                    }
+                })
+                .catch(err => {
+                    console.error(err);
+                    alert('Có lỗi mạng xảy ra khi lưu phân quyền.');
+                    saveBtn.disabled = false;
+                    saveBtn.innerHTML = '<i class="fas fa-floppy-disk"></i> Lưu phân quyền';
+                });
             });
         }
 
