@@ -1194,6 +1194,7 @@ if ($res) {
         // HTML Viewer Inline logic
         function openHtmlViewer(filePath, title) {
             document.getElementById('viewerInlineTitle').innerText = title;
+            document.getElementById('viewerDownloadBtn').href = filePath;
             const iframe = document.getElementById('viewerIframeInline');
             
             // Extract extension
