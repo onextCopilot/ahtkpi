@@ -37,6 +37,12 @@ $conn->query("CREATE TABLE IF NOT EXISTS pakd (
     updated_at      DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
 
+// ── Migrate: add new columns if the table already existed without them ────────
+$conn->query("ALTER TABLE pakd ADD COLUMN IF NOT EXISTS assignment_date  DATETIME DEFAULT NULL");
+$conn->query("ALTER TABLE pakd ADD COLUMN IF NOT EXISTS expected_closing  DATE     DEFAULT NULL");
+$conn->query("ALTER TABLE pakd ADD COLUMN IF NOT EXISTS odoo_stage_id    INT      DEFAULT NULL");
+$conn->query("ALTER TABLE pakd ADD COLUMN IF NOT EXISTS division_names   VARCHAR(500) DEFAULT NULL");
+
 // ── Load data ─────────────────────────────────────────────────────────────────
 $search = trim($_GET['search'] ?? '');
 $filter_status = $_GET['status'] ?? '';

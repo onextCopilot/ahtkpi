@@ -9,6 +9,12 @@ if (!isset($_SESSION['user_id'])) {
 $user_id = $_SESSION['user_id'];
 $role    = $_SESSION['role'] ?? 'user';
 
+// ── Migrate: ensure new columns exist ────────────────────────────────────────
+$conn->query("ALTER TABLE pakd ADD COLUMN IF NOT EXISTS assignment_date  DATETIME DEFAULT NULL");
+$conn->query("ALTER TABLE pakd ADD COLUMN IF NOT EXISTS expected_closing  DATE     DEFAULT NULL");
+$conn->query("ALTER TABLE pakd ADD COLUMN IF NOT EXISTS odoo_stage_id    INT      DEFAULT NULL");
+$conn->query("ALTER TABLE pakd ADD COLUMN IF NOT EXISTS division_names   VARCHAR(500) DEFAULT NULL");
+
 // ── Load won stage from settings ─────────────────────────────────────────────
 $wonStageId = null;
 $wonStageName = null;
