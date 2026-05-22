@@ -69,6 +69,15 @@ foreach ([
 }
 unset($_col, $_def, $r);
 
+// ── Ensure pakd_settings table exists ────────────────────────────────────────
+$conn->query("CREATE TABLE IF NOT EXISTS pakd_settings (
+    id            INT AUTO_INCREMENT PRIMARY KEY,
+    setting_key   VARCHAR(100) NOT NULL UNIQUE,
+    setting_value TEXT DEFAULT NULL,
+    updated_by    INT DEFAULT NULL,
+    updated_at    DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+
 // ── Load stage filter settings from DB ───────────────────────────────────────
 // Admin can configure this via Settings modal on the PAKD list page
 $savedStageIds = [];
