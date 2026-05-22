@@ -218,6 +218,33 @@ function isMenuItemActive($path, $current_uri)
             <span>OKR Management</span>
         </a>
 
+        <!-- 8. Projects Dropdown -->
+        <div class="nav-item nav-item-parent <?php
+        $is_projects_open = strpos($current_uri, '/projects/phuong-an-kinh-doanh') !== false ||
+            strpos($current_uri, '/projects/du-an') !== false;
+        echo $is_projects_open ? 'active open' : ''; ?>" onclick="toggleSubmenu(this)">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                stroke-linecap="round" stroke-linejoin="round">
+                <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path>
+                <line x1="12" y1="11" x2="12" y2="17"></line>
+                <line x1="9" y1="14" x2="15" y2="14"></line>
+            </svg>
+            <span>Projects</span>
+            <svg class="chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polyline points="6 9 12 15 18 9"></polyline>
+            </svg>
+        </div>
+        <div class="submenu <?php echo $is_projects_open ? 'open' : ''; ?>">
+            <a href="/projects/phuong-an-kinh-doanh"
+                class="submenu-item <?php echo (strpos($current_uri, '/projects/phuong-an-kinh-doanh') !== false) ? 'active' : ''; ?>">
+                <span>Business Plans</span>
+            </a>
+            <a href="/projects/du-an"
+                class="submenu-item <?php echo (strpos($current_uri, '/projects/du-an') !== false) ? 'active' : ''; ?>">
+                <span>My Project</span>
+            </a>
+        </div>
+
         <!-- 8. HRM -->
         <a href="/hrm" class="nav-item <?php echo isMenuItemActive('/hrm', $current_uri); ?>">
             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">

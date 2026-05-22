@@ -84,6 +84,12 @@ $routes = [
     '/presale' => 'modules/presale/index.php',
     '/presale/ajax-handler' => 'modules/presale/ajax_handler.php',
     '/tai-lieu-quy-trinh' => 'modules/documents/tai_lieu_quy_trinh.php',
+    '/projects/phuong-an-kinh-doanh' => 'modules/projects/phuong_an_kinh_doanh.php',
+    '/projects/du-an' => 'modules/projects/du_an.php',
+    '/projects/pakd/create' => 'modules/projects/pakd_create.php',
+    '/projects/pakd/edit' => 'modules/projects/pakd_detail.php',
+    '/projects/pakd/sync-odoo' => 'modules/projects/sync_pakd_odoo.php',
+    '/projects/pakd/settings' => 'modules/projects/pakd_sync_settings.php',
 ];
 
 // DEBUG: log URI + match result
