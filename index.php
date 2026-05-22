@@ -127,6 +127,7 @@ $routes = [
     '/hrm/candidates' => 'modules/hrm/candidates.php',
     '/presale' => 'modules/presale/index.php',
     '/presale/ajax-handler' => 'modules/presale/ajax_handler.php',
+    '/tai-lieu-quy-trinh' => 'modules/documents/tai_lieu_quy_trinh.php',
 ];
 
 // DEBUG: log URI + match result

@@ -258,5 +258,328 @@ if ($action === 'get_project_data') {
     exit;
 }
 
+if ($action === 'get_file_content') {
+    $file_id = (int)$_POST['file_id'];
+    try {
+        $stmt = $conn->prepare("SELECT file_name, extracted_text FROM presale_session_files WHERE id = ?");
+        $stmt->bind_param("i", $file_id);
+        $stmt->execute();
+        $res = $stmt->get_result();
+        if ($row = $res->fetch_assoc()) {
+            echo json_encode(['success' => true, 'file_name' => $row['file_name'], 'content' => $row['extracted_text']]);
+        } else {
+            echo json_encode(['success' => false, 'message' => 'File not found']);
+        }
+    } catch (Exception $e) {
+        echo json_encode(['success' => false, 'message' => $e->getMessage()]);
+    }
+    exit;
+}
+
+if ($action === 'export_word') {
+    $html = $_POST['html_content'] ?? '';
+    // Xoá các nút bấm khỏi nội dung export
+    $html = preg_replace('/<button.*?>.*?<\/button>/si', '', $html);
+    
+    header("Content-Type: application/vnd.ms-word");
+    header("Content-Disposition: attachment; filename=AI_Presale_Proposal.doc");
+    header("Pragma: no-cache");
+    header("Expires: 0");
+    
+    echo "
+    <html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'>
+    <head>
+        <meta charset='utf-8'>
+        <style>
+            body { font-family: 'Times New Roman', serif; line-height: 1.5; padding: 20px; }
+            table { border-collapse: collapse; width: 100%; border: 1px solid #000; margin-bottom: 15px; }
+            th, td { border: 1px solid #000; padding: 10px; text-align: left; vertical-align: top; }
+            th { background-color: #f3f4f6; font-weight: bold; }
+            h1, h2, h3 { color: #1e3a8a; }
+            p { margin-bottom: 10px; }
+        </style>
+    </head>
+    <body>
+        <h1 style='text-align: center;'>BẢN ĐỀ XUẤT GIẢI PHÁP (AI DRAFT)</h1>
+        <p style='text-align: right; font-style: italic;'>Ngày tạo: " . date('d/m/Y H:i') . "</p>
+        <hr>
+        <div class='content'>
+            $html
+        </div>
+        <br>
+        <p style='font-size: 10pt; color: #666;'>Tài liệu được tạo tự động bởi AI Presale Assistant.</p>
+    </body>
+    </html>";
+    exit;
+}
+
+if ($action === 'load_history') {
+    $session_id = isset($_POST['session_id']) ? (int)$_POST['session_id'] : 0;
+    if (!$session_id) {
+        echo json_encode(['success' => false, 'message' => 'Invalid session_id']);
+        exit;
+    }
+
+    $messages = [];
+    try {
+        $stmt = $conn->prepare("SELECT role, content FROM presale_chat_messages WHERE session_id = ? ORDER BY created_at ASC");
+        $stmt->bind_param("i", $session_id);
+        $stmt->execute();
+        $res = $stmt->get_result();
+        while ($row = $res->fetch_assoc()) {
+            $messages[] = $row;
+        }
+    } catch (Exception $e) {
+        echo json_encode(['success' => false, 'message' => $e->getMessage()]);
+        exit;
+    }
+
+    echo json_encode([
+        'success' => true,
+        'messages' => $messages
+    ]);
+    exit;
+}
+
+if ($action === 'create_project') {
+    $name = trim($_POST['name'] ?? '');
+    if (!$name) {
+        echo json_encode(['success' => false, 'message' => 'Tên dự án không được để trống']);
+        exit;
+    }
+    try {
+        $user_id = (int)$_SESSION['user_id'];
+        $stmt = $conn->prepare("INSERT INTO presale_projects (user_id, name) VALUES (?, ?)");
+        $stmt->bind_param("is", $user_id, $name);
+        $stmt->execute();
+        $project_id = $conn->insert_id;
+        
+        $stmt2 = $conn->prepare("INSERT INTO presale_chat_sessions (project_id, user_id, title) VALUES (?, ?, 'Chat mặc định')");
+        $stmt2->bind_param("ii", $project_id, $user_id);
+        $stmt2->execute();
+
+        echo json_encode(['success' => true, 'project_id' => $project_id, 'title' => $name]);
+    } catch (Exception $e) {
+        echo json_encode(['success' => false, 'message' => $e->getMessage()]);
+    }
+    exit;
+}
+
+if ($action === 'create_chat') {
+    $project_id = (int)$_POST['project_id'];
+    try {
+        $user_id = (int)$_SESSION['user_id'];
+        $stmt = $conn->prepare("INSERT INTO presale_chat_sessions (project_id, user_id, title) VALUES (?, ?, 'Chat mới')");
+        $stmt->bind_param("ii", $project_id, $user_id);
+        $stmt->execute();
+        echo json_encode(['success' => true, 'session_id' => $conn->insert_id]);
+    } catch (Exception $e) {
+        echo json_encode(['success' => false, 'message' => $e->getMessage()]);
+    }
+    exit;
+}
+
+if ($action === 'delete_chat') {
+    $session_id = (int)$_POST['session_id'];
+    try {
+        // Xoá tin nhắn
+        $stmt_m = $conn->prepare("DELETE FROM presale_chat_messages WHERE session_id = ?");
+        $stmt_m->bind_param("i", $session_id);
+        $stmt_m->execute();
+
+        // Xoá session
+        $stmt_s = $conn->prepare("DELETE FROM presale_chat_sessions WHERE id = ?");
+        $stmt_s->bind_param("i", $session_id);
+        $stmt_s->execute();
+
+        echo json_encode(['success' => true]);
+    } catch (Exception $e) {
+        echo json_encode(['success' => false, 'message' => $e->getMessage()]);
+    }
+    exit;
+}
+
+if ($action === 'delete_project') {
+    $project_id = (int)$_POST['project_id'];
+    try {
+        $stmtF = $conn->prepare("DELETE FROM presale_session_files WHERE project_id = ?");
+        $stmtF->bind_param("i", $project_id);
+        $stmtF->execute();
+
+        // Xoá tin nhắn
+        $stmtM = $conn->prepare("DELETE FROM presale_chat_messages WHERE session_id IN (SELECT id FROM presale_chat_sessions WHERE project_id = ?)");
+        $stmtM->bind_param("i", $project_id);
+        $stmtM->execute();
+
+        // Xoá chat sessions
+        $stmtC = $conn->prepare("DELETE FROM presale_chat_sessions WHERE project_id = ?");
+        $stmtC->bind_param("i", $project_id);
+        $stmtC->execute();
+
+        $stmtS = $conn->prepare("DELETE FROM presale_project_shares WHERE project_id = ?");
+        $stmtS->bind_param("i", $project_id);
+        $stmtS->execute();
+
+        $stmt = $conn->prepare("DELETE FROM presale_projects WHERE id = ?");
+        $stmt->bind_param("i", $project_id);
+        $stmt->execute();
+        echo json_encode(['success' => true]);
+    } catch (Exception $e) {
+        echo json_encode(['success' => false, 'message' => $e->getMessage()]);
+    }
+    exit;
+}
+
+if ($action === 'get_users') {
+    $users = [];
+    try {
+        // Try selecting username or full_name, adjust dynamically based on schema if needed
+        // Assuming 'username' and 'id' are standard columns in your 'users' table
+        $res = $conn->query("SELECT id, username FROM users WHERE id != " . (int)$_SESSION['user_id']);
+        if ($res) {
+            while ($r = $res->fetch_assoc()) {
+                $users[] = $r;
+            }
+        }
+    } catch(Exception $e){}
+    echo json_encode(['success' => true, 'users' => $users]);
+    exit;
+}
+
+if ($action === 'share_project') {
+    $project_id = (int)$_POST['project_id'];
+    $user_id = (int)$_POST['user_id'];
+    try {
+        $stmt = $conn->prepare("SELECT id FROM presale_project_shares WHERE project_id = ? AND user_id = ?");
+        $stmt->bind_param("ii", $project_id, $user_id);
+        $stmt->execute();
+        if ($stmt->get_result()->num_rows === 0) {
+            $stmt2 = $conn->prepare("INSERT INTO presale_project_shares (project_id, user_id) VALUES (?, ?)");
+            $stmt2->bind_param("ii", $project_id, $user_id);
+            $stmt2->execute();
+        }
+        echo json_encode(['success' => true]);
+    } catch(Exception $e) {
+        echo json_encode(['success' => false, 'message' => $e->getMessage()]);
+    }
+    exit;
+}
+
+if ($action === 'upload_project_file') {
+    $project_id = (int)$_POST['project_id'];
+    
+    if (!$project_id) {
+        echo json_encode(['success' => false, 'message' => 'Thiếu Project ID']);
+        exit;
+    }
+
+    if (!isset($_FILES['file'])) {
+        echo json_encode(['success' => false, 'message' => 'Không tìm thấy file gửi lên']);
+        exit;
+    }
+
+    if ($_FILES['file']['error'] !== UPLOAD_ERR_OK) {
+        $error_msg = 'Lỗi upload: ' . $_FILES['file']['error'];
+        if ($_FILES['file']['error'] === UPLOAD_ERR_INI_SIZE) $error_msg = 'File quá lớn so với cấu hình server (upload_max_filesize)';
+        if ($_FILES['file']['error'] === UPLOAD_ERR_FORM_SIZE) $error_msg = 'File quá lớn so với giới hạn của Form';
+        if ($_FILES['file']['error'] === UPLOAD_ERR_PARTIAL) $error_msg = 'File chỉ được tải lên một phần';
+        if ($_FILES['file']['error'] === UPLOAD_ERR_NO_FILE) $error_msg = 'Không có file nào được tải lên';
+        
+        echo json_encode(['success' => false, 'message' => $error_msg]);
+        exit;
+    }
+
+    $filename = $_FILES['file']['name'];
+    $tmpName = $_FILES['file']['tmp_name'];
+    $ext = strtolower(pathinfo($filename, PATHINFO_EXTENSION));
+    
+    $extracted_text = "";
+    if ($ext === 'txt') {
+        $extracted_text = file_get_contents($tmpName);
+    } elseif ($ext === 'docx') {
+        $zip = new ZipArchive;
+        if ($zip->open($tmpName) === true) {
+            if (($index = $zip->locateName('word/document.xml')) !== false) {
+                $xmlContent = $zip->getFromIndex($index);
+                $extracted_text = strip_tags(str_replace(['<w:p>', '</w:p>'], ["\n", "\n"], $xmlContent));
+            }
+            $zip->close();
+        }
+    } elseif ($ext === 'pdf') {
+        if (class_exists('Smalot\PdfParser\Parser')) {
+            try {
+                $parser = new \Smalot\PdfParser\Parser();
+                $pdf = $parser->parseFile($tmpName);
+                $extracted_text = $pdf->getText();
+            } catch (Exception $e) {
+                $extracted_text = "[Lỗi đọc PDF: " . $e->getMessage() . "]";
+            }
+        } else {
+            $extracted_text = "[Hệ thống chưa cài đặt thư viện đọc PDF. Vui lòng chạy lệnh: composer require smalot/pdfparser]";
+        }
+    }
+
+    if (!$extracted_text) {
+        $extracted_text = "[Không trích xuất được text từ file này]";
+    }
+
+    $ai_file_id = null;
+    require_once __DIR__ . '/../../libs/AiHiveService.php';
+    $aiService = new AiHiveService();
+    if ($aiService->isConfigured()) {
+        $mimeType = mime_content_type($tmpName);
+        if (!$mimeType) $mimeType = 'application/octet-stream';
+        $uploadRes = $aiService->uploadFile($tmpName, $filename, $mimeType);
+        if ($uploadRes['success'] && isset($uploadRes['data']['id'])) {
+            $ai_file_id = $uploadRes['data']['id'];
+        }
+    }
+
+    try {
+        if ($ai_file_id) {
+            $stmt = $conn->prepare("INSERT INTO presale_session_files (project_id, session_id, file_name, extracted_text, ai_file_id) VALUES (?, NULL, ?, ?, ?)");
+            $stmt->bind_param("isss", $project_id, $filename, $extracted_text, $ai_file_id);
+        } else {
+            $stmt = $conn->prepare("INSERT INTO presale_session_files (project_id, session_id, file_name, extracted_text) VALUES (?, NULL, ?, ?)");
+            $stmt->bind_param("iss", $project_id, $filename, $extracted_text);
+        }
+        $stmt->execute();
+        echo json_encode(['success' => true, 'file_id' => $conn->insert_id, 'file_name' => $filename]);
+    } catch (Exception $e) {
+        echo json_encode(['success' => false, 'message' => $e->getMessage()]);
+    }
+    exit;
+}
+
+if ($action === 'get_project_files') {
+    $project_id = (int)$_POST['project_id'];
+    $files = [];
+    try {
+        $stmt = $conn->prepare("SELECT id, file_name FROM presale_session_files WHERE project_id = ?");
+        $stmt->bind_param("i", $project_id);
+        $stmt->execute();
+        $res = $stmt->get_result();
+        while ($row = $res->fetch_assoc()) {
+            $files[] = $row;
+        }
+    } catch (Exception $e) {}
+    echo json_encode(['success' => true, 'files' => $files]);
+    exit;
+}
+
+if ($action === 'delete_project_file') {
+    $file_id = (int)$_POST['file_id'];
+    try {
+        $stmt = $conn->prepare("DELETE FROM presale_session_files WHERE id = ?");
+        $stmt->bind_param("i", $file_id);
+        $stmt->execute();
+        echo json_encode(['success' => true]);
+    } catch (Exception $e) {
+        echo json_encode(['success' => false, 'message' => $e->getMessage()]);
+    }
+    exit;
+}
+
+
 // Fallback for other actions
 echo json_encode(['success' => false, 'message' => 'Invalid action']);

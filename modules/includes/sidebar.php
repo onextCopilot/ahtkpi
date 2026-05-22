@@ -229,15 +229,29 @@ function isMenuItemActive($path, $current_uri)
             <span>HRM</span>
         </a>
 
-        <!-- 9. Documents -->
-        <a href="/documents" class="nav-item <?php echo isMenuItemActive('/documents', $current_uri); ?>">
+        <!-- 9. Documents Dropdown -->
+        <div class="nav-item nav-item-parent <?php
+        $is_docs_open = strpos($current_uri, '/documents') !== false ||
+            strpos($current_uri, '/tai-lieu-quy-trinh') !== false;
+        echo $is_docs_open ? 'active open' : ''; ?>" onclick="toggleSubmenu(this)">
             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
                 stroke-linecap="round" stroke-linejoin="round">
                 <path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"></path>
                 <polyline points="13 2 13 9 20 9"></polyline>
             </svg>
             <span>Documents</span>
-        </a>
+            <svg class="chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polyline points="6 9 12 15 18 9"></polyline>
+            </svg>
+        </div>
+        <div class="submenu <?php echo $is_docs_open ? 'open' : ''; ?>">
+            <a href="/tai-lieu-quy-trinh" class="submenu-item <?php echo (strpos($current_uri, '/tai-lieu-quy-trinh') !== false) ? 'active' : ''; ?>">
+                <span>Tài Liệu - Quy Trình</span>
+            </a>
+            <a href="/documents" class="submenu-item <?php echo ($current_uri === '/documents' || strpos($current_uri, '/documents') !== false) ? 'active' : ''; ?>">
+                <span>Drive</span>
+            </a>
+        </div>
 
         <!-- 10. Sale Assistant -->
         <?php if ($_SESSION['role'] === 'admin' || ($_SESSION['full_name'] ?? '') === 'Hyun Cao'): ?>
