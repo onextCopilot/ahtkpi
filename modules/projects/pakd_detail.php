@@ -965,6 +965,9 @@ function getProjectTypeIcon($type) {
                                             <span class="pasx-processing-label">
                                                 <i class="fas fa-clock"></i> Processing...
                                             </span>
+                                            <button id="btn-resend-pasx" class="btn-resend-pasx" onclick="resendPasxRequest()" title="Gửi lại yêu cầu PASX">
+                                                <i class="fas fa-redo"></i> Resend
+                                            </button>
                                         <?php endif; ?>
                                         <span class="pasx-sent-badge">
                                             PASX: <code><?= htmlspecialchars($pakd['pasx_id']) ?></code>
@@ -1513,6 +1516,36 @@ function getProjectTypeIcon($type) {
             autosave(btn);
         }
 
+        // ── Resend PASX Request ──
+        function resendPasxRequest() {
+            const btn = document.getElementById('btn-resend-pasx');
+            if (!btn || btn.disabled) return;
+
+            btn.disabled = true;
+            btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Đang gửi...';
+
+            fetch('/projects/pakd/edit?id=<?= (int)$pakd['id'] ?>', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ pakdId: <?= (int)$pakd['id'] ?> })
+            })
+            .then(r => r.json())
+            .then(data => {
+                if (data.ok) {
+                    showToast(data.msg || 'Đã gửi lại yêu cầu PASX!', 'success');
+                } else {
+                    showToast(data.msg || 'Có lỗi xảy ra khi gửi lại', 'error');
+                }
+                btn.disabled = false;
+                btn.innerHTML = '<i class="fas fa-redo"></i> Resend';
+            })
+            .catch(function(err) {
+                showToast('Lỗi kết nối: ' + err.message, 'error');
+                btn.disabled = false;
+                btn.innerHTML = '<i class="fas fa-redo"></i> Resend';
+            });
+        }
+
         function pasxApprove() {
             showToast('Đang xử lý Approve...', 'success');
             // TODO: gọi API approve
@@ -1721,6 +1754,26 @@ function getProjectTypeIcon($type) {
             transition: color .15s;
         }
         .btn-del-cr:hover { color: #dc2626; }
+
+        /* Resend button */
+        .btn-resend-pasx {
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            margin-left: 8px;
+            padding: 3px 10px;
+            background: #fff;
+            color: #6366f1;
+            border: 1px solid #a5b4fc;
+            border-radius: 5px;
+            font-size: 11px;
+            font-weight: 500;
+            cursor: pointer;
+            white-space: nowrap;
+            transition: background .15s, border-color .15s;
+        }
+        .btn-resend-pasx:hover:not(:disabled) { background: #eef2ff; border-color: #6366f1; }
+        .btn-resend-pasx:disabled { opacity: .55; cursor: not-allowed; }
     </style>
 
 <!-- PASX History Modal -->
