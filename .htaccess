@@ -42,6 +42,7 @@ RewriteRule ^settings/sale-levels/?$ modules/settings/sale-levels/index.php [L]
 RewriteRule ^settings/odoo-rates/?$ modules/settings/odoo_rates/index.php [L]
 RewriteRule ^settings/backup/?$ modules/settings/backup/index.php [L]
 RewriteRule ^settings/workflow/?$ modules/settings/workflow/index.php [L]
+RewriteRule ^settings/arrowhitech/?$ modules/settings/arrowhitech/index.php [L]
 
 # Application Modules
 RewriteRule ^debt/?$ modules/debt/index.php [L]
@@ -73,10 +74,21 @@ RewriteRule ^hrm/job-post-create/?$ modules/hrm/job_post_create.php [L]
 RewriteRule ^hrm/system-settings/?$ modules/hrm/system_settings.php [L]
 RewriteRule ^hrm/ajax-handler/?$ modules/hrm/ajax_handler.php [L]
 
+# Presale Module
+RewriteRule ^presale/?$ modules/presale/index.php [L]
+RewriteRule ^presale/ajax-handler/?$ modules/presale/ajax_handler.php [L]
+RewriteRule ^presale/vision/thumbnails/(.+)$ modules/presale/vision/thumbnails/$1 [L]
+
 # APIs
+RewriteRule ^api/request_production_plan/?$ api/request_production_plan.php [L]
+RewriteRule ^api/pasx/callback/?$ api/pasx_callback.php [L]
+RewriteRule ^api/notifications/mark_read/?$ api/notifications_mark_read.php [L]
 RewriteRule ^api/kpi_tab_order/?$ api/kpi_tab_order.php [L]
 RewriteRule ^api/kpi_monthly_save/?$ api/kpi_monthly_save.php [L]
 RewriteRule ^api/kpi_quarterly_save/?$ api/kpi_quarterly_save.php [L]
+
+# Allow direct access to vision thumbnails (before the modules block)
+RewriteRule ^modules/presale/vision/thumbnails/(.+)$ modules/presale/vision/thumbnails/$1 [L]
 
 # Protect modules directory from direct access (MUST be after all rewrite rules)
 RewriteCond %{ENV:REDIRECT_STATUS} ^$
