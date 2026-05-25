@@ -42,7 +42,7 @@ if (!$expected) {
 if (!hash_equals($expected, $received)) {
     // Log failed auth
     $conn->query("INSERT INTO pasx_webhook_logs (event, payload, http_status, note, received_at)
-        VALUES ('auth_failed', " . $conn->real_escape_string(json_encode(['raw' => substr($raw_body, 0, 500)])) . ", 401, 'Invalid X-Webhook-Secret', NOW())");
+        VALUES ('auth_failed', '" . $conn->real_escape_string(json_encode(['raw' => substr($raw_body, 0, 500)])) . "', 401, 'Invalid X-Webhook-Secret', NOW())");
     http_response_code(401);
     echo json_encode(['ok' => false, 'msg' => 'Unauthorized']);
     exit;
@@ -80,6 +80,7 @@ if ($pakd_id) {
         "ALTER TABLE pakd ADD COLUMN pasx_status VARCHAR(32) DEFAULT NULL",
         "ALTER TABLE pakd ADD COLUMN pasx_id VARCHAR(64) DEFAULT NULL",
         "ALTER TABLE pakd ADD COLUMN pasx_requested_at DATETIME DEFAULT NULL",
+        "ALTER TABLE pakd ADD COLUMN fin_data JSON DEFAULT NULL",
     ] as $sql) { try { $conn->query($sql); } catch (Exception $e) {} }
 
     // Cập nhật status
