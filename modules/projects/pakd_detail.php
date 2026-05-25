@@ -339,6 +339,11 @@ function pct($val, $base, $dec = 2) {
     if (!$base) return '—';
     return number_format($val / $base * 100, $dec);
 }
+// % of total cost: always ≥ 0, divides by totalCost not revNet
+function pctCost($val, $total, $dec = 2) {
+    if (!$total) return '—';
+    return number_format(max(0, $val / $total * 100), $dec);
+}
 
 // Financial table calculations
 $fin_rev_gross    = (float)($pakd['revenue'] ?? 0);
@@ -1057,7 +1062,7 @@ function getProjectTypeIcon($type) {
                                         <span class="pasx-sent-badge" id="pasx-sent-badge" style="display:none"></span>
                                     <?php endif; ?>
                                 </td>
-                                <td class="td-rate"><?= pct($fin_prod_cost, $fin_rev_net) ?>%</td>
+                                <td class="td-rate" id="r41-rate"><?= pctCost($fin_prod_cost, $fin_total_cost) ?>%</td>
                                 <td class="td-amount"><?= formatVND($fin_prod_cost) ?></td>
                                 <td class="td-ccy">VND</td>
                                 <td class="td-action">
@@ -1077,7 +1082,7 @@ function getProjectTypeIcon($type) {
                                         </span>
                                     <?php endif; ?>
                                 </td>
-                                <td class="td-rate"><?= $fin_human_cost > 0 ? pct($fin_human_cost, $fin_rev_net) . '%' : '' ?></td>
+                                <td class="td-rate" id="r411-rate"><?= $fin_human_cost > 0 ? pctCost($fin_human_cost, $fin_total_cost) . '%' : '' ?></td>
                                 <td class="td-amount"><?= $fin_human_cost > 0 ? formatVND($fin_human_cost) : '' ?></td>
                                 <td class="td-ccy">VND</td>
                                 <td class="td-action"></td>
@@ -1093,7 +1098,7 @@ function getProjectTypeIcon($type) {
                                         </span>
                                     <?php endif; ?>
                                 </td>
-                                <td class="td-rate"><?= $fin_overtime > 0 ? pct($fin_overtime, $fin_rev_net) . '%' : '' ?></td>
+                                <td class="td-rate" id="r412-rate"><?= $fin_overtime > 0 ? pctCost($fin_overtime, $fin_total_cost) . '%' : '' ?></td>
                                 <td class="td-amount"><?= $fin_overtime > 0 ? formatVND($fin_overtime) : '' ?></td>
                                 <td class="td-ccy">VND</td>
                                 <td class="td-action"></td>
@@ -1186,7 +1191,7 @@ function getProjectTypeIcon($type) {
                                 <td class="td-stt">4.4</td>
                                 <td class="ind-1">Chi phí khác</td>
                                 <td></td>
-                                <td class="td-rate"></td>
+                                <td class="td-rate" id="r44-rate"></td>
                                 <td class="td-amount amt-blue" id="r44-amt">0</td>
                                 <td class="td-ccy">VND</td>
                                 <td class="td-action"></td>
@@ -1229,6 +1234,8 @@ function getProjectTypeIcon($type) {
         }
 
         const FIN_PROD       = <?= (int)$fin_prod_cost ?>;
+        const FIN_HUMAN      = <?= (int)$fin_human_cost ?>;
+        const FIN_OVERTIME   = <?= (int)$fin_overtime ?>;
         const PAKD_ID        = <?= $pakd_id ?>;
         const PASX_HAS_DATA  = <?= $pasx_has_data ? 'true' : 'false' ?>;
 
@@ -1240,6 +1247,12 @@ function getProjectTypeIcon($type) {
         function fin_parse(val) {
             if (!val) return 0;
             return parseFloat(String(val).replace(/\./g, '').replace(',', '.')) || 0;
+        }
+
+        // Helper: % of total cost, always ≥ 0
+        function costPct(val, total) {
+            if (!total) return '—';
+            return Math.max(0, val / total * 100).toFixed(2) + '%';
         }
 
         function fin_calc() {
@@ -1278,15 +1291,12 @@ function getProjectTypeIcon($type) {
             document.getElementById('r421-rate').textContent = p421.toFixed(2) + '%';
 
             const salesTotal = v421 + v422 + v423 + v424;
-            const salesPct = revNet > 0 ? (salesTotal / revNet * 100).toFixed(2) : '0.00';
-            document.getElementById('r42-rate').textContent = salesPct + '%';
             document.getElementById('r42-amt').textContent = fin_fmt(salesTotal);
 
             // ── Row 4.3: Management ──
             const p43 = parseFloat(document.getElementById('r43-pct').value) || 0;
             const v43 = revNet * p43 / 100;
             document.getElementById('r43-res').textContent = '= ' + fin_fmt(v43);
-            document.getElementById('r43-rate').textContent = p43.toFixed(2) + '%';
 
             // ── Row 4.4: Other costs ──
             let otherTotal = 0;
@@ -1300,6 +1310,18 @@ function getProjectTypeIcon($type) {
             const totalPct = revNet > 0 ? (totalCost / revNet * 100).toFixed(2) : '0.00';
             document.getElementById('r4-rate').textContent = totalPct + '%';
             document.getElementById('r4-amt').textContent = fin_fmt(totalCost);
+
+            // ── Cost sub-row rates: % of totalCost, always ≥ 0 ──
+            const r41 = document.getElementById('r41-rate');
+            if (r41) r41.textContent = costPct(FIN_PROD, totalCost);
+            const r411 = document.getElementById('r411-rate');
+            if (r411) r411.textContent = FIN_HUMAN > 0 ? costPct(FIN_HUMAN, totalCost) : '';
+            const r412 = document.getElementById('r412-rate');
+            if (r412) r412.textContent = FIN_OVERTIME > 0 ? costPct(FIN_OVERTIME, totalCost) : '';
+            document.getElementById('r42-rate').textContent = costPct(salesTotal, totalCost);
+            document.getElementById('r43-rate').textContent = costPct(v43, totalCost);
+            const r44 = document.getElementById('r44-rate');
+            if (r44) r44.textContent = otherTotal > 0 ? costPct(otherTotal, totalCost) : '';
 
             // ── Row 5: Gross profit ──
             const grossProfit = revNet - totalCost;
