@@ -1737,53 +1737,15 @@ function getProjectTypeIcon($type) {
         .phm-badge-warn   { background: #fefce8; color: #a16207; border: 1px solid #fde047; }
         .phm-currency     { text-align: right; font-variant-numeric: tabular-nums; color: #1e40af; }
 
-        /* PASX Cost badge + hover tooltip */
-        .phm-cost-badge {
-            display: inline-flex; align-items: center; gap: 4px;
-            padding: 2px 8px; border-radius: 12px; font-size: .75rem; font-weight: 500;
+        /* Toggle button for PASX cost detail */
+        .phm-toggle-btn {
+            display: inline-flex; align-items: center; gap: 5px;
+            padding: 3px 10px; border-radius: 12px; font-size: .75rem; font-weight: 500;
             background: #eff6ff; color: #2563eb; border: 1px solid #bfdbfe;
-            cursor: pointer; position: relative; white-space: nowrap;
+            cursor: pointer; white-space: nowrap; transition: background .15s;
         }
-        .phm-cost-badge:hover .phm-cost-tooltip,
-        .phm-cost-badge:focus .phm-cost-tooltip { display: block; }
-
-        .phm-cost-tooltip {
-            display: none;
-            position: absolute;
-            top: calc(100% + 6px);
-            left: 50%; transform: translateX(-50%);
-            z-index: 9999;
-            background: #fff;
-            border: 1px solid #e2e8f0;
-            border-radius: 8px;
-            box-shadow: 0 8px 24px rgba(0,0,0,.12);
-            min-width: 560px;
-            padding: 10px;
-        }
-        .phm-cost-tooltip::before {
-            content: '';
-            position: absolute; top: -6px; left: 50%; transform: translateX(-50%);
-            border: 6px solid transparent;
-            border-bottom-color: #e2e8f0;
-            border-top: none;
-        }
-
-        .phm-cost-table {
-            width: 100%; border-collapse: collapse; font-size: .78rem; white-space: nowrap;
-        }
-        .phm-cost-table th {
-            background: #1e293b; color: #e2e8f0;
-            padding: 5px 8px; font-weight: 600; font-size: .72rem;
-            text-transform: uppercase; letter-spacing: .03em;
-        }
-        .phm-cost-table td {
-            padding: 5px 8px; border-bottom: 1px solid #f1f5f9; color: #334155;
-        }
-        .phm-cost-table tr:last-child td { border-bottom: none; }
-        .phm-cost-table tr:hover td { background: #f8fafc; }
-        .phm-cost-table tfoot td { background: #f8fafc; font-size: .8rem; }
-        /* Tooltip phải đủ rộng để show path */
-        .phm-cost-tooltip { min-width: 680px; }
+        .phm-toggle-btn:hover { background: #dbeafe; border-color: #93c5fd; }
+        .phm-chevron { font-size: .65rem; transition: transform .2s; margin-left: 2px; }
 
         /* ── Change Request rows ── */
         .btn-add-cr {
@@ -1895,88 +1857,86 @@ function loadPasxHistory() {
             return `<span class="phm-badge phm-badge-ok">${s}</span>`;
         };
 
-        // Chỉ lấy dòng có total > 0 để bỏ qua các template rỗng
-        const buildCostTooltip = (pasxCost) => {
-            if (!pasxCost || !pasxCost.length) return '';
-            const active = pasxCost.filter(c => (c.total || 0) > 0);
+        const buildCostRows = (pasxCost) => {
+            const active = (pasxCost || []).filter(c => (c.total || 0) > 0);
             if (!active.length) return '';
-            let rows = active.map(c => `
-                <tr>
-                    <td style="font-weight:500;">${c.name || '—'}</td>
-                    <td style="color:#64748b;font-size:.74rem;max-width:200px;overflow:hidden;text-overflow:ellipsis;" title="${c.path || ''}">${c.path || ''}</td>
-                    <td style="text-align:right;color:#475569;">${fmtNum(c.unit)}${c.unitType ? ' <span style="font-size:.72rem;color:#94a3b8;">'+c.unitType+'</span>' : ''}</td>
-                    <td style="text-align:right;color:#475569;">${fmtNum(c.amount)}</td>
-                    <td style="text-align:right;color:#1e40af;font-weight:600;">${fmtNum(c.total)} ₫</td>
-                    <td style="color:#94a3b8;font-size:.74rem;">${c.note || ''}</td>
-                </tr>`).join('');
             const grandTotal = active.reduce((s, c) => s + (c.total || 0), 0);
-            return `<div class="phm-cost-tooltip">
-                <table class="phm-cost-table">
-                    <thead><tr>
-                        <th>Hạng mục</th><th>Path</th>
-                        <th style="text-align:right">Đơn giá</th>
-                        <th style="text-align:right">Số lượng</th>
-                        <th style="text-align:right">Thành tiền</th>
-                        <th>Ghi chú</th>
+            const rows = active.map(c => `
+                <tr style="background:#fff;">
+                    <td style="padding:6px 10px;font-weight:500;color:#0f172a;">${c.name || '—'}</td>
+                    <td style="padding:6px 10px;color:#64748b;font-size:.75rem;">${c.path || ''}</td>
+                    <td style="padding:6px 10px;text-align:right;color:#475569;">${fmtNum(c.unit)}${c.unitType ? ' <span style="font-size:.7rem;color:#94a3b8;">'+c.unitType+'</span>' : ''}</td>
+                    <td style="padding:6px 10px;text-align:right;color:#475569;">${fmtNum(c.amount)}</td>
+                    <td style="padding:6px 10px;text-align:right;font-weight:600;color:#1e40af;">${fmtNum(c.total)} ₫</td>
+                </tr>`).join('');
+            return `
+                <table style="width:100%;border-collapse:collapse;font-size:.8rem;">
+                    <thead><tr style="background:#f1f5f9;">
+                        <th style="padding:6px 10px;text-align:left;font-weight:600;color:#475569;font-size:.72rem;text-transform:uppercase;letter-spacing:.04em;">Hạng mục</th>
+                        <th style="padding:6px 10px;text-align:left;font-weight:600;color:#475569;font-size:.72rem;text-transform:uppercase;letter-spacing:.04em;">Path</th>
+                        <th style="padding:6px 10px;text-align:right;font-weight:600;color:#475569;font-size:.72rem;text-transform:uppercase;letter-spacing:.04em;">Đơn giá</th>
+                        <th style="padding:6px 10px;text-align:right;font-weight:600;color:#475569;font-size:.72rem;text-transform:uppercase;letter-spacing:.04em;">Số lượng</th>
+                        <th style="padding:6px 10px;text-align:right;font-weight:600;color:#475569;font-size:.72rem;text-transform:uppercase;letter-spacing:.04em;">Thành tiền</th>
                     </tr></thead>
                     <tbody>${rows}</tbody>
-                    <tfoot><tr>
-                        <td colspan="4" style="text-align:right;font-weight:700;padding:5px 8px;border-top:2px solid #e2e8f0;color:#0f172a;">Tổng</td>
-                        <td style="text-align:right;font-weight:700;padding:5px 8px;border-top:2px solid #e2e8f0;color:#1e40af;">${fmtNum(grandTotal)} ₫</td>
-                        <td style="border-top:2px solid #e2e8f0;"></td>
+                    <tfoot><tr style="background:#f8fafc;border-top:2px solid #e2e8f0;">
+                        <td colspan="4" style="padding:7px 10px;text-align:right;font-weight:700;color:#0f172a;">Tổng cộng</td>
+                        <td style="padding:7px 10px;text-align:right;font-weight:700;color:#1d4ed8;">${fmtNum(grandTotal)} ₫</td>
                     </tr></tfoot>
-                </table>
-            </div>`;
+                </table>`;
         };
 
+        let rowIdx = 0;
         let html = `
         <table class="phm-table">
             <thead>
                 <tr>
-                    <th>Thời gian</th>
+                    <th>Thời gian nhận</th>
                     <th>Người gửi</th>
-                    <th>Event</th>
-                    <th>Status</th>
+                    <th>Event / Status</th>
                     <th style="text-align:right">Human Cost</th>
                     <th style="text-align:right">Overtime Cost</th>
-                    <th>Chi tiết PASX</th>
-                    <th>Note</th>
+                    <th style="text-align:center">Chi tiết</th>
                 </tr>
             </thead>
             <tbody>`;
 
         data.logs.forEach(log => {
-            // Chỉ đếm dòng có total > 0
             const activeCost = (log.pasxCost || []).filter(c => (c.total || 0) > 0);
             const hasCost = activeCost.length > 0;
-            const costCell = hasCost
-                ? `<td style="text-align:center;">
-                       <span class="phm-cost-badge" tabindex="0">
-                           <i class="fas fa-layer-group"></i> ${activeCost.length} dòng
-                           ${buildCostTooltip(log.pasxCost)}
-                       </span>
-                   </td>`
-                : `<td style="color:#cbd5e1;text-align:center;">—</td>`;
+            const rid = 'phm-cost-' + (rowIdx++);
 
-            const submittedBy = log.submitted_by
-                ? `<span style="font-weight:500;color:#334155;">${log.submitted_by}</span>`
-                : `<span style="color:#cbd5e1;">—</span>`;
-
+            const submittedBy = log.submitted_by || '—';
             const submittedAt = log.submitted_at
-                ? `<br><span style="font-size:.72rem;color:#94a3b8;">${fmtDate(log.submitted_at)}</span>`
+                ? `<div style="font-size:.71rem;color:#94a3b8;margin-top:2px;">${fmtDate(log.submitted_at)}</div>`
                 : '';
+
+            const costBtn = hasCost
+                ? `<button class="phm-toggle-btn" onclick="phmToggle('${rid}')">
+                       <i class="fas fa-layer-group"></i> ${activeCost.length} hạng mục
+                       <i class="fas fa-chevron-down phm-chevron" id="${rid}-icon"></i>
+                   </button>`
+                : `<span style="color:#cbd5e1;font-size:.78rem;">—</span>`;
 
             html += `
             <tr>
-                <td style="white-space:nowrap;color:#64748b;">${fmtDate(log.received_at)}</td>
-                <td>${submittedBy}${submittedAt}</td>
-                <td><code style="font-size:.78rem;color:#6366f1;">${log.event || '—'}</code></td>
-                <td>${statusBadge(log.status, log.http_status)}</td>
-                <td class="phm-currency">${log.humanCost != null ? fmtNum(log.humanCost) + ' ₫' : '—'}</td>
-                <td class="phm-currency">${log.overtimeCost != null ? fmtNum(log.overtimeCost) + ' ₫' : '—'}</td>
-                ${costCell}
-                <td style="color:#94a3b8;font-size:.78rem;">${log.note || ''}</td>
-            </tr>`;
+                <td style="white-space:nowrap;color:#64748b;vertical-align:top;">${fmtDate(log.received_at)}</td>
+                <td style="vertical-align:top;">
+                    <div style="font-weight:500;color:#334155;">${submittedBy}</div>${submittedAt}
+                </td>
+                <td style="vertical-align:top;">
+                    <code style="font-size:.78rem;color:#6366f1;">${log.event || '—'}</code>
+                    <div style="margin-top:4px;">${statusBadge(log.status, log.http_status)}</div>
+                </td>
+                <td class="phm-currency" style="vertical-align:top;">${log.humanCost != null ? fmtNum(log.humanCost) + ' ₫' : '—'}</td>
+                <td class="phm-currency" style="vertical-align:top;">${log.overtimeCost != null ? fmtNum(log.overtimeCost) + ' ₫' : '—'}</td>
+                <td style="text-align:center;vertical-align:top;">${costBtn}</td>
+            </tr>
+            ${hasCost ? `<tr id="${rid}" style="display:none;">
+                <td colspan="6" style="padding:0;background:#f8fafc;border-bottom:2px solid #6366f1;">
+                    ${buildCostRows(log.pasxCost)}
+                </td>
+            </tr>` : ''}`;
         });
 
         html += '</tbody></table>';
@@ -1985,6 +1945,15 @@ function loadPasxHistory() {
     .catch(() => {
         body.innerHTML = '<div class="phm-empty" style="color:#dc2626;">Lỗi khi tải lịch sử</div>';
     });
+}
+
+function phmToggle(rid) {
+    const row  = document.getElementById(rid);
+    const icon = document.getElementById(rid + '-icon');
+    if (!row) return;
+    const open = row.style.display !== 'none';
+    row.style.display  = open ? 'none' : 'table-row';
+    if (icon) icon.style.transform = open ? '' : 'rotate(180deg)';
 }
 
 // Đóng bằng phím Escape
