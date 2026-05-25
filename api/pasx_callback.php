@@ -24,8 +24,11 @@ $conn->query("CREATE TABLE IF NOT EXISTS pasx_webhook_logs (
     received_at   DATETIME DEFAULT CURRENT_TIMESTAMP
 )");
 
-// Thêm cột opp_id vào log table nếu chưa có
-try { $conn->query("ALTER TABLE pasx_webhook_logs ADD COLUMN opp_id VARCHAR(64) DEFAULT NULL AFTER pakd_id"); } catch (\Throwable $e) {}
+// Thêm cột mới vào log table nếu chưa có
+try { $conn->query("ALTER TABLE pasx_webhook_logs ADD COLUMN opp_id        VARCHAR(64)  DEFAULT NULL AFTER pakd_id");   } catch (\Throwable $e) {}
+try { $conn->query("ALTER TABLE pasx_webhook_logs ADD COLUMN submitted_by  VARCHAR(255) DEFAULT NULL AFTER note");       } catch (\Throwable $e) {}
+try { $conn->query("ALTER TABLE pasx_webhook_logs ADD COLUMN submitted_at  DATETIME     DEFAULT NULL AFTER submitted_by"); } catch (\Throwable $e) {}
+try { $conn->query("ALTER TABLE pasx_webhook_logs ADD COLUMN meta          JSON         DEFAULT NULL AFTER submitted_at"); } catch (\Throwable $e) {}
 
 $raw_body = file_get_contents('php://input');
 
@@ -69,7 +72,21 @@ $overtime             = isset($data['overtimeCost']) ? (float)$data['overtimeCos
 $pasx_cost            = (isset($data['pasxCost']) && is_array($data['pasxCost'])) ? $data['pasxCost'] : null;
 $pakd_id_from_payload = isset($data['pakdId'])       ? (int)$data['pakdId']         : null;
 
-// ── Lookup pakd: ưu tiên pakdId (stable vì chính mình gửi sang), fallback oppId ──
+// ── Parse _meta ──
+$meta         = isset($data['_meta']) && is_array($data['_meta']) ? $data['_meta'] : null;
+$meta_opp_id  = $meta['oppId']                                    ?? null;   // oppId trong meta
+$submitted_by = $meta['submittedBy']['fullName']                  ?? null;
+$submitted_at = null;
+if (!empty($meta['submittedAt'])) {
+    try {
+        $dt = new \DateTime($meta['submittedAt']);
+        $submitted_at = $dt->format('Y-m-d H:i:s');
+    } catch (\Throwable $e) {}
+}
+// Nếu không có oppId ở top-level thì lấy từ meta
+if (!$opp_id && $meta_opp_id) $opp_id = (string)$meta_opp_id;
+
+// ── Lookup pakd: 1) pakdId trực tiếp  2) oppId top-level / _meta ──
 $pakd_id = null;
 if ($pakd_id_from_payload) {
     $lk = $conn->prepare("SELECT id FROM pakd WHERE id = ? LIMIT 1");
@@ -90,11 +107,16 @@ if (!$pakd_id && $opp_id) {
 
 // ── Ghi log ──
 $log_stmt = $conn->prepare(
-    "INSERT INTO pasx_webhook_logs (pakd_id, opp_id, pasx_id, event, payload, status, http_status, received_at)
-     VALUES (?, ?, ?, ?, ?, ?, 200, NOW())"
+    "INSERT INTO pasx_webhook_logs
+        (pakd_id, opp_id, pasx_id, event, payload, status, http_status, submitted_by, submitted_at, meta, received_at)
+     VALUES (?, ?, ?, ?, ?, ?, 200, ?, ?, ?, NOW())"
 );
 $payload_json = json_encode($data, JSON_UNESCAPED_UNICODE);
-$log_stmt->bind_param("isssss", $pakd_id, $opp_id, $pasx_id, $event, $payload_json, $status);
+$meta_json    = $meta ? json_encode($meta, JSON_UNESCAPED_UNICODE) : null;
+$log_stmt->bind_param("isssssssss",
+    $pakd_id, $opp_id, $pasx_id, $event, $payload_json, $status,
+    $submitted_by, $submitted_at, $meta_json
+);
 $log_stmt->execute();
 $log_stmt->close();
 
@@ -145,10 +167,11 @@ if ($pakd_id) {
 
 http_response_code(200);
 echo json_encode([
-    'ok'      => true,
-    'msg'     => 'Callback received',
-    'opp_id'  => $opp_id,
-    'pakd_id' => $pakd_id,
-    'event'   => $event,
-    'status'  => $status,
+    'ok'           => true,
+    'msg'          => 'Callback received',
+    'opp_id'       => $opp_id,
+    'pakd_id'      => $pakd_id,
+    'event'        => $event,
+    'status'       => $status,
+    'submitted_by' => $submitted_by,
 ]);

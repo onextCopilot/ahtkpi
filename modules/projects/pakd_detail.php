@@ -124,10 +124,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'get_p
     // Đảm bảo cột opp_id tồn tại
     try { $conn->query("ALTER TABLE pasx_webhook_logs ADD COLUMN opp_id VARCHAR(64) DEFAULT NULL AFTER pakd_id"); } catch (\Throwable $e) {}
 
+    // Đảm bảo các cột mới tồn tại
+    try { $conn->query("ALTER TABLE pasx_webhook_logs ADD COLUMN submitted_by  VARCHAR(255) DEFAULT NULL AFTER note"); }       catch (\Throwable $e) {}
+    try { $conn->query("ALTER TABLE pasx_webhook_logs ADD COLUMN submitted_at  DATETIME     DEFAULT NULL AFTER submitted_by"); } catch (\Throwable $e) {}
+    try { $conn->query("ALTER TABLE pasx_webhook_logs ADD COLUMN meta          JSON         DEFAULT NULL AFTER submitted_at"); } catch (\Throwable $e) {}
+
     $logs = [];
     if ($pid || $opp_id) {
         $stmt = $conn->prepare(
-            "SELECT id, pakd_id, opp_id, pasx_id, event, status, payload, http_status, note, received_at
+            "SELECT id, pakd_id, opp_id, pasx_id, event, status, payload,
+                    http_status, note, submitted_by, submitted_at, received_at
              FROM pasx_webhook_logs
              WHERE pakd_id = ? OR opp_id = ?
              ORDER BY received_at DESC LIMIT 50"
@@ -136,12 +142,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'get_p
         $stmt->execute();
         $res = $stmt->get_result();
         while ($row = $res->fetch_assoc()) {
-            // Parse payload để lấy humanCost, overtimeCost, pasxCost
+            // Parse payload để lấy humanCost, overtimeCost, pasxCost, _meta
             $pl = !empty($row['payload']) ? json_decode($row['payload'], true) : [];
             $row['humanCost']    = $pl['humanCost']    ?? null;
             $row['overtimeCost'] = $pl['overtimeCost'] ?? null;
             $row['pasxCost']     = (isset($pl['pasxCost']) && is_array($pl['pasxCost'])) ? $pl['pasxCost'] : null;
-            unset($row['payload']); // không cần gửi toàn bộ payload
+            // submittedBy: ưu tiên cột DB, fallback payload _meta
+            if (empty($row['submitted_by']) && !empty($pl['_meta']['submittedBy']['fullName'])) {
+                $row['submitted_by'] = $pl['_meta']['submittedBy']['fullName'];
+            }
+            if (empty($row['submitted_at']) && !empty($pl['_meta']['submittedAt'])) {
+                $row['submitted_at'] = $pl['_meta']['submittedAt'];
+            }
+            unset($row['payload']); // không gửi toàn bộ payload
             $logs[] = $row;
         }
         $stmt->close();
@@ -1768,6 +1781,9 @@ function getProjectTypeIcon($type) {
         }
         .phm-cost-table tr:last-child td { border-bottom: none; }
         .phm-cost-table tr:hover td { background: #f8fafc; }
+        .phm-cost-table tfoot td { background: #f8fafc; font-size: .8rem; }
+        /* Tooltip phải đủ rộng để show path */
+        .phm-cost-tooltip { min-width: 680px; }
 
         /* ── Change Request rows ── */
         .btn-add-cr {
@@ -1879,27 +1895,36 @@ function loadPasxHistory() {
             return `<span class="phm-badge phm-badge-ok">${s}</span>`;
         };
 
+        // Chỉ lấy dòng có total > 0 để bỏ qua các template rỗng
         const buildCostTooltip = (pasxCost) => {
             if (!pasxCost || !pasxCost.length) return '';
-            let rows = pasxCost.map(c => `
+            const active = pasxCost.filter(c => (c.total || 0) > 0);
+            if (!active.length) return '';
+            let rows = active.map(c => `
                 <tr>
-                    <td>${c.name || '—'}</td>
-                    <td style="color:#64748b;font-size:.75rem;">${c.path || ''}</td>
-                    <td style="text-align:right">${fmtNum(c.unit)} ${c.unitType || ''}</td>
-                    <td style="text-align:right">${fmtNum(c.amount)}</td>
-                    <td style="text-align:right;color:#1e40af;font-weight:600;">${fmtNum(c.total)}</td>
+                    <td style="font-weight:500;">${c.name || '—'}</td>
+                    <td style="color:#64748b;font-size:.74rem;max-width:200px;overflow:hidden;text-overflow:ellipsis;" title="${c.path || ''}">${c.path || ''}</td>
+                    <td style="text-align:right;color:#475569;">${fmtNum(c.unit)}${c.unitType ? ' <span style="font-size:.72rem;color:#94a3b8;">'+c.unitType+'</span>' : ''}</td>
+                    <td style="text-align:right;color:#475569;">${fmtNum(c.amount)}</td>
+                    <td style="text-align:right;color:#1e40af;font-weight:600;">${fmtNum(c.total)} ₫</td>
                     <td style="color:#94a3b8;font-size:.74rem;">${c.note || ''}</td>
                 </tr>`).join('');
+            const grandTotal = active.reduce((s, c) => s + (c.total || 0), 0);
             return `<div class="phm-cost-tooltip">
                 <table class="phm-cost-table">
                     <thead><tr>
-                        <th>Tên</th><th>Path</th>
-                        <th style="text-align:right">Unit</th>
-                        <th style="text-align:right">SL</th>
-                        <th style="text-align:right">Total (h)</th>
+                        <th>Hạng mục</th><th>Path</th>
+                        <th style="text-align:right">Đơn giá</th>
+                        <th style="text-align:right">Số lượng</th>
+                        <th style="text-align:right">Thành tiền</th>
                         <th>Ghi chú</th>
                     </tr></thead>
                     <tbody>${rows}</tbody>
+                    <tfoot><tr>
+                        <td colspan="4" style="text-align:right;font-weight:700;padding:5px 8px;border-top:2px solid #e2e8f0;color:#0f172a;">Tổng</td>
+                        <td style="text-align:right;font-weight:700;padding:5px 8px;border-top:2px solid #e2e8f0;color:#1e40af;">${fmtNum(grandTotal)} ₫</td>
+                        <td style="border-top:2px solid #e2e8f0;"></td>
+                    </tr></tfoot>
                 </table>
             </div>`;
         };
@@ -1909,6 +1934,7 @@ function loadPasxHistory() {
             <thead>
                 <tr>
                     <th>Thời gian</th>
+                    <th>Người gửi</th>
                     <th>Event</th>
                     <th>Status</th>
                     <th style="text-align:right">Human Cost</th>
@@ -1920,19 +1946,30 @@ function loadPasxHistory() {
             <tbody>`;
 
         data.logs.forEach(log => {
-            const hasCost = log.pasxCost && log.pasxCost.length > 0;
+            // Chỉ đếm dòng có total > 0
+            const activeCost = (log.pasxCost || []).filter(c => (c.total || 0) > 0);
+            const hasCost = activeCost.length > 0;
             const costCell = hasCost
                 ? `<td style="text-align:center;">
                        <span class="phm-cost-badge" tabindex="0">
-                           <i class="fas fa-layer-group"></i> ${log.pasxCost.length} dòng
+                           <i class="fas fa-layer-group"></i> ${activeCost.length} dòng
                            ${buildCostTooltip(log.pasxCost)}
                        </span>
                    </td>`
                 : `<td style="color:#cbd5e1;text-align:center;">—</td>`;
 
+            const submittedBy = log.submitted_by
+                ? `<span style="font-weight:500;color:#334155;">${log.submitted_by}</span>`
+                : `<span style="color:#cbd5e1;">—</span>`;
+
+            const submittedAt = log.submitted_at
+                ? `<br><span style="font-size:.72rem;color:#94a3b8;">${fmtDate(log.submitted_at)}</span>`
+                : '';
+
             html += `
             <tr>
                 <td style="white-space:nowrap;color:#64748b;">${fmtDate(log.received_at)}</td>
+                <td>${submittedBy}${submittedAt}</td>
                 <td><code style="font-size:.78rem;color:#6366f1;">${log.event || '—'}</code></td>
                 <td>${statusBadge(log.status, log.http_status)}</td>
                 <td class="phm-currency">${log.humanCost != null ? fmtNum(log.humanCost) + ' ₫' : '—'}</td>
