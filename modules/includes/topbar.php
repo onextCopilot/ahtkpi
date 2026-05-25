@@ -160,6 +160,34 @@ usort($am_notifications, function ($a, $b) {
 });
 
 $notif_count = count($am_notifications);
+
+// ── PASX Notifications ──
+$pasx_notifs = [];
+try {
+    $conn->query("CREATE TABLE IF NOT EXISTS pasx_notifications (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        user_id INT NOT NULL,
+        pakd_id INT NOT NULL,
+        pasx_id VARCHAR(64) DEFAULT NULL,
+        event VARCHAR(64) DEFAULT NULL,
+        status VARCHAR(32) DEFAULT NULL,
+        human_cost DECIMAL(20,2) DEFAULT NULL,
+        overtime_cost DECIMAL(20,2) DEFAULT NULL,
+        opp_name VARCHAR(255) DEFAULT NULL,
+        submitted_by VARCHAR(255) DEFAULT NULL,
+        is_read TINYINT(1) DEFAULT 0,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        INDEX idx_user_read (user_id, is_read)
+    )");
+    $pn = $conn->prepare("SELECT id, pakd_id, pasx_id, event, status, human_cost, overtime_cost, opp_name, submitted_by, created_at FROM pasx_notifications WHERE user_id=? AND is_read=0 ORDER BY created_at DESC LIMIT 20");
+    $pn->bind_param("i", $current_user_id);
+    $pn->execute();
+    $pn_res = $pn->get_result();
+    while ($pn_row = $pn_res->fetch_assoc()) $pasx_notifs[] = $pn_row;
+    $pn->close();
+} catch (\Throwable $e) {}
+$pasx_notif_count = count($pasx_notifs);
+$total_notif_count = $notif_count + $pasx_notif_count;
 ?>
 <header class="top-bar">
     <div class="page-title">
@@ -193,9 +221,9 @@ $notif_count = count($am_notifications);
                     <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path>
                     <path d="M13.73 21a2 2 0 0 1-3.46 0"></path>
                 </svg>
-                <?php if ($notif_count > 0): ?>
+                <?php if ($total_notif_count > 0): ?>
                     <span id="notif-badge"
-                        style="position: absolute; top: 4px; right: 4px; width: 14px; height: 14px; background-color: #ef4444; color: white; border-radius: 50%; border: 2px solid white; font-size: 8px; font-weight: bold; display: flex; align-items: center; justify-content: center;"><?php echo $notif_count > 9 ? '9+' : $notif_count; ?></span>
+                        style="position: absolute; top: 4px; right: 4px; width: 14px; height: 14px; background-color: #ef4444; color: white; border-radius: 50%; border: 2px solid white; font-size: 8px; font-weight: bold; display: flex; align-items: center; justify-content: center;"><?php echo $total_notif_count > 9 ? '9+' : $total_notif_count; ?></span>
                 <?php endif; ?>
             </a>
 
@@ -205,12 +233,39 @@ $notif_count = count($am_notifications);
                 <div
                     style="padding: 12px 16px; border-bottom: 1px solid #f1f5f9; display: flex; justify-content: space-between; align-items: center; background: #f8fafc;">
                     <span style="font-weight: 600; font-size: 0.95rem; color: #1e293b;">Thông báo</span>
-                    <?php if ($notif_count > 0): ?>
-                        <a href="#" onclick="markAllAsRead(event)"
+                    <?php if ($total_notif_count > 0): ?>
+                        <a href="#" onclick="markAllAsRead(event); markAllPasxNotifRead();"
                             style="font-size: 0.8rem; color: #3b82f6; text-decoration: none;">Đánh dấu đã đọc tất cả</a>
                     <?php endif; ?>
                 </div>
                 <div style="max-height: 350px; overflow-y: auto;">
+                    <?php foreach ($pasx_notifs as $pn): ?>
+                    <div class="notif-item pasx-notif-item" id="pasx-notif-<?= $pn['id'] ?>"
+                        style="padding:12px 16px;border-bottom:1px solid #f1f5f9;background:#f5f3ff;position:relative;transition:background .2s;"
+                        onmouseover="this.style.filter='brightness(0.97)'" onmouseout="this.style.filter='none'">
+                        <div style="font-size:.8rem;font-weight:700;color:#6366f1;margin-bottom:3px;">
+                            <i class="fas fa-cog" style="margin-right:4px;"></i>
+                            PASX <?= strtoupper(htmlspecialchars($pn['status'] ?? '')) ?>
+                            <?php if ($pn['submitted_by']): ?><span style="font-weight:400;color:#7c3aed;font-size:.75rem;"> · <?= htmlspecialchars($pn['submitted_by']) ?></span><?php endif; ?>
+                        </div>
+                        <div style="font-size:.82rem;color:#334155;margin-bottom:6px;">
+                            <strong><?= htmlspecialchars(mb_substr($pn['opp_name'] ?? 'PAKD #'.$pn['pakd_id'], 0, 50)) ?></strong>
+                            <?php if ($pn['human_cost']): ?>
+                            <br><span style="font-size:.75rem;color:#64748b;">Human: <?= number_format($pn['human_cost'],0,',','.') ?> ₫
+                            <?php if ($pn['overtime_cost']): ?>| OT: <?= number_format($pn['overtime_cost'],0,',','.') ?> ₫<?php endif; ?></span>
+                            <?php endif; ?>
+                            <br><span style="color:#94a3b8;font-size:.72rem;"><?= date('d/m/Y H:i', strtotime($pn['created_at'])) ?></span>
+                        </div>
+                        <div style="display:flex;gap:8px;align-items:center;">
+                            <a href="/projects/pakd/edit?id=<?= $pn['pakd_id'] ?>"
+                                style="font-size:.7rem;color:#6366f1;text-decoration:none;border:1px solid #6366f1;padding:3px 8px;border-radius:4px;">
+                                Xem PAKD</a>
+                            <button onclick="markPasxNotifRead(<?= $pn['id'] ?>, 'pasx-notif-<?= $pn['id'] ?>')"
+                                style="background:none;border:1px solid #a5b4fc;color:#6366f1;padding:3px 8px;border-radius:4px;font-size:.7rem;cursor:pointer;">
+                                Đã đọc</button>
+                        </div>
+                    </div>
+                    <?php endforeach; ?>
                     <?php if ($notif_count > 0): ?>
                         <?php foreach ($am_notifications as $notif):
                             $d = $notif['debt'];
@@ -285,9 +340,11 @@ $notif_count = count($am_notifications);
                             </div>
                         <?php endforeach; ?>
                     <?php else: ?>
+                        <?php if ($total_notif_count == 0): ?>
                         <div style="padding: 24px; text-align: center; color: #94a3b8; font-size: 0.9rem;">
                             Không có thông báo mới.
                         </div>
+                        <?php endif; ?>
                     <?php endif; ?>
                 </div>
             </div>
@@ -386,6 +443,35 @@ $notif_count = count($am_notifications);
                     badge.style.display = 'none';
                 }
             }
+        }
+
+        function markPasxNotifRead(id, elemId) {
+            fetch('/api/notifications/mark_read', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({id: id})
+            }).then(r => r.json()).then(d => {
+                if (d.ok) {
+                    const el = document.getElementById(elemId);
+                    if (el) { el.style.opacity = '0'; el.style.transition = 'opacity .3s'; setTimeout(() => el.remove(), 300); }
+                    decreaseBadge();
+                }
+            });
+        }
+
+        function markAllPasxNotifRead() {
+            fetch('/api/notifications/mark_read', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({all: true})
+            }).then(r => r.json()).then(d => {
+                if (d.ok) {
+                    document.querySelectorAll('.pasx-notif-item').forEach(el => {
+                        el.style.opacity = '0'; el.style.transition = 'opacity .3s';
+                        setTimeout(() => el.remove(), 300);
+                    });
+                }
+            });
         }
     </script>
 </header>

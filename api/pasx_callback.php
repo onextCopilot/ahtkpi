@@ -163,6 +163,62 @@ if ($pakd_id) {
             error_log('[pasx_callback] fin_data update error: ' . $e->getMessage());
         }
     }
+
+    // ── Tạo thông báo cho AM ──
+    try {
+        $conn->query("CREATE TABLE IF NOT EXISTS pasx_notifications (
+            id            INT AUTO_INCREMENT PRIMARY KEY,
+            user_id       INT NOT NULL,
+            pakd_id       INT NOT NULL,
+            pasx_id       VARCHAR(64) DEFAULT NULL,
+            event         VARCHAR(64) DEFAULT NULL,
+            status        VARCHAR(32) DEFAULT NULL,
+            human_cost    DECIMAL(20,2) DEFAULT NULL,
+            overtime_cost DECIMAL(20,2) DEFAULT NULL,
+            opp_name      VARCHAR(255) DEFAULT NULL,
+            submitted_by  VARCHAR(255) DEFAULT NULL,
+            is_read       TINYINT(1) DEFAULT 0,
+            created_at    DATETIME DEFAULT CURRENT_TIMESTAMP,
+            INDEX idx_user_read (user_id, is_read)
+        )");
+
+        // Lấy am_name và opportunity_name từ pakd
+        $pr = $conn->prepare("SELECT am_name, opportunity_name FROM pakd WHERE id=? LIMIT 1");
+        $pr->bind_param("i", $pakd_id);
+        $pr->execute();
+        $pakd_row = $pr->get_result()->fetch_assoc();
+        $pr->close();
+
+        if ($pakd_row) {
+            $am_full_name = $pakd_row['am_name']          ?? null;
+            $opp_name_val = $pakd_row['opportunity_name'] ?? null;
+
+            if ($am_full_name) {
+                $ur = $conn->prepare("SELECT id FROM users WHERE full_name = ? LIMIT 1");
+                $ur->bind_param("s", $am_full_name);
+                $ur->execute();
+                $user_row = $ur->get_result()->fetch_assoc();
+                $ur->close();
+
+                if ($user_row) {
+                    $am_user_id = (int)$user_row['id'];
+                    $ni = $conn->prepare(
+                        "INSERT INTO pasx_notifications
+                            (user_id, pakd_id, pasx_id, event, status, human_cost, overtime_cost, opp_name, submitted_by)
+                         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
+                    );
+                    $ni->bind_param("iisssddss",
+                        $am_user_id, $pakd_id, $pasx_id, $event, $status,
+                        $human_cost, $overtime, $opp_name_val, $submitted_by
+                    );
+                    $ni->execute();
+                    $ni->close();
+                }
+            }
+        }
+    } catch (\Throwable $e) {
+        error_log('[pasx_callback] notification insert error: ' . $e->getMessage());
+    }
 }
 
 http_response_code(200);
