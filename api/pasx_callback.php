@@ -3,6 +3,8 @@
  * Webhook: nhận callback từ ArrowHitech PASX
  * POST /api/pasx/callback
  * Header: X-Webhook-Secret: <secret>
+ *
+ * Lookup PAKD theo oppId (odoo_opp_id) — stable across environments
  */
 require_once __DIR__ . '/../config/config.php';
 
@@ -12,6 +14,7 @@ header('Content-Type: application/json; charset=utf-8');
 $conn->query("CREATE TABLE IF NOT EXISTS pasx_webhook_logs (
     id            INT AUTO_INCREMENT PRIMARY KEY,
     pakd_id       INT DEFAULT NULL,
+    opp_id        VARCHAR(64) DEFAULT NULL,
     pasx_id       VARCHAR(64) DEFAULT NULL,
     event         VARCHAR(64) DEFAULT NULL,
     payload       JSON DEFAULT NULL,
@@ -33,14 +36,12 @@ $received = $_SERVER['HTTP_X_WEBHOOK_SECRET']
          ?? '';
 
 if (!$expected) {
-    // Log & reject nếu chưa cấu hình secret
     http_response_code(500);
     echo json_encode(['ok' => false, 'msg' => 'Webhook secret chưa được cấu hình trên server']);
     exit;
 }
 
 if (!hash_equals($expected, $received)) {
-    // Log failed auth
     $conn->query("INSERT INTO pasx_webhook_logs (event, payload, http_status, note, received_at)
         VALUES ('auth_failed', '" . $conn->real_escape_string(json_encode(['raw' => substr($raw_body, 0, 500)])) . "', 401, 'Invalid X-Webhook-Secret', NOW())");
     http_response_code(401);
@@ -56,24 +57,35 @@ if (!is_array($data)) {
     exit;
 }
 
-$pakd_id     = isset($data['pakdId'])      ? (int)$data['pakdId']      : null;
+$opp_id      = isset($data['oppId'])       ? (string)$data['oppId']       : null;
 $pasx_id     = $data['pasxId']             ?? null;
 $event       = $data['event']              ?? 'callback';
 $status      = $data['status']             ?? null;
-$human_cost  = isset($data['humanCost'])   ? (float)$data['humanCost']   : null;
-$overtime    = isset($data['overtimeCost'])? (float)$data['overtimeCost']: null;
+$human_cost  = isset($data['humanCost'])   ? (float)$data['humanCost']    : null;
+$overtime    = isset($data['overtimeCost'])? (float)$data['overtimeCost'] : null;
+
+// ── Lookup pakd theo oppId (odoo_opp_id) ──
+$pakd_id = null;
+if ($opp_id) {
+    $lk = $conn->prepare("SELECT id FROM pakd WHERE odoo_opp_id = ? LIMIT 1");
+    $lk->bind_param("s", $opp_id);
+    $lk->execute();
+    $lk_row  = $lk->get_result()->fetch_assoc();
+    $lk->close();
+    $pakd_id = $lk_row ? (int)$lk_row['id'] : null;
+}
 
 // ── Ghi log ──
 $log_stmt = $conn->prepare(
-    "INSERT INTO pasx_webhook_logs (pakd_id, pasx_id, event, payload, status, http_status, received_at)
-     VALUES (?, ?, ?, ?, ?, 200, NOW())"
+    "INSERT INTO pasx_webhook_logs (pakd_id, opp_id, pasx_id, event, payload, status, http_status, received_at)
+     VALUES (?, ?, ?, ?, ?, ?, 200, NOW())"
 );
 $payload_json = json_encode($data, JSON_UNESCAPED_UNICODE);
-$log_stmt->bind_param("issss", $pakd_id, $pasx_id, $event, $payload_json, $status);
+$log_stmt->bind_param("isssss", $pakd_id, $opp_id, $pasx_id, $event, $payload_json, $status);
 $log_stmt->execute();
 $log_stmt->close();
 
-// ── Cập nhật pakd nếu có pakdId ──
+// ── Cập nhật pakd nếu tìm được bản ghi ──
 if ($pakd_id) {
     // Đảm bảo các cột tồn tại
     foreach ([
@@ -81,9 +93,9 @@ if ($pakd_id) {
         "ALTER TABLE pakd ADD COLUMN pasx_id VARCHAR(64) DEFAULT NULL",
         "ALTER TABLE pakd ADD COLUMN pasx_requested_at DATETIME DEFAULT NULL",
         "ALTER TABLE pakd ADD COLUMN fin_data JSON DEFAULT NULL",
-    ] as $sql) { try { $conn->query($sql); } catch (Exception $e) {} }
+    ] as $sql) { try { $conn->query($sql); } catch (\Throwable $e) {} }
 
-    // Cập nhật status
+    // Cập nhật pasx_status
     if ($status) {
         $st = $conn->prepare("UPDATE pakd SET pasx_status=? WHERE id=?");
         $st->bind_param("si", $status, $pakd_id);
@@ -91,9 +103,8 @@ if ($pakd_id) {
         $st->close();
     }
 
-    // Cập nhật fin_data với human_cost / overtime nếu có
+    // Cập nhật fin_data với humanCost / overtimeCost nếu có
     if ($human_cost !== null || $overtime !== null) {
-        // Đảm bảo cột fin_data tồn tại (dùng Throwable để bắt cả Error lẫn Exception)
         try { $conn->query("ALTER TABLE pakd ADD COLUMN fin_data JSON DEFAULT NULL"); } catch (\Throwable $e) {}
 
         try {
@@ -113,7 +124,6 @@ if ($pakd_id) {
             $fu->execute();
             $fu->close();
         } catch (\Throwable $e) {
-            // log lỗi nhưng không crash response
             error_log('[pasx_callback] fin_data update error: ' . $e->getMessage());
         }
     }
@@ -123,6 +133,7 @@ http_response_code(200);
 echo json_encode([
     'ok'      => true,
     'msg'     => 'Callback received',
+    'opp_id'  => $opp_id,
     'pakd_id' => $pakd_id,
     'event'   => $event,
     'status'  => $status,
