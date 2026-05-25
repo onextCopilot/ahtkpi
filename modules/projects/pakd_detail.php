@@ -127,7 +127,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'save_
         "ALTER TABLE pakd ADD COLUMN timeline    TEXT          DEFAULT NULL",
     ] as $sql) { try { $conn->query($sql); } catch (Exception $e) {} }
 
-    $fin_data     = $_POST['fin_data']     ?? '{}';
+    // Merge fin_data: giữ lại các field từ callback (human_cost, overtime_cost) không bị ghi đè
+    $fin_data_post = json_decode($_POST['fin_data'] ?? '{}', true) ?: [];
+    $existing_row  = $conn->query("SELECT fin_data FROM pakd WHERE id=$pid")->fetch_assoc();
+    $fin_data_db   = !empty($existing_row['fin_data']) ? (json_decode($existing_row['fin_data'], true) ?: []) : [];
+    // Các field từ PASX callback - ưu tiên giữ giá trị DB nếu POST không có
+    foreach (['human_cost', 'overtime_cost'] as $protected) {
+        if (isset($fin_data_db[$protected]) && !isset($fin_data_post[$protected])) {
+            $fin_data_post[$protected] = $fin_data_db[$protected];
+        }
+    }
+    $fin_data     = json_encode($fin_data_post);
     $revenue      = (float)($_POST['revenue']      ?? 0);
     $gross_profit = (float)($_POST['gross_profit'] ?? 0);
     $contract_no  = trim($_POST['contract_no']  ?? '');
