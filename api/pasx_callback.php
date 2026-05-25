@@ -113,7 +113,7 @@ $log_stmt = $conn->prepare(
 );
 $payload_json = json_encode($data, JSON_UNESCAPED_UNICODE);
 $meta_json    = $meta ? json_encode($meta, JSON_UNESCAPED_UNICODE) : null;
-$log_stmt->bind_param("isssssssss",
+$log_stmt->bind_param("issssssss",
     $pakd_id, $opp_id, $pasx_id, $event, $payload_json, $status,
     $submitted_by, $submitted_at, $meta_json
 );
