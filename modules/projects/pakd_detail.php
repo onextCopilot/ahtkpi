@@ -684,6 +684,12 @@ function getProjectTypeIcon($type) {
         /* Row type: detail (sub-sub) */
         .fin-table tr.row-detail { background: #fafafa; }
 
+        /* Row type: section header (4.1, 4.2, 4.3, 4.4) */
+        .fin-table tr.row-section { background: #eef4fb; }
+        .fin-table tr.row-section td { font-weight: 500; color: #334155; }
+        .fin-table tr.row-section .td-stt { font-weight: 600 !important; color: #475569; }
+        .fin-table tr.row-section td.ind-1 { border-left: 3px solid #93c5fd; }
+
         /* Cell type helpers */
         .td-stt    { text-align: center; color: var(--lgray); font-size: 11px; font-weight: 400 !important; }
         .td-desc   { color: var(--gray); font-size: 12px; }
@@ -1015,7 +1021,7 @@ function getProjectTypeIcon($type) {
                             </tr>
 
                             <!-- 4.1 Chi phí sản xuất (LOCKED) -->
-                            <tr class="row-lock">
+                            <tr class="row-lock row-section">
                                 <td class="td-stt">4.1</td>
                                 <td class="ind-1">
                                     Chi phí sản xuất
@@ -1105,7 +1111,7 @@ function getProjectTypeIcon($type) {
                             </tr>
 
                             <!-- 4.2 Chi phí bán hàng -->
-                            <tr class="row-sub">
+                            <tr class="row-sub row-section">
                                 <td class="td-stt">4.2</td>
                                 <td class="ind-1">Chi phí bán hàng (kinh doanh)</td>
                                 <td class="td-desc">Tuân thủ theo bảng phân bổ tùy thị trường</td>
@@ -1170,7 +1176,7 @@ function getProjectTypeIcon($type) {
                             </tr>
 
                             <!-- 4.3 Chi phí quản lý -->
-                            <tr class="row-sub">
+                            <tr class="row-sub row-section">
                                 <td class="td-stt">4.3</td>
                                 <td class="ind-1">Chi phí quản lý + back office</td>
                                 <td class="td-desc">12% doanh thu thuần — Tuân thủ bằng phân bổ</td>
@@ -1187,7 +1193,7 @@ function getProjectTypeIcon($type) {
                             </tr>
 
                             <!-- 4.4 Chi phí khác -->
-                            <tr class="row-sub">
+                            <tr class="row-sub row-section">
                                 <td class="td-stt">4.4</td>
                                 <td class="ind-1">Chi phí khác</td>
                                 <td></td>
