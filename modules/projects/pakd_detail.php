@@ -101,6 +101,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_SERVER['CONTENT_TYPE'] ?? '') ==
     exit;
 }
 
+// ── AJAX: Save Division ──
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'save_division') {
+    header('Content-Type: application/json; charset=utf-8');
+    $pid      = (int)($_POST['id'] ?? 0);
+    $division = trim($_POST['division_names'] ?? '');
+    if (!$pid) { echo json_encode(['ok' => false, 'msg' => 'ID không hợp lệ']); exit; }
+    $st = $conn->prepare("UPDATE pakd SET division_names=? WHERE id=?");
+    $st->bind_param("si", $division, $pid);
+    $ok = $st->execute();
+    $st->close();
+    echo json_encode(['ok' => $ok]);
+    exit;
+}
+
 // ── AJAX: PASX History ──
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'get_pasx_history') {
     header('Content-Type: application/json; charset=utf-8');
@@ -209,6 +223,11 @@ $stmt->bind_param("i", $pakd_id);
 $stmt->execute();
 $pakd = $stmt->get_result()->fetch_assoc();
 $stmt->close();
+
+// Lấy danh sách divisions để làm dropdown
+$division_options = [];
+$dres = $conn->query("SELECT DISTINCT division_names FROM pakd WHERE division_names IS NOT NULL AND division_names != '' ORDER BY division_names");
+if ($dres) while ($dr = $dres->fetch_row()) $division_options[] = $dr[0];
 
 // Parse saved financial detail data
 $fin_saved = !empty($pakd['fin_data']) ? (json_decode($pakd['fin_data'], true) ?? []) : [];
@@ -690,6 +709,24 @@ function getProjectTypeIcon($type) {
                 <div class="meta-item">
                     <div class="meta-label">AM (SD/AM)</div>
                     <div class="meta-value"><?= htmlspecialchars($pakd['am_name'] ?: '—') ?></div>
+                </div>
+                <div class="meta-item">
+                    <div class="meta-label">Lead/Opp Divisions</div>
+                    <div class="meta-value">
+                        <select id="sel-division" class="project-type-select" onchange="saveDivision(this.value)" style="max-width:200px;">
+                            <option value="">— Chọn Division —</option>
+                            <?php foreach ($division_options as $div): ?>
+                                <option value="<?= htmlspecialchars($div) ?>" <?= $pakd['division_names'] === $div ? 'selected' : '' ?>>
+                                    <?= htmlspecialchars($div) ?>
+                                </option>
+                            <?php endforeach; ?>
+                            <?php if ($pakd['division_names'] && !in_array($pakd['division_names'], $division_options)): ?>
+                                <option value="<?= htmlspecialchars($pakd['division_names']) ?>" selected>
+                                    <?= htmlspecialchars($pakd['division_names']) ?>
+                                </option>
+                            <?php endif; ?>
+                        </select>
+                    </div>
                 </div>
                 <div class="meta-item">
                     <div class="meta-label">Loại dự án</div>
@@ -1366,6 +1403,25 @@ function getProjectTypeIcon($type) {
             toast.innerHTML = icon + msg;
             document.body.appendChild(toast);
             setTimeout(() => { toast.style.opacity = '0'; toast.style.transition = 'opacity .3s'; setTimeout(() => toast.remove(), 300); }, 4000);
+        }
+
+        function saveDivision(val) {
+            fetch('/projects/pakd/edit?id=' + PAKD_ID, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                body: new URLSearchParams({ action: 'save_division', id: PAKD_ID, division_names: val })
+            })
+            .then(r => r.json())
+            .then(d => {
+                const sel = document.getElementById('sel-division');
+                if (d.ok) {
+                    showToast('Đã lưu Division', 'success');
+                    sel.style.borderColor = '#16a34a';
+                    setTimeout(() => sel.style.borderColor = '', 2000);
+                } else {
+                    showToast('Lỗi lưu Division', 'error');
+                }
+            });
         }
 
         function pasxApprove() {
