@@ -93,21 +93,29 @@ if ($pakd_id) {
 
     // Cập nhật fin_data với human_cost / overtime nếu có
     if ($human_cost !== null || $overtime !== null) {
-        $fr = $conn->prepare("SELECT fin_data FROM pakd WHERE id=?");
-        $fr->bind_param("i", $pakd_id);
-        $fr->execute();
-        $row      = $fr->get_result()->fetch_assoc();
-        $fr->close();
-        $fin_data = !empty($row['fin_data']) ? (json_decode($row['fin_data'], true) ?? []) : [];
+        // Đảm bảo cột fin_data tồn tại (dùng Throwable để bắt cả Error lẫn Exception)
+        try { $conn->query("ALTER TABLE pakd ADD COLUMN fin_data JSON DEFAULT NULL"); } catch (\Throwable $e) {}
 
-        if ($human_cost !== null) $fin_data['human_cost']  = $human_cost;
-        if ($overtime   !== null) $fin_data['overtime_cost'] = $overtime;
+        try {
+            $fr = $conn->prepare("SELECT fin_data FROM pakd WHERE id=?");
+            $fr->bind_param("i", $pakd_id);
+            $fr->execute();
+            $row      = $fr->get_result()->fetch_assoc();
+            $fr->close();
+            $fin_data = !empty($row['fin_data']) ? (json_decode($row['fin_data'], true) ?? []) : [];
 
-        $fu = $conn->prepare("UPDATE pakd SET fin_data=? WHERE id=?");
-        $fj = json_encode($fin_data);
-        $fu->bind_param("si", $fj, $pakd_id);
-        $fu->execute();
-        $fu->close();
+            if ($human_cost !== null) $fin_data['human_cost']    = $human_cost;
+            if ($overtime   !== null) $fin_data['overtime_cost'] = $overtime;
+
+            $fu = $conn->prepare("UPDATE pakd SET fin_data=? WHERE id=?");
+            $fj = json_encode($fin_data);
+            $fu->bind_param("si", $fj, $pakd_id);
+            $fu->execute();
+            $fu->close();
+        } catch (\Throwable $e) {
+            // log lỗi nhưng không crash response
+            error_log('[pasx_callback] fin_data update error: ' . $e->getMessage());
+        }
     }
 }
 
