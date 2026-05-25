@@ -210,9 +210,11 @@ function pct($val, $base, $dec = 2) {
 $fin_rev_gross   = (float)($pakd['revenue']     ?? 0);
 $fin_deductions  = 0;
 $fin_rev_net     = $fin_rev_gross - $fin_deductions;
-$fin_prod_cost   = (float)($pakd['pasx_value']  ?? 0);
 $fin_human_cost  = (float)($fin_saved['human_cost']    ?? 0); // cập nhật từ ArrowHitech callback
 $fin_overtime    = (float)($fin_saved['overtime_cost'] ?? 0); // cập nhật từ ArrowHitech callback
+// Nếu đã nhận được data từ callback thì dùng tổng human+overtime, không thì dùng pasx_value
+$pasx_has_data   = ($fin_human_cost > 0 || $fin_overtime > 0);
+$fin_prod_cost   = $pasx_has_data ? ($fin_human_cost + $fin_overtime) : (float)($pakd['pasx_value'] ?? 0);
 $fin_sales_pct   = 2.0;
 $fin_sales_comm  = (int)round($fin_rev_net * $fin_sales_pct / 100);
 $fin_presales_pct = 0.0;
@@ -223,6 +225,7 @@ $fin_mgmt        = (int)round($fin_rev_net * $fin_mgmt_pct / 100);
 $fin_other_cost  = 0;
 $fin_total_cost  = $fin_prod_cost + $fin_sales_total + $fin_mgmt + $fin_other_cost;
 $fin_gross_profit = $fin_rev_net - $fin_total_cost;
+$fin_margin_pct  = $fin_rev_net > 0 ? ($fin_gross_profit / $fin_rev_net * 100) : 0;
 
 $statusLabels = [
     'draft' => 'Nháp',
@@ -829,10 +832,24 @@ function getProjectTypeIcon($type) {
                                 <td class="td-desc">
                                     Lấy thông tin từ Phương án sản xuất (locked)
                                     <?php if (!empty($pakd['pasx_id'])): ?>
-                                        <span class="pasx-processing-label">
-                                            <i class="fas fa-clock"></i>
-                                            Processing...
-                                        </span>
+                                        <?php if ($pasx_has_data): ?>
+                                            <?php if ($fin_margin_pct >= 20): ?>
+                                                <button class="btn-pasx-action btn-pasx-approve" onclick="pasxApprove()">
+                                                    <i class="fas fa-check"></i> Approve
+                                                </button>
+                                            <?php else: ?>
+                                                <button class="btn-pasx-action btn-pasx-ceo" onclick="pasxGetApproveCEO()">
+                                                    <i class="fas fa-user-tie"></i> Get Approve (CEO)
+                                                </button>
+                                                <button class="btn-pasx-action btn-pasx-reject" onclick="pasxRejectRebuild()">
+                                                    <i class="fas fa-redo"></i> Reject / Rebuild PASX
+                                                </button>
+                                            <?php endif; ?>
+                                        <?php else: ?>
+                                            <span class="pasx-processing-label">
+                                                <i class="fas fa-clock"></i> Processing...
+                                            </span>
+                                        <?php endif; ?>
                                         <span class="pasx-sent-badge">
                                             PASX: <code><?= htmlspecialchars($pakd['pasx_id']) ?></code>
                                             <span class="pasx-sent-at"><?= $pakd['pasx_requested_at'] ? date('d/m/Y H:i', strtotime($pakd['pasx_requested_at'])) : '' ?></span>
@@ -858,13 +875,13 @@ function getProjectTypeIcon($type) {
                                 <td class="ind-2">Human Cost / Chi phí nhân công <i class="fas fa-circle-info" style="color:var(--lgray);font-size:10px;"></i></td>
                                 <td class="td-desc pasx-sub-desc">
                                     Từ Phương án sản xuất
-                                    <?php if (!empty($pakd['pasx_id'])): ?>
+                                    <?php if (!empty($pakd['pasx_id']) && !$pasx_has_data): ?>
                                         <span class="pasx-processing-label">
                                             <i class="fas fa-clock"></i> Processing...
                                         </span>
                                     <?php endif; ?>
                                 </td>
-                                <td class="td-rate"><?= $fin_prod_cost > 0 ? pct($fin_human_cost, $fin_rev_net) . '%' : '' ?></td>
+                                <td class="td-rate"><?= $fin_human_cost > 0 ? pct($fin_human_cost, $fin_rev_net) . '%' : '' ?></td>
                                 <td class="td-amount"><?= $fin_human_cost > 0 ? formatVND($fin_human_cost) : '' ?></td>
                                 <td class="td-ccy">VND</td>
                                 <td class="td-action"></td>
@@ -874,13 +891,13 @@ function getProjectTypeIcon($type) {
                                 <td class="ind-2">Chi phí làm việc ngoài giờ / Overtime cost <i class="fas fa-circle-info" style="color:var(--lgray);font-size:10px;"></i></td>
                                 <td class="td-desc pasx-sub-desc">
                                     Từ Phương án sản xuất
-                                    <?php if (!empty($pakd['pasx_id'])): ?>
+                                    <?php if (!empty($pakd['pasx_id']) && !$pasx_has_data): ?>
                                         <span class="pasx-processing-label">
                                             <i class="fas fa-clock"></i> Processing...
                                         </span>
                                     <?php endif; ?>
                                 </td>
-                                <td class="td-rate"><?= $fin_prod_cost > 0 ? pct($fin_overtime, $fin_rev_net) . '%' : '' ?></td>
+                                <td class="td-rate"><?= $fin_overtime > 0 ? pct($fin_overtime, $fin_rev_net) . '%' : '' ?></td>
                                 <td class="td-amount"><?= $fin_overtime > 0 ? formatVND($fin_overtime) : '' ?></td>
                                 <td class="td-ccy">VND</td>
                                 <td class="td-action"></td>
@@ -1263,6 +1280,22 @@ function getProjectTypeIcon($type) {
             document.body.appendChild(toast);
             setTimeout(() => { toast.style.opacity = '0'; toast.style.transition = 'opacity .3s'; setTimeout(() => toast.remove(), 300); }, 4000);
         }
+
+        function pasxApprove() {
+            showToast('Đang xử lý Approve...', 'success');
+            // TODO: gọi API approve
+        }
+
+        function pasxGetApproveCEO() {
+            showToast('Đang gửi yêu cầu phê duyệt lên CEO...', 'success');
+            // TODO: gọi API get approve CEO
+        }
+
+        function pasxRejectRebuild() {
+            if (!confirm('Bạn có chắc muốn Reject và yêu cầu rebuild PASX?')) return;
+            showToast('Đã gửi yêu cầu Reject / Rebuild PASX.', 'error');
+            // TODO: gọi API reject/rebuild
+        }
     </script>
     <style>
         @keyframes toastIn { from { transform: translateY(16px); opacity: 0; } to { transform: none; opacity: 1; } }
@@ -1337,6 +1370,40 @@ function getProjectTypeIcon($type) {
         }
         .btn-req-pasx:hover:not(:disabled) { background: #0284c7; }
         .btn-req-pasx:disabled { opacity: .55; cursor: not-allowed; }
+
+        /* PASX action buttons (after data received) */
+        .btn-pasx-action {
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            margin-left: 10px;
+            padding: 4px 12px;
+            border: none;
+            border-radius: 6px;
+            font-size: 12px;
+            font-weight: 500;
+            cursor: pointer;
+            white-space: nowrap;
+            transition: background .2s, opacity .2s;
+        }
+        .btn-pasx-approve {
+            background: #16a34a;
+            color: #fff;
+        }
+        .btn-pasx-approve:hover { background: #15803d; }
+
+        .btn-pasx-ceo {
+            background: #7c3aed;
+            color: #fff;
+        }
+        .btn-pasx-ceo:hover { background: #6d28d9; }
+
+        .btn-pasx-reject {
+            background: #fff;
+            color: #dc2626;
+            border: 1px solid #fca5a5;
+        }
+        .btn-pasx-reject:hover { background: #fef2f2; }
     </style>
 </body>
 </html>
