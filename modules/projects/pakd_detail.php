@@ -845,6 +845,7 @@ function getProjectTypeIcon($type) {
                                     Lấy thông tin từ Phương án sản xuất (locked)
                                     <?php if (!empty($pakd['pasx_id'])): ?>
                                         <?php if ($pasx_has_data): ?>
+                                            <span id="pasx-action-btns">
                                             <?php if ($fin_margin_pct >= 20): ?>
                                                 <button class="btn-pasx-action btn-pasx-approve" onclick="pasxApprove()">
                                                     <i class="fas fa-check"></i> Approve
@@ -857,6 +858,7 @@ function getProjectTypeIcon($type) {
                                                     <i class="fas fa-redo"></i> Reject / Rebuild PASX
                                                 </button>
                                             <?php endif; ?>
+                                            </span>
                                         <?php else: ?>
                                             <span class="pasx-processing-label">
                                                 <i class="fas fa-clock"></i> Processing...
@@ -1044,8 +1046,9 @@ function getProjectTypeIcon($type) {
             document.querySelector('.main-content').classList.toggle('expanded');
         }
 
-        const FIN_PROD   = <?= (int)$fin_prod_cost ?>;
-        const PAKD_ID    = <?= $pakd_id ?>;
+        const FIN_PROD       = <?= (int)$fin_prod_cost ?>;
+        const PAKD_ID        = <?= $pakd_id ?>;
+        const PASX_HAS_DATA  = <?= $pasx_has_data ? 'true' : 'false' ?>;
 
         // ── Helpers ──
         function fin_fmt(n) {
@@ -1118,6 +1121,28 @@ function getProjectTypeIcon($type) {
             const grossPct = revNet > 0 ? (grossProfit / revNet * 100).toFixed(2) : '0.00';
             document.getElementById('r5-rate').textContent = grossPct + '%';
             document.getElementById('r5-amt').textContent = fin_fmt(grossProfit);
+
+            // ── Cập nhật PASX action buttons theo margin realtime ──
+            if (PASX_HAS_DATA) {
+                const marginPct = revNet > 0 ? (grossProfit / revNet * 100) : 0;
+                const container = document.getElementById('pasx-action-btns');
+                if (container) {
+                    if (marginPct >= 20) {
+                        container.innerHTML = `
+                            <button class="btn-pasx-action btn-pasx-approve" onclick="pasxApprove()">
+                                <i class="fas fa-check"></i> Approve
+                            </button>`;
+                    } else {
+                        container.innerHTML = `
+                            <button class="btn-pasx-action btn-pasx-ceo" onclick="pasxGetApproveCEO()">
+                                <i class="fas fa-user-tie"></i> Get Approve (CEO)
+                            </button>
+                            <button class="btn-pasx-action btn-pasx-reject" onclick="pasxRejectRebuild()">
+                                <i class="fas fa-redo"></i> Reject / Rebuild PASX
+                            </button>`;
+                    }
+                }
+            }
         }
 
         // ── Inline save indicator ──
