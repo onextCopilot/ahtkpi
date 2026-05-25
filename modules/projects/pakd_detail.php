@@ -317,11 +317,15 @@ $statusIcon = [
 ];
 $iconClass = $statusIcon[$pakd['status']] ?? 'fa-circle';
 
-// Override: nếu PASX đang processing thì hiện trạng thái riêng trên status bar
-if (($pakd['pasx_status'] ?? '') === 'processing') {
-    $statusLabel = 'Processing · Đang làm PASX';
+// Override status bar khi PASX đang được xử lý
+$pasx_done_statuses = ['completed', 'approved', 'rejected', 'cancelled'];
+$pasx_active = !empty($pakd['pasx_id'])
+    && !in_array($pakd['pasx_status'] ?? '', $pasx_done_statuses)
+    && ($pakd['status'] ?? '') !== 'approved'; // nếu PAKD đã approve thì không override
+
+if ($pasx_active) {
+    $statusLabel = 'Đang làm PASX · ' . strtoupper($pakd['pasx_status'] ?? 'CREATED');
     $statusColor = '#7c3aed';
-    $statusText  = '#ffffff';
     $iconClass   = 'fa-cog fa-spin';
 }
 
