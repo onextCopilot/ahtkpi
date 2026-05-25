@@ -101,6 +101,40 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_SERVER['CONTENT_TYPE'] ?? '') ==
     exit;
 }
 
+// ── AJAX: PASX History ──
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'get_pasx_history') {
+    header('Content-Type: application/json; charset=utf-8');
+    $pid    = (int)($_POST['pakd_id'] ?? 0);
+    $opp_id = trim($_POST['opp_id'] ?? '');
+
+    // Đảm bảo cột opp_id tồn tại
+    try { $conn->query("ALTER TABLE pasx_webhook_logs ADD COLUMN opp_id VARCHAR(64) DEFAULT NULL AFTER pakd_id"); } catch (\Throwable $e) {}
+
+    $logs = [];
+    if ($pid || $opp_id) {
+        $stmt = $conn->prepare(
+            "SELECT id, pakd_id, opp_id, pasx_id, event, status, payload, http_status, note, received_at
+             FROM pasx_webhook_logs
+             WHERE pakd_id = ? OR opp_id = ?
+             ORDER BY received_at DESC LIMIT 50"
+        );
+        $stmt->bind_param("is", $pid, $opp_id);
+        $stmt->execute();
+        $res = $stmt->get_result();
+        while ($row = $res->fetch_assoc()) {
+            // Parse payload để lấy humanCost, overtimeCost
+            $pl = !empty($row['payload']) ? json_decode($row['payload'], true) : [];
+            $row['humanCost']    = $pl['humanCost']    ?? null;
+            $row['overtimeCost'] = $pl['overtimeCost'] ?? null;
+            unset($row['payload']); // không cần gửi toàn bộ payload
+            $logs[] = $row;
+        }
+        $stmt->close();
+    }
+    echo json_encode(['ok' => true, 'logs' => $logs]);
+    exit;
+}
+
 // ── AJAX: Save Project Type ──
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'save_project_type') {
     header('Content-Type: application/json; charset=utf-8');
@@ -840,6 +874,9 @@ function getProjectTypeIcon($type) {
                                     Chi phí sản xuất
                                     <i class="fas fa-lock" style="color:var(--lgray);font-size:9px;margin-left:4px;" title="Khóa – từ Phương án sản xuất"></i>
                                     <i class="fas fa-circle-info" style="color:var(--lgray);font-size:10px;margin-left:2px;"></i>
+                                    <button class="btn-pasx-history" onclick="openPasxHistory()" title="Xem lịch sử cập nhật từ Profile">
+                                        <i class="fas fa-history"></i>
+                                    </button>
                                 </td>
                                 <td class="td-desc">
                                     Lấy thông tin từ Phương án sản xuất (locked)
@@ -1442,6 +1479,156 @@ function getProjectTypeIcon($type) {
             border: 1px solid #fca5a5;
         }
         .btn-pasx-reject:hover { background: #fef2f2; }
+
+        /* History icon button */
+        .btn-pasx-history {
+            background: none; border: none; cursor: pointer;
+            color: #94a3b8; padding: 0 3px; font-size: 11px;
+            vertical-align: middle; transition: color .2s;
+        }
+        .btn-pasx-history:hover { color: #6366f1; }
+
+        /* History modal */
+        .pasx-history-overlay {
+            display: none; position: fixed; inset: 0;
+            background: rgba(0,0,0,.45); z-index: 1000;
+            align-items: center; justify-content: center;
+        }
+        .pasx-history-overlay.open { display: flex; }
+        .pasx-history-modal {
+            background: #fff; border-radius: 12px; width: 720px; max-width: 95vw;
+            max-height: 80vh; display: flex; flex-direction: column;
+            box-shadow: 0 20px 60px rgba(0,0,0,.25);
+        }
+        .phm-header {
+            display: flex; align-items: center; justify-content: space-between;
+            padding: 1.25rem 1.5rem; border-bottom: 1px solid #e2e8f0;
+        }
+        .phm-header h3 { margin: 0; font-size: 1rem; font-weight: 600; color: #0f172a; }
+        .phm-close {
+            background: none; border: none; cursor: pointer; color: #64748b;
+            font-size: 1.2rem; padding: 4px; line-height: 1;
+        }
+        .phm-close:hover { color: #0f172a; }
+        .phm-body { padding: 1rem 1.5rem; overflow-y: auto; flex: 1; }
+        .phm-loading { text-align: center; padding: 2rem; color: #94a3b8; font-size: .9rem; }
+        .phm-empty  { text-align: center; padding: 2rem; color: #94a3b8; font-size: .875rem; }
+        .phm-table  { width: 100%; border-collapse: collapse; font-size: .82rem; }
+        .phm-table th {
+            background: #f8fafc; padding: 8px 10px; text-align: left;
+            font-weight: 600; color: #475569; border-bottom: 2px solid #e2e8f0;
+            white-space: nowrap;
+        }
+        .phm-table td {
+            padding: 8px 10px; border-bottom: 1px solid #f1f5f9;
+            vertical-align: top; color: #334155;
+        }
+        .phm-table tr:hover td { background: #f8fafc; }
+        .phm-badge {
+            display: inline-block; padding: 2px 8px; border-radius: 20px;
+            font-size: .75rem; font-weight: 500;
+        }
+        .phm-badge-ok     { background: #f0fdf4; color: #16a34a; border: 1px solid #bbf7d0; }
+        .phm-badge-err    { background: #fef2f2; color: #dc2626; border: 1px solid #fecaca; }
+        .phm-badge-warn   { background: #fefce8; color: #a16207; border: 1px solid #fde047; }
+        .phm-currency     { text-align: right; font-variant-numeric: tabular-nums; color: #1e40af; }
     </style>
+
+<!-- PASX History Modal -->
+<div class="pasx-history-overlay" id="pasxHistoryOverlay" onclick="closePasxHistory(event)">
+    <div class="pasx-history-modal" onclick="event.stopPropagation()">
+        <div class="phm-header">
+            <h3><i class="fas fa-history" style="color:#6366f1;margin-right:8px;"></i>Lịch sử cập nhật từ ArrowHitech Profile</h3>
+            <button class="phm-close" onclick="closePasxHistory()">&times;</button>
+        </div>
+        <div class="phm-body" id="pasxHistoryBody">
+            <div class="phm-loading"><i class="fas fa-spinner fa-spin"></i> Đang tải...</div>
+        </div>
+    </div>
+</div>
+
+<script>
+function openPasxHistory() {
+    document.getElementById('pasxHistoryOverlay').classList.add('open');
+    loadPasxHistory();
+}
+
+function closePasxHistory(e) {
+    if (!e || e.target === document.getElementById('pasxHistoryOverlay')) {
+        document.getElementById('pasxHistoryOverlay').classList.remove('open');
+    }
+}
+
+function loadPasxHistory() {
+    const body = document.getElementById('pasxHistoryBody');
+    body.innerHTML = '<div class="phm-loading"><i class="fas fa-spinner fa-spin"></i> Đang tải...</div>';
+
+    fetch('/projects/pakd/edit?id=' + PAKD_ID, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({
+            action:   'get_pasx_history',
+            pakd_id:  PAKD_ID,
+            opp_id:   '<?= htmlspecialchars($pakd['odoo_opp_id'] ?? '') ?>',
+        })
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (!data.ok || !data.logs || data.logs.length === 0) {
+            body.innerHTML = '<div class="phm-empty"><i class="fas fa-inbox" style="font-size:2rem;display:block;margin-bottom:.5rem;"></i>Chưa có lịch sử cập nhật</div>';
+            return;
+        }
+
+        const fmtNum = n => n != null ? Number(n).toLocaleString('vi-VN') : '—';
+        const fmtDate = s => {
+            if (!s) return '—';
+            const d = new Date(s.replace(' ', 'T'));
+            return d.toLocaleDateString('vi-VN') + ' ' + d.toLocaleTimeString('vi-VN', {hour:'2-digit', minute:'2-digit', second:'2-digit'});
+        };
+        const statusBadge = (s, http) => {
+            if (s === 'auth_failed' || (http && http >= 400)) return `<span class="phm-badge phm-badge-err">${s || 'error'}</span>`;
+            if (!s) return '<span class="phm-badge phm-badge-warn">—</span>';
+            return `<span class="phm-badge phm-badge-ok">${s}</span>`;
+        };
+
+        let html = `
+        <table class="phm-table">
+            <thead>
+                <tr>
+                    <th>Thời gian</th>
+                    <th>Event</th>
+                    <th>Status</th>
+                    <th style="text-align:right">Human Cost</th>
+                    <th style="text-align:right">Overtime Cost</th>
+                    <th>Note</th>
+                </tr>
+            </thead>
+            <tbody>`;
+
+        data.logs.forEach(log => {
+            html += `
+            <tr>
+                <td style="white-space:nowrap;color:#64748b;">${fmtDate(log.received_at)}</td>
+                <td><code style="font-size:.78rem;color:#6366f1;">${log.event || '—'}</code></td>
+                <td>${statusBadge(log.status, log.http_status)}</td>
+                <td class="phm-currency">${log.humanCost != null ? fmtNum(log.humanCost) + ' ₫' : '—'}</td>
+                <td class="phm-currency">${log.overtimeCost != null ? fmtNum(log.overtimeCost) + ' ₫' : '—'}</td>
+                <td style="color:#94a3b8;font-size:.78rem;">${log.note || ''}</td>
+            </tr>`;
+        });
+
+        html += '</tbody></table>';
+        body.innerHTML = html;
+    })
+    .catch(() => {
+        body.innerHTML = '<div class="phm-empty" style="color:#dc2626;">Lỗi khi tải lịch sử</div>';
+    });
+}
+
+// Đóng bằng phím Escape
+document.addEventListener('keydown', e => {
+    if (e.key === 'Escape') closePasxHistory({target: document.getElementById('pasxHistoryOverlay')});
+});
+</script>
 </body>
 </html>
