@@ -865,6 +865,22 @@ function getProjectTypeIcon($type) {
                                 <td class="td-action"></td>
                             </tr>
 
+                            <!-- 1.3 Change Requests -->
+                            <tr class="row-sub row-cr-header">
+                                <td class="td-stt">1.3</td>
+                                <td class="ind-1">Change Requests</td>
+                                <td><span style="font-size:11px;color:#64748b;">Các khoản thu thêm từ CR</span></td>
+                                <td class="td-rate" id="r13-rate"></td>
+                                <td class="td-amount" id="r13-amt" style="font-weight:600;color:#0f172a;">0</td>
+                                <td class="td-ccy">VND</td>
+                                <td class="td-action">
+                                    <button class="btn-add-cr" onclick="addCrRow()" title="Thêm Change Request">
+                                        <i class="fas fa-plus"></i>
+                                    </button>
+                                </td>
+                            </tr>
+                            <tbody id="cr-rows"></tbody>
+
                             <!-- 2. Khoản giảm trừ -->
                             <tr class="row-cat">
                                 <td class="td-stt">2</td>
@@ -1147,12 +1163,15 @@ function getProjectTypeIcon($type) {
         }
 
         function fin_calc() {
-            // ── Row 1: Doanh thu = sum(1.1 + 1.2) ──
+            // ── Row 1: Doanh thu = sum(1.1 + 1.2 + 1.3 CR) ──
             const v11 = fin_parse(document.getElementById('r11-inp').value);
             const v12 = fin_parse(document.getElementById('r12-inp').value);
-            const revGross = v11 + v12;
+            const v13 = getCrTotal();
+            const revGross = v11 + v12 + v13;
             document.getElementById('r1-amt').textContent = fin_fmt(revGross);
             document.getElementById('r11-rate').textContent = revGross > 0 ? (v11 / revGross * 100).toFixed(2) + '%' : '';
+            document.getElementById('r13-amt').textContent = fin_fmt(v13);
+            document.getElementById('r13-rate').textContent = v13 > 0 && revGross > 0 ? (v13 / revGross * 100).toFixed(2) + '%' : '';
 
             // ── Row 2: Khoản giảm trừ = sum(2.1 + 2.2) ──
             const v21 = fin_parse(document.getElementById('r21-inp').value);
@@ -1234,6 +1253,7 @@ function getProjectTypeIcon($type) {
         // ── Inline save indicator ──
         function showFieldSaved(input) {
             const cell = input.closest('td') || input.closest('.form-group') || input.parentElement;
+            if (!cell) return; // element removed from DOM (e.g. after row deletion)
             cell.querySelectorAll('.field-saved').forEach(e => e.remove());
             const badge = document.createElement('span');
             badge.className = 'field-saved';
@@ -1262,7 +1282,8 @@ function getProjectTypeIcon($type) {
                 r43_pct:     parseFloat(el('r43-pct')?.value) || 0,
                 other_costs: Array.from(document.querySelectorAll('.other-cost-cell input'))
                                   .map(i => fin_parse(i.value)),
-                rev_net:     fin_parse(el('r3-amt')?.textContent), // doanh thu thuần (sau giảm trừ)
+                rev_net:         fin_parse(el('r3-amt')?.textContent), // doanh thu thuần (sau giảm trừ)
+                change_requests: getCrData(),
             };
             fetch('/projects/pakd/edit?id=' + PAKD_ID, {
                 method: 'POST',
@@ -1300,6 +1321,13 @@ function getProjectTypeIcon($type) {
             if (Array.isArray(saved.other_costs)) {
                 const cells = document.querySelectorAll('.other-cost-cell input');
                 saved.other_costs.forEach((v, i) => { if (cells[i]) cells[i].value = v || ''; });
+            }
+            if (Array.isArray(saved.change_requests)) {
+                saved.change_requests.forEach(function(cr) {
+                    if (cr && (cr.name || cr.amount)) {
+                        addCrRow(cr.name || '', cr.amount || 0);
+                    }
+                });
             }
         })();
 
@@ -1422,6 +1450,67 @@ function getProjectTypeIcon($type) {
                     showToast('Lỗi lưu Division', 'error');
                 }
             });
+        }
+
+        // ── Change Request helpers ──
+        function escHtml(s) {
+            return String(s)
+                .replace(/&/g, '&amp;').replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+        }
+
+        function getCrTotal() {
+            let total = 0;
+            document.querySelectorAll('#cr-rows .cr-amt-inp').forEach(function(inp) {
+                total += fin_parse(inp.value);
+            });
+            return total;
+        }
+
+        function getCrData() {
+            const items = [];
+            document.querySelectorAll('#cr-rows tr.cr-row').forEach(function(row) {
+                const name = row.querySelector('.cr-name-inp')?.value || '';
+                const amt  = fin_parse(row.querySelector('.cr-amt-inp')?.value || '0');
+                items.push({ name: name, amount: amt });
+            });
+            return items;
+        }
+
+        function addCrRow(name, amount) {
+            name   = name   !== undefined ? name   : '';
+            amount = amount !== undefined ? amount : 0;
+            const idx = Date.now() + '_' + Math.floor(Math.random() * 10000);
+            const tr  = document.createElement('tr');
+            tr.className = 'row-detail cr-row';
+            tr.dataset.idx = idx;
+            tr.innerHTML =
+                '<td class="td-stt" style="color:#94a3b8;font-size:11px;">CR</td>' +
+                '<td class="ind-2">' +
+                    '<input class="cr-name-inp" value="' + escHtml(name) + '" placeholder="Tên Change Request..." ' +
+                           'oninput="fin_calc()" onblur="autosave(this)">' +
+                '</td>' +
+                '<td><input class="fin-input" placeholder="Diễn giải..."></td>' +
+                '<td class="td-rate"></td>' +
+                '<td class="td-amount">' +
+                    '<input class="cr-amt-inp" value="' + (amount || '') + '" placeholder="0" ' +
+                           'oninput="fin_calc()" onblur="autosave(this)">' +
+                '</td>' +
+                '<td class="td-ccy">VND</td>' +
+                '<td class="td-action">' +
+                    '<button class="btn-del-cr" onclick="deleteCrRow(this)" title="Xóa CR này">' +
+                        '<i class="fas fa-trash-alt"></i>' +
+                    '</button>' +
+                '</td>';
+            document.getElementById('cr-rows').appendChild(tr);
+            fin_calc();
+            tr.querySelector('.cr-name-inp')?.focus();
+        }
+
+        function deleteCrRow(btn) {
+            btn.closest('tr')?.remove();
+            fin_calc();
+            autosave(btn);
         }
 
         function pasxApprove() {
@@ -1600,6 +1689,38 @@ function getProjectTypeIcon($type) {
         .phm-badge-err    { background: #fef2f2; color: #dc2626; border: 1px solid #fecaca; }
         .phm-badge-warn   { background: #fefce8; color: #a16207; border: 1px solid #fde047; }
         .phm-currency     { text-align: right; font-variant-numeric: tabular-nums; color: #1e40af; }
+
+        /* ── Change Request rows ── */
+        .btn-add-cr {
+            background: none; border: 1px solid #cbd5e1; border-radius: 4px;
+            color: #64748b; cursor: pointer; padding: 3px 8px; font-size: 11px;
+            transition: background .15s, border-color .15s, color .15s;
+        }
+        .btn-add-cr:hover { background: #6366f1; border-color: #6366f1; color: #fff; }
+
+        .cr-name-inp {
+            width: 100%; border: 1px solid transparent; border-radius: 4px;
+            padding: 2px 6px; font-size: 12.5px; font-family: inherit;
+            color: var(--slate); background: transparent; outline: none; box-sizing: border-box;
+        }
+        .cr-name-inp:hover, .cr-name-inp:focus { border-color: var(--border); background: #fff; }
+        .cr-name-inp::placeholder { color: var(--lgray); }
+
+        .cr-amt-inp {
+            border: 1px solid transparent; border-radius: 4px;
+            padding: 2px 6px; font-size: 12.5px; font-family: inherit;
+            color: var(--slate); background: transparent; outline: none;
+            text-align: right; box-sizing: border-box; width: 100%;
+        }
+        .cr-amt-inp:hover, .cr-amt-inp:focus { border-color: var(--border); background: #fff; }
+        .cr-amt-inp::placeholder { color: var(--lgray); }
+
+        .btn-del-cr {
+            background: none; border: none; cursor: pointer;
+            color: #94a3b8; padding: 2px 6px; font-size: 11px;
+            transition: color .15s;
+        }
+        .btn-del-cr:hover { color: #dc2626; }
     </style>
 
 <!-- PASX History Modal -->
