@@ -60,16 +60,26 @@ if (!is_array($data)) {
     exit;
 }
 
-$opp_id      = isset($data['oppId'])       ? (string)$data['oppId']       : null;
-$pasx_id     = $data['pasxId']             ?? null;
-$event       = $data['event']              ?? 'callback';
-$status      = $data['status']             ?? null;
-$human_cost  = isset($data['humanCost'])   ? (float)$data['humanCost']    : null;
-$overtime    = isset($data['overtimeCost'])? (float)$data['overtimeCost'] : null;
+$opp_id               = isset($data['oppId'])        ? (string)$data['oppId']       : null;
+$pasx_id              = $data['pasxId']              ?? null;
+$event                = $data['event']               ?? 'callback';
+$status               = $data['status']              ?? null;
+$human_cost           = isset($data['humanCost'])    ? (float)$data['humanCost']    : null;
+$overtime             = isset($data['overtimeCost']) ? (float)$data['overtimeCost'] : null;
+$pasx_cost            = (isset($data['pasxCost']) && is_array($data['pasxCost'])) ? $data['pasxCost'] : null;
+$pakd_id_from_payload = isset($data['pakdId'])       ? (int)$data['pakdId']         : null;
 
-// ── Lookup pakd theo oppId (odoo_opp_id) ──
+// ── Lookup pakd: ưu tiên pakdId (stable vì chính mình gửi sang), fallback oppId ──
 $pakd_id = null;
-if ($opp_id) {
+if ($pakd_id_from_payload) {
+    $lk = $conn->prepare("SELECT id FROM pakd WHERE id = ? LIMIT 1");
+    $lk->bind_param("i", $pakd_id_from_payload);
+    $lk->execute();
+    $lk_row  = $lk->get_result()->fetch_assoc();
+    $lk->close();
+    $pakd_id = $lk_row ? (int)$lk_row['id'] : null;
+}
+if (!$pakd_id && $opp_id) {
     $lk = $conn->prepare("SELECT id FROM pakd WHERE odoo_opp_id = ? LIMIT 1");
     $lk->bind_param("s", $opp_id);
     $lk->execute();
@@ -106,8 +116,8 @@ if ($pakd_id) {
         $st->close();
     }
 
-    // Cập nhật fin_data với humanCost / overtimeCost nếu có
-    if ($human_cost !== null || $overtime !== null) {
+    // Cập nhật fin_data với humanCost / overtimeCost / pasxCost nếu có
+    if ($human_cost !== null || $overtime !== null || $pasx_cost !== null) {
         try { $conn->query("ALTER TABLE pakd ADD COLUMN fin_data JSON DEFAULT NULL"); } catch (\Throwable $e) {}
 
         try {
@@ -118,11 +128,12 @@ if ($pakd_id) {
             $fr->close();
             $fin_data = !empty($row['fin_data']) ? (json_decode($row['fin_data'], true) ?? []) : [];
 
-            if ($human_cost !== null) $fin_data['human_cost']    = $human_cost;
-            if ($overtime   !== null) $fin_data['overtime_cost'] = $overtime;
+            if ($human_cost  !== null) $fin_data['human_cost']    = $human_cost;
+            if ($overtime    !== null) $fin_data['overtime_cost'] = $overtime;
+            if ($pasx_cost   !== null) $fin_data['pasx_cost']     = $pasx_cost; // array chi tiết nhân công
 
             $fu = $conn->prepare("UPDATE pakd SET fin_data=? WHERE id=?");
-            $fj = json_encode($fin_data);
+            $fj = json_encode($fin_data, JSON_UNESCAPED_UNICODE);
             $fu->bind_param("si", $fj, $pakd_id);
             $fu->execute();
             $fu->close();

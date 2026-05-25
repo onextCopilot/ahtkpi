@@ -136,10 +136,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'get_p
         $stmt->execute();
         $res = $stmt->get_result();
         while ($row = $res->fetch_assoc()) {
-            // Parse payload để lấy humanCost, overtimeCost
+            // Parse payload để lấy humanCost, overtimeCost, pasxCost
             $pl = !empty($row['payload']) ? json_decode($row['payload'], true) : [];
             $row['humanCost']    = $pl['humanCost']    ?? null;
             $row['overtimeCost'] = $pl['overtimeCost'] ?? null;
+            $row['pasxCost']     = (isset($pl['pasxCost']) && is_array($pl['pasxCost'])) ? $pl['pasxCost'] : null;
             unset($row['payload']); // không cần gửi toàn bộ payload
             $logs[] = $row;
         }
@@ -1723,6 +1724,51 @@ function getProjectTypeIcon($type) {
         .phm-badge-warn   { background: #fefce8; color: #a16207; border: 1px solid #fde047; }
         .phm-currency     { text-align: right; font-variant-numeric: tabular-nums; color: #1e40af; }
 
+        /* PASX Cost badge + hover tooltip */
+        .phm-cost-badge {
+            display: inline-flex; align-items: center; gap: 4px;
+            padding: 2px 8px; border-radius: 12px; font-size: .75rem; font-weight: 500;
+            background: #eff6ff; color: #2563eb; border: 1px solid #bfdbfe;
+            cursor: pointer; position: relative; white-space: nowrap;
+        }
+        .phm-cost-badge:hover .phm-cost-tooltip,
+        .phm-cost-badge:focus .phm-cost-tooltip { display: block; }
+
+        .phm-cost-tooltip {
+            display: none;
+            position: absolute;
+            top: calc(100% + 6px);
+            left: 50%; transform: translateX(-50%);
+            z-index: 9999;
+            background: #fff;
+            border: 1px solid #e2e8f0;
+            border-radius: 8px;
+            box-shadow: 0 8px 24px rgba(0,0,0,.12);
+            min-width: 560px;
+            padding: 10px;
+        }
+        .phm-cost-tooltip::before {
+            content: '';
+            position: absolute; top: -6px; left: 50%; transform: translateX(-50%);
+            border: 6px solid transparent;
+            border-bottom-color: #e2e8f0;
+            border-top: none;
+        }
+
+        .phm-cost-table {
+            width: 100%; border-collapse: collapse; font-size: .78rem; white-space: nowrap;
+        }
+        .phm-cost-table th {
+            background: #1e293b; color: #e2e8f0;
+            padding: 5px 8px; font-weight: 600; font-size: .72rem;
+            text-transform: uppercase; letter-spacing: .03em;
+        }
+        .phm-cost-table td {
+            padding: 5px 8px; border-bottom: 1px solid #f1f5f9; color: #334155;
+        }
+        .phm-cost-table tr:last-child td { border-bottom: none; }
+        .phm-cost-table tr:hover td { background: #f8fafc; }
+
         /* ── Change Request rows ── */
         .btn-add-cr {
             background: none; border: 1px solid #cbd5e1; border-radius: 4px;
@@ -1833,6 +1879,31 @@ function loadPasxHistory() {
             return `<span class="phm-badge phm-badge-ok">${s}</span>`;
         };
 
+        const buildCostTooltip = (pasxCost) => {
+            if (!pasxCost || !pasxCost.length) return '';
+            let rows = pasxCost.map(c => `
+                <tr>
+                    <td>${c.name || '—'}</td>
+                    <td style="color:#64748b;font-size:.75rem;">${c.path || ''}</td>
+                    <td style="text-align:right">${fmtNum(c.unit)} ${c.unitType || ''}</td>
+                    <td style="text-align:right">${fmtNum(c.amount)}</td>
+                    <td style="text-align:right;color:#1e40af;font-weight:600;">${fmtNum(c.total)}</td>
+                    <td style="color:#94a3b8;font-size:.74rem;">${c.note || ''}</td>
+                </tr>`).join('');
+            return `<div class="phm-cost-tooltip">
+                <table class="phm-cost-table">
+                    <thead><tr>
+                        <th>Tên</th><th>Path</th>
+                        <th style="text-align:right">Unit</th>
+                        <th style="text-align:right">SL</th>
+                        <th style="text-align:right">Total (h)</th>
+                        <th>Ghi chú</th>
+                    </tr></thead>
+                    <tbody>${rows}</tbody>
+                </table>
+            </div>`;
+        };
+
         let html = `
         <table class="phm-table">
             <thead>
@@ -1842,12 +1913,23 @@ function loadPasxHistory() {
                     <th>Status</th>
                     <th style="text-align:right">Human Cost</th>
                     <th style="text-align:right">Overtime Cost</th>
+                    <th>Chi tiết PASX</th>
                     <th>Note</th>
                 </tr>
             </thead>
             <tbody>`;
 
         data.logs.forEach(log => {
+            const hasCost = log.pasxCost && log.pasxCost.length > 0;
+            const costCell = hasCost
+                ? `<td style="text-align:center;">
+                       <span class="phm-cost-badge" tabindex="0">
+                           <i class="fas fa-layer-group"></i> ${log.pasxCost.length} dòng
+                           ${buildCostTooltip(log.pasxCost)}
+                       </span>
+                   </td>`
+                : `<td style="color:#cbd5e1;text-align:center;">—</td>`;
+
             html += `
             <tr>
                 <td style="white-space:nowrap;color:#64748b;">${fmtDate(log.received_at)}</td>
@@ -1855,6 +1937,7 @@ function loadPasxHistory() {
                 <td>${statusBadge(log.status, log.http_status)}</td>
                 <td class="phm-currency">${log.humanCost != null ? fmtNum(log.humanCost) + ' ₫' : '—'}</td>
                 <td class="phm-currency">${log.overtimeCost != null ? fmtNum(log.overtimeCost) + ' ₫' : '—'}</td>
+                ${costCell}
                 <td style="color:#94a3b8;font-size:.78rem;">${log.note || ''}</td>
             </tr>`;
         });
