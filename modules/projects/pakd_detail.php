@@ -317,6 +317,14 @@ $statusIcon = [
 ];
 $iconClass = $statusIcon[$pakd['status']] ?? 'fa-circle';
 
+// Override: nếu PASX đang processing thì hiện trạng thái riêng trên status bar
+if (($pakd['pasx_status'] ?? '') === 'processing') {
+    $statusLabel = 'Processing · Đang làm PASX';
+    $statusColor = '#7c3aed';
+    $statusText  = '#ffffff';
+    $iconClass   = 'fa-cog fa-spin';
+}
+
 function getProjectTypeIcon($type) {
     return strtolower(trim($type)) === 'external' ? 'fa-desktop' : 'fa-building';
 }
