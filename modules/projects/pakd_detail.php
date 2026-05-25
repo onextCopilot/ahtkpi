@@ -408,15 +408,21 @@ $statusIcon = [
 $iconClass = $statusIcon[$pakd['status']] ?? 'fa-circle';
 
 // Override status bar khi PASX đang được xử lý
-$pasx_done_statuses = ['completed', 'approved', 'rejected', 'cancelled'];
+$pasx_done_statuses = ['completed', 'approved', 'cancelled']; // 'rejected' xử lý riêng bên dưới
 $pasx_active = !empty($pakd['pasx_id'])
     && !in_array($pakd['pasx_status'] ?? '', $pasx_done_statuses)
-    && ($pakd['status'] ?? '') !== 'approved'; // nếu PAKD đã approve thì không override
+    && ($pakd['status'] ?? '') !== 'approved';
 
 if ($pasx_active) {
-    $statusLabel = 'Đang làm PASX · ' . strtoupper($pakd['pasx_status'] ?? 'CREATED');
-    $statusColor = '#7c3aed';
-    $iconClass   = 'fa-cog fa-spin';
+    if (($pakd['pasx_status'] ?? '') === 'rejected') {
+        $statusLabel = 'Đã Reject PASX · Đang chờ Profile rebuild';
+        $statusColor = '#b45309'; // amber-700
+        $iconClass   = 'fa-clock';
+    } else {
+        $statusLabel = 'Đang làm PASX · ' . strtoupper($pakd['pasx_status'] ?? 'CREATED');
+        $statusColor = '#7c3aed';
+        $iconClass   = 'fa-cog fa-spin';
+    }
 }
 
 function getProjectTypeIcon($type) {
@@ -1522,6 +1528,31 @@ function getProjectTypeIcon($type) {
             });
         }
 
+        // ── Update status banner dynamically (không cần F5) ──
+        function updateStatusBanner(label, color, iconCls) {
+            const banner = document.querySelector('.status-banner');
+            if (!banner) return;
+            banner.style.background  = color;
+            banner.style.boxShadow   = '0 2px 8px ' + color + '55';
+            const icon = banner.querySelector('.sb-icon i');
+            if (icon) icon.className = 'fas ' + iconCls;
+            // Cập nhật text node đầu tiên trong .sb-text (trước <span class="sb-sep">)
+            const sbText = banner.querySelector('.sb-text');
+            if (sbText) {
+                // Tìm và thay text node đầu
+                for (const node of sbText.childNodes) {
+                    if (node.nodeType === Node.TEXT_NODE && node.textContent.trim()) {
+                        node.textContent = label + ' ';
+                        break;
+                    }
+                }
+                // Nếu không có text node thì prepend
+                if (![...sbText.childNodes].some(n => n.nodeType === Node.TEXT_NODE && n.textContent.trim())) {
+                    sbText.insertBefore(document.createTextNode(label + ' '), sbText.firstChild);
+                }
+            }
+        }
+
         // ── Change Request helpers ──
         function escHtml(s) {
             return String(s)
@@ -1685,11 +1716,13 @@ function getProjectTypeIcon($type) {
                 document.getElementById('reject-dialog-overlay')?.remove();
                 if (data.ok) {
                     showToast(data.msg, 'success');
-                    // Cập nhật lại action buttons
+                    // Cập nhật action buttons
                     const container = document.getElementById('pasx-action-btns');
                     if (container) {
-                        container.innerHTML = '<span style="font-size:12px;color:#dc2626;font-weight:500;"><i class="fas fa-times-circle"></i> Đã Reject — đang chờ Profile rebuild</span>';
+                        container.innerHTML = '<span style="font-size:12px;color:#b45309;font-weight:500;"><i class="fas fa-clock"></i> Đã Reject — đang chờ Profile rebuild</span>';
                     }
+                    // Cập nhật status banner ngay lập tức
+                    updateStatusBanner('Đã Reject PASX · Đang chờ Profile rebuild', '#b45309', 'fa-clock');
                 } else {
                     showToast(data.msg || 'Có lỗi xảy ra', 'error');
                     btn.disabled = false;
