@@ -1060,7 +1060,11 @@ function getProjectTypeIcon($type) {
                                 <td class="td-rate"><?= pct($fin_prod_cost, $fin_rev_net) ?>%</td>
                                 <td class="td-amount"><?= formatVND($fin_prod_cost) ?></td>
                                 <td class="td-ccy">VND</td>
-                                <td class="td-action"></td>
+                                <td class="td-action">
+                                    <button class="btn-pasx-history" onclick="openPasxHistory()" title="Review lịch sử từ ArrowHitech Profile">
+                                        <i class="fas fa-eye"></i>
+                                    </button>
+                                </td>
                             </tr>
                             <tr class="row-detail row-lock">
                                 <td class="td-stt">4.1.1</td>
