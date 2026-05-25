@@ -24,6 +24,9 @@ $conn->query("CREATE TABLE IF NOT EXISTS pasx_webhook_logs (
     received_at   DATETIME DEFAULT CURRENT_TIMESTAMP
 )");
 
+// Thêm cột opp_id vào log table nếu chưa có
+try { $conn->query("ALTER TABLE pasx_webhook_logs ADD COLUMN opp_id VARCHAR(64) DEFAULT NULL AFTER pakd_id"); } catch (\Throwable $e) {}
+
 $raw_body = file_get_contents('php://input');
 
 // ── Xác thực Webhook Secret ──
