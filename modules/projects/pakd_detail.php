@@ -217,25 +217,27 @@ function pct($val, $base, $dec = 2) {
 }
 
 // Financial table calculations
-$fin_rev_gross   = (float)($pakd['revenue']     ?? 0);
-$fin_deductions  = 0;
-$fin_rev_net     = $fin_rev_gross - $fin_deductions;
-$fin_human_cost  = (float)($fin_saved['human_cost']    ?? 0); // cập nhật từ ArrowHitech callback
-$fin_overtime    = (float)($fin_saved['overtime_cost'] ?? 0); // cập nhật từ ArrowHitech callback
+$fin_rev_gross    = (float)($pakd['revenue'] ?? 0);
+$fin_human_cost   = (float)($fin_saved['human_cost']    ?? 0); // cập nhật từ ArrowHitech callback
+$fin_overtime     = (float)($fin_saved['overtime_cost'] ?? 0); // cập nhật từ ArrowHitech callback
+// Dùng rev_net đã lưu từ JS (doanh thu thuần sau giảm trừ); fallback về revenue gross
+$fin_rev_net      = !empty($fin_saved['rev_net']) ? (float)$fin_saved['rev_net'] : $fin_rev_gross;
 // Nếu đã nhận được data từ callback thì dùng tổng human+overtime, không thì dùng pasx_value
-$pasx_has_data   = ($fin_human_cost > 0 || $fin_overtime > 0);
-$fin_prod_cost   = $pasx_has_data ? ($fin_human_cost + $fin_overtime) : (float)($pakd['pasx_value'] ?? 0);
-$fin_sales_pct   = 2.0;
-$fin_sales_comm  = (int)round($fin_rev_net * $fin_sales_pct / 100);
+$pasx_has_data    = ($fin_human_cost > 0 || $fin_overtime > 0);
+$fin_prod_cost    = $pasx_has_data ? ($fin_human_cost + $fin_overtime) : (float)($pakd['pasx_value'] ?? 0);
+$fin_sales_pct    = 2.0;
+$fin_sales_comm   = (int)round($fin_rev_net * $fin_sales_pct / 100);
 $fin_presales_pct = 0.0;
-$fin_mkt_pct     = 0.0;
-$fin_sales_total = $fin_sales_comm;
-$fin_mgmt_pct    = 12.0;
-$fin_mgmt        = (int)round($fin_rev_net * $fin_mgmt_pct / 100);
-$fin_other_cost  = 0;
-$fin_total_cost  = $fin_prod_cost + $fin_sales_total + $fin_mgmt + $fin_other_cost;
-$fin_gross_profit = $fin_rev_net - $fin_total_cost;
-$fin_margin_pct  = $fin_rev_net > 0 ? ($fin_gross_profit / $fin_rev_net * 100) : 0;
+$fin_mkt_pct      = 0.0;
+$fin_sales_total  = $fin_sales_comm;
+$fin_mgmt_pct     = 12.0;
+$fin_mgmt         = (int)round($fin_rev_net * $fin_mgmt_pct / 100);
+$fin_other_cost   = 0;
+$fin_total_cost   = $fin_prod_cost + $fin_sales_total + $fin_mgmt + $fin_other_cost;
+// Dùng gross_profit đã lưu từ DB (JS tính đủ tất cả các field nên chính xác hơn)
+$fin_gross_profit_db = (float)($pakd['gross_profit'] ?? 0);
+$fin_gross_profit    = $fin_gross_profit_db != 0 ? $fin_gross_profit_db : ($fin_rev_net - $fin_total_cost);
+$fin_margin_pct      = $fin_rev_net > 0 ? ($fin_gross_profit / $fin_rev_net * 100) : 0;
 
 $statusLabels = [
     'draft' => 'Nháp',
@@ -1149,6 +1151,7 @@ function getProjectTypeIcon($type) {
                 r43_pct:     parseFloat(el('r43-pct')?.value) || 0,
                 other_costs: Array.from(document.querySelectorAll('.other-cost-cell input'))
                                   .map(i => fin_parse(i.value)),
+                rev_net:     fin_parse(el('r3-amt')?.textContent), // doanh thu thuần (sau giảm trừ)
             };
             fetch('/projects/pakd/edit?id=' + PAKD_ID, {
                 method: 'POST',
