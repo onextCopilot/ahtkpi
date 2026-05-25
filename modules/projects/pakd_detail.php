@@ -1692,28 +1692,41 @@ function getProjectTypeIcon($type) {
         }
         .btn-pasx-history:hover { color: #6366f1; }
 
-        /* History modal */
+        /* History sidebar/drawer */
         .pasx-history-overlay {
             display: none; position: fixed; inset: 0;
-            background: rgba(0,0,0,.45); z-index: 1000;
-            align-items: center; justify-content: center;
+            background: rgba(15,23,42,.35); z-index: 1000;
         }
-        .pasx-history-overlay.open { display: flex; }
+        .pasx-history-overlay.open { display: block; }
+
         .pasx-history-modal {
-            background: #fff; border-radius: 12px; width: 720px; max-width: 95vw;
-            max-height: 80vh; display: flex; flex-direction: column;
-            box-shadow: 0 20px 60px rgba(0,0,0,.25);
+            position: fixed; top: 0; right: 0;
+            width: 50%; height: 100vh;
+            background: #fff;
+            box-shadow: -8px 0 40px rgba(15,23,42,.18);
+            display: flex; flex-direction: column;
+            transform: translateX(100%);
+            transition: transform .28s cubic-bezier(.4,0,.2,1);
+            border-radius: 0;
         }
+        .pasx-history-overlay.open .pasx-history-modal {
+            transform: translateX(0);
+        }
+
         .phm-header {
             display: flex; align-items: center; justify-content: space-between;
-            padding: 1.25rem 1.5rem; border-bottom: 1px solid #e2e8f0;
+            padding: 1.1rem 1.5rem; border-bottom: 1px solid #e2e8f0;
+            flex-shrink: 0; background: #fff;
+            position: sticky; top: 0; z-index: 1;
         }
-        .phm-header h3 { margin: 0; font-size: 1rem; font-weight: 600; color: #0f172a; }
+        .phm-header h3 { margin: 0; font-size: .95rem; font-weight: 600; color: #0f172a; }
         .phm-close {
-            background: none; border: none; cursor: pointer; color: #64748b;
-            font-size: 1.2rem; padding: 4px; line-height: 1;
+            display: flex; align-items: center; justify-content: center;
+            width: 30px; height: 30px; border-radius: 6px;
+            background: none; border: 1px solid #e2e8f0; cursor: pointer;
+            color: #64748b; font-size: 1rem; line-height: 1; transition: background .15s;
         }
-        .phm-close:hover { color: #0f172a; }
+        .phm-close:hover { background: #f1f5f9; color: #0f172a; }
         .phm-body { padding: 1rem 1.5rem; overflow-y: auto; flex: 1; }
         .phm-loading { text-align: center; padding: 2rem; color: #94a3b8; font-size: .9rem; }
         .phm-empty  { text-align: center; padding: 2rem; color: #94a3b8; font-size: .875rem; }
@@ -1800,9 +1813,9 @@ function getProjectTypeIcon($type) {
         .btn-resend-pasx:disabled { opacity: .55; cursor: not-allowed; }
     </style>
 
-<!-- PASX History Modal -->
+<!-- PASX History Sidebar -->
 <div class="pasx-history-overlay" id="pasxHistoryOverlay" onclick="closePasxHistory(event)">
-    <div class="pasx-history-modal" onclick="event.stopPropagation()">
+    <div class="pasx-history-modal">
         <div class="phm-header">
             <h3><i class="fas fa-history" style="color:#6366f1;margin-right:8px;"></i>Lịch sử cập nhật từ ArrowHitech Profile</h3>
             <button class="phm-close" onclick="closePasxHistory()">&times;</button>
@@ -1820,8 +1833,11 @@ function openPasxHistory() {
 }
 
 function closePasxHistory(e) {
-    if (!e || e.target === document.getElementById('pasxHistoryOverlay')) {
-        document.getElementById('pasxHistoryOverlay').classList.remove('open');
+    const overlay = document.getElementById('pasxHistoryOverlay');
+    const modal   = overlay?.querySelector('.pasx-history-modal');
+    // Đóng khi click backdrop (overlay) chứ không phải sidebar
+    if (!e || (e.target === overlay && modal && !modal.contains(e.target))) {
+        overlay.classList.remove('open');
     }
 }
 
