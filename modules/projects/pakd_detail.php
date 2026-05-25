@@ -666,6 +666,12 @@ function getProjectTypeIcon($type) {
         /* Row type: main category */
         .fin-table tr.row-cat { background: #f1f5f9; }
         .fin-table tr.row-cat td { font-weight: 600; padding: 9px 12px; }
+        /* Row 1: Doanh thu — xanh lá nhạt */
+        .fin-table tr.row-rev { background: #dcfce7; }
+        .fin-table tr.row-rev td { color: #166534; }
+        /* Row 4: Tổng chi phí — cam nhạt */
+        .fin-table tr.row-cost { background: #ffedd5; }
+        .fin-table tr.row-cost td { color: #9a3412; }
 
         /* Row type: computed formula */
         .fin-table tr.row-formula { background: #fff; }
@@ -688,7 +694,6 @@ function getProjectTypeIcon($type) {
         .fin-table tr.row-section { background: #eef4fb; }
         .fin-table tr.row-section td { font-weight: 500; color: #334155; }
         .fin-table tr.row-section .td-stt { font-weight: 600 !important; color: #475569; }
-        .fin-table tr.row-section td.ind-1 { border-left: 3px solid #93c5fd; }
 
         /* Cell type helpers */
         .td-stt    { text-align: center; color: var(--lgray); font-size: 11px; font-weight: 400 !important; }
@@ -925,7 +930,7 @@ function getProjectTypeIcon($type) {
                         </thead>
                         <tbody>
                             <!-- 1. Doanh thu -->
-                            <tr class="row-cat">
+                            <tr class="row-cat row-rev">
                                 <td class="td-stt">1</td>
                                 <td>Doanh thu</td>
                                 <td></td>
@@ -1010,7 +1015,7 @@ function getProjectTypeIcon($type) {
                             </tr>
 
                             <!-- 4. Tổng chi phí -->
-                            <tr class="row-cat">
+                            <tr class="row-cat row-cost">
                                 <td class="td-stt">4</td>
                                 <td>Tổng chi phí <i class="fas fa-circle-info" style="color:var(--lgray);font-size:10px;"></i></td>
                                 <td></td>
