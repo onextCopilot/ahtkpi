@@ -355,12 +355,12 @@ $fin_rev_net      = !empty($fin_saved['rev_net']) ? (float)$fin_saved['rev_net']
 $pasx_has_data    = ($fin_human_cost > 0 || $fin_overtime > 0);
 $fin_prod_cost    = $pasx_has_data ? ($fin_human_cost + $fin_overtime) : (float)($pakd['pasx_value'] ?? 0);
 $fin_sales_pct    = 2.0;
-$fin_sales_comm   = (int)round($fin_rev_net * $fin_sales_pct / 100);
+$fin_sales_comm   = (int)round(max(0, $fin_rev_gross) * $fin_sales_pct / 100); // base = gross revenue
 $fin_presales_pct = 0.0;
 $fin_mkt_pct      = 0.0;
 $fin_sales_total  = $fin_sales_comm;
 $fin_mgmt_pct     = 12.0;
-$fin_mgmt         = (int)round($fin_rev_net * $fin_mgmt_pct / 100);
+$fin_mgmt         = (int)round(max(0, $fin_rev_net) * $fin_mgmt_pct / 100);
 $fin_other_cost   = 0;
 $fin_total_cost   = $fin_prod_cost + $fin_sales_total + $fin_mgmt + $fin_other_cost;
 // Dùng gross_profit đã lưu từ DB (JS tính đủ tất cả các field nên chính xác hơn)
@@ -1117,8 +1117,8 @@ function getProjectTypeIcon($type) {
                             <tr class="row-detail">
                                 <td class="td-stt">4.2.1</td>
                                 <td class="ind-2"><input class="fin-input" value="Sales Commission"></td>
-                                <td class="td-desc"><input class="fin-input" value="2% doanh thu thuần"></td>
-                                <td class="td-rate" id="r421-rate"><?= number_format($fin_sales_pct, 2) ?>%</td>
+                                <td class="td-desc"><input class="fin-input" value="2% doanh thu"></td>
+                                <td class="td-rate" id="r421-rate"></td>
                                 <td class="td-amount">
                                     <div class="pct-wrap">
                                         <input type="number" class="pct-inp" id="r421-pct" value="<?= $fin_sales_pct ?>" min="0" max="100" step="0.1" oninput="fin_calc()">
@@ -1132,7 +1132,7 @@ function getProjectTypeIcon($type) {
                             <tr class="row-detail">
                                 <td class="td-stt">4.2.2</td>
                                 <td class="ind-2"><input class="fin-input" value="Presales Commission"></td>
-                                <td class="td-desc"><input class="fin-input" value="% doanh thu thuần"></td>
+                                <td class="td-desc"><input class="fin-input" value="% doanh thu"></td>
                                 <td class="td-rate" id="r422-rate"></td>
                                 <td class="td-amount">
                                     <div class="pct-wrap">
@@ -1147,7 +1147,7 @@ function getProjectTypeIcon($type) {
                             <tr class="row-detail">
                                 <td class="td-stt">4.2.3</td>
                                 <td class="ind-2"><input class="fin-input" value="MKT Commission"></td>
-                                <td class="td-desc"><input class="fin-input" value="% doanh thu thuần"></td>
+                                <td class="td-desc"><input class="fin-input" value="% doanh thu"></td>
                                 <td class="td-rate" id="r423-rate"></td>
                                 <td class="td-amount">
                                     <div class="pct-wrap">
@@ -1276,32 +1276,36 @@ function getProjectTypeIcon($type) {
             const revNet = revGross - deductions;
             document.getElementById('r3-amt').textContent = fin_fmt(revNet);
 
-            // ── Row 4.2: Sales commissions ──
+            // ── Row 4.2: Sales commissions (base = revGross, always ≥ 0) ──
             const p421 = parseFloat(document.getElementById('r421-pct').value) || 0;
             const p422 = parseFloat(document.getElementById('r422-pct').value) || 0;
             const p423 = parseFloat(document.getElementById('r423-pct').value) || 0;
-            const v421 = revNet * p421 / 100;
-            const v422 = revNet * p422 / 100;
-            const v423 = revNet * p423 / 100;
+            const v421 = Math.max(0, revGross * p421 / 100);
+            const v422 = Math.max(0, revGross * p422 / 100);
+            const v423 = Math.max(0, revGross * p423 / 100);
             const v424 = fin_parse(document.getElementById('r424-inp').value);
 
             document.getElementById('r421-res').textContent = '= ' + fin_fmt(v421);
             document.getElementById('r422-res').textContent = '= ' + fin_fmt(v422);
             document.getElementById('r423-res').textContent = '= ' + fin_fmt(v423);
-            document.getElementById('r421-rate').textContent = p421.toFixed(2) + '%';
 
             const salesTotal = v421 + v422 + v423 + v424;
             document.getElementById('r42-amt').textContent = fin_fmt(salesTotal);
 
-            // ── Row 4.3: Management ──
+            // ── Row 4.3: Management (% of revNet) ──
             const p43 = parseFloat(document.getElementById('r43-pct').value) || 0;
-            const v43 = revNet * p43 / 100;
+            const v43 = Math.max(0, revNet * p43 / 100);
             document.getElementById('r43-res').textContent = '= ' + fin_fmt(v43);
 
-            // ── Row 4.4: Other costs ──
+            // ── Row 4.4: Other costs — collect individual values first ──
             let otherTotal = 0;
+            const otherRows = []; // [{rateCell, val}] for rate update after totalCost
             document.querySelectorAll('.other-cost-cell input').forEach(function(inp) {
-                otherTotal += fin_parse(inp.value);
+                const val = fin_parse(inp.value);
+                otherTotal += val;
+                const row = inp.closest('tr');
+                const rateCell = row ? row.querySelector('.td-rate') : null;
+                otherRows.push({ rateCell, val });
             });
             document.getElementById('r44-amt').textContent = fin_fmt(otherTotal);
 
@@ -1311,17 +1315,26 @@ function getProjectTypeIcon($type) {
             document.getElementById('r4-rate').textContent = totalPct + '%';
             document.getElementById('r4-amt').textContent = fin_fmt(totalCost);
 
-            // ── Cost sub-row rates: % of totalCost, always ≥ 0 ──
+            // ── All cost sub-row rates: % of totalCost, always ≥ 0 ──
             const r41 = document.getElementById('r41-rate');
             if (r41) r41.textContent = costPct(FIN_PROD, totalCost);
             const r411 = document.getElementById('r411-rate');
             if (r411) r411.textContent = FIN_HUMAN > 0 ? costPct(FIN_HUMAN, totalCost) : '';
             const r412 = document.getElementById('r412-rate');
             if (r412) r412.textContent = FIN_OVERTIME > 0 ? costPct(FIN_OVERTIME, totalCost) : '';
+            // 4.2 sub-items: % of totalCost
+            document.getElementById('r421-rate').textContent = v421 > 0 ? costPct(v421, totalCost) : '';
+            document.getElementById('r422-rate').textContent = v422 > 0 ? costPct(v422, totalCost) : '';
+            document.getElementById('r423-rate').textContent = v423 > 0 ? costPct(v423, totalCost) : '';
+            // 4.2 total, 4.3, 4.4 totals
             document.getElementById('r42-rate').textContent = costPct(salesTotal, totalCost);
             document.getElementById('r43-rate').textContent = costPct(v43, totalCost);
-            const r44 = document.getElementById('r44-rate');
-            if (r44) r44.textContent = otherTotal > 0 ? costPct(otherTotal, totalCost) : '';
+            const r44el = document.getElementById('r44-rate');
+            if (r44el) r44el.textContent = otherTotal > 0 ? costPct(otherTotal, totalCost) : '';
+            // 4.4 sub-item rates
+            otherRows.forEach(function({ rateCell, val }) {
+                if (rateCell) rateCell.textContent = val > 0 ? costPct(val, totalCost) : '';
+            });
 
             // ── Row 5: Gross profit ──
             const grossProfit = revNet - totalCost;
