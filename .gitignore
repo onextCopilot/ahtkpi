@@ -1,5 +1,6 @@
 # Configuration files with sensitive data
 config/config.php
+config/arrowhitech_config.json
 
 # IDE and Editor files
 .vscode/
