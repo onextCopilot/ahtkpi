@@ -1696,8 +1696,10 @@ function getProjectTypeIcon($type) {
         .pasx-history-overlay {
             display: none; position: fixed; inset: 0;
             background: rgba(15,23,42,.35); z-index: 1000;
+            opacity: 0; transition: opacity .55s cubic-bezier(.25,.46,.45,.94);
         }
         .pasx-history-overlay.open { display: block; }
+        .pasx-history-overlay.open-active { opacity: 1; }
 
         .pasx-history-modal {
             position: fixed; top: 0; right: 0;
@@ -1706,7 +1708,7 @@ function getProjectTypeIcon($type) {
             box-shadow: -8px 0 40px rgba(15,23,42,.18);
             display: flex; flex-direction: column;
             transform: translateX(100%);
-            transition: transform .28s cubic-bezier(.4,0,.2,1);
+            transition: transform .55s cubic-bezier(.25,.46,.45,.94);
             border-radius: 0;
         }
         .pasx-history-overlay.open .pasx-history-modal {
@@ -1828,16 +1830,18 @@ function getProjectTypeIcon($type) {
 
 <script>
 function openPasxHistory() {
-    document.getElementById('pasxHistoryOverlay').classList.add('open');
+    const overlay = document.getElementById('pasxHistoryOverlay');
+    overlay.classList.add('open');
+    requestAnimationFrame(() => requestAnimationFrame(() => overlay.classList.add('open-active')));
     loadPasxHistory();
 }
 
 function closePasxHistory(e) {
     const overlay = document.getElementById('pasxHistoryOverlay');
     const modal   = overlay?.querySelector('.pasx-history-modal');
-    // Đóng khi click backdrop (overlay) chứ không phải sidebar
     if (!e || (e.target === overlay && modal && !modal.contains(e.target))) {
-        overlay.classList.remove('open');
+        overlay.classList.remove('open-active');
+        setTimeout(() => overlay.classList.remove('open'), 550);
     }
 }
 
