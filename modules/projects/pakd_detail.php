@@ -115,6 +115,63 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'save_
     exit;
 }
 
+// ── AJAX: Reject PASX ──
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'reject_pasx') {
+    header('Content-Type: application/json; charset=utf-8');
+    $pid    = (int)($_POST['id']     ?? 0);
+    $reason = trim($_POST['reason']  ?? '');
+    if (!$pid) { echo json_encode(['ok' => false, 'msg' => 'ID không hợp lệ']); exit; }
+
+    $configFile = __DIR__ . '/../../config/arrowhitech_config.json';
+    if (!file_exists($configFile)) { echo json_encode(['ok'=>false,'msg'=>'Chưa cấu hình ArrowHitech API']); exit; }
+    $cfg       = json_decode(file_get_contents($configFile), true);
+    $api_url   = rtrim($cfg['api_url']   ?? '', '/');
+    $api_token = $cfg['api_token']        ?? '';
+    if (!$api_url || !$api_token) { echo json_encode(['ok'=>false,'msg'=>'Thiếu URL hoặc Token trong cấu hình']); exit; }
+
+    $timestamp  = (int)(microtime(true) * 1000);
+    $request_id = sprintf('%04x%04x-%04x-%04x-%04x-%04x%04x%04x',
+        mt_rand(0,0xffff),mt_rand(0,0xffff),mt_rand(0,0xffff),
+        mt_rand(0,0x0fff)|0x4000, mt_rand(0,0x3fff)|0x8000,
+        mt_rand(0,0xffff),mt_rand(0,0xffff),mt_rand(0,0xffff));
+
+    $ch = curl_init($api_url . '/integrations/os/pakd/' . $pid . '/reject');
+    curl_setopt_array($ch, [
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_POST           => true,
+        CURLOPT_POSTFIELDS     => json_encode(['reason' => $reason]),
+        CURLOPT_HTTPHEADER     => [
+            'X-API-Key: '    . $api_token,
+            'X-Timestamp: '  . $timestamp,
+            'X-Request-Id: ' . $request_id,
+            'Content-Type: application/json',
+        ],
+        CURLOPT_SSL_VERIFYPEER => false,
+        CURLOPT_TIMEOUT        => 15,
+    ]);
+    $response  = curl_exec($ch);
+    $http_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    $curl_err  = curl_error($ch);
+    curl_close($ch);
+
+    if ($curl_err) { echo json_encode(['ok'=>false,'msg'=>'Lỗi kết nối: '.$curl_err]); exit; }
+
+    if ($http_code >= 200 && $http_code < 300) {
+        // Cập nhật pasx_status = rejected trong DB
+        $st = $conn->prepare("UPDATE pakd SET pasx_status='rejected' WHERE id=?");
+        $st->bind_param("i", $pid);
+        $st->execute();
+        $st->close();
+        echo json_encode(['ok'=>true,'msg'=>'Đã gửi yêu cầu Reject / Rebuild PASX thành công']);
+    } else {
+        $err     = json_decode($response, true);
+        $err_val = $err['message'] ?? $err['error'] ?? null;
+        if (is_array($err_val)) $err_val = json_encode($err_val, JSON_UNESCAPED_UNICODE);
+        echo json_encode(['ok'=>false,'msg'=>'API lỗi: '.($err_val ?? 'HTTP '.$http_code)]);
+    }
+    exit;
+}
+
 // ── AJAX: PASX History ──
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'get_pasx_history') {
     header('Content-Type: application/json; charset=utf-8');
@@ -1567,9 +1624,82 @@ function getProjectTypeIcon($type) {
         }
 
         function pasxRejectRebuild() {
-            if (!confirm('Bạn có chắc muốn Reject và yêu cầu rebuild PASX?')) return;
-            showToast('Đã gửi yêu cầu Reject / Rebuild PASX.', 'error');
-            // TODO: gọi API reject/rebuild
+            // Hiện dialog nhập lý do
+            const overlay = document.createElement('div');
+            overlay.id = 'reject-dialog-overlay';
+            overlay.style.cssText = 'position:fixed;inset:0;background:rgba(15,23,42,.45);z-index:2000;display:flex;align-items:center;justify-content:center;';
+            overlay.innerHTML = `
+                <div style="background:#fff;border-radius:12px;width:440px;max-width:95vw;box-shadow:0 20px 60px rgba(0,0,0,.25);overflow:hidden;">
+                    <div style="padding:18px 20px 14px;border-bottom:1px solid #e2e8f0;display:flex;align-items:center;gap:10px;">
+                        <div style="width:34px;height:34px;border-radius:8px;background:#fef2f2;display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+                            <i class="fas fa-redo" style="color:#dc2626;font-size:14px;"></i>
+                        </div>
+                        <div>
+                            <div style="font-weight:700;color:#0f172a;font-size:.95rem;">Reject / Rebuild PASX</div>
+                            <div style="font-size:.78rem;color:#64748b;margin-top:2px;">Yêu cầu hệ thống Profile làm lại Phương án sản xuất</div>
+                        </div>
+                    </div>
+                    <div style="padding:16px 20px;">
+                        <label style="display:block;font-size:.75rem;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px;">
+                            Lý do từ chối <span style="color:#dc2626;">*</span>
+                        </label>
+                        <textarea id="reject-reason-inp" rows="3" placeholder="Nhập lý do cụ thể để bên Profile biết cần điều chỉnh gì..."
+                            style="width:100%;border:1px solid #e2e8f0;border-radius:6px;padding:9px 11px;font-size:.85rem;font-family:inherit;color:#0f172a;resize:vertical;outline:none;box-sizing:border-box;"></textarea>
+                        <div id="reject-reason-err" style="display:none;color:#dc2626;font-size:.75rem;margin-top:4px;"><i class="fas fa-exclamation-circle"></i> Vui lòng nhập lý do</div>
+                    </div>
+                    <div style="padding:0 20px 18px;display:flex;justify-content:flex-end;gap:8px;">
+                        <button onclick="document.getElementById('reject-dialog-overlay').remove()"
+                            style="padding:7px 16px;border:1px solid #e2e8f0;border-radius:6px;background:#fff;color:#64748b;font-size:.85rem;cursor:pointer;">
+                            Huỷ
+                        </button>
+                        <button id="reject-confirm-btn" onclick="submitPasxReject()"
+                            style="padding:7px 16px;border:none;border-radius:6px;background:#dc2626;color:#fff;font-size:.85rem;font-weight:600;cursor:pointer;display:flex;align-items:center;gap:6px;">
+                            <i class="fas fa-redo"></i> Xác nhận Reject
+                        </button>
+                    </div>
+                </div>`;
+            document.body.appendChild(overlay);
+            overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove(); });
+            setTimeout(() => document.getElementById('reject-reason-inp')?.focus(), 50);
+        }
+
+        function submitPasxReject() {
+            const reason = (document.getElementById('reject-reason-inp')?.value || '').trim();
+            const errEl  = document.getElementById('reject-reason-err');
+            if (!reason) {
+                errEl.style.display = 'block';
+                document.getElementById('reject-reason-inp').style.borderColor = '#dc2626';
+                return;
+            }
+            const btn = document.getElementById('reject-confirm-btn');
+            btn.disabled = true;
+            btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Đang gửi...';
+
+            fetch('/projects/pakd/edit?id=' + PAKD_ID, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                body: new URLSearchParams({ action: 'reject_pasx', id: PAKD_ID, reason })
+            })
+            .then(r => r.json())
+            .then(data => {
+                document.getElementById('reject-dialog-overlay')?.remove();
+                if (data.ok) {
+                    showToast(data.msg, 'success');
+                    // Cập nhật lại action buttons
+                    const container = document.getElementById('pasx-action-btns');
+                    if (container) {
+                        container.innerHTML = '<span style="font-size:12px;color:#dc2626;font-weight:500;"><i class="fas fa-times-circle"></i> Đã Reject — đang chờ Profile rebuild</span>';
+                    }
+                } else {
+                    showToast(data.msg || 'Có lỗi xảy ra', 'error');
+                    btn.disabled = false;
+                    btn.innerHTML = '<i class="fas fa-redo"></i> Xác nhận Reject';
+                }
+            })
+            .catch(err => {
+                showToast('Lỗi kết nối: ' + err.message, 'error');
+                document.getElementById('reject-dialog-overlay')?.remove();
+            });
         }
     </script>
     <style>
