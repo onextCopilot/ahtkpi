@@ -1916,31 +1916,47 @@ function loadPasxHistory() {
             return `<span class="phm-badge phm-badge-ok">${s}</span>`;
         };
 
+        const buildPathHtml = (path, name) => {
+            const raw    = path || name || '—';
+            const parts  = raw.split('>').map(s => s.trim()).filter(Boolean);
+            if (parts.length <= 1) {
+                return `<div style="font-weight:600;color:#0f172a;">${parts[0] || '—'}</div>`;
+            }
+            return parts.map((part, i) => {
+                const isLast   = i === parts.length - 1;
+                const indent   = i * 14;
+                const arrow    = i > 0 ? '<span style="color:#cbd5e1;margin-right:5px;font-size:.7rem;">↳</span>' : '';
+                const style    = isLast
+                    ? `font-weight:600;color:#0f172a;`
+                    : `color:#94a3b8;font-size:.75rem;`;
+                return `<div style="padding-left:${indent}px;${style}line-height:1.5;">${arrow}${part}</div>`;
+            }).join('');
+        };
+
         const buildCostRows = (pasxCost) => {
             const active = (pasxCost || []).filter(c => (c.total || 0) > 0);
             if (!active.length) return '';
             const grandTotal = active.reduce((s, c) => s + (c.total || 0), 0);
             const rows = active.map(c => `
                 <tr style="background:#fff;">
-                    <td style="padding:6px 10px;font-weight:500;color:#0f172a;">${c.name || '—'}</td>
-                    <td style="padding:6px 10px;color:#64748b;font-size:.75rem;">${c.path || ''}</td>
-                    <td style="padding:6px 10px;text-align:right;color:#475569;">${fmtNum(c.unit)}${c.unitType ? ' <span style="font-size:.7rem;color:#94a3b8;">'+c.unitType+'</span>' : ''}</td>
-                    <td style="padding:6px 10px;text-align:right;color:#475569;">${fmtNum(c.amount)}</td>
-                    <td style="padding:6px 10px;text-align:right;font-weight:600;color:#1e40af;">${fmtNum(c.total)} ₫</td>
+                    <td style="padding:8px 12px;">${buildPathHtml(c.path, c.name)}</td>
+                    <td style="padding:8px 12px;text-align:right;color:#475569;white-space:nowrap;">${fmtNum(c.unit)}${c.unitType ? ' <span style="font-size:.7rem;color:#94a3b8;">'+c.unitType+'</span>' : ''}</td>
+                    <td style="padding:8px 12px;text-align:right;color:#475569;white-space:nowrap;">${fmtNum(c.amount)}</td>
+                    <td style="padding:8px 12px;text-align:right;font-weight:600;color:#1e40af;white-space:nowrap;">${fmtNum(c.total)} ₫</td>
                 </tr>`).join('');
+            const thStyle = 'padding:7px 12px;font-weight:600;color:#475569;font-size:.72rem;text-transform:uppercase;letter-spacing:.04em;white-space:nowrap;';
             return `
                 <table style="width:100%;border-collapse:collapse;font-size:.8rem;">
                     <thead><tr style="background:#f1f5f9;">
-                        <th style="padding:6px 10px;text-align:left;font-weight:600;color:#475569;font-size:.72rem;text-transform:uppercase;letter-spacing:.04em;">Hạng mục</th>
-                        <th style="padding:6px 10px;text-align:left;font-weight:600;color:#475569;font-size:.72rem;text-transform:uppercase;letter-spacing:.04em;">Path</th>
-                        <th style="padding:6px 10px;text-align:right;font-weight:600;color:#475569;font-size:.72rem;text-transform:uppercase;letter-spacing:.04em;">Đơn giá</th>
-                        <th style="padding:6px 10px;text-align:right;font-weight:600;color:#475569;font-size:.72rem;text-transform:uppercase;letter-spacing:.04em;">Số lượng</th>
-                        <th style="padding:6px 10px;text-align:right;font-weight:600;color:#475569;font-size:.72rem;text-transform:uppercase;letter-spacing:.04em;">Thành tiền</th>
+                        <th style="${thStyle}text-align:left;">Hạng mục / Path</th>
+                        <th style="${thStyle}text-align:right;">Đơn giá</th>
+                        <th style="${thStyle}text-align:right;">Số lượng</th>
+                        <th style="${thStyle}text-align:right;">Thành tiền</th>
                     </tr></thead>
                     <tbody>${rows}</tbody>
                     <tfoot><tr style="background:#f8fafc;border-top:2px solid #e2e8f0;">
-                        <td colspan="4" style="padding:7px 10px;text-align:right;font-weight:700;color:#0f172a;">Tổng cộng</td>
-                        <td style="padding:7px 10px;text-align:right;font-weight:700;color:#1d4ed8;">${fmtNum(grandTotal)} ₫</td>
+                        <td colspan="3" style="padding:8px 12px;text-align:right;font-weight:700;color:#0f172a;">Tổng cộng</td>
+                        <td style="padding:8px 12px;text-align:right;font-weight:700;color:#1d4ed8;white-space:nowrap;">${fmtNum(grandTotal)} ₫</td>
                     </tr></tfoot>
                 </table>`;
         };
