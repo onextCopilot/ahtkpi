@@ -983,10 +983,6 @@ function getProjectTypeIcon($type) {
                                                 <i class="fas fa-redo"></i> Resend
                                             </button>
                                         <?php endif; ?>
-                                        <span class="pasx-sent-badge">
-                                            PASX: <code><?= htmlspecialchars($pakd['pasx_id']) ?></code>
-                                            <span class="pasx-sent-at"><?= $pakd['pasx_requested_at'] ? date('d/m/Y H:i', strtotime($pakd['pasx_requested_at'])) : '' ?></span>
-                                        </span>
                                     <?php else: ?>
                                         <button id="btn-req-pasx"
                                                 class="btn-req-pasx"
@@ -1730,6 +1726,33 @@ function getProjectTypeIcon($type) {
         }
         .phm-close:hover { background: #f1f5f9; color: #0f172a; }
         .phm-body { padding: 1rem 1.5rem; overflow-y: auto; flex: 1; }
+
+        /* PASX ID info strip in sidebar header */
+        .phm-pasx-info {
+            display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+            padding: 5px 10px; border-radius: 6px;
+            background: #f1f5f9; border: 1px solid #e2e8f0;
+            font-size: .75rem;
+        }
+        .phm-pasx-label {
+            font-size: .68rem; font-weight: 700; color: #94a3b8;
+            text-transform: uppercase; letter-spacing: .05em;
+        }
+        .phm-pasx-code {
+            font-family: 'SFMono-Regular', Consolas, monospace;
+            font-size: .78rem; color: #4f46e5; font-weight: 600;
+            background: #ede9fe; padding: 1px 6px; border-radius: 4px;
+            letter-spacing: .02em;
+        }
+        .phm-pasx-at {
+            display: flex; align-items: center; gap: 4px;
+            color: #64748b; font-size: .73rem;
+        }
+        .phm-pasx-status {
+            padding: 1px 7px; border-radius: 10px; font-size: .7rem; font-weight: 700;
+            background: #f0fdf4; color: #16a34a; border: 1px solid #bbf7d0;
+            letter-spacing: .04em;
+        }
         .phm-loading { text-align: center; padding: 2rem; color: #94a3b8; font-size: .9rem; }
         .phm-empty  { text-align: center; padding: 2rem; color: #94a3b8; font-size: .875rem; }
         .phm-table  { width: 100%; border-collapse: collapse; font-size: .82rem; }
@@ -1819,8 +1842,24 @@ function getProjectTypeIcon($type) {
 <div class="pasx-history-overlay" id="pasxHistoryOverlay" onclick="closePasxHistory(event)">
     <div class="pasx-history-modal">
         <div class="phm-header">
-            <h3><i class="fas fa-history" style="color:#6366f1;margin-right:8px;"></i>Lịch sử cập nhật từ ArrowHitech Profile</h3>
-            <button class="phm-close" onclick="closePasxHistory()">&times;</button>
+            <div style="flex:1;min-width:0;">
+                <h3 style="margin:0 0 6px 0;">
+                    <i class="fas fa-history" style="color:#6366f1;margin-right:8px;"></i>Lịch sử cập nhật từ ArrowHitech Profile
+                </h3>
+                <?php if (!empty($pakd['pasx_id'])): ?>
+                <div class="phm-pasx-info">
+                    <span class="phm-pasx-label">PASX ID</span>
+                    <code class="phm-pasx-code"><?= htmlspecialchars($pakd['pasx_id']) ?></code>
+                    <?php if ($pakd['pasx_requested_at']): ?>
+                        <span class="phm-pasx-at"><i class="fas fa-clock" style="font-size:10px;"></i> <?= date('d/m/Y H:i', strtotime($pakd['pasx_requested_at'])) ?></span>
+                    <?php endif; ?>
+                    <?php if (!empty($pakd['pasx_status'])): ?>
+                        <span class="phm-pasx-status"><?= htmlspecialchars(strtoupper($pakd['pasx_status'])) ?></span>
+                    <?php endif; ?>
+                </div>
+                <?php endif; ?>
+            </div>
+            <button class="phm-close" onclick="closePasxHistory()" style="flex-shrink:0;margin-left:12px;">&times;</button>
         </div>
         <div class="phm-body" id="pasxHistoryBody">
             <div class="phm-loading"><i class="fas fa-spinner fa-spin"></i> Đang tải...</div>
