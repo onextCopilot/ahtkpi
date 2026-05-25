@@ -422,6 +422,30 @@ if ($res) {
                         </div>
                     </a>
 
+                    <!-- ArrowHitech API Module -->
+                    <a href="/settings/arrowhitech" class="setting-card" style="border-color: #f97316;">
+                        <div class="setting-icon" style="color: #f97316; background: #fff7ed;">
+                            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <rect x="2" y="3" width="20" height="14" rx="2"></rect>
+                                <path d="M8 21h8M12 17v4"></path>
+                                <path d="M7 8h.01M7 12h10M7 16h10"></path>
+                            </svg>
+                        </div>
+                        <div class="setting-info">
+                            <h3>ArrowHitech API</h3>
+                            <p>Cấu hình URL và Token để tích hợp ArrowHitech Profile API.</p>
+                        </div>
+                        <div class="setting-arrow" style="color: #f97316;">
+                            Configure API
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <line x1="5" y1="12" x2="19" y2="12"></line>
+                                <polyline points="12 5 19 12 12 19"></polyline>
+                            </svg>
+                        </div>
+                    </a>
+
                     <!-- Presale Prompts Management Module -->
                     <a href="/settings/presale-prompts" class="setting-card" style="border-color: #f59e0b;">
                         <div class="setting-icon" style="color: #f59e0b; background: #fef3c7;">

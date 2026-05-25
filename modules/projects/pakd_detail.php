@@ -10,6 +10,110 @@ $user_id = $_SESSION['user_id'];
 $role = $_SESSION['role'] ?? 'user';
 $pakd_id = isset($_GET['id']) ? (int)$_GET['id'] : 0;
 
+// ── AJAX: Request Production Plan ──
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_SERVER['CONTENT_TYPE'] ?? '') === 'application/json') {
+    header('Content-Type: application/json; charset=utf-8');
+    $body    = json_decode(file_get_contents('php://input'), true);
+    $pid     = (int)($body['pakdId'] ?? 0);
+
+    if (!$pid) { echo json_encode(['ok'=>false,'msg'=>'pakdId không hợp lệ']); exit; }
+
+    $configFile = __DIR__ . '/../../config/arrowhitech_config.json';
+    if (!file_exists($configFile)) { echo json_encode(['ok'=>false,'msg'=>'Chưa cấu hình ArrowHitech API']); exit; }
+    $cfg       = json_decode(file_get_contents($configFile), true);
+    $api_url   = rtrim($cfg['api_url']   ?? '', '/');
+    $api_token = $cfg['api_token'] ?? '';
+    if (!$api_url || !$api_token) { echo json_encode(['ok'=>false,'msg'=>'Thiếu URL hoặc Token trong cấu hình']); exit; }
+
+    $st = $conn->prepare("SELECT id, odoo_opp_id, department, division_names, opportunity_name, am_name, company_name, opp_value, project_type FROM pakd WHERE id=?");
+    $st->bind_param("i", $pid);
+    $st->execute();
+    $p = $st->get_result()->fetch_assoc();
+    $st->close();
+    if (!$p) { echo json_encode(['ok'=>false,'msg'=>'Không tìm thấy PAKD #'.$pid]); exit; }
+
+    $timestamp  = (int)(microtime(true) * 1000);
+    $request_id = sprintf('%04x%04x-%04x-%04x-%04x-%04x%04x%04x',
+        mt_rand(0,0xffff),mt_rand(0,0xffff),mt_rand(0,0xffff),
+        mt_rand(0,0x0fff)|0x4000, mt_rand(0,0x3fff)|0x8000,
+        mt_rand(0,0xffff),mt_rand(0,0xffff),mt_rand(0,0xffff));
+
+    $payload = [
+        'pakdId'         => $p['id'],
+        'oppId'          => $p['odoo_opp_id'],
+        'departmentName' => $p['division_names'],
+        'saleTeam'       => $p['department'],
+        'oppName'        => $p['opportunity_name'],
+        'amName'         => $p['am_name'],
+        'companyName'    => $p['company_name'],
+        'oppValue'       => (float)$p['opp_value'],
+        'projectType'    => strtolower($p['project_type'] ?? 'external'),
+    ];
+
+    $ch = curl_init($api_url . '/integrations/os/pakd-created');
+    curl_setopt_array($ch, [
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_POST           => true,
+        CURLOPT_POSTFIELDS     => json_encode($payload),
+        CURLOPT_HTTPHEADER     => [
+            'X-API-Key: '    . $api_token,
+            'X-Timestamp: '  . $timestamp,
+            'X-Request-Id: ' . $request_id,
+            'Content-Type: application/json',
+        ],
+        CURLOPT_SSL_VERIFYPEER => false,
+        CURLOPT_TIMEOUT        => 15,
+    ]);
+    $response  = curl_exec($ch);
+    $http_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    $curl_err  = curl_error($ch);
+
+    if ($curl_err) { echo json_encode(['ok'=>false,'msg'=>'Lỗi kết nối: '.$curl_err]); exit; }
+    if ($http_code >= 200 && $http_code < 300) {
+        $res  = json_decode($response, true);
+        $data = $res['data'] ?? [];
+        $pasx_id     = $data['pasxId']    ?? null;
+        $pasx_status = $data['status']    ?? null;
+        $idempotent  = !empty($data['idempotent']);
+
+        // Ensure columns exist (ignore duplicate column errors)
+        foreach ([
+            "ALTER TABLE pakd ADD COLUMN pasx_id VARCHAR(64) DEFAULT NULL",
+            "ALTER TABLE pakd ADD COLUMN pasx_status VARCHAR(32) DEFAULT NULL",
+            "ALTER TABLE pakd ADD COLUMN pasx_requested_at DATETIME DEFAULT NULL",
+        ] as $sql) { try { $conn->query($sql); } catch (Exception $e) {} }
+
+        // Save to DB
+        $st2 = $conn->prepare("UPDATE pakd SET pasx_id=?, pasx_status=?, pasx_requested_at=NOW() WHERE id=?");
+        $st2->bind_param("ssi", $pasx_id, $pasx_status, $pid);
+        $st2->execute();
+        $st2->close();
+
+        $msg = $idempotent ? 'Yêu cầu đã tồn tại (idempotent).' : 'Đã gửi yêu cầu Production Plan thành công!';
+        echo json_encode(['ok'=>true,'msg'=>$msg,'data'=>$res]);
+    } else {
+        $err = json_decode($response, true);
+        $err_val = $err['message'] ?? $err['error'] ?? null;
+        if (is_array($err_val)) $err_val = json_encode($err_val, JSON_UNESCAPED_UNICODE);
+        $err_msg = $err_val ?? ('HTTP ' . $http_code);
+        echo json_encode(['ok'=>false,'msg'=>'API lỗi: '.$err_msg,'http_code'=>$http_code,'raw'=>$err]);
+    }
+    exit;
+}
+
+// ── AJAX: Save Project Type ──
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'save_project_type') {
+    header('Content-Type: application/json; charset=utf-8');
+    $type = strtolower(trim($_POST['project_type'] ?? ''));
+    if (!in_array($type, ['internal', 'external'])) { echo json_encode(['ok'=>false,'msg'=>'Giá trị không hợp lệ']); exit; }
+    $st = $conn->prepare("UPDATE pakd SET project_type=? WHERE id=?");
+    $st->bind_param("si", $type, $pakd_id);
+    $ok = $st->execute();
+    $st->close();
+    echo json_encode(['ok'=>$ok]);
+    exit;
+}
+
 // ── AJAX Save Handler ──
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'save_pakd') {
     header('Content-Type: application/json; charset=utf-8');
@@ -191,7 +295,7 @@ function getProjectTypeIcon($type) {
             --gray: #64748b;
             --lgray: #94a3b8;
             --border: #e2e8f0;
-            --r-md: 8px;
+            --r-md: 4px;
         }
 
         /* Reset gradient from dashboard.css */
@@ -244,8 +348,8 @@ function getProjectTypeIcon($type) {
 
         /* ── Status Banner ── */
         .status-banner {
-            background: <?= $statusBg ?>;
-            border: 1px solid <?= $statusBorder ?>;
+            background: <?= $statusColor ?>;
+            border: none;
             border-radius: var(--r-md);
             padding: 10px 16px;
             display: flex;
@@ -254,20 +358,21 @@ function getProjectTypeIcon($type) {
             margin-bottom: 20px;
             font-size: 13px;
             font-weight: 500;
-            color: <?= $statusText ?>;
+            color: #fff;
+            box-shadow: 0 2px 8px <?= $statusColor ?>55;
         }
         .status-banner .sb-icon {
-            background: <?= $statusColor ?>; color: #fff;
+            background: rgba(255,255,255,0.2); color: #fff;
             width: 26px; height: 26px; border-radius: 5px;
             display: flex; align-items: center; justify-content: center;
             font-size: 13px; flex-shrink: 0;
         }
-        .sb-text { display: flex; align-items: center; gap: 7px; font-weight: 600; font-size: 13px; }
-        .sb-text .sb-sep { color: var(--gray); font-weight: 400; }
+        .sb-text { display: flex; align-items: center; gap: 7px; font-weight: 600; font-size: 13px; color: #fff; }
+        .sb-text .sb-sep { color: rgba(255,255,255,0.7); font-weight: 400; }
         .sb-badge {
             display: inline-flex; align-items: center; gap: 5px;
-            padding: 2px 8px; background: rgba(0,0,0,0.06);
-            border-radius: 4px; font-size: 12px; color: var(--slate); font-weight: 500;
+            padding: 2px 8px; background: rgba(255,255,255,0.2);
+            border-radius: 4px; font-size: 12px; color: #fff; font-weight: 500;
         }
 
         /* ── Actions Row ── */
@@ -423,7 +528,7 @@ function getProjectTypeIcon($type) {
         .td-rate   { text-align: right; color: var(--gray); white-space: nowrap; }
         .td-amount { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
         .td-ccy    { text-align: center; color: var(--lgray); font-size: 11px; }
-        .td-action { text-align: center; }
+        .td-action { text-align: center; overflow: visible; }
 
         /* Indentation */
         .ind-1 { padding-left: 20px !important; }
@@ -528,7 +633,10 @@ function getProjectTypeIcon($type) {
                 <div class="meta-item">
                     <div class="meta-label">Loại dự án</div>
                     <div class="meta-value">
-                        <i class="fas <?= getProjectTypeIcon($pakd['project_type']) ?>" style="color:var(--gray); margin-right:4px;"></i><?= htmlspecialchars($pakd['project_type']) ?>
+                        <select id="sel-project-type" class="project-type-select" onchange="saveProjectType(this.value)">
+                            <option value="external" <?= strtolower($pakd['project_type']) === 'external' ? 'selected' : '' ?>>🖥 External</option>
+                            <option value="internal" <?= strtolower($pakd['project_type']) === 'internal' ? 'selected' : '' ?>>🏢 Internal</option>
+                        </select>
                     </div>
                 </div>
                 <div class="meta-item">
@@ -718,7 +826,28 @@ function getProjectTypeIcon($type) {
                                     <i class="fas fa-lock" style="color:var(--lgray);font-size:9px;margin-left:4px;" title="Khóa – từ Phương án sản xuất"></i>
                                     <i class="fas fa-circle-info" style="color:var(--lgray);font-size:10px;margin-left:2px;"></i>
                                 </td>
-                                <td class="td-desc">Lấy thông tin từ Phương án sản xuất (locked)</td>
+                                <td class="td-desc">
+                                    Lấy thông tin từ Phương án sản xuất (locked)
+                                    <?php if (!empty($pakd['pasx_id'])): ?>
+                                        <span class="pasx-processing-label">
+                                            <i class="fas fa-clock"></i>
+                                            Processing...
+                                        </span>
+                                        <span class="pasx-sent-badge">
+                                            PASX: <code><?= htmlspecialchars($pakd['pasx_id']) ?></code>
+                                            <span class="pasx-sent-at"><?= $pakd['pasx_requested_at'] ? date('d/m/Y H:i', strtotime($pakd['pasx_requested_at'])) : '' ?></span>
+                                        </span>
+                                    <?php else: ?>
+                                        <button id="btn-req-pasx"
+                                                class="btn-req-pasx"
+                                                onclick="requestProductionPlan()"
+                                                title="Gửi yêu cầu tạo Phương án sản xuất">
+                                            <i class="fas fa-paper-plane"></i>
+                                            Request production plan
+                                        </button>
+                                        <span class="pasx-sent-badge" id="pasx-sent-badge" style="display:none"></span>
+                                    <?php endif; ?>
+                                </td>
                                 <td class="td-rate"><?= pct($fin_prod_cost, $fin_rev_net) ?>%</td>
                                 <td class="td-amount"><?= formatVND($fin_prod_cost) ?></td>
                                 <td class="td-ccy">VND</td>
@@ -727,7 +856,14 @@ function getProjectTypeIcon($type) {
                             <tr class="row-detail row-lock">
                                 <td class="td-stt">4.1.1</td>
                                 <td class="ind-2">Human Cost / Chi phí nhân công <i class="fas fa-circle-info" style="color:var(--lgray);font-size:10px;"></i></td>
-                                <td class="td-desc">Từ Phương án sản xuất</td>
+                                <td class="td-desc pasx-sub-desc">
+                                    Từ Phương án sản xuất
+                                    <?php if (!empty($pakd['pasx_id'])): ?>
+                                        <span class="pasx-processing-label">
+                                            <i class="fas fa-clock"></i> Processing...
+                                        </span>
+                                    <?php endif; ?>
+                                </td>
                                 <td class="td-rate"><?= $fin_prod_cost > 0 ? pct($fin_human_cost, $fin_rev_net) . '%' : '' ?></td>
                                 <td class="td-amount"><?= $fin_human_cost > 0 ? formatVND($fin_human_cost) : '' ?></td>
                                 <td class="td-ccy">VND</td>
@@ -736,7 +872,14 @@ function getProjectTypeIcon($type) {
                             <tr class="row-detail row-lock">
                                 <td class="td-stt">4.1.2</td>
                                 <td class="ind-2">Chi phí làm việc ngoài giờ / Overtime cost <i class="fas fa-circle-info" style="color:var(--lgray);font-size:10px;"></i></td>
-                                <td class="td-desc">Từ Phương án sản xuất</td>
+                                <td class="td-desc pasx-sub-desc">
+                                    Từ Phương án sản xuất
+                                    <?php if (!empty($pakd['pasx_id'])): ?>
+                                        <span class="pasx-processing-label">
+                                            <i class="fas fa-clock"></i> Processing...
+                                        </span>
+                                    <?php endif; ?>
+                                </td>
                                 <td class="td-rate"><?= $fin_prod_cost > 0 ? pct($fin_overtime, $fin_rev_net) . '%' : '' ?></td>
                                 <td class="td-amount"><?= $fin_overtime > 0 ? formatVND($fin_overtime) : '' ?></td>
                                 <td class="td-ccy">VND</td>
@@ -1036,6 +1179,164 @@ function getProjectTypeIcon($type) {
             });
             fin_calc();
         });
+
+        // ── Save Project Type ──
+        function saveProjectType(val) {
+            fetch('/projects/pakd/edit?id=<?= (int)$pakd['id'] ?>', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                body: 'action=save_project_type&project_type=' + encodeURIComponent(val)
+            })
+            .then(r => r.json())
+            .then(d => { if (d.ok) showToast('Đã lưu loại dự án: ' + val, 'success'); });
+        }
+
+        // ── Request Production Plan ──
+        function requestProductionPlan() {
+            const btn = document.getElementById('btn-req-pasx');
+            if (!btn || btn.disabled) return;
+
+            btn.disabled = true;
+            btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Đang gửi...';
+
+            fetch('/projects/pakd/edit?id=<?= (int)$pakd['id'] ?>', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ pakdId: <?= (int)$pakd['id'] ?> })
+            })
+            .then(r => r.json())
+            .then(data => {
+                if (data.ok) {
+                    showToast(data.msg, 'success');
+                    const pasxId = data.data?.data?.pasxId ?? '';
+                    const now = new Date();
+                    const fmt = now.toLocaleDateString('vi-VN',{day:'2-digit',month:'2-digit',year:'numeric'})
+                              + ' ' + now.toLocaleTimeString('vi-VN',{hour:'2-digit',minute:'2-digit'});
+                    // Replace button with Processing label + badge
+                    btn.outerHTML = `
+                        <span class="pasx-processing-label">
+                            <i class="fas fa-clock"></i> Processing...
+                        </span>
+                        <span class="pasx-sent-badge" style="display:inline-flex">
+                            PASX: <code>${pasxId}</code>
+                            <span class="pasx-sent-at">${fmt}</span>
+                        </span>`;
+                    // Add Processing label to 4.1.1 and 4.1.2
+                    document.querySelectorAll('.pasx-sub-desc').forEach(el => {
+                        el.insertAdjacentHTML('beforeend', `<span class="pasx-processing-label"><i class="fas fa-clock"></i> Processing...</span>`);
+                    });
+                } else {
+                    showToast(data.msg || 'Có lỗi xảy ra', 'error');
+                    btn.disabled = false;
+                    btn.innerHTML = '<i class="fas fa-paper-plane"></i> Request production plan';
+                }
+            })
+            .catch(err => {
+                showToast('Lỗi kết nối: ' + err.message, 'error');
+                btn.disabled = false;
+                btn.innerHTML = '<i class="fas fa-paper-plane"></i> Request production plan';
+            });
+        }
+
+        function showToast(msg, type) {
+            const existing = document.getElementById('pasx-toast');
+            if (existing) existing.remove();
+
+            const toast = document.createElement('div');
+            toast.id = 'pasx-toast';
+            toast.style.cssText = [
+                'position:fixed', 'bottom:24px', 'right:24px', 'z-index:9999',
+                'padding:12px 20px', 'border-radius:8px', 'font-size:14px',
+                'font-weight:500', 'box-shadow:0 4px 12px rgba(0,0,0,.15)',
+                'display:flex', 'align-items:center', 'gap:10px',
+                'max-width:420px', 'animation:toastIn .25s ease',
+                type === 'success'
+                    ? 'background:#f0fdf4;color:#166534;border:1px solid #bbf7d0'
+                    : 'background:#fef2f2;color:#991b1b;border:1px solid #fecaca'
+            ].join(';');
+
+            const icon = type === 'success'
+                ? '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>'
+                : '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>';
+
+            toast.innerHTML = icon + msg;
+            document.body.appendChild(toast);
+            setTimeout(() => { toast.style.opacity = '0'; toast.style.transition = 'opacity .3s'; setTimeout(() => toast.remove(), 300); }, 4000);
+        }
     </script>
+    <style>
+        @keyframes toastIn { from { transform: translateY(16px); opacity: 0; } to { transform: none; opacity: 1; } }
+
+        .pasx-processing-label {
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            margin-left: 10px;
+            padding: 2px 8px;
+            background: #fefce8;
+            border: 1px solid #fde047;
+            border-radius: 4px;
+            font-size: 11px;
+            font-weight: 500;
+            color: #a16207;
+        }
+        .pasx-processing-label i { font-size: 10px; }
+
+        .project-type-select {
+            padding: 3px 8px;
+            border: 1px solid #cbd5e1;
+            border-radius: 4px;
+            font-size: 13px;
+            color: #334155;
+            background: #fff;
+            cursor: pointer;
+            outline: none;
+        }
+        .project-type-select:focus { border-color: #3b82f6; }
+
+        .pasx-sent-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            margin-left: 10px;
+            padding: 2px 8px;
+            background: #f0fdf4;
+            border: 1px solid #bbf7d0;
+            border-radius: 4px;
+            font-size: 11px;
+            color: #15803d;
+            font-weight: 500;
+        }
+        .pasx-sent-badge i { color: #16a34a; }
+        .pasx-sent-badge code {
+            font-family: monospace;
+            font-size: 11px;
+            color: #166534;
+            background: none;
+        }
+        .pasx-sent-badge .pasx-sent-at {
+            color: #6b7280;
+            font-weight: 400;
+        }
+
+        .btn-req-pasx {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            margin-left: 16px;
+            padding: 4px 12px;
+            background: #0ea5e9;
+            color: #fff;
+            border: none;
+            border-radius: 6px;
+            font-size: 12px;
+            font-weight: 500;
+            cursor: pointer;
+            white-space: nowrap;
+            transition: background .2s;
+        }
+        .btn-req-pasx:hover:not(:disabled) { background: #0284c7; }
+        .btn-req-pasx:disabled { opacity: .55; cursor: not-allowed; }
+    </style>
 </body>
 </html>
