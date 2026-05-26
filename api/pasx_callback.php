@@ -71,15 +71,15 @@ $human_cost           = isset($data['humanCost'])    ? (float)$data['humanCost']
 $overtime             = isset($data['overtimeCost']) ? (float)$data['overtimeCost'] : null;
 $pasx_cost            = (isset($data['pasxCost']) && is_array($data['pasxCost'])) ? $data['pasxCost'] : null;
 $pakd_id_from_payload = isset($data['pakdId'])       ? (int)$data['pakdId']         : null;
-// Ghi chú từ Profile (nhiều field name có thể dùng)
-$pasx_note            = $data['note'] ?? $data['message'] ?? $data['comment'] ?? $data['notes'] ?? null;
+// Ghi chú từ Profile
+$pasx_note            = $data['resubmitNote'] ?? $data['note'] ?? $data['message'] ?? null;
 
 // ── Parse _meta ──
 $meta         = isset($data['_meta']) && is_array($data['_meta']) ? $data['_meta'] : null;
 $meta_opp_id  = $meta['oppId']                                    ?? null;   // oppId trong meta
 $submitted_by = $meta['submittedBy']['fullName']                  ?? null;
-// Ghi chú từ _meta (fallback nếu top-level không có)
-if (!$pasx_note) $pasx_note = $meta['note'] ?? $meta['message'] ?? $meta['comment'] ?? null;
+// Ghi chú từ _meta.resubmitNote (field chính thức của Profile)
+if (!$pasx_note && $meta) $pasx_note = $meta['resubmitNote'] ?? $meta['note'] ?? null;
 $submitted_at = null;
 if (!empty($meta['submittedAt'])) {
     try {
