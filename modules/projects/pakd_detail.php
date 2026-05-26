@@ -246,6 +246,72 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'get_c
         }
     } catch (\Throwable $e) {}
 
+    // ── Gửi email cho từng CEO Approver ──────────────────────────────────────
+    if ($ok) {
+        try {
+            require_once __DIR__ . '/../includes/SimpleMailer.php';
+            $smtp = [];
+            $smtpRes = $conn->query("SELECT setting_key, setting_value FROM system_settings WHERE setting_key LIKE 'smtp_%'");
+            if ($smtpRes) while ($sr = $smtpRes->fetch_assoc()) $smtp[$sr['setting_key']] = $sr['setting_value'];
+
+            if (!empty($smtp['smtp_host']) && !empty($smtp['smtp_user']) && !empty($smtp['smtp_pass'])) {
+                // Lấy thông tin pakd + margin
+                $pe = $conn->prepare("SELECT opportunity_name, company_name, am_name, revenue, gross_profit FROM pakd WHERE id=? LIMIT 1");
+                $pe->bind_param("i", $pid); $pe->execute();
+                $pkInfo = $pe->get_result()->fetch_assoc(); $pe->close();
+                $margin = ($pkInfo['revenue'] > 0) ? round($pkInfo['gross_profit'] / $pkInfo['revenue'] * 100, 1) : 0;
+                $detailUrl = (isset($_SERVER['HTTPS']) ? 'https' : 'http') . '://' . ($_SERVER['HTTP_HOST'] ?? 'localhost') . '/projects/pakd/edit?id=' . $pid;
+                $reviewUrl = (isset($_SERVER['HTTPS']) ? 'https' : 'http') . '://' . ($_SERVER['HTTP_HOST'] ?? 'localhost') . '/projects/ceo-review';
+
+                // Lấy email của từng CEO Approver
+                if ($ceoIds) {
+                    $inStr = implode(',', $ceoIds);
+                    $emailRes = $conn->query("SELECT full_name, email FROM users WHERE id IN ($inStr) AND email IS NOT NULL AND email != ''");
+                } else {
+                    $emailRes = $conn->query("SELECT full_name, email FROM users WHERE role='admin' AND email IS NOT NULL AND email != '' LIMIT 10");
+                }
+
+                $mailer = new SimpleMailer(
+                    $smtp['smtp_host'],
+                    (int)($smtp['smtp_port'] ?? 587),
+                    $smtp['smtp_user'],
+                    $smtp['smtp_pass']
+                );
+                $fromName = $smtp['smtp_from_name'] ?? 'AHT KPI System';
+                $subject  = '[AHT KPI] Yêu cầu phê duyệt PASX — ' . ($pkInfo['opportunity_name'] ?? 'PAKD #'.$pid);
+
+                $emailBody = '
+<div style="font-family:Inter,Arial,sans-serif;max-width:560px;margin:0 auto;background:#f8fafc;border-radius:12px;overflow:hidden;">
+  <div style="background:linear-gradient(135deg,#d97706,#b45309);padding:24px 28px;color:white;">
+    <div style="font-size:18px;font-weight:700;margin-bottom:4px;">📋 Yêu cầu phê duyệt PASX</div>
+    <div style="font-size:13px;opacity:.85;">Cần CEO xem xét và phê duyệt</div>
+  </div>
+  <div style="background:white;padding:24px 28px;">
+    <table style="width:100%;border-collapse:collapse;font-size:13px;color:#1e293b;">
+      <tr><td style="padding:8px 0;color:#64748b;width:140px;">Opportunity</td><td style="padding:8px 0;font-weight:600;">'.htmlspecialchars($pkInfo['opportunity_name'] ?? '—').'</td></tr>
+      <tr><td style="padding:8px 0;color:#64748b;border-top:1px solid #f1f5f9;">Khách hàng</td><td style="padding:8px 0;border-top:1px solid #f1f5f9;">'.htmlspecialchars($pkInfo['company_name'] ?? '—').'</td></tr>
+      <tr><td style="padding:8px 0;color:#64748b;border-top:1px solid #f1f5f9;">AM / Sales</td><td style="padding:8px 0;border-top:1px solid #f1f5f9;">'.htmlspecialchars($pkInfo['am_name'] ?? '—').'</td></tr>
+      <tr><td style="padding:8px 0;color:#64748b;border-top:1px solid #f1f5f9;">Margin</td><td style="padding:8px 0;border-top:1px solid #f1f5f9;font-weight:700;color:'.($margin>=20?'#16a34a':($margin>=10?'#d97706':'#dc2626')).'">'.$margin.'%</td></tr>
+    </table>
+    <div style="margin-top:20px;display:flex;gap:10px;">
+      <a href="'.$reviewUrl.'" style="display:inline-block;padding:10px 20px;background:#d97706;color:white;border-radius:8px;text-decoration:none;font-weight:600;font-size:13px;">Xem danh sách chờ duyệt</a>
+      <a href="'.$detailUrl.'" style="display:inline-block;padding:10px 20px;background:#f1f5f9;color:#1e293b;border-radius:8px;text-decoration:none;font-weight:600;font-size:13px;">Xem chi tiết PAKD</a>
+    </div>
+  </div>
+  <div style="background:#f8fafc;padding:14px 28px;font-size:11px;color:#94a3b8;text-align:center;">
+    AHT KPI System · Email tự động, vui lòng không reply
+  </div>
+</div>';
+
+                if ($emailRes) {
+                    while ($eu = $emailRes->fetch_assoc()) {
+                        if ($eu['email']) $mailer->send($eu['email'], $subject, $emailBody, $fromName);
+                    }
+                }
+            }
+        } catch (\Throwable $e) {} // Email thất bại không ảnh hưởng response
+    }
+
     echo json_encode(['ok' => $ok, 'msg' => $ok ? 'Đã gửi yêu cầu lên CEO' : 'Lỗi cập nhật DB']);
     exit;
 }
@@ -504,6 +570,15 @@ $fin_total_cost   = $fin_prod_cost + $fin_sales_total + $fin_mgmt + $fin_other_c
 $fin_gross_profit_db = (float)($pakd['gross_profit'] ?? 0);
 $fin_gross_profit    = $fin_gross_profit_db != 0 ? $fin_gross_profit_db : ($fin_rev_net - $fin_total_cost);
 $fin_margin_pct      = $fin_rev_net > 0 ? ($fin_gross_profit / $fin_rev_net * 100) : 0;
+
+// ── Kiểm tra user hiện tại có phải CEO Approver không ──
+$isCeoApprover = ($role === 'admin');
+if (!$isCeoApprover) {
+    $caRes = $conn->query("SELECT setting_value FROM system_settings WHERE setting_key='pasx_ceo_approvers' LIMIT 1");
+    if ($caRes && $caRow = $caRes->fetch_assoc()) {
+        $isCeoApprover = in_array($user_id, array_map('intval', json_decode($caRow['setting_value'] ?? '[]', true) ?: []));
+    }
+}
 
 $statusLabels = [
     'draft' => 'Nháp',
@@ -929,6 +1004,27 @@ function getProjectTypeIcon($type) {
                 </div>
             </div>
         </div>
+
+        <?php if (($pakd['pasx_status'] ?? '') === 'pending_ceo' && $isCeoApprover): ?>
+        <!-- CEO Action Banner -->
+        <div id="ceo-action-banner" style="display:flex;align-items:center;gap:14px;padding:13px 28px;background:#fffbeb;border-bottom:1px solid #fde68a;">
+            <div style="width:36px;height:36px;border-radius:9px;background:#fef3c7;display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+                <i class="fas fa-user-tie" style="color:#d97706;font-size:15px;"></i>
+            </div>
+            <div style="flex:1;">
+                <div style="font-size:.88rem;font-weight:700;color:#92400e;">Yêu cầu phê duyệt từ AM</div>
+                <div style="font-size:.78rem;color:#b45309;margin-top:1px;">PASX này có margin &lt; 20%. AM đã gửi lên để CEO xem xét và phê duyệt.</div>
+            </div>
+            <button id="ceo-approve-direct-btn" onclick="ceoBannerApprove()"
+                style="display:inline-flex;align-items:center;gap:6px;padding:8px 18px;border:none;border-radius:8px;background:#16a34a;color:#fff;font-size:.85rem;font-weight:600;cursor:pointer;font-family:inherit;">
+                <i class="fas fa-check"></i> Approve
+            </button>
+            <button id="ceo-reject-direct-btn" onclick="ceoBannerReject()"
+                style="display:inline-flex;align-items:center;gap:6px;padding:8px 14px;border:1px solid #fca5a5;border-radius:8px;background:#fff;color:#dc2626;font-size:.85rem;font-weight:600;cursor:pointer;font-family:inherit;">
+                <i class="fas fa-times"></i> Từ chối
+            </button>
+        </div>
+        <?php endif; ?>
 
         <div class="detail-container<?= ($pakd['status'] ?? '') === 'approved' ? ' page-locked' : '' ?>">
 
@@ -1855,6 +1951,41 @@ function getProjectTypeIcon($type) {
                 btn.disabled = false;
                 btn.innerHTML = '<i class="fas fa-redo"></i> Resend';
             });
+        }
+
+        // ── CEO Banner: Approve trực tiếp từ pakd_detail ──
+        function ceoBannerApprove() {
+            const btn = document.getElementById('ceo-approve-direct-btn');
+            if (!btn || btn.disabled) return;
+            btn.disabled = true;
+            btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Đang xử lý...';
+            fetch('/projects/pakd/edit?id=' + PAKD_ID, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                body: new URLSearchParams({ action: 'approve_pasx', id: PAKD_ID })
+            })
+            .then(r => r.json())
+            .then(data => {
+                if (data.ok) {
+                    showToast('Đã approve PASX thành công!', 'success');
+                    document.getElementById('ceo-action-banner')?.remove();
+                    updateStatusBanner('AM tiến hành gửi báo giá và xác nhận', '#16a34a', 'fa-check-square');
+                    const container = document.getElementById('pasx-action-btns');
+                    if (container) container.innerHTML = '<span style="font-size:12px;color:rgba(255,255,255,.8);"><i class="fas fa-check-circle"></i> Đã Approve</span>';
+                    document.querySelectorAll('.detail-container input,.detail-container select,.detail-container textarea').forEach(el => { el.disabled = true; });
+                    document.querySelector('.detail-container')?.classList.add('page-locked');
+                } else {
+                    showToast(data.msg || 'Có lỗi xảy ra', 'error');
+                    btn.disabled = false;
+                    btn.innerHTML = '<i class="fas fa-check"></i> Approve';
+                }
+            })
+            .catch(() => { showToast('Lỗi kết nối', 'error'); btn.disabled = false; btn.innerHTML = '<i class="fas fa-check"></i> Approve'; });
+        }
+
+        function ceoBannerReject() {
+            // Dùng lại pasxRejectRebuild() đang có
+            pasxRejectRebuild();
         }
 
         function pasxApprove() {

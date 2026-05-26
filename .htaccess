@@ -75,6 +75,7 @@ RewriteRule ^hrm/system-settings/?$ modules/hrm/system_settings.php [L]
 RewriteRule ^hrm/ajax-handler/?$ modules/hrm/ajax_handler.php [L]
 
 # Presale Module
+RewriteRule ^projects/ceo-review/?$ modules/projects/ceo_review.php [L]
 RewriteRule ^presale/?$ modules/presale/index.php [L]
 RewriteRule ^presale/ajax-handler/?$ modules/presale/ajax_handler.php [L]
 RewriteRule ^presale/vision/thumbnails/(.+)$ modules/presale/vision/thumbnails/$1 [L]
