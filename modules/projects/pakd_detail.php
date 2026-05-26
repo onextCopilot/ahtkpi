@@ -1408,15 +1408,11 @@ function getProjectTypeIcon($type) {
                                 <td class="ind-1">
                                     Chi phí sản xuất
                                     <i class="fas fa-lock" style="color:var(--lgray);font-size:9px;margin-left:4px;" title="Khóa – từ Phương án sản xuất"></i>
-                                    <span class="pasx-note-tip" style="position:relative;display:inline-flex;align-items:center;">
-                                        <i class="fas fa-circle-info" style="color:<?= $fin_pasx_note ? '#d97706' : 'var(--lgray)' ?>;font-size:10px;margin-left:2px;cursor:<?= $fin_pasx_note ? 'help' : 'default' ?>;"></i>
-                                        <?php if ($fin_pasx_note): ?>
-                                        <span class="pasx-note-bubble" style="display:none;position:absolute;bottom:calc(100% + 6px);left:50%;transform:translateX(-50%);background:#1e293b;color:#f1f5f9;font-size:11px;line-height:1.55;padding:8px 12px;border-radius:8px;white-space:pre-wrap;max-width:280px;width:max-content;box-shadow:0 4px 14px rgba(0,0,0,.25);z-index:999;pointer-events:none;">
-                                            <strong style="display:block;color:#fbbf24;font-size:10px;text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px;">Ghi chú từ Profile</strong><?= htmlspecialchars($fin_pasx_note) ?>
-                                            <span style="position:absolute;bottom:-5px;left:50%;transform:translateX(-50%);width:10px;height:10px;background:#1e293b;clip-path:polygon(0 0,100% 0,50% 100%);"></span>
-                                        </span>
-                                        <?php endif; ?>
-                                    </span>
+                                    <?php if ($fin_pasx_note): ?>
+                                    <i class="fas fa-circle-info pasx-note-icon" data-note="<?= htmlspecialchars($fin_pasx_note) ?>" style="color:#d97706;font-size:10px;margin-left:2px;cursor:help;"></i>
+                                    <?php else: ?>
+                                    <i class="fas fa-circle-info" style="color:var(--lgray);font-size:10px;margin-left:2px;"></i>
+                                    <?php endif; ?>
                                     <button class="btn-pasx-history" onclick="openPasxHistory()" title="Xem lịch sử cập nhật từ Profile">
                                         <i class="fas fa-history"></i>
                                     </button>
@@ -2844,13 +2840,30 @@ document.addEventListener('keydown', e => {
     if (e.key === 'Escape') closePasxHistory({target: document.getElementById('pasxHistoryOverlay')});
 });
 
-// ── Tooltip ghi chú Profile (Chi phí sản xuất) ──
-document.querySelectorAll('.pasx-note-tip').forEach(function(tip) {
-    const bubble = tip.querySelector('.pasx-note-bubble');
-    if (!bubble) return;
-    tip.addEventListener('mouseenter', function() { bubble.style.display = 'block'; });
-    tip.addEventListener('mouseleave', function() { bubble.style.display = 'none'; });
-});
+// ── Tooltip ghi chú Profile (position:fixed tránh overflow clip) ──
+(function() {
+    const tip = document.createElement('div');
+    tip.id = 'pasx-note-tooltip';
+    tip.style.cssText = 'display:none;position:fixed;z-index:9999;background:#1e293b;color:#f1f5f9;font-size:11px;line-height:1.6;padding:10px 13px;border-radius:8px;max-width:300px;box-shadow:0 4px 16px rgba(0,0,0,.3);pointer-events:none;';
+    document.body.appendChild(tip);
+
+    document.querySelectorAll('.pasx-note-icon').forEach(function(icon) {
+        icon.addEventListener('mouseenter', function(e) {
+            const note = icon.dataset.note || '';
+            if (!note) return;
+            tip.innerHTML = '<strong style="display:block;color:#fbbf24;font-size:10px;text-transform:uppercase;letter-spacing:.05em;margin-bottom:5px;">Ghi chú từ Profile</strong>' + note.replace(/\n/g,'<br>');
+            tip.style.display = 'block';
+            const r = icon.getBoundingClientRect();
+            const tw = tip.offsetWidth;
+            let left = r.left + r.width / 2 - tw / 2;
+            if (left < 8) left = 8;
+            if (left + tw > window.innerWidth - 8) left = window.innerWidth - tw - 8;
+            tip.style.left = left + 'px';
+            tip.style.top  = (r.top - tip.offsetHeight - 8) + 'px';
+        });
+        icon.addEventListener('mouseleave', function() { tip.style.display = 'none'; });
+    });
+})();
 </script>
 </body>
 </html>
