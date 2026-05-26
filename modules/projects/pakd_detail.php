@@ -128,7 +128,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'appro
     $api_token = $cfg['api_token']        ?? '';
     if (!$api_url || !$api_token) { echo json_encode(['ok'=>false,'msg'=>'Thiếu URL hoặc Token trong cấu hình']); exit; }
 
-    $body = [];
+    $body = [
+        'message' => 'Cảm ơn, PASX đã được approve, Sale/AM/BD sẽ chuyển báo giá cho khách hàng. Vui lòng chờ.. ',
+    ];
 
     $timestamp  = (int)(microtime(true) * 1000);
     $request_id = sprintf('%04x%04x-%04x-%04x-%04x-%04x%04x%04x',
