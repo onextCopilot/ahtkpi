@@ -200,20 +200,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'get_c
 
     // Lấy danh sách CEO Approver từ config (fallback: admin role)
     try {
-        $cfgFile2 = __DIR__ . '/../../config/arrowhitech_config.json';
-        $ceoIds   = [];
-        if (file_exists($cfgFile2)) {
-            $cfg2   = json_decode(file_get_contents($cfgFile2), true);
-            $ceoIds = array_map('intval', (array)($cfg2['pasx_ceo_approvers'] ?? []));
-            $ceoIds = array_values(array_filter($ceoIds));
+        // Đọc CEO Approvers từ DB (system_settings)
+        $ceoIds = [];
+        $caRes2 = $conn->query("SELECT setting_value FROM system_settings WHERE setting_key = 'pasx_ceo_approvers' LIMIT 1");
+        if ($caRes2 && $caRow = $caRes2->fetch_assoc()) {
+            $ceoIds = array_values(array_filter(array_map('intval', json_decode($caRow['setting_value'] ?? '[]', true) ?: [])));
         }
 
         if ($ceoIds) {
-            $inList  = implode(',', $ceoIds);
-            $admins  = $conn->query("SELECT id FROM users WHERE id IN ($inList)");
+            $inList = implode(',', $ceoIds);
+            $admins = $conn->query("SELECT id FROM users WHERE id IN ($inList)");
         } else {
             // Fallback: tất cả admin nếu chưa cấu hình
-            $admins  = $conn->query("SELECT id FROM users WHERE role = 'admin' LIMIT 10");
+            $admins = $conn->query("SELECT id FROM users WHERE role = 'admin' LIMIT 10");
         }
 
         $pr2 = $conn->prepare("SELECT opportunity_name, pasx_id FROM pakd WHERE id=? LIMIT 1");

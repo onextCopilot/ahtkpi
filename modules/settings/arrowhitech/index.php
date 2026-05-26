@@ -19,21 +19,34 @@ $message = '';
 $messageType = '';
 
 $config = [
-    'api_url'              => 'https://api-profile.arrowhitech.com',
-    'api_token'            => '',
-    'webhook_secret'       => '',
-    'pasx_ceo_approvers'   => [],   // array of user IDs
+    'api_url'        => 'https://api-profile.arrowhitech.com',
+    'api_token'      => '',
+    'webhook_secret' => '',
 ];
 
 if (file_exists($configFile)) {
     $saved = json_decode(file_get_contents($configFile), true);
     if (is_array($saved)) {
-        foreach (['api_url', 'api_token', 'webhook_secret', 'pasx_ceo_approvers'] as $k) {
+        foreach (['api_url', 'api_token', 'webhook_secret'] as $k) {
             if (isset($saved[$k])) $config[$k] = $saved[$k];
         }
     }
 }
-if (!is_array($config['pasx_ceo_approvers'])) $config['pasx_ceo_approvers'] = [];
+
+// Auto-create system_settings table if missing (same pattern as smtp/backup modules)
+$conn->query("CREATE TABLE IF NOT EXISTS system_settings (
+    id            INT AUTO_INCREMENT PRIMARY KEY,
+    setting_key   VARCHAR(100) NOT NULL UNIQUE,
+    setting_value TEXT DEFAULT NULL,
+    updated_at    DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+
+// Load CEO Approvers from DB
+$ceoApprovers = [];
+$caRes = $conn->query("SELECT setting_value FROM system_settings WHERE setting_key = 'pasx_ceo_approvers' LIMIT 1");
+if ($caRes && $row = $caRes->fetch_assoc()) {
+    $ceoApprovers = array_map('intval', json_decode($row['setting_value'] ?? '[]', true) ?: []);
+}
 
 // Load all users for CEO Approver picker
 $allUsers = [];
@@ -42,19 +55,28 @@ if ($uRes) while ($u = $uRes->fetch_assoc()) $allUsers[] = $u;
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'save') {
     $new_secret = trim($_POST['webhook_secret'] ?? '');
-    $ceo_ids = array_map('intval', (array)($_POST['pasx_ceo_approvers'] ?? []));
     $config = [
-        'api_url'            => rtrim(trim($_POST['api_url'] ?? ''), '/'),
-        'api_token'          => trim($_POST['api_token'] ?? ''),
-        'webhook_secret'     => $new_secret ?: $config['webhook_secret'],
-        'pasx_ceo_approvers' => array_values(array_filter($ceo_ids)),
+        'api_url'        => rtrim(trim($_POST['api_url'] ?? ''), '/'),
+        'api_token'      => trim($_POST['api_token'] ?? ''),
+        'webhook_secret' => $new_secret ?: $config['webhook_secret'],
     ];
 
-    if (file_put_contents($configFile, json_encode($config, JSON_PRETTY_PRINT))) {
+    // Save API config to JSON
+    $jsonOk = (bool)file_put_contents($configFile, json_encode($config, JSON_PRETTY_PRINT));
+
+    // Save CEO Approvers to DB
+    $ceo_ids  = array_values(array_filter(array_map('intval', (array)($_POST['pasx_ceo_approvers'] ?? []))));
+    $ceoJson  = json_encode($ceo_ids);
+    $dbOk     = $conn->query("INSERT INTO system_settings (setting_key, setting_value)
+                               VALUES ('pasx_ceo_approvers', '$ceoJson')
+                               ON DUPLICATE KEY UPDATE setting_value = '$ceoJson'");
+    $ceoApprovers = $ceo_ids; // reflect immediately
+
+    if ($jsonOk && $dbOk) {
         $message = 'Đã lưu cấu hình ArrowHitech API thành công!';
         $messageType = 'success';
     } else {
-        $message = 'Không thể lưu file cấu hình. Vui lòng kiểm tra quyền ghi.';
+        $message = 'Không thể lưu cấu hình. Kiểm tra quyền ghi file hoặc kết nối DB.';
         $messageType = 'error';
     }
 }
@@ -345,7 +367,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
                                     ];
                                     foreach ($allUsers as $u):
                                         $uid     = (int)$u['id'];
-                                        $checked = in_array($uid, $config['pasx_ceo_approvers']) ? 'checked' : '';
+                                        $checked = in_array($uid, $ceoApprovers) ? 'checked' : '';
                                         $pc      = $palette[abs(crc32($u['full_name'] ?? '')) % count($palette)];
                                         $parts   = array_filter(explode(' ', $u['full_name'] ?? ''));
                                         $ini     = strtoupper(($parts[0][0] ?? '') . (count($parts) > 1 ? end($parts)[0] : ''));
