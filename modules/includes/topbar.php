@@ -239,29 +239,52 @@ $total_notif_count = $notif_count + $pasx_notif_count;
                     <?php endif; ?>
                 </div>
                 <div style="max-height: 350px; overflow-y: auto;">
-                    <?php foreach ($pasx_notifs as $pn): ?>
+                    <?php foreach ($pasx_notifs as $pn):
+                        $isCeoReq = ($pn['event'] === 'ceo_approve_request');
+                        $nb_bg    = $isCeoReq ? '#fffbeb' : '#f5f3ff';
+                        $nb_color = $isCeoReq ? '#d97706' : '#6366f1';
+                        $nb_icon  = $isCeoReq ? 'fa-user-tie' : 'fa-cog';
+                        $nb_bdr   = $isCeoReq ? '#fde68a' : '#ede9fe';
+                        $nb_title = $isCeoReq
+                            ? 'Yêu cầu phê duyệt PASX'
+                            : 'PASX ' . strtoupper($pn['status'] ?? '');
+                        $nb_link_label = $isCeoReq ? 'Xem & Duyệt' : 'Xem PAKD';
+                        $nb_link_url   = $isCeoReq
+                            ? '/projects/ceo-review'
+                            : '/projects/pakd/edit?id=' . $pn['pakd_id'];
+                    ?>
                     <div class="notif-item pasx-notif-item" id="pasx-notif-<?= $pn['id'] ?>"
-                        style="padding:12px 16px;border-bottom:1px solid #f1f5f9;background:#f5f3ff;position:relative;transition:background .2s;"
+                        style="padding:12px 16px;border-bottom:1px solid #f1f5f9;background:<?= $nb_bg ?>;border-left:3px solid <?= $nb_bdr ?>;position:relative;transition:background .2s;"
                         onmouseover="this.style.filter='brightness(0.97)'" onmouseout="this.style.filter='none'">
-                        <div style="font-size:.8rem;font-weight:700;color:#6366f1;margin-bottom:3px;">
-                            <i class="fas fa-cog" style="margin-right:4px;"></i>
-                            PASX <?= strtoupper(htmlspecialchars($pn['status'] ?? '')) ?>
-                            <?php if ($pn['submitted_by']): ?><span style="font-weight:400;color:#7c3aed;font-size:.75rem;"> · <?= htmlspecialchars($pn['submitted_by']) ?></span><?php endif; ?>
+                        <div style="font-size:.82rem;font-weight:700;color:<?= $nb_color ?>;margin-bottom:3px;display:flex;align-items:center;gap:6px;">
+                            <i class="fas <?= $nb_icon ?>"></i>
+                            <?= htmlspecialchars($nb_title) ?>
                         </div>
-                        <div style="font-size:.82rem;color:#334155;margin-bottom:6px;">
-                            <strong><?= htmlspecialchars(mb_substr($pn['opp_name'] ?? 'PAKD #'.$pn['pakd_id'], 0, 50)) ?></strong>
-                            <?php if ($pn['human_cost']): ?>
-                            <br><span style="font-size:.75rem;color:#64748b;">Human: <?= number_format($pn['human_cost'],0,',','.') ?> ₫
-                            <?php if ($pn['overtime_cost']): ?>| OT: <?= number_format($pn['overtime_cost'],0,',','.') ?> ₫<?php endif; ?></span>
-                            <?php endif; ?>
-                            <br><span style="color:#94a3b8;font-size:.72rem;"><?= date('d/m/Y H:i', strtotime($pn['created_at'])) ?></span>
+                        <div style="font-size:.83rem;color:#1e293b;font-weight:600;margin-bottom:2px;">
+                            <?= htmlspecialchars(mb_substr($pn['opp_name'] ?? 'PAKD #'.$pn['pakd_id'], 0, 55)) ?>
+                        </div>
+                        <?php if ($isCeoReq && $pn['submitted_by']): ?>
+                        <div style="font-size:.75rem;color:#92400e;margin-bottom:4px;">
+                            <i class="fas fa-user" style="margin-right:3px;opacity:.7;"></i>AM: <?= htmlspecialchars($pn['submitted_by']) ?>
+                        </div>
+                        <?php elseif ($pn['human_cost']): ?>
+                        <div style="font-size:.75rem;color:#64748b;margin-bottom:4px;">
+                            Human: <?= number_format($pn['human_cost'],0,',','.') ?> ₫
+                            <?php if ($pn['overtime_cost']): ?> · OT: <?= number_format($pn['overtime_cost'],0,',','.') ?> ₫<?php endif; ?>
+                        </div>
+                        <?php endif; ?>
+                        <div style="font-size:.72rem;color:#94a3b8;margin-bottom:8px;">
+                            <?= date('d/m/Y H:i', strtotime($pn['created_at'])) ?>
                         </div>
                         <div style="display:flex;gap:8px;align-items:center;">
+                            <a href="<?= $nb_link_url ?>"
+                                style="font-size:.75rem;color:<?= $nb_color ?>;text-decoration:none;border:1px solid <?= $nb_color ?>;padding:3px 10px;border-radius:5px;font-weight:600;">
+                                <?= $nb_link_label ?></a>
                             <a href="/projects/pakd/edit?id=<?= $pn['pakd_id'] ?>"
-                                style="font-size:.7rem;color:#6366f1;text-decoration:none;border:1px solid #6366f1;padding:3px 8px;border-radius:4px;">
-                                Xem PAKD</a>
+                                style="font-size:.75rem;color:#64748b;text-decoration:none;border:1px solid #e2e8f0;padding:3px 10px;border-radius:5px;">
+                                Chi tiết</a>
                             <button onclick="markPasxNotifRead(<?= $pn['id'] ?>, 'pasx-notif-<?= $pn['id'] ?>')"
-                                style="background:none;border:1px solid #a5b4fc;color:#6366f1;padding:3px 8px;border-radius:4px;font-size:.7rem;cursor:pointer;">
+                                style="background:none;border:1px solid #e2e8f0;color:#94a3b8;padding:3px 8px;border-radius:5px;font-size:.72rem;cursor:pointer;margin-left:auto;">
                                 Đã đọc</button>
                         </div>
                     </div>

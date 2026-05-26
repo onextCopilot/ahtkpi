@@ -215,31 +215,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'get_c
             $admins = $conn->query("SELECT id FROM users WHERE role = 'admin' LIMIT 10");
         }
 
-        $pr2 = $conn->prepare("SELECT opportunity_name, pasx_id FROM pakd WHERE id=? LIMIT 1");
+        $pr2 = $conn->prepare("SELECT opportunity_name, am_name, pasx_id FROM pakd WHERE id=? LIMIT 1");
         $pr2->bind_param("i", $pid);
         $pr2->execute();
         $pk2 = $pr2->get_result()->fetch_assoc();
         $pr2->close();
 
         if ($admins && $pk2) {
-            // Đảm bảo bảng pasx_notifications tồn tại
-            $conn->query("CREATE TABLE IF NOT EXISTS pasx_notifications (
-                id         INT AUTO_INCREMENT PRIMARY KEY,
-                user_id    INT NOT NULL,
-                pakd_id    INT DEFAULT NULL,
-                pasx_id    VARCHAR(64) DEFAULT NULL,
-                event      VARCHAR(64) DEFAULT NULL,
-                status     VARCHAR(32) DEFAULT NULL,
-                opp_name   VARCHAR(500) DEFAULT NULL,
-                is_read    TINYINT(1) DEFAULT 0,
-                created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
-
             $ni = $conn->prepare("INSERT IGNORE INTO pasx_notifications
-                (user_id, pakd_id, pasx_id, event, status, opp_name)
-                VALUES (?, ?, ?, 'ceo_approve_request', 'pending_ceo', ?)");
+                (user_id, pakd_id, pasx_id, event, status, opp_name, submitted_by)
+                VALUES (?, ?, ?, 'ceo_approve_request', 'pending_ceo', ?, ?)");
             while ($adm = $admins->fetch_assoc()) {
-                $ni->bind_param("iiss", $adm['id'], $pid, $pk2['pasx_id'], $pk2['opportunity_name']);
+                $ni->bind_param("iisss", $adm['id'], $pid, $pk2['pasx_id'], $pk2['opportunity_name'], $pk2['am_name']);
                 $ni->execute();
             }
             $ni->close();
