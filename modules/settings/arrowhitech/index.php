@@ -187,49 +187,56 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
         }
 
         /* CEO Approver user picker */
-        .user-search-wrap { position: relative; margin-bottom: 10px; }
-        .user-search-wrap i { position: absolute; left: 11px; top: 50%; transform: translateY(-50%); color: #94a3b8; font-size: 13px; }
+        .user-search-wrap { position: relative; margin-bottom: 8px; }
+        .user-search-wrap i { position: absolute; left: 11px; top: 50%; transform: translateY(-50%); color: #94a3b8; font-size: 12px; }
         .user-search-wrap input {
-            width: 100%; padding: 8px 12px 8px 32px;
+            width: 100%; padding: 7px 12px 7px 32px;
             border: 1px solid #cbd5e1; border-radius: 6px;
-            font-size: .875rem; font-family: inherit; outline: none;
-            box-sizing: border-box; color: #1e293b;
+            font-size: .85rem; font-family: inherit; outline: none;
+            box-sizing: border-box; color: #1e293b; background: #fff;
         }
         .user-search-wrap input:focus { border-color: #3b82f6; box-shadow: 0 0 0 3px rgba(59,130,246,.1); }
 
         .user-picker {
             border: 1px solid #e2e8f0; border-radius: 8px;
-            max-height: 260px; overflow-y: auto; background: #fafbfc;
+            max-height: 240px; overflow-y: auto; background: #fff;
         }
         .user-picker-item {
-            display: flex; align-items: center; gap: 12px;
-            padding: 10px 14px; border-bottom: 1px solid #f1f5f9;
-            cursor: pointer; transition: background .12s;
+            display: flex; align-items: center; gap: 10px;
+            padding: 8px 12px; border-bottom: 1px solid #f1f5f9;
+            cursor: pointer; transition: background .1s; user-select: none;
         }
         .user-picker-item:last-child { border-bottom: none; }
-        .user-picker-item:hover { background: #f1f5f9; }
-        .user-picker-item input[type="checkbox"] { width: 15px; height: 15px; accent-color: #2563eb; flex-shrink: 0; cursor: pointer; }
-        .user-picker-avatar {
-            width: 32px; height: 32px; border-radius: 50%;
+        .user-picker-item:hover { background: #f8faff; }
+        .user-picker-item.is-checked { background: #eff6ff; }
+
+        .user-picker-item input[type="checkbox"] {
+            width: 15px; height: 15px; accent-color: #2563eb;
+            flex-shrink: 0; cursor: pointer; margin: 0;
+        }
+        .user-picker-av {
+            width: 28px; height: 28px; border-radius: 50%;
             object-fit: cover; flex-shrink: 0; border: 1px solid #e2e8f0;
         }
         .user-picker-initials {
-            width: 32px; height: 32px; border-radius: 50%;
-            font-size: 11px; font-weight: 700;
-            display: flex; align-items: center; justify-content: center;
-            flex-shrink: 0;
+            width: 28px; height: 28px; border-radius: 50%;
+            font-size: 10px; font-weight: 700; letter-spacing: .02em;
+            display: flex; align-items: center; justify-content: center; flex-shrink: 0;
         }
-        .user-picker-name { font-size: .875rem; font-weight: 500; color: #1e293b; }
-        .user-picker-meta { font-size: .75rem; color: #64748b; margin-top: 1px; }
+        .user-picker-info { flex: 1; min-width: 0; }
+        .user-picker-name { font-size: .83rem; font-weight: 600; color: #1e293b; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .user-picker-email { font-size: .74rem; color: #94a3b8; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
         .user-picker-role {
-            margin-left: auto; font-size: .7rem; font-weight: 600;
-            padding: 2px 7px; border-radius: 20px;
-            background: #e0e7ff; color: #4338ca; flex-shrink: 0;
+            flex-shrink: 0; font-size: .68rem; font-weight: 700;
+            padding: 2px 7px; border-radius: 20px; letter-spacing: .02em;
+            background: #e0e7ff; color: #4338ca;
         }
-        .selected-count {
-            font-size: .8rem; color: #2563eb; font-weight: 600; margin-top: 6px;
-        }
-        .user-picker-empty { padding: 20px; text-align: center; color: #94a3b8; font-size: .85rem; }
+        .user-picker-role.admin  { background: #fee2e2; color: #b91c1c; }
+        .user-picker-role.manager{ background: #fef3c7; color: #92400e; }
+        .user-picker-role.ceo    { background: #fce7f3; color: #9d174d; }
+
+        .selected-count { font-size: .8rem; color: #2563eb; font-weight: 600; margin-top: 6px; min-height: 18px; }
+        .user-picker-empty { padding: 24px; text-align: center; color: #94a3b8; font-size: .85rem; }
     </style>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 </head>
@@ -373,19 +380,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
                                         $ini     = strtoupper(($parts[0][0] ?? '') . (count($parts) > 1 ? end($parts)[0] : ''));
                                         $roleLabel = ['admin'=>'Admin','manager'=>'Manager','user'=>'User','ceo'=>'CEO'][$u['role'] ?? ''] ?? ($u['role'] ?? '');
                                     ?>
-                                    <label class="user-picker-item" data-name="<?= htmlspecialchars(strtolower($u['full_name'] . ' ' . $u['email'])) ?>">
-                                        <input type="checkbox" name="pasx_ceo_approvers[]" value="<?= $uid ?>" <?= $checked ?> onchange="updateCount()">
+                                    <label class="user-picker-item <?= $checked ? 'is-checked' : '' ?>" data-name="<?= htmlspecialchars(strtolower($u['full_name'] . ' ' . $u['email'])) ?>">
+                                        <input type="checkbox" name="pasx_ceo_approvers[]" value="<?= $uid ?>" <?= $checked ?> onchange="updateCount();this.closest('.user-picker-item').classList.toggle('is-checked',this.checked)">
                                         <?php if (!empty($u['avatar'])): ?>
-                                            <img src="<?= htmlspecialchars($u['avatar']) ?>" class="user-picker-avatar" alt="" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">
+                                            <img src="<?= htmlspecialchars($u['avatar']) ?>" class="user-picker-av" alt=""
+                                                 onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">
                                             <div class="user-picker-initials" style="display:none;background:<?= $pc[0] ?>;color:<?= $pc[1] ?>"><?= htmlspecialchars($ini ?: '?') ?></div>
                                         <?php else: ?>
                                             <div class="user-picker-initials" style="background:<?= $pc[0] ?>;color:<?= $pc[1] ?>"><?= htmlspecialchars($ini ?: '?') ?></div>
                                         <?php endif; ?>
-                                        <div style="min-width:0;flex:1;">
+                                        <div class="user-picker-info">
                                             <div class="user-picker-name"><?= htmlspecialchars($u['full_name'] ?: '—') ?></div>
-                                            <div class="user-picker-meta"><?= htmlspecialchars($u['email'] ?: '') ?></div>
+                                            <div class="user-picker-email"><?= htmlspecialchars($u['email'] ?: '') ?></div>
                                         </div>
-                                        <span class="user-picker-role"><?= htmlspecialchars($roleLabel) ?></span>
+                                        <span class="user-picker-role <?= htmlspecialchars($u['role'] ?? '') ?>"><?= htmlspecialchars($roleLabel) ?></span>
                                     </label>
                                     <?php endforeach; ?>
                                 <?php endif; ?>
