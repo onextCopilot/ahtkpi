@@ -186,6 +186,42 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'appro
     exit;
 }
 
+// ── AJAX: Yêu cầu CEO duyệt PASX ──
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'get_ceo_approve') {
+    header('Content-Type: application/json; charset=utf-8');
+    $pid = (int)($_POST['id'] ?? 0);
+    if (!$pid) { echo json_encode(['ok'=>false,'msg'=>'ID không hợp lệ']); exit; }
+
+    // Cập nhật DB: status=pending, pasx_status=pending_ceo
+    $st = $conn->prepare("UPDATE pakd SET status='pending', pasx_status='pending_ceo' WHERE id=?");
+    $st->bind_param("i", $pid);
+    $ok = $st->execute();
+    $st->close();
+
+    // Gửi notification cho tất cả admin/CEO
+    try {
+        $admins = $conn->query("SELECT id FROM users WHERE role IN ('admin','ceo') LIMIT 10");
+        $pr2 = $conn->prepare("SELECT opportunity_name, pasx_id FROM pakd WHERE id=? LIMIT 1");
+        $pr2->bind_param("i", $pid);
+        $pr2->execute();
+        $pk2 = $pr2->get_result()->fetch_assoc();
+        $pr2->close();
+        if ($admins && $pk2) {
+            $ni = $conn->prepare("INSERT IGNORE INTO pasx_notifications
+                (user_id, pakd_id, pasx_id, event, status, opp_name)
+                VALUES (?, ?, ?, 'ceo_approve_request', 'pending_ceo', ?)");
+            while ($adm = $admins->fetch_assoc()) {
+                $ni->bind_param("iiss", $adm['id'], $pid, $pk2['pasx_id'], $pk2['opportunity_name']);
+                $ni->execute();
+            }
+            $ni->close();
+        }
+    } catch (\Throwable $e) {}
+
+    echo json_encode(['ok' => $ok, 'msg' => $ok ? 'Đã gửi yêu cầu lên CEO' : 'Lỗi cập nhật DB']);
+    exit;
+}
+
 // ── AJAX: Reject PASX ──
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'reject_pasx') {
     header('Content-Type: application/json; charset=utf-8');
@@ -425,12 +461,14 @@ $fin_rev_net      = !empty($fin_saved['rev_net']) ? (float)$fin_saved['rev_net']
 // Nếu đã nhận được data từ callback thì dùng tổng human+overtime, không thì dùng pasx_value
 $pasx_has_data    = ($fin_human_cost > 0 || $fin_overtime > 0);
 $fin_prod_cost    = $pasx_has_data ? ($fin_human_cost + $fin_overtime) : (float)($pakd['pasx_value'] ?? 0);
-$fin_sales_pct    = 2.0;
-$fin_sales_comm   = (int)round(max(0, $fin_rev_gross) * $fin_sales_pct / 100); // base = gross revenue
-$fin_presales_pct = 0.0;
-$fin_mkt_pct      = 0.0;
-$fin_sales_total  = $fin_sales_comm;
-$fin_mgmt_pct     = 12.0;
+$fin_sales_pct    = (float)($fin_saved['r421_pct'] ?? 2.0);
+$fin_presales_pct = (float)($fin_saved['r422_pct'] ?? 0.0);
+$fin_mkt_pct      = (float)($fin_saved['r423_pct'] ?? 0.0);
+$fin_sales_comm   = (int)round(max(0, $fin_rev_gross) * $fin_sales_pct    / 100);
+$fin_presales_comm= (int)round(max(0, $fin_rev_gross) * $fin_presales_pct / 100);
+$fin_mkt_comm     = (int)round(max(0, $fin_rev_gross) * $fin_mkt_pct      / 100);
+$fin_sales_total  = $fin_sales_comm + $fin_presales_comm + $fin_mkt_comm;
+$fin_mgmt_pct     = (float)($fin_saved['r43_pct'] ?? 12.0);
 $fin_mgmt         = (int)round(max(0, $fin_rev_net) * $fin_mgmt_pct / 100);
 $fin_other_cost   = 0;
 $fin_total_cost   = $fin_prod_cost + $fin_sales_total + $fin_mgmt + $fin_other_cost;
@@ -494,6 +532,10 @@ if ($pasx_active) {
         $statusLabel = 'Đã Reject PASX · Đang chờ Profile rebuild';
         $statusColor = '#b45309'; // amber-700
         $iconClass   = 'fa-clock';
+    } elseif (($pakd['pasx_status'] ?? '') === 'pending_ceo') {
+        $statusLabel = 'Chờ CEO duyệt · PASX đang chờ phê duyệt';
+        $statusColor = '#d97706'; // amber-600
+        $iconClass   = 'fa-user-tie';
     } else {
         $statusLabel = 'Đang làm PASX · ' . strtoupper($pakd['pasx_status'] ?? 'CREATED');
         $statusColor = '#7c3aed';
@@ -1211,8 +1253,8 @@ function getProjectTypeIcon($type) {
                             </tr>
                             <tr class="row-detail">
                                 <td class="td-stt">4.2.1</td>
-                                <td class="ind-2"><input class="fin-input" value="Sales Commission"></td>
-                                <td class="td-desc"><input class="fin-input" value="2% doanh thu"></td>
+                                <td class="ind-2"><input class="fin-input" id="r421-name" value="<?= htmlspecialchars($fin_saved['r421_name'] ?? 'Sales Commission') ?>"></td>
+                                <td class="td-desc"><input class="fin-input" id="r421-desc" value="<?= htmlspecialchars($fin_saved['r421_desc'] ?? '2% doanh thu') ?>"></td>
                                 <td class="td-rate" id="r421-rate"></td>
                                 <td class="td-amount">
                                     <div class="pct-wrap">
@@ -1226,8 +1268,8 @@ function getProjectTypeIcon($type) {
                             </tr>
                             <tr class="row-detail">
                                 <td class="td-stt">4.2.2</td>
-                                <td class="ind-2"><input class="fin-input" value="Presales Commission"></td>
-                                <td class="td-desc"><input class="fin-input" value="% doanh thu"></td>
+                                <td class="ind-2"><input class="fin-input" id="r422-name" value="<?= htmlspecialchars($fin_saved['r422_name'] ?? 'Presales Commission') ?>"></td>
+                                <td class="td-desc"><input class="fin-input" id="r422-desc" value="<?= htmlspecialchars($fin_saved['r422_desc'] ?? '% doanh thu') ?>"></td>
                                 <td class="td-rate" id="r422-rate"></td>
                                 <td class="td-amount">
                                     <div class="pct-wrap">
@@ -1241,8 +1283,8 @@ function getProjectTypeIcon($type) {
                             </tr>
                             <tr class="row-detail">
                                 <td class="td-stt">4.2.3</td>
-                                <td class="ind-2"><input class="fin-input" value="MKT Commission"></td>
-                                <td class="td-desc"><input class="fin-input" value="% doanh thu"></td>
+                                <td class="ind-2"><input class="fin-input" id="r423-name" value="<?= htmlspecialchars($fin_saved['r423_name'] ?? 'MKT Commission') ?>"></td>
+                                <td class="td-desc"><input class="fin-input" id="r423-desc" value="<?= htmlspecialchars($fin_saved['r423_desc'] ?? '% doanh thu') ?>"></td>
                                 <td class="td-rate" id="r423-rate"></td>
                                 <td class="td-amount">
                                     <div class="pct-wrap">
@@ -1256,8 +1298,8 @@ function getProjectTypeIcon($type) {
                             </tr>
                             <tr class="row-detail">
                                 <td class="td-stt">4.2.4</td>
-                                <td class="ind-2"><input class="fin-input" value="Chi phí bán hàng khác"></td>
-                                <td class="td-desc"><input class="fin-input" placeholder="Diễn giải..."></td>
+                                <td class="ind-2"><input class="fin-input" id="r424-name" value="<?= htmlspecialchars($fin_saved['r424_name'] ?? 'Chi phí bán hàng khác') ?>"></td>
+                                <td class="td-desc"><input class="fin-input" id="r424-desc" placeholder="Diễn giải..." value="<?= htmlspecialchars($fin_saved['r424_desc'] ?? '') ?>"></td>
                                 <td class="td-rate"></td>
                                 <td class="td-amount"><input class="fin-input r" id="r424-inp" placeholder="0" oninput="fin_calc()"></td>
                                 <td class="td-ccy">VND</td>
@@ -1491,6 +1533,15 @@ function getProjectTypeIcon($type) {
                 r423_pct:    parseFloat(el('r423-pct')?.value) || 0,
                 r424_amt:    fin_parse(el('r424-inp')?.value),
                 r43_pct:     parseFloat(el('r43-pct')?.value) || 0,
+                // Labels (persisted so edits survive F5)
+                r421_name: (el('r421-name')?.value || '').trim(),
+                r421_desc: (el('r421-desc')?.value || '').trim(),
+                r422_name: (el('r422-name')?.value || '').trim(),
+                r422_desc: (el('r422-desc')?.value || '').trim(),
+                r423_name: (el('r423-name')?.value || '').trim(),
+                r423_desc: (el('r423-desc')?.value || '').trim(),
+                r424_name: (el('r424-name')?.value || '').trim(),
+                r424_desc: (el('r424-desc')?.value || '').trim(),
                 other_costs: Array.from(document.querySelectorAll('.other-cost-cell input'))
                                   .map(i => fin_parse(i.value)),
                 rev_net:         fin_parse(el('r3-amt')?.textContent), // doanh thu thuần (sau giảm trừ)
@@ -1856,8 +1907,74 @@ function getProjectTypeIcon($type) {
         }
 
         function pasxGetApproveCEO() {
-            showToast('Đang gửi yêu cầu phê duyệt lên CEO...', 'success');
-            // TODO: gọi API get approve CEO
+            // Hiện dialog xác nhận trước khi gửi
+            const overlay = document.createElement('div');
+            overlay.id = 'ceo-approve-dialog-overlay';
+            overlay.style.cssText = 'position:fixed;inset:0;background:rgba(15,23,42,.45);z-index:2000;display:flex;align-items:center;justify-content:center;';
+            overlay.innerHTML = `
+                <div style="background:#fff;border-radius:12px;width:440px;max-width:95vw;box-shadow:0 20px 60px rgba(0,0,0,.25);overflow:hidden;">
+                    <div style="padding:18px 20px 14px;border-bottom:1px solid #e2e8f0;display:flex;align-items:center;gap:10px;">
+                        <div style="width:34px;height:34px;border-radius:8px;background:#fef3c7;display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+                            <i class="fas fa-user-tie" style="color:#d97706;font-size:14px;"></i>
+                        </div>
+                        <div>
+                            <div style="font-weight:700;color:#0f172a;font-size:.95rem;">Yêu cầu CEO phê duyệt</div>
+                            <div style="font-size:.78rem;color:#64748b;margin-top:2px;">Gửi PASX này lên CEO để xét duyệt đặc biệt (margin &lt; 20%)</div>
+                        </div>
+                    </div>
+                    <div style="padding:16px 20px;font-size:.85rem;color:#475569;line-height:1.65;">
+                        PASX này có <strong>margin &lt; 20%</strong>, không đủ điều kiện tự approve.<br>
+                        Bạn muốn gửi yêu cầu phê duyệt lên <strong>CEO</strong>?<br>
+                        <span style="color:#94a3b8;font-size:.8rem;">CEO sẽ nhận được thông báo và có thể approve hoặc reject.</span>
+                    </div>
+                    <div style="padding:0 20px 18px;display:flex;justify-content:flex-end;gap:8px;">
+                        <button onclick="document.getElementById('ceo-approve-dialog-overlay').remove()"
+                            style="padding:7px 16px;border:1px solid #e2e8f0;border-radius:6px;background:#fff;color:#64748b;font-size:.85rem;cursor:pointer;font-family:inherit;">
+                            Huỷ
+                        </button>
+                        <button id="ceo-approve-confirm-btn" onclick="submitCeoApproveRequest()"
+                            style="padding:7px 16px;border:none;border-radius:6px;background:#d97706;color:#fff;font-size:.85rem;font-weight:600;cursor:pointer;display:flex;align-items:center;gap:6px;font-family:inherit;">
+                            <i class="fas fa-user-tie"></i> Gửi lên CEO
+                        </button>
+                    </div>
+                </div>`;
+            document.body.appendChild(overlay);
+            overlay.addEventListener('click', function(e) { if (e.target === overlay) overlay.remove(); });
+        }
+
+        function submitCeoApproveRequest() {
+            const btn = document.getElementById('ceo-approve-confirm-btn');
+            if (!btn) return;
+            btn.disabled = true;
+            btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Đang gửi...';
+
+            fetch('/projects/pakd/edit?id=' + PAKD_ID, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                body: new URLSearchParams({ action: 'get_ceo_approve', id: PAKD_ID })
+            })
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+                document.getElementById('ceo-approve-dialog-overlay')?.remove();
+                if (data.ok) {
+                    showToast('Đã gửi yêu cầu lên CEO thành công', 'success');
+                    // Cập nhật action buttons
+                    const container = document.getElementById('pasx-action-btns');
+                    if (container) {
+                        container.innerHTML = '<span style="font-size:12px;color:#d97706;font-weight:500;display:inline-flex;align-items:center;gap:5px;"><i class="fas fa-user-tie"></i> Đã gửi lên CEO — đang chờ phê duyệt</span>';
+                    }
+                    // Cập nhật status banner
+                    updateStatusBanner('Chờ CEO duyệt · PASX đang chờ phê duyệt', '#d97706', 'fa-user-tie');
+                } else {
+                    showToast(data.msg || 'Gửi yêu cầu thất bại', 'error');
+                    btn.disabled = false;
+                    btn.innerHTML = '<i class="fas fa-user-tie"></i> Gửi lên CEO';
+                }
+            })
+            .catch(function() {
+                document.getElementById('ceo-approve-dialog-overlay')?.remove();
+                showToast('Lỗi kết nối, vui lòng thử lại', 'error');
+            });
         }
 
         function pasxRejectRebuild() {
