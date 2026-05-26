@@ -1,6 +1,16 @@
 <?php
 $current_uri = $_SERVER['REQUEST_URI'];
 
+// Check if current user is a CEO approver
+$_sidebar_is_ceo_approver = false;
+if (isset($_SESSION['user_id']) && isset($conn)) {
+    $caRes = $conn->query("SELECT setting_value FROM system_settings WHERE setting_key='pasx_ceo_approvers' LIMIT 1");
+    if ($caRes && $caRow = $caRes->fetch_assoc()) {
+        $caList = array_map('intval', json_decode($caRow['setting_value'] ?? '[]', true) ?: []);
+        $_sidebar_is_ceo_approver = in_array((int)$_SESSION['user_id'], $caList);
+    }
+}
+
 function isMenuItemActive($path, $current_uri)
 {
     // Exact match for dashboard
@@ -221,7 +231,8 @@ function isMenuItemActive($path, $current_uri)
         <!-- 8. Projects Dropdown -->
         <div class="nav-item nav-item-parent <?php
         $is_projects_open = strpos($current_uri, '/projects/phuong-an-kinh-doanh') !== false ||
-            strpos($current_uri, '/projects/du-an') !== false;
+            strpos($current_uri, '/projects/du-an') !== false ||
+            strpos($current_uri, '/projects/ceo-review') !== false;
         echo $is_projects_open ? 'active open' : ''; ?>" onclick="toggleSubmenu(this)">
             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
                 stroke-linecap="round" stroke-linejoin="round">
@@ -243,6 +254,18 @@ function isMenuItemActive($path, $current_uri)
                 class="submenu-item <?php echo (strpos($current_uri, '/projects/du-an') !== false) ? 'active' : ''; ?>">
                 <span>My Project</span>
             </a>
+            <?php if ($_sidebar_is_ceo_approver): ?>
+            <a href="/projects/ceo-review"
+                class="submenu-item <?php echo (strpos($current_uri, '/projects/ceo-review') !== false) ? 'active' : ''; ?>"
+                style="display:flex;align-items:center;gap:6px;">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;opacity:0.7;">
+                    <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
+                    <circle cx="12" cy="7" r="4"/>
+                    <polyline points="9 11 12 14 22 4"/>
+                </svg>
+                <span>CEO Review</span>
+            </a>
+            <?php endif; ?>
         </div>
 
         <!-- 8. HRM -->
