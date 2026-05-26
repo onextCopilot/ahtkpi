@@ -718,27 +718,31 @@ function formatVND($n) {
                             <td><?= renderStars($p['opp_probability']) ?></td>
                             <td style="font-size:12px;color:var(--gray);"><?= htmlspecialchars($p['odoo_stage_name'] ?: '—') ?></td>
                             <td>
-                                <span class="status-badge <?= $p['status'] ?>">
-                                    <?= statusLabel($p['status']) ?>
-                                </span>
                                 <?php
                                 $ps = $p['pasx_status'] ?? '';
-                                if ($ps):
-                                    $psLabel = [
-                                        'created'     => ['🔧 BP sản xuất đang lên PA', '#7c3aed', '#ede9fe'],
-                                        'processing'  => ['⚙ PASX âm, Cần Review',      '#6d28d9', '#ede9fe'],
-                                        'pending'     => ['⏳ PASX chờ',       '#d97706', '#fef3c7'],
-                                        'pending_ceo' => ['👔 Chờ CEO',        '#d97706', '#fef3c7'],
-                                        'approved'    => ['✔ PASX approved',   '#16a34a', '#dcfce7'],
-                                        'rejected'    => ['↩ PASX rejected',   '#b91c1c', '#fee2e2'],
-                                        'completed'   => ['✔ Hoàn thành',      '#0284c7', '#e0f2fe'],
-                                        'cancelled'   => ['✖ Huỷ',             '#64748b', '#f1f5f9'],
-                                    ][$ps] ?? [strtoupper($ps), '#64748b', '#f1f5f9'];
+                                $psMap = [
+                                    'created'     => ['BP sản xuất đang lên PA', '#7c3aed', '#ede9fe'],
+                                    'processing'  => ['PASX âm, Cần Review',     '#b45309', '#fef3c7'],
+                                    'pending'     => ['PASX chờ duyệt',          '#d97706', '#fef3c7'],
+                                    'pending_ceo' => ['Chờ CEO duyệt',           '#d97706', '#fef3c7'],
+                                    'approved'    => ['PASX approved',           '#16a34a', '#dcfce7'],
+                                    'rejected'    => ['PASX rejected',           '#b91c1c', '#fee2e2'],
+                                    'completed'   => ['Hoàn thành',             '#0284c7', '#e0f2fe'],
+                                    'cancelled'   => ['Đã huỷ',                 '#64748b', '#f1f5f9'],
+                                ];
+                                $psInfo = $ps ? ($psMap[$ps] ?? [strtoupper($ps), '#64748b', '#f1f5f9']) : null;
                                 ?>
-                                <span style="display:inline-flex;align-items:center;margin-top:4px;font-size:10px;font-weight:700;padding:2px 7px;border-radius:4px;background:<?= $psLabel[2] ?>;color:<?= $psLabel[1] ?>;white-space:nowrap;">
-                                    <?= htmlspecialchars($psLabel[0]) ?>
-                                </span>
-                                <?php endif; ?>
+                                <div style="display:flex;flex-direction:column;gap:4px;align-items:flex-start;">
+                                    <span class="status-badge <?= $p['status'] ?>">
+                                        <?= statusLabel($p['status']) ?>
+                                    </span>
+                                    <?php if ($psInfo): ?>
+                                    <span style="display:inline-flex;align-items:center;gap:5px;font-size:10px;font-weight:600;padding:2px 7px;border-radius:4px;background:<?= $psInfo[2] ?>;color:<?= $psInfo[1] ?>;white-space:nowrap;line-height:1.5;">
+                                        <span style="width:5px;height:5px;border-radius:50%;background:<?= $psInfo[1] ?>;flex-shrink:0;"></span>
+                                        <?= htmlspecialchars($psInfo[0]) ?>
+                                    </span>
+                                    <?php endif; ?>
+                                </div>
                             </td>
                             <td style="font-size:12px;color:var(--lgray);"><?= !empty($p['assignment_date']) ? date('d/m/Y', strtotime($p['assignment_date'])) : '—' ?></td>
                             <td style="font-size:12px;color:var(--lgray);"><?= !empty($p['expected_closing']) ? date('d/m/Y', strtotime($p['expected_closing'])) : '—' ?></td>
