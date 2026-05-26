@@ -442,7 +442,7 @@ $fin_margin_pct      = $fin_rev_net > 0 ? ($fin_gross_profit / $fin_rev_net * 10
 $statusLabels = [
     'draft' => 'Nháp',
     'pending' => 'Chờ duyệt',
-    'approved' => 'PAKD đã được approve',
+    'approved' => 'AM tiến hành gửi báo giá và xác nhận',
     'rejected' => 'Từ chối'
 ];
 $statusLabel = $statusLabels[$pakd['status']] ?? 'Không xác định';
@@ -1806,7 +1806,7 @@ function getProjectTypeIcon($type) {
                 overlay.remove();
                 if (data.ok) {
                     showToast(data.msg || 'Approve thành công!', 'success');
-                    updateStatusBanner('PAKD đã được approve', '#16a34a', 'fa-check-square');
+                    updateStatusBanner('AM tiến hành gửi báo giá và xác nhận', '#16a34a', 'fa-check-square');
                     // Ẩn nút approve, không cho bấm lại
                     const container = document.getElementById('pasx-action-btns');
                     if (container) container.innerHTML =
