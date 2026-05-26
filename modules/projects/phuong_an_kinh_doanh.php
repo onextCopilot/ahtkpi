@@ -725,8 +725,8 @@ function formatVND($n) {
                                 $ps = $p['pasx_status'] ?? '';
                                 if ($ps):
                                     $psLabel = [
-                                        'created'     => ['🔧 PASX',          '#7c3aed', '#ede9fe'],
-                                        'processing'  => ['⚙ Đang làm',       '#6d28d9', '#ede9fe'],
+                                        'created'     => ['🔧 BP sản xuất đang lên PA', '#7c3aed', '#ede9fe'],
+                                        'processing'  => ['⚙ PASX âm, Cần Review',      '#6d28d9', '#ede9fe'],
                                         'pending'     => ['⏳ PASX chờ',       '#d97706', '#fef3c7'],
                                         'pending_ceo' => ['👔 Chờ CEO',        '#d97706', '#fef3c7'],
                                         'approved'    => ['✔ PASX approved',   '#16a34a', '#dcfce7'],
