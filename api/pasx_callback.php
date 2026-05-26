@@ -71,11 +71,15 @@ $human_cost           = isset($data['humanCost'])    ? (float)$data['humanCost']
 $overtime             = isset($data['overtimeCost']) ? (float)$data['overtimeCost'] : null;
 $pasx_cost            = (isset($data['pasxCost']) && is_array($data['pasxCost'])) ? $data['pasxCost'] : null;
 $pakd_id_from_payload = isset($data['pakdId'])       ? (int)$data['pakdId']         : null;
+// Ghi chú từ Profile (nhiều field name có thể dùng)
+$pasx_note            = $data['note'] ?? $data['message'] ?? $data['comment'] ?? $data['notes'] ?? null;
 
 // ── Parse _meta ──
 $meta         = isset($data['_meta']) && is_array($data['_meta']) ? $data['_meta'] : null;
 $meta_opp_id  = $meta['oppId']                                    ?? null;   // oppId trong meta
 $submitted_by = $meta['submittedBy']['fullName']                  ?? null;
+// Ghi chú từ _meta (fallback nếu top-level không có)
+if (!$pasx_note) $pasx_note = $meta['note'] ?? $meta['message'] ?? $meta['comment'] ?? null;
 $submitted_at = null;
 if (!empty($meta['submittedAt'])) {
     try {
@@ -153,6 +157,7 @@ if ($pakd_id) {
             if ($human_cost  !== null) $fin_data['human_cost']    = $human_cost;
             if ($overtime    !== null) $fin_data['overtime_cost'] = $overtime;
             if ($pasx_cost   !== null) $fin_data['pasx_cost']     = $pasx_cost; // array chi tiết nhân công
+            if ($pasx_note   !== null) $fin_data['pasx_note']     = $pasx_note; // ghi chú từ Profile
 
             $fu = $conn->prepare("UPDATE pakd SET fin_data=? WHERE id=?");
             $fj = json_encode($fin_data, JSON_UNESCAPED_UNICODE);
@@ -202,14 +207,15 @@ if ($pakd_id) {
 
                 if ($user_row) {
                     $am_user_id = (int)$user_row['id'];
+                    try { $conn->query("ALTER TABLE pasx_notifications ADD COLUMN message TEXT DEFAULT NULL"); } catch (\Throwable $e) {}
                     $ni = $conn->prepare(
                         "INSERT INTO pasx_notifications
-                            (user_id, pakd_id, pasx_id, event, status, human_cost, overtime_cost, opp_name, submitted_by)
-                         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
+                            (user_id, pakd_id, pasx_id, event, status, human_cost, overtime_cost, opp_name, submitted_by, message)
+                         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
                     );
-                    $ni->bind_param("iisssddss",
+                    $ni->bind_param("iisssddsss",
                         $am_user_id, $pakd_id, $pasx_id, $event, $status,
-                        $human_cost, $overtime, $opp_name_val, $submitted_by
+                        $human_cost, $overtime, $opp_name_val, $submitted_by, $pasx_note
                     );
                     $ni->execute();
                     $ni->close();

@@ -292,6 +292,10 @@ $total_notif_count = $notif_count + $pasx_notif_count;
                         <div style="font-size:.75rem;color:#dc2626;margin-bottom:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:260px;" title="<?= htmlspecialchars($pn['message']) ?>">
                             <i class="fas fa-comment-alt" style="margin-right:3px;opacity:.7;"></i><?= htmlspecialchars(mb_strimwidth($pn['message'], 0, 60, '…')) ?>
                         </div>
+                        <?php elseif (!$isCeoReq && !$isCeoApproved && !empty($pn['message'])): ?>
+                        <div style="font-size:.75rem;color:#b45309;margin-bottom:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:260px;" title="<?= htmlspecialchars($pn['message']) ?>">
+                            <i class="fas fa-comment-alt" style="margin-right:3px;opacity:.7;"></i><?= htmlspecialchars(mb_strimwidth($pn['message'], 0, 60, '…')) ?>
+                        </div>
                         <?php elseif ($pn['human_cost']): ?>
                         <div style="font-size:.75rem;color:#64748b;margin-bottom:4px;">
                             Human: <?= number_format($pn['human_cost'],0,',','.') ?> ₫

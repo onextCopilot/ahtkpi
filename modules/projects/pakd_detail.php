@@ -667,6 +667,7 @@ function pctCost($val, $total, $dec = 2) {
 $fin_rev_gross    = (float)($pakd['revenue'] ?? 0);
 $fin_human_cost   = (float)($fin_saved['human_cost']    ?? 0); // cập nhật từ ArrowHitech callback
 $fin_overtime     = (float)($fin_saved['overtime_cost'] ?? 0); // cập nhật từ ArrowHitech callback
+$fin_pasx_note    = trim($fin_saved['pasx_note'] ?? '');       // ghi chú từ Profile
 // Dùng rev_net đã lưu từ JS (doanh thu thuần sau giảm trừ); fallback về revenue gross
 $fin_rev_net      = !empty($fin_saved['rev_net']) ? (float)$fin_saved['rev_net'] : $fin_rev_gross;
 // Nếu đã nhận được data từ callback thì dùng tổng human+overtime, không thì dùng pasx_value
@@ -1395,7 +1396,8 @@ function getProjectTypeIcon($type) {
                                 <td class="ind-1">
                                     Chi phí sản xuất
                                     <i class="fas fa-lock" style="color:var(--lgray);font-size:9px;margin-left:4px;" title="Khóa – từ Phương án sản xuất"></i>
-                                    <i class="fas fa-circle-info" style="color:var(--lgray);font-size:10px;margin-left:2px;"></i>
+                                    <i class="fas fa-circle-info" style="color:<?= $fin_pasx_note ? '#d97706' : 'var(--lgray)' ?>;font-size:10px;margin-left:2px;cursor:<?= $fin_pasx_note ? 'pointer' : 'default' ?>;"
+                                       title="<?= $fin_pasx_note ? htmlspecialchars($fin_pasx_note) : 'Chi phí từ Phương án sản xuất (Profile)' ?>"></i>
                                     <button class="btn-pasx-history" onclick="openPasxHistory()" title="Xem lịch sử cập nhật từ Profile">
                                         <i class="fas fa-history"></i>
                                     </button>
