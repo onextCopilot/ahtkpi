@@ -6,15 +6,17 @@ if (!isset($_SESSION['user_id'])) { header('Location: /login'); exit; }
 $userId = (int)$_SESSION['user_id'];
 $role   = $_SESSION['role'] ?? 'user';
 
-// ── Access control: admin hoặc trong danh sách CEO Approver ──────────────────
-$isCeoApprover = ($role === 'admin');
-if (!$isCeoApprover) {
-    $caRes = $conn->query("SELECT setting_value FROM system_settings WHERE setting_key='pasx_ceo_approvers' LIMIT 1");
-    if ($caRes && $caRow = $caRes->fetch_assoc()) {
-        $isCeoApprover = in_array($userId, array_map('intval', json_decode($caRow['setting_value'] ?? '[]', true) ?: []));
-    }
+// ── Access control ────────────────────────────────────────────────────────────
+// Kiểm tra CEO Approver (chỉ user trong danh sách pasx_ceo_approvers)
+$isCeoApprover = false;
+$caRes = $conn->query("SELECT setting_value FROM system_settings WHERE setting_key='pasx_ceo_approvers' LIMIT 1");
+if ($caRes && $caRow = $caRes->fetch_assoc()) {
+    $isCeoApprover = in_array($userId, array_map('intval', json_decode($caRow['setting_value'] ?? '[]', true) ?: []));
 }
-if (!$isCeoApprover) { header('Location: /dashboard'); exit; }
+
+// Trang hiển thị cho admin + CEO; chỉ CEO được thao tác
+$canView = ($role === 'admin') || $isCeoApprover;
+if (!$canView) { header('Location: /dashboard'); exit; }
 
 // ── Helper: load SMTP settings ───────────────────────────────────────────────
 function loadSmtp($conn) {
@@ -63,6 +65,7 @@ function callProfileApi($conn, $endpoint, $body) {
 // ── AJAX: CEO Approve ─────────────────────────────────────────────────────────
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'ceo_approve') {
     header('Content-Type: application/json; charset=utf-8');
+    if (!$isCeoApprover) { echo json_encode(['ok'=>false,'msg'=>'Bạn không có quyền thực hiện thao tác này']); exit; }
     $pid = (int)($_POST['id'] ?? 0);
     if (!$pid) { echo json_encode(['ok'=>false,'msg'=>'ID không hợp lệ']); exit; }
 
@@ -91,6 +94,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'ceo_a
 // ── AJAX: CEO Reject ──────────────────────────────────────────────────────────
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'ceo_reject') {
     header('Content-Type: application/json; charset=utf-8');
+    if (!$isCeoApprover) { echo json_encode(['ok'=>false,'msg'=>'Bạn không có quyền thực hiện thao tác này']); exit; }
     $pid    = (int)($_POST['id']     ?? 0);
     $reason = trim($_POST['reason']  ?? '');
     if (!$pid)    { echo json_encode(['ok'=>false,'msg'=>'ID không hợp lệ']); exit; }
@@ -292,12 +296,18 @@ function fmtVND($n) {
                     <a href="/projects/pakd/edit?id=<?= $p['id'] ?>" class="rc-link" target="_blank">
                         <i class="fas fa-external-link-alt"></i> Xem chi tiết
                     </a>
+                    <?php if ($isCeoApprover): ?>
                     <button class="btn-reject" onclick="openRejectDialog(<?= $p['id'] ?>, '<?= htmlspecialchars(addslashes($p['opportunity_name'] ?: $p['name'])) ?>')">
                         <i class="fas fa-times"></i> Từ chối
                     </button>
                     <button class="btn-approve" id="approve-btn-<?= $p['id'] ?>" onclick="doApprove(<?= $p['id'] ?>)">
                         <i class="fas fa-check"></i> Approve
                     </button>
+                    <?php else: ?>
+                    <span style="font-size:.75rem;color:#94a3b8;font-style:italic;">
+                        <i class="fas fa-eye" style="margin-right:3px;"></i>Chỉ xem
+                    </span>
+                    <?php endif; ?>
                 </div>
             </div>
             <?php endforeach; ?>

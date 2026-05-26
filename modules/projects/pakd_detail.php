@@ -194,8 +194,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'get_c
 
     $ceo_message = trim($_POST['message'] ?? '');
 
-    // Đảm bảo cột message tồn tại
-    try { $conn->query("ALTER TABLE pasx_notifications ADD COLUMN IF NOT EXISTS message TEXT DEFAULT NULL"); } catch (\Throwable $e) {}
+    // Đảm bảo cột message tồn tại (compatible MySQL 5.7+)
+    try { $conn->query("ALTER TABLE pasx_notifications ADD COLUMN message TEXT DEFAULT NULL"); } catch (\Throwable $e) {}
 
     // Cập nhật DB: status=pending, pasx_status=pending_ceo
     $st = $conn->prepare("UPDATE pakd SET status='pending', pasx_status='pending_ceo' WHERE id=?");
@@ -297,7 +297,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'get_c
     <table width="580" cellpadding="0" cellspacing="0" style="max-width:580px;width:100%;">
 
       <!-- Header -->
-      <tr><td style="background:linear-gradient(135deg,#b45309 0%,#d97706 60%,#f59e0b 100%);border-radius:12px 12px 0 0;padding:32px 36px 28px;">
+      <tr><td style="background:#b45309;border-radius:12px 12px 0 0;padding:32px 36px 28px;">
         <table width="100%" cellpadding="0" cellspacing="0">
           <tr>
             <td>
@@ -382,8 +382,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'get_c
         <table width="100%" cellpadding="0" cellspacing="0">
           <tr>
             <td align="center" style="padding-bottom:12px;">
-              <a href="'.$reviewUrl.'" style="display:inline-block;padding:14px 32px;background:linear-gradient(135deg,#d97706,#b45309);color:white;border-radius:8px;text-decoration:none;font-size:14px;font-weight:700;letter-spacing:.02em;box-shadow:0 4px 12px rgba(180,83,9,.35);">
-                &#10003; Xem &amp; Phê duyệt PASX
+              <a href="'.$reviewUrl.'" style="display:inline-block;padding:14px 32px;background:#d97706;color:#ffffff;border-radius:8px;text-decoration:none;font-size:14px;font-weight:700;letter-spacing:.02em;">
+                ✓ Xem &amp; Phê duyệt PASX
               </a>
             </td>
           </tr>
