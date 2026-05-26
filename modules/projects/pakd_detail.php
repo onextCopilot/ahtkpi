@@ -118,11 +118,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'save_
 // ── AJAX: Approve PASX → tạo Project bên Profile ──
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'approve_pasx') {
     header('Content-Type: application/json; charset=utf-8');
-    $pid          = (int)($_POST['id']           ?? 0);
-    $total_amount = (float)($_POST['totalAmount'] ?? 0);
-    $currency     = trim($_POST['currency']       ?? 'VND') ?: 'VND';
-    if (!$pid)          { echo json_encode(['ok'=>false,'msg'=>'ID không hợp lệ']); exit; }
-    if ($total_amount <= 0) { echo json_encode(['ok'=>false,'msg'=>'totalAmount phải > 0']); exit; }
+    $pid = (int)($_POST['id'] ?? 0);
+    if (!$pid) { echo json_encode(['ok'=>false,'msg'=>'ID không hợp lệ']); exit; }
 
     $configFile = __DIR__ . '/../../config/arrowhitech_config.json';
     if (!file_exists($configFile)) { echo json_encode(['ok'=>false,'msg'=>'Chưa cấu hình ArrowHitech API']); exit; }
@@ -131,23 +128,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'appro
     $api_token = $cfg['api_token']        ?? '';
     if (!$api_url || !$api_token) { echo json_encode(['ok'=>false,'msg'=>'Thiếu URL hoặc Token trong cấu hình']); exit; }
 
-    // Lấy thêm info để đưa vào extraData
-    $pr = $conn->prepare("SELECT opportunity_name, am_name, odoo_opp_id, pasx_id FROM pakd WHERE id=? LIMIT 1");
-    $pr->bind_param("i", $pid);
-    $pr->execute();
-    $pk = $pr->get_result()->fetch_assoc();
-    $pr->close();
-
-    $body = [
-        'totalAmount' => $total_amount,
-        'currency'    => $currency,
-        'extraData'   => [
-            'oppName'  => $pk['opportunity_name'] ?? null,
-            'amName'   => $pk['am_name']          ?? null,
-            'oppId'    => $pk['odoo_opp_id']      ?? null,
-            'pasxId'   => $pk['pasx_id']          ?? null,
-        ],
-    ];
+    $body = [];
 
     $timestamp  = (int)(microtime(true) * 1000);
     $request_id = sprintf('%04x%04x-%04x-%04x-%04x-%04x%04x%04x',
@@ -1755,35 +1736,22 @@ function getProjectTypeIcon($type) {
         }
 
         function pasxApprove() {
-            // Lấy totalAmount từ doanh thu gộp (row 1)
-            const totalAmount = fin_parse(document.getElementById('r1-amt')?.textContent);
-            if (!totalAmount || totalAmount <= 0) {
-                showToast('Doanh thu phải > 0 trước khi Approve', 'error');
-                return;
-            }
-
             // Dialog xác nhận
             const overlay = document.createElement('div');
             overlay.id = 'approve-dialog-overlay';
             overlay.style.cssText = 'position:fixed;inset:0;background:rgba(15,23,42,.45);z-index:2000;display:flex;align-items:center;justify-content:center;';
             overlay.innerHTML = `
-                <div style="background:#fff;border-radius:12px;width:420px;max-width:95vw;box-shadow:0 20px 60px rgba(0,0,0,.25);overflow:hidden;">
+                <div style="background:#fff;border-radius:12px;width:400px;max-width:95vw;box-shadow:0 20px 60px rgba(0,0,0,.25);overflow:hidden;">
                     <div style="padding:18px 20px 14px;border-bottom:1px solid #e2e8f0;display:flex;align-items:center;gap:10px;">
                         <span style="width:32px;height:32px;border-radius:8px;background:#dcfce7;display:flex;align-items:center;justify-content:center;flex-shrink:0;">
                             <i class="fas fa-check" style="color:#16a34a;font-size:14px;"></i>
                         </span>
                         <div>
                             <div style="font-weight:700;font-size:15px;color:#0f172a;">Xác nhận Approve PASX</div>
-                            <div style="font-size:12px;color:#64748b;margin-top:2px;">Profile sẽ tạo Project với thông tin bên dưới</div>
+                            <div style="font-size:12px;color:#64748b;margin-top:2px;">Profile sẽ tạo Project sau khi Approve</div>
                         </div>
                     </div>
                     <div style="padding:16px 20px;">
-                        <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:12px 16px;margin-bottom:14px;">
-                            <div style="display:flex;justify-content:space-between;align-items:center;">
-                                <span style="font-size:12px;color:#64748b;">Total Amount</span>
-                                <strong style="font-size:15px;color:#0f172a;">${totalAmount.toLocaleString('vi-VN')} VND</strong>
-                            </div>
-                        </div>
                         <p style="font-size:12.5px;color:#475569;margin:0 0 16px;">
                             Sau khi Approve, Profile sẽ tạo Project và trạng thái PAKD chuyển sang <strong>Approved</strong>.
                             Hành động này không thể hoàn tác.
@@ -1804,11 +1772,11 @@ function getProjectTypeIcon($type) {
             overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove(); });
 
             document.getElementById('btn-confirm-approve').addEventListener('click', function() {
-                submitPasxApprove(totalAmount, this, overlay);
+                submitPasxApprove(this, overlay);
             });
         }
 
-        function submitPasxApprove(totalAmount, btn, overlay) {
+        function submitPasxApprove(btn, overlay) {
             btn.disabled = true;
             btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Đang gửi...';
 
@@ -1816,10 +1784,8 @@ function getProjectTypeIcon($type) {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
                 body: new URLSearchParams({
-                    action:      'approve_pasx',
-                    id:          PAKD_ID,
-                    totalAmount: totalAmount,
-                    currency:    'VND',
+                    action: 'approve_pasx',
+                    id:     PAKD_ID,
                 })
             })
             .then(r => r.json())
