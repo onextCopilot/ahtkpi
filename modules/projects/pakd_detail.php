@@ -171,8 +171,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'appro
     if ($curl_err) { echo json_encode(['ok'=>false,'msg'=>'Lỗi kết nối: '.$curl_err]); exit; }
 
     if ($http_code >= 200 && $http_code < 300) {
-        // Cập nhật pasx_status = approved trong DB
-        $st = $conn->prepare("UPDATE pakd SET pasx_status='approved' WHERE id=?");
+        // Cập nhật cả status và pasx_status = approved trong DB
+        $st = $conn->prepare("UPDATE pakd SET status='approved', pasx_status='approved' WHERE id=?");
         $st->bind_param("i", $pid);
         $st->execute();
         $st->close();
