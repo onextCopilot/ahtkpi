@@ -264,31 +264,144 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'get_c
                     $smtp['smtp_user'],
                     $smtp['smtp_pass']
                 );
-                $fromName = $smtp['smtp_from_name'] ?? 'AHT KPI System';
-                $subject  = '[AHT KPI] Yêu cầu phê duyệt PASX — ' . ($pkInfo['opportunity_name'] ?? 'PAKD #'.$pid);
+                $fromName   = $smtp['smtp_from_name'] ?? 'AHT KPI System';
+                $subject    = '[Cần phê duyệt] PASX – ' . ($pkInfo['opportunity_name'] ?? 'PAKD #'.$pid);
+                $marginColor = $margin >= 20 ? '#16a34a' : ($margin >= 10 ? '#d97706' : '#dc2626');
+                $marginBg    = $margin >= 20 ? '#f0fdf4' : ($margin >= 10 ? '#fffbeb' : '#fef2f2');
+                $oppName     = htmlspecialchars($pkInfo['opportunity_name'] ?? '—');
+                $companyName = htmlspecialchars($pkInfo['company_name']     ?? '—');
+                $amName      = htmlspecialchars($pkInfo['am_name']          ?? '—');
+                $reqDate     = date('d/m/Y H:i');
 
-                $emailBody = '
-<div style="font-family:Inter,Arial,sans-serif;max-width:560px;margin:0 auto;background:#f8fafc;border-radius:12px;overflow:hidden;">
-  <div style="background:linear-gradient(135deg,#d97706,#b45309);padding:24px 28px;color:white;">
-    <div style="font-size:18px;font-weight:700;margin-bottom:4px;">📋 Yêu cầu phê duyệt PASX</div>
-    <div style="font-size:13px;opacity:.85;">Cần CEO xem xét và phê duyệt</div>
-  </div>
-  <div style="background:white;padding:24px 28px;">
-    <table style="width:100%;border-collapse:collapse;font-size:13px;color:#1e293b;">
-      <tr><td style="padding:8px 0;color:#64748b;width:140px;">Opportunity</td><td style="padding:8px 0;font-weight:600;">'.htmlspecialchars($pkInfo['opportunity_name'] ?? '—').'</td></tr>
-      <tr><td style="padding:8px 0;color:#64748b;border-top:1px solid #f1f5f9;">Khách hàng</td><td style="padding:8px 0;border-top:1px solid #f1f5f9;">'.htmlspecialchars($pkInfo['company_name'] ?? '—').'</td></tr>
-      <tr><td style="padding:8px 0;color:#64748b;border-top:1px solid #f1f5f9;">AM / Sales</td><td style="padding:8px 0;border-top:1px solid #f1f5f9;">'.htmlspecialchars($pkInfo['am_name'] ?? '—').'</td></tr>
-      <tr><td style="padding:8px 0;color:#64748b;border-top:1px solid #f1f5f9;">Margin</td><td style="padding:8px 0;border-top:1px solid #f1f5f9;font-weight:700;color:'.($margin>=20?'#16a34a':($margin>=10?'#d97706':'#dc2626')).'">'.$margin.'%</td></tr>
+                $emailBody = '<!DOCTYPE html>
+<html lang="vi">
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
+<body style="margin:0;padding:0;background:#f1f5f9;font-family:\'Segoe UI\',Arial,sans-serif;">
+<table width="100%" cellpadding="0" cellspacing="0" style="background:#f1f5f9;padding:32px 0;">
+  <tr><td align="center">
+    <table width="580" cellpadding="0" cellspacing="0" style="max-width:580px;width:100%;">
+
+      <!-- Header -->
+      <tr><td style="background:linear-gradient(135deg,#b45309 0%,#d97706 60%,#f59e0b 100%);border-radius:12px 12px 0 0;padding:32px 36px 28px;">
+        <table width="100%" cellpadding="0" cellspacing="0">
+          <tr>
+            <td>
+              <div style="display:inline-block;background:rgba(255,255,255,.18);border-radius:10px;padding:8px 12px;margin-bottom:16px;">
+                <span style="color:white;font-size:13px;font-weight:700;letter-spacing:.04em;">AHT KPI SYSTEM</span>
+              </div>
+              <div style="color:white;font-size:22px;font-weight:700;line-height:1.3;margin-bottom:6px;">
+                Yêu cầu phê duyệt PASX
+              </div>
+              <div style="color:rgba(255,255,255,.8);font-size:13px;line-height:1.5;">
+                AM <strong style="color:white;">'.$amName.'</strong> đã gửi Phương án sản xuất lên để CEO xem xét và phê duyệt đặc biệt.
+              </div>
+            </td>
+            <td width="64" valign="top" style="padding-left:16px;">
+              <div style="width:56px;height:56px;background:rgba(255,255,255,.2);border-radius:50%;text-align:center;line-height:56px;font-size:24px;">
+                &#128203;
+              </div>
+            </td>
+          </tr>
+        </table>
+      </td></tr>
+
+      <!-- Alert banner -->
+      <tr><td style="background:#92400e;padding:10px 36px;">
+        <table width="100%" cellpadding="0" cellspacing="0">
+          <tr>
+            <td style="color:#fef3c7;font-size:12px;font-weight:600;letter-spacing:.03em;">
+              &#9888;&#65039; Margin dưới 20% — Cần CEO phê duyệt trước khi AM gửi báo giá cho khách hàng
+            </td>
+          </tr>
+        </table>
+      </td></tr>
+
+      <!-- Body -->
+      <tr><td style="background:white;padding:32px 36px;">
+
+        <!-- Opportunity info -->
+        <div style="font-size:11px;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:.08em;margin-bottom:12px;">Thông tin Opportunity</div>
+        <table width="100%" cellpadding="0" cellspacing="0" style="border:1px solid #e2e8f0;border-radius:10px;overflow:hidden;margin-bottom:24px;">
+          <tr style="background:#f8fafc;">
+            <td style="padding:12px 16px;font-size:12px;color:#64748b;font-weight:600;width:160px;border-bottom:1px solid #e2e8f0;">Opportunity</td>
+            <td style="padding:12px 16px;font-size:13px;color:#0f172a;font-weight:700;border-bottom:1px solid #e2e8f0;">'.$oppName.'</td>
+          </tr>
+          <tr>
+            <td style="padding:12px 16px;font-size:12px;color:#64748b;font-weight:600;border-bottom:1px solid #e2e8f0;">Khách hàng</td>
+            <td style="padding:12px 16px;font-size:13px;color:#1e293b;border-bottom:1px solid #e2e8f0;">'.$companyName.'</td>
+          </tr>
+          <tr style="background:#f8fafc;">
+            <td style="padding:12px 16px;font-size:12px;color:#64748b;font-weight:600;border-bottom:1px solid #e2e8f0;">AM / Sales</td>
+            <td style="padding:12px 16px;font-size:13px;color:#1e293b;border-bottom:1px solid #e2e8f0;">'.$amName.'</td>
+          </tr>
+          <tr>
+            <td style="padding:12px 16px;font-size:12px;color:#64748b;font-weight:600;">Ngày gửi</td>
+            <td style="padding:12px 16px;font-size:13px;color:#1e293b;">'.$reqDate.'</td>
+          </tr>
+        </table>
+
+        <!-- Margin highlight -->
+        <div style="font-size:11px;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:.08em;margin-bottom:12px;">Chỉ số tài chính</div>
+        <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:28px;">
+          <tr>
+            <td width="50%" style="padding-right:8px;">
+              <div style="background:'.$marginBg.';border:1px solid '.$marginColor.'33;border-radius:10px;padding:16px 20px;text-align:center;">
+                <div style="font-size:11px;color:'.$marginColor.';font-weight:700;text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px;">Gross Margin</div>
+                <div style="font-size:28px;font-weight:800;color:'.$marginColor.';line-height:1;">'.$margin.'%</div>
+                <div style="font-size:11px;color:'.$marginColor.';opacity:.7;margin-top:4px;">'.($margin < 20 ? 'Dưới ngưỡng tự approve' : 'Đạt ngưỡng').'</div>
+              </div>
+            </td>
+            <td width="50%" style="padding-left:8px;">
+              <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:16px 20px;text-align:center;">
+                <div style="font-size:11px;color:#64748b;font-weight:700;text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px;">Doanh thu</div>
+                <div style="font-size:20px;font-weight:800;color:#1e293b;line-height:1;">'.number_format($pkInfo['revenue'],0,',','.').'</div>
+                <div style="font-size:11px;color:#94a3b8;margin-top:4px;">VND</div>
+              </div>
+            </td>
+          </tr>
+        </table>
+
+        <!-- CTA -->
+        <table width="100%" cellpadding="0" cellspacing="0">
+          <tr>
+            <td align="center" style="padding-bottom:12px;">
+              <a href="'.$reviewUrl.'" style="display:inline-block;padding:14px 32px;background:linear-gradient(135deg,#d97706,#b45309);color:white;border-radius:8px;text-decoration:none;font-size:14px;font-weight:700;letter-spacing:.02em;box-shadow:0 4px 12px rgba(180,83,9,.35);">
+                &#10003; Xem &amp; Phê duyệt PASX
+              </a>
+            </td>
+          </tr>
+          <tr>
+            <td align="center">
+              <a href="'.$detailUrl.'" style="display:inline-block;padding:10px 24px;background:white;color:#475569;border:1px solid #cbd5e1;border-radius:8px;text-decoration:none;font-size:13px;font-weight:600;">
+                Xem chi tiết PAKD
+              </a>
+            </td>
+          </tr>
+        </table>
+
+      </td></tr>
+
+      <!-- Footer -->
+      <tr><td style="background:#1e293b;border-radius:0 0 12px 12px;padding:20px 36px;">
+        <table width="100%" cellpadding="0" cellspacing="0">
+          <tr>
+            <td style="color:#94a3b8;font-size:11px;line-height:1.6;">
+              <strong style="color:#cbd5e1;">AHT KPI System</strong> · ArrowHitech<br>
+              Email này được gửi tự động — vui lòng không reply trực tiếp.<br>
+              Để hủy nhận thông báo, liên hệ quản trị viên hệ thống.
+            </td>
+            <td align="right" valign="middle" style="padding-left:16px;">
+              <div style="width:36px;height:36px;background:rgba(255,255,255,.08);border-radius:8px;text-align:center;line-height:36px;font-size:16px;">&#128312;</div>
+            </td>
+          </tr>
+        </table>
+      </td></tr>
+
     </table>
-    <div style="margin-top:20px;display:flex;gap:10px;">
-      <a href="'.$reviewUrl.'" style="display:inline-block;padding:10px 20px;background:#d97706;color:white;border-radius:8px;text-decoration:none;font-weight:600;font-size:13px;">Xem danh sách chờ duyệt</a>
-      <a href="'.$detailUrl.'" style="display:inline-block;padding:10px 20px;background:#f1f5f9;color:#1e293b;border-radius:8px;text-decoration:none;font-weight:600;font-size:13px;">Xem chi tiết PAKD</a>
-    </div>
-  </div>
-  <div style="background:#f8fafc;padding:14px 28px;font-size:11px;color:#94a3b8;text-align:center;">
-    AHT KPI System · Email tự động, vui lòng không reply
-  </div>
-</div>';
+  </td></tr>
+</table>
+</body>
+</html>';
 
                 if ($emailRes) {
                     while ($eu = $emailRes->fetch_assoc()) {
