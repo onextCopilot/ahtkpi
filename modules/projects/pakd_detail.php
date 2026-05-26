@@ -198,15 +198,44 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'get_c
     $ok = $st->execute();
     $st->close();
 
-    // Gửi notification cho tất cả admin/CEO
+    // Lấy danh sách CEO Approver từ config (fallback: admin role)
     try {
-        $admins = $conn->query("SELECT id FROM users WHERE role IN ('admin','ceo') LIMIT 10");
+        $cfgFile2 = __DIR__ . '/../../config/arrowhitech_config.json';
+        $ceoIds   = [];
+        if (file_exists($cfgFile2)) {
+            $cfg2   = json_decode(file_get_contents($cfgFile2), true);
+            $ceoIds = array_map('intval', (array)($cfg2['pasx_ceo_approvers'] ?? []));
+            $ceoIds = array_values(array_filter($ceoIds));
+        }
+
+        if ($ceoIds) {
+            $inList  = implode(',', $ceoIds);
+            $admins  = $conn->query("SELECT id FROM users WHERE id IN ($inList)");
+        } else {
+            // Fallback: tất cả admin nếu chưa cấu hình
+            $admins  = $conn->query("SELECT id FROM users WHERE role = 'admin' LIMIT 10");
+        }
+
         $pr2 = $conn->prepare("SELECT opportunity_name, pasx_id FROM pakd WHERE id=? LIMIT 1");
         $pr2->bind_param("i", $pid);
         $pr2->execute();
         $pk2 = $pr2->get_result()->fetch_assoc();
         $pr2->close();
+
         if ($admins && $pk2) {
+            // Đảm bảo bảng pasx_notifications tồn tại
+            $conn->query("CREATE TABLE IF NOT EXISTS pasx_notifications (
+                id         INT AUTO_INCREMENT PRIMARY KEY,
+                user_id    INT NOT NULL,
+                pakd_id    INT DEFAULT NULL,
+                pasx_id    VARCHAR(64) DEFAULT NULL,
+                event      VARCHAR(64) DEFAULT NULL,
+                status     VARCHAR(32) DEFAULT NULL,
+                opp_name   VARCHAR(500) DEFAULT NULL,
+                is_read    TINYINT(1) DEFAULT 0,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+
             $ni = $conn->prepare("INSERT IGNORE INTO pasx_notifications
                 (user_id, pakd_id, pasx_id, event, status, opp_name)
                 VALUES (?, ?, ?, 'ceo_approve_request', 'pending_ceo', ?)");

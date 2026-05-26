@@ -19,27 +19,35 @@ $message = '';
 $messageType = '';
 
 $config = [
-    'api_url'        => 'https://api-profile.arrowhitech.com',
-    'api_token'      => '',
-    'webhook_secret' => '',
+    'api_url'              => 'https://api-profile.arrowhitech.com',
+    'api_token'            => '',
+    'webhook_secret'       => '',
+    'pasx_ceo_approvers'   => [],   // array of user IDs
 ];
 
 if (file_exists($configFile)) {
     $saved = json_decode(file_get_contents($configFile), true);
     if (is_array($saved)) {
-        // chỉ lấy các key cần thiết, bỏ htpasswd cũ nếu có
-        foreach (['api_url', 'api_token', 'webhook_secret'] as $k) {
+        foreach (['api_url', 'api_token', 'webhook_secret', 'pasx_ceo_approvers'] as $k) {
             if (isset($saved[$k])) $config[$k] = $saved[$k];
         }
     }
 }
+if (!is_array($config['pasx_ceo_approvers'])) $config['pasx_ceo_approvers'] = [];
+
+// Load all users for CEO Approver picker
+$allUsers = [];
+$uRes = $conn->query("SELECT id, full_name, email, role, avatar FROM users ORDER BY full_name");
+if ($uRes) while ($u = $uRes->fetch_assoc()) $allUsers[] = $u;
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'save') {
     $new_secret = trim($_POST['webhook_secret'] ?? '');
+    $ceo_ids = array_map('intval', (array)($_POST['pasx_ceo_approvers'] ?? []));
     $config = [
-        'api_url'        => rtrim(trim($_POST['api_url'] ?? ''), '/'),
-        'api_token'      => trim($_POST['api_token'] ?? ''),
-        'webhook_secret' => $new_secret ?: $config['webhook_secret'],
+        'api_url'            => rtrim(trim($_POST['api_url'] ?? ''), '/'),
+        'api_token'          => trim($_POST['api_token'] ?? ''),
+        'webhook_secret'     => $new_secret ?: $config['webhook_secret'],
+        'pasx_ceo_approvers' => array_values(array_filter($ceo_ids)),
     ];
 
     if (file_put_contents($configFile, json_encode($config, JSON_PRETTY_PRINT))) {
@@ -155,7 +163,53 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
             background: #dbeafe; padding: 1px 5px; border-radius: 4px;
             font-family: 'Courier New', monospace; font-size: .8rem; border: 1px solid #93c5fd;
         }
+
+        /* CEO Approver user picker */
+        .user-search-wrap { position: relative; margin-bottom: 10px; }
+        .user-search-wrap i { position: absolute; left: 11px; top: 50%; transform: translateY(-50%); color: #94a3b8; font-size: 13px; }
+        .user-search-wrap input {
+            width: 100%; padding: 8px 12px 8px 32px;
+            border: 1px solid #cbd5e1; border-radius: 6px;
+            font-size: .875rem; font-family: inherit; outline: none;
+            box-sizing: border-box; color: #1e293b;
+        }
+        .user-search-wrap input:focus { border-color: #3b82f6; box-shadow: 0 0 0 3px rgba(59,130,246,.1); }
+
+        .user-picker {
+            border: 1px solid #e2e8f0; border-radius: 8px;
+            max-height: 260px; overflow-y: auto; background: #fafbfc;
+        }
+        .user-picker-item {
+            display: flex; align-items: center; gap: 12px;
+            padding: 10px 14px; border-bottom: 1px solid #f1f5f9;
+            cursor: pointer; transition: background .12s;
+        }
+        .user-picker-item:last-child { border-bottom: none; }
+        .user-picker-item:hover { background: #f1f5f9; }
+        .user-picker-item input[type="checkbox"] { width: 15px; height: 15px; accent-color: #2563eb; flex-shrink: 0; cursor: pointer; }
+        .user-picker-avatar {
+            width: 32px; height: 32px; border-radius: 50%;
+            object-fit: cover; flex-shrink: 0; border: 1px solid #e2e8f0;
+        }
+        .user-picker-initials {
+            width: 32px; height: 32px; border-radius: 50%;
+            font-size: 11px; font-weight: 700;
+            display: flex; align-items: center; justify-content: center;
+            flex-shrink: 0;
+        }
+        .user-picker-name { font-size: .875rem; font-weight: 500; color: #1e293b; }
+        .user-picker-meta { font-size: .75rem; color: #64748b; margin-top: 1px; }
+        .user-picker-role {
+            margin-left: auto; font-size: .7rem; font-weight: 600;
+            padding: 2px 7px; border-radius: 20px;
+            background: #e0e7ff; color: #4338ca; flex-shrink: 0;
+        }
+        .selected-count {
+            font-size: .8rem; color: #2563eb; font-weight: 600; margin-top: 6px;
+        }
+        .user-picker-empty { padding: 20px; text-align: center; color: #94a3b8; font-size: .85rem; }
     </style>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 </head>
 <body>
 <div class="dashboard-container">
@@ -265,6 +319,60 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
 
                         <hr class="section-divider">
 
+                        <!-- ── SECTION 3: CEO Approver ── -->
+                        <div class="section-title">Phần 3 — CEO Approver cho PASX (margin &lt; 20%)</div>
+
+                        <div class="info-box" style="background:#fefce8;border-color:#fde68a;color:#713f12;">
+                            Khi AM bấm <strong>"Gửi lên CEO"</strong> (PASX margin &lt; 20%), các user được chọn dưới đây sẽ nhận được thông báo phê duyệt.
+                            Nếu chưa chọn ai, hệ thống sẽ fallback về tất cả user có role <code>admin</code>.
+                        </div>
+
+                        <div class="form-group">
+                            <label>Chọn CEO Approver <span style="color:#ef4444">*</span></label>
+                            <div class="user-search-wrap">
+                                <i class="fas fa-search"></i>
+                                <input type="text" id="userSearch" placeholder="Tìm theo tên hoặc email..." oninput="filterUsers()">
+                            </div>
+                            <div class="user-picker" id="userPicker">
+                                <?php if (empty($allUsers)): ?>
+                                    <div class="user-picker-empty">Không có user nào trong hệ thống</div>
+                                <?php else: ?>
+                                    <?php
+                                    $palette = [
+                                        ['#ddd6fe','#5b21b6'],['#bfdbfe','#1e40af'],['#bbf7d0','#166534'],
+                                        ['#fed7aa','#9a3412'],['#fde68a','#92400e'],['#fbcfe8','#9d174d'],
+                                        ['#a5f3fc','#164e63'],['#d9f99d','#3f6212'],
+                                    ];
+                                    foreach ($allUsers as $u):
+                                        $uid     = (int)$u['id'];
+                                        $checked = in_array($uid, $config['pasx_ceo_approvers']) ? 'checked' : '';
+                                        $pc      = $palette[abs(crc32($u['full_name'] ?? '')) % count($palette)];
+                                        $parts   = array_filter(explode(' ', $u['full_name'] ?? ''));
+                                        $ini     = strtoupper(($parts[0][0] ?? '') . (count($parts) > 1 ? end($parts)[0] : ''));
+                                        $roleLabel = ['admin'=>'Admin','manager'=>'Manager','user'=>'User','ceo'=>'CEO'][$u['role'] ?? ''] ?? ($u['role'] ?? '');
+                                    ?>
+                                    <label class="user-picker-item" data-name="<?= htmlspecialchars(strtolower($u['full_name'] . ' ' . $u['email'])) ?>">
+                                        <input type="checkbox" name="pasx_ceo_approvers[]" value="<?= $uid ?>" <?= $checked ?> onchange="updateCount()">
+                                        <?php if (!empty($u['avatar'])): ?>
+                                            <img src="<?= htmlspecialchars($u['avatar']) ?>" class="user-picker-avatar" alt="" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">
+                                            <div class="user-picker-initials" style="display:none;background:<?= $pc[0] ?>;color:<?= $pc[1] ?>"><?= htmlspecialchars($ini ?: '?') ?></div>
+                                        <?php else: ?>
+                                            <div class="user-picker-initials" style="background:<?= $pc[0] ?>;color:<?= $pc[1] ?>"><?= htmlspecialchars($ini ?: '?') ?></div>
+                                        <?php endif; ?>
+                                        <div style="min-width:0;flex:1;">
+                                            <div class="user-picker-name"><?= htmlspecialchars($u['full_name'] ?: '—') ?></div>
+                                            <div class="user-picker-meta"><?= htmlspecialchars($u['email'] ?: '') ?></div>
+                                        </div>
+                                        <span class="user-picker-role"><?= htmlspecialchars($roleLabel) ?></span>
+                                    </label>
+                                    <?php endforeach; ?>
+                                <?php endif; ?>
+                            </div>
+                            <div class="selected-count" id="selectedCount"></div>
+                        </div>
+
+                        <hr class="section-divider">
+
                         <div style="margin-top:1.5rem;">
                             <button type="submit" class="btn btn-primary">
                                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path><polyline points="17 21 17 13 7 13 7 21"></polyline><polyline points="7 3 7 8 15 8"></polyline></svg>
@@ -311,6 +419,22 @@ function copyShareBox() {
     const secret = document.getElementById('webhook_secret').value;
     navigator.clipboard.writeText(secret).then(() => showToast('Đã copy secret!'));
 }
+
+function filterUsers() {
+    const q = document.getElementById('userSearch').value.toLowerCase();
+    document.querySelectorAll('#userPicker .user-picker-item').forEach(function(item) {
+        item.style.display = item.dataset.name.includes(q) ? '' : 'none';
+    });
+}
+
+function updateCount() {
+    const total = document.querySelectorAll('#userPicker input[type="checkbox"]:checked').length;
+    const el = document.getElementById('selectedCount');
+    if (el) el.textContent = total ? 'Đã chọn ' + total + ' người' : '';
+}
+
+// Init count on load
+document.addEventListener('DOMContentLoaded', updateCount);
 
 function showToast(msg) {
     const t = document.createElement('div');
