@@ -243,18 +243,36 @@ $total_notif_count = $notif_count + $pasx_notif_count;
                 </div>
                 <div style="max-height: 350px; overflow-y: auto;">
                     <?php foreach ($pasx_notifs as $pn):
-                        $isCeoReq = ($pn['event'] === 'ceo_approve_request');
-                        $nb_bg    = $isCeoReq ? '#fffbeb' : '#f5f3ff';
-                        $nb_color = $isCeoReq ? '#d97706' : '#6366f1';
-                        $nb_icon  = $isCeoReq ? 'fa-user-tie' : 'fa-cog';
-                        $nb_bdr   = $isCeoReq ? '#fde68a' : '#ede9fe';
-                        $nb_title = $isCeoReq
-                            ? 'Yêu cầu phê duyệt PASX'
-                            : 'PASX ' . strtoupper($pn['status'] ?? '');
-                        $nb_link_label = $isCeoReq ? 'Xem & Duyệt' : 'Xem PAKD';
-                        $nb_link_url   = $isCeoReq
-                            ? '/projects/ceo-review'
-                            : '/projects/pakd/edit?id=' . $pn['pakd_id'];
+                        $ev = $pn['event'] ?? '';
+                        $isCeoReq      = ($ev === 'ceo_approve_request');
+                        $isCeoApproved = ($ev === 'ceo_approved');
+                        $isCeoRejected = ($ev === 'ceo_rejected');
+
+                        if ($isCeoReq) {
+                            $nb_bg    = '#fffbeb'; $nb_color = '#d97706';
+                            $nb_icon  = 'fa-user-tie'; $nb_bdr = '#fde68a';
+                            $nb_title = 'Yêu cầu phê duyệt PASX';
+                            $nb_link_label = 'Xem & Duyệt';
+                            $nb_link_url   = '/projects/ceo-review';
+                        } elseif ($isCeoApproved) {
+                            $nb_bg    = '#f0fdf4'; $nb_color = '#16a34a';
+                            $nb_icon  = 'fa-check-circle'; $nb_bdr = '#bbf7d0';
+                            $nb_title = 'PASX đã được CEO phê duyệt ✓';
+                            $nb_link_label = 'Xem PAKD';
+                            $nb_link_url   = '/projects/pakd/edit?id=' . $pn['pakd_id'];
+                        } elseif ($isCeoRejected) {
+                            $nb_bg    = '#fef2f2'; $nb_color = '#dc2626';
+                            $nb_icon  = 'fa-times-circle'; $nb_bdr = '#fecaca';
+                            $nb_title = 'PASX bị CEO từ chối';
+                            $nb_link_label = 'Xem PAKD';
+                            $nb_link_url   = '/projects/pakd/edit?id=' . $pn['pakd_id'];
+                        } else {
+                            $nb_bg    = '#f5f3ff'; $nb_color = '#6366f1';
+                            $nb_icon  = 'fa-cog'; $nb_bdr = '#ede9fe';
+                            $nb_title = 'PASX ' . strtoupper($pn['status'] ?? '');
+                            $nb_link_label = 'Xem PAKD';
+                            $nb_link_url   = '/projects/pakd/edit?id=' . $pn['pakd_id'];
+                        }
                     ?>
                     <div class="notif-item pasx-notif-item" id="pasx-notif-<?= $pn['id'] ?>"
                         style="padding:12px 16px;border-bottom:1px solid #f1f5f9;background:<?= $nb_bg ?>;border-left:3px solid <?= $nb_bdr ?>;position:relative;transition:background .2s;"
@@ -269,6 +287,10 @@ $total_notif_count = $notif_count + $pasx_notif_count;
                         <?php if ($isCeoReq && $pn['submitted_by']): ?>
                         <div style="font-size:.75rem;color:#92400e;margin-bottom:4px;">
                             <i class="fas fa-user" style="margin-right:3px;opacity:.7;"></i>AM: <?= htmlspecialchars($pn['submitted_by']) ?>
+                        </div>
+                        <?php elseif ($isCeoRejected && !empty($pn['message'])): ?>
+                        <div style="font-size:.75rem;color:#dc2626;margin-bottom:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:260px;" title="<?= htmlspecialchars($pn['message']) ?>">
+                            <i class="fas fa-comment-alt" style="margin-right:3px;opacity:.7;"></i><?= htmlspecialchars(mb_strimwidth($pn['message'], 0, 60, '…')) ?>
                         </div>
                         <?php elseif ($pn['human_cost']): ?>
                         <div style="font-size:.75rem;color:#64748b;margin-bottom:4px;">

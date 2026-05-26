@@ -26,6 +26,197 @@ function loadSmtp($conn) {
     return $s;
 }
 
+// ── Helper: gửi email + notification cho AM sau khi CEO hành động ─────────────
+function notifyAm($conn, $pid, $action, $reason = '') {
+    try {
+        // Lấy thông tin PAKD + AM
+        $pr = $conn->prepare("SELECT opportunity_name, company_name, am_name, pasx_id, revenue, gross_profit FROM pakd WHERE id=? LIMIT 1");
+        $pr->bind_param("i", $pid); $pr->execute();
+        $pk = $pr->get_result()->fetch_assoc(); $pr->close();
+        if (!$pk) return;
+
+        $oppName  = $pk['opportunity_name'] ?? 'PAKD #'.$pid;
+        $amName   = $pk['am_name']          ?? '';
+        $pasx_id  = $pk['pasx_id']          ?? '';
+        $margin   = $pk['revenue'] > 0 ? round($pk['gross_profit'] / $pk['revenue'] * 100, 1) : 0;
+
+        // Tìm AM user (match full_name)
+        $amUserId = null; $amEmail = null;
+        if ($amName) {
+            $ur = $conn->prepare("SELECT id, email FROM users WHERE full_name = ? LIMIT 1");
+            $ur->bind_param("s", $amName); $ur->execute();
+            $amRow = $ur->get_result()->fetch_assoc(); $ur->close();
+            if ($amRow) { $amUserId = (int)$amRow['id']; $amEmail = $amRow['email']; }
+        }
+
+        $isApprove   = ($action === 'approve');
+        $event       = $isApprove ? 'ceo_approved' : 'ceo_rejected';
+        $notifStatus = $isApprove ? 'approved' : 'rejected';
+
+        // ── Notification ──────────────────────────────────────────────────────
+        if ($amUserId) {
+            try { $conn->query("ALTER TABLE pasx_notifications ADD COLUMN message TEXT DEFAULT NULL"); } catch (\Throwable $e) {}
+            $ni = $conn->prepare("INSERT INTO pasx_notifications
+                (user_id, pakd_id, pasx_id, event, status, opp_name, message)
+                VALUES (?, ?, ?, ?, ?, ?, ?)");
+            $ni->bind_param("iisssss", $amUserId, $pid, $pasx_id, $event, $notifStatus, $oppName, $reason);
+            $ni->execute(); $ni->close();
+        }
+
+        // ── Email ─────────────────────────────────────────────────────────────
+        if (!$amEmail) return;
+        $smtp = loadSmtp($conn);
+        if (empty($smtp['smtp_host']) || empty($smtp['smtp_user']) || empty($smtp['smtp_pass'])) return;
+
+        require_once __DIR__ . '/../includes/SimpleMailer.php';
+        $detailUrl   = (isset($_SERVER['HTTPS']) ? 'https' : 'http') . '://' . ($_SERVER['HTTP_HOST'] ?? 'localhost') . '/projects/pakd/edit?id=' . $pid;
+        $oppNameEsc  = htmlspecialchars($oppName);
+        $amNameEsc   = htmlspecialchars($amName);
+        $companyEsc  = htmlspecialchars($pk['company_name'] ?? '—');
+        $reqDate     = date('d/m/Y H:i');
+        $marginColor = $margin >= 20 ? '#16a34a' : ($margin >= 10 ? '#d97706' : '#dc2626');
+        $marginBg    = $margin >= 20 ? '#f0fdf4' : ($margin >= 10 ? '#fffbeb' : '#fef2f2');
+
+        if ($isApprove) {
+            $subject    = '[Đã phê duyệt] PASX – ' . $oppName;
+            $headerBg   = '#15803d';
+            $headerTitle= 'PASX đã được CEO phê duyệt ✓';
+            $headerSub  = 'CEO đã xem xét và <strong style="color:white;">phê duyệt</strong> Phương án sản xuất của bạn.';
+            $alertBg    = '#166534';
+            $alertText  = '✅ Bạn có thể tiến hành gửi báo giá cho khách hàng.';
+            $reasonBlock= '';
+            $ctaLabel   = 'Xem PAKD đã duyệt';
+            $ctaBg      = '#16a34a';
+        } else {
+            $subject    = '[Từ chối] PASX – ' . $oppName;
+            $headerBg   = '#b45309';
+            $headerTitle= 'PASX đã bị CEO từ chối';
+            $headerSub  = 'CEO đã xem xét và <strong style="color:white;">từ chối</strong> Phương án sản xuất. Vui lòng xem lý do và yêu cầu Profile điều chỉnh lại.';
+            $alertBg    = '#92400e';
+            $alertText  = '⚠️ Cần yêu cầu bên Profile rebuild lại PASX trước khi gửi báo giá.';
+            $reasonEsc  = nl2br(htmlspecialchars($reason));
+            $reasonBlock= $reason ? '
+        <div style="margin-bottom:24px;">
+          <div style="font-size:11px;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:.08em;margin-bottom:10px;">Lý do từ chối</div>
+          <div style="background:#fef2f2;border:1px solid #fecaca;border-left:3px solid #dc2626;border-radius:8px;padding:14px 16px;font-size:13px;color:#991b1b;line-height:1.65;">'.$reasonEsc.'</div>
+        </div>' : '';
+            $ctaLabel   = 'Xem PAKD & Yêu cầu điều chỉnh';
+            $ctaBg      = '#d97706';
+        }
+
+        $emailBody = '<!DOCTYPE html>
+<html lang="vi">
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
+<body style="margin:0;padding:0;background:#f1f5f9;font-family:\'Segoe UI\',Arial,sans-serif;">
+<table width="100%" cellpadding="0" cellspacing="0" style="background:#f1f5f9;padding:32px 0;">
+  <tr><td align="center">
+    <table width="580" cellpadding="0" cellspacing="0" style="max-width:580px;width:100%;">
+
+      <!-- Header -->
+      <tr><td style="background:'.$headerBg.';border-radius:12px 12px 0 0;padding:32px 36px 28px;">
+        <table width="100%" cellpadding="0" cellspacing="0">
+          <tr>
+            <td>
+              <div style="display:inline-block;background:rgba(255,255,255,.18);border-radius:10px;padding:8px 12px;margin-bottom:16px;">
+                <span style="color:white;font-size:13px;font-weight:700;letter-spacing:.04em;">AHT OS SYSTEM</span>
+              </div>
+              <div style="color:white;font-size:22px;font-weight:700;line-height:1.3;margin-bottom:6px;">'.$headerTitle.'</div>
+              <div style="color:rgba(255,255,255,.85);font-size:13px;line-height:1.5;">'.$headerSub.'</div>
+            </td>
+          </tr>
+        </table>
+      </td></tr>
+
+      <!-- Alert banner -->
+      <tr><td style="background:'.$alertBg.';padding:10px 36px;">
+        <div style="color:#fef3c7;font-size:12px;font-weight:600;letter-spacing:.03em;">'.$alertText.'</div>
+      </td></tr>
+
+      <!-- Body -->
+      <tr><td style="background:white;padding:32px 36px;">
+
+        <!-- Opportunity info -->
+        <div style="font-size:11px;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:.08em;margin-bottom:12px;">Thông tin Opportunity</div>
+        <table width="100%" cellpadding="0" cellspacing="0" style="border:1px solid #e2e8f0;border-radius:10px;overflow:hidden;margin-bottom:24px;">
+          <tr style="background:#f8fafc;">
+            <td style="padding:12px 16px;font-size:12px;color:#64748b;font-weight:600;width:160px;border-bottom:1px solid #e2e8f0;">Opportunity</td>
+            <td style="padding:12px 16px;font-size:13px;color:#0f172a;font-weight:700;border-bottom:1px solid #e2e8f0;">'.$oppNameEsc.'</td>
+          </tr>
+          <tr>
+            <td style="padding:12px 16px;font-size:12px;color:#64748b;font-weight:600;border-bottom:1px solid #e2e8f0;">Khách hàng</td>
+            <td style="padding:12px 16px;font-size:13px;color:#1e293b;border-bottom:1px solid #e2e8f0;">'.$companyEsc.'</td>
+          </tr>
+          <tr style="background:#f8fafc;">
+            <td style="padding:12px 16px;font-size:12px;color:#64748b;font-weight:600;border-bottom:1px solid #e2e8f0;">AM / Sales</td>
+            <td style="padding:12px 16px;font-size:13px;color:#1e293b;border-bottom:1px solid #e2e8f0;">'.$amNameEsc.'</td>
+          </tr>
+          <tr>
+            <td style="padding:12px 16px;font-size:12px;color:#64748b;font-weight:600;">Ngày xử lý</td>
+            <td style="padding:12px 16px;font-size:13px;color:#1e293b;">'.$reqDate.'</td>
+          </tr>
+        </table>
+
+        '.$reasonBlock.'
+
+        <!-- Margin -->
+        <div style="font-size:11px;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:.08em;margin-bottom:12px;">Chỉ số tài chính</div>
+        <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:28px;">
+          <tr>
+            <td width="50%" style="padding-right:8px;">
+              <div style="background:'.$marginBg.';border:1px solid '.$marginColor.'33;border-radius:10px;padding:16px 20px;text-align:center;">
+                <div style="font-size:11px;color:'.$marginColor.';font-weight:700;text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px;">Gross Margin</div>
+                <div style="font-size:28px;font-weight:800;color:'.$marginColor.';line-height:1;">'.$margin.'%</div>
+              </div>
+            </td>
+            <td width="50%" style="padding-left:8px;">
+              <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:16px 20px;text-align:center;">
+                <div style="font-size:11px;color:#64748b;font-weight:700;text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px;">Doanh thu</div>
+                <div style="font-size:20px;font-weight:800;color:#1e293b;line-height:1;">'.number_format($pk['revenue'],0,',','.').'</div>
+                <div style="font-size:11px;color:#94a3b8;margin-top:4px;">VND</div>
+              </div>
+            </td>
+          </tr>
+        </table>
+
+        <!-- CTA -->
+        <table width="100%" cellpadding="0" cellspacing="0">
+          <tr>
+            <td align="center">
+              <a href="'.$detailUrl.'" style="display:inline-block;padding:14px 32px;background:'.$ctaBg.';color:#ffffff;border-radius:8px;text-decoration:none;font-size:14px;font-weight:700;letter-spacing:.02em;">
+                '.$ctaLabel.'
+              </a>
+            </td>
+          </tr>
+        </table>
+
+      </td></tr>
+
+      <!-- Footer -->
+      <tr><td style="background:#1e293b;border-radius:0 0 12px 12px;padding:20px 36px;">
+        <div style="color:#94a3b8;font-size:12px;line-height:1.6;">
+          <strong style="color:#cbd5e1;">AHT OS System</strong> · ArrowHitech<br>
+          Email này được gửi tự động — vui lòng không reply trực tiếp.<br>
+          Để huỷ nhận thông báo, liên hệ quản trị viên hệ thống.
+        </div>
+      </td></tr>
+
+    </table>
+  </td></tr>
+</table>
+</body>
+</html>';
+
+        $mailer = new SimpleMailer(
+            $smtp['smtp_host'],
+            (int)($smtp['smtp_port'] ?? 587),
+            $smtp['smtp_user'],
+            $smtp['smtp_pass']
+        );
+        $fromName = $smtp['smtp_from_name'] ?? 'AHT OS System';
+        $mailer->send($smtp['smtp_user'], $fromName, $amEmail, $amName, $subject, $emailBody);
+    } catch (\Throwable $e) {}
+}
+
 // ── Helper: gọi Profile API approve/reject ───────────────────────────────────
 function callProfileApi($conn, $endpoint, $body) {
     $cfgFile = __DIR__ . '/../../config/arrowhitech_config.json';
@@ -84,6 +275,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'ceo_a
     if ($ok) {
         $st = $conn->prepare("UPDATE pakd SET status='approved', pasx_status='approved' WHERE id=?");
         $st->bind_param("i", $pid); $st->execute(); $st->close();
+        notifyAm($conn, $pid, 'approve');
         echo json_encode(['ok'=>true, 'msg'=>'Đã approve thành công']);
     } else {
         echo json_encode(['ok'=>false, 'msg'=>$msg]);
@@ -104,6 +296,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'ceo_r
     if ($ok) {
         $st = $conn->prepare("UPDATE pakd SET pasx_status='rejected' WHERE id=?");
         $st->bind_param("i", $pid); $st->execute(); $st->close();
+        notifyAm($conn, $pid, 'reject', $reason);
         echo json_encode(['ok'=>true, 'msg'=>'Đã từ chối PASX']);
     } else {
         echo json_encode(['ok'=>false, 'msg'=>$msg]);

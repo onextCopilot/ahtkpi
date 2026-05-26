@@ -302,7 +302,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'get_c
           <tr>
             <td>
               <div style="display:inline-block;background:rgba(255,255,255,.18);border-radius:10px;padding:8px 12px;margin-bottom:16px;">
-                <span style="color:white;font-size:13px;font-weight:700;letter-spacing:.04em;">AHT KPI SYSTEM</span>
+                <span style="color:white;font-size:13px;font-weight:700;letter-spacing:.04em;">AHT OS SYSTEM</span>
               </div>
               <div style="color:white;font-size:22px;font-weight:700;line-height:1.3;margin-bottom:6px;">
                 Yêu cầu phê duyệt PASX
@@ -403,7 +403,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'get_c
         <table width="100%" cellpadding="0" cellspacing="0">
           <tr>
             <td style="color:#94a3b8;font-size:11px;line-height:1.6;">
-              <strong style="color:#cbd5e1;">AHT KPI System</strong> · ArrowHitech<br>
+              <strong style="color:#cbd5e1;">AHT OS System</strong> · ArrowHitech<br>
               Email này được gửi tự động — vui lòng không reply trực tiếp.<br>
               Để hủy nhận thông báo, liên hệ quản trị viên hệ thống.
             </td>
@@ -1102,21 +1102,21 @@ function getProjectTypeIcon($type) {
             <div class="tmb-right">
                 <div class="metric-item">
                     <span class="m-label">Doanh thu thuần:</span>
-                    <strong><?= formatVND($pakd['revenue']) ?></strong>
+                    <strong id="tmb-rev-net"><?= formatVND($fin_rev_net) ?></strong>
                     <span class="m-unit">VND</span>
                 </div>
                 <div class="tmb-divider"></div>
                 <div class="metric-item">
                     <span class="m-label">Lợi nhuận gộp:</span>
-                    <strong><?= formatVND($pakd['gross_profit']) ?></strong>
+                    <strong id="tmb-gross-profit"><?= formatVND($fin_gross_profit) ?></strong>
                     <span class="m-unit">VND</span>
                 </div>
                 <div class="tmb-divider"></div>
                 <div class="metric-item">
                     <span class="m-label">PASX:</span>
-                    <strong><?= formatVND($pakd['pasx_value']) ?></strong>
+                    <strong id="tmb-pasx-amt"><?= formatVND($fin_prod_cost) ?></strong>
                     <span class="m-unit">VND</span>
-                    <span class="m-pct">(<?= number_format($pasx_percent, 2) ?>%)</span>
+                    <span class="m-pct" id="tmb-pasx-pct">(<?= number_format($fin_rev_net > 0 ? ($fin_prod_cost / $fin_rev_net * 100) : 0, 2) ?>%)</span>
                 </div>
             </div>
         </div>
@@ -1724,6 +1724,14 @@ function getProjectTypeIcon($type) {
             const grossPct = revNet > 0 ? (grossProfit / revNet * 100).toFixed(2) : '0.00';
             document.getElementById('r5-rate').textContent = grossPct + '%';
             document.getElementById('r5-amt').textContent = fin_fmt(grossProfit);
+
+            // ── Cập nhật stats bar (top metrics) ──
+            const tmbRev = document.getElementById('tmb-rev-net');
+            if (tmbRev) tmbRev.textContent = fin_fmt(revNet);
+            const tmbGp = document.getElementById('tmb-gross-profit');
+            if (tmbGp) tmbGp.textContent = fin_fmt(grossProfit);
+            const tmbPasxPct = document.getElementById('tmb-pasx-pct');
+            if (tmbPasxPct && revNet > 0) tmbPasxPct.textContent = '(' + (FIN_PROD / revNet * 100).toFixed(2) + '%)';
 
             // ── Cập nhật PASX action buttons theo margin realtime ──
             if (PASX_HAS_DATA && PAKD_STATUS !== 'approved' && PASX_STATUS !== 'pending_ceo' && PASX_STATUS !== 'rejected') {
