@@ -1292,6 +1292,8 @@ function getProjectTypeIcon($type) {
                                                 <span style="font-size:12px;color:rgba(255,255,255,.8);"><i class="fas fa-check-circle"></i> Đã Approve</span>
                                             <?php elseif (($pakd['pasx_status'] ?? '') === 'pending_ceo'): ?>
                                                 <span style="font-size:12px;color:#d97706;font-weight:500;display:inline-flex;align-items:center;gap:5px;"><i class="fas fa-user-tie"></i> Đã gửi lên CEO — đang chờ phê duyệt</span>
+                                            <?php elseif (($pakd['pasx_status'] ?? '') === 'rejected'): ?>
+                                                <span style="font-size:12px;color:#b45309;font-weight:500;display:inline-flex;align-items:center;gap:5px;"><i class="fas fa-clock"></i> Đã Reject — đang chờ Profile rebuild</span>
                                             <?php elseif ($fin_margin_pct >= 20): ?>
                                                 <button class="btn-pasx-action btn-pasx-approve" onclick="pasxApprove()">
                                                     <i class="fas fa-check"></i> Approve
@@ -1607,7 +1609,7 @@ function getProjectTypeIcon($type) {
             document.getElementById('r5-amt').textContent = fin_fmt(grossProfit);
 
             // ── Cập nhật PASX action buttons theo margin realtime ──
-            if (PASX_HAS_DATA && PAKD_STATUS !== 'approved' && PASX_STATUS !== 'pending_ceo') {
+            if (PASX_HAS_DATA && PAKD_STATUS !== 'approved' && PASX_STATUS !== 'pending_ceo' && PASX_STATUS !== 'rejected') {
                 const marginPct = revNet > 0 ? (grossProfit / revNet * 100) : 0;
                 const container = document.getElementById('pasx-action-btns');
                 if (container) {
