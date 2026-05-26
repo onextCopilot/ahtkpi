@@ -128,8 +128,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'appro
     $api_token = $cfg['api_token']        ?? '';
     if (!$api_url || !$api_token) { echo json_encode(['ok'=>false,'msg'=>'Thiếu URL hoặc Token trong cấu hình']); exit; }
 
+    // Lấy thông tin pakd để gửi kèm
+    $pr = $conn->prepare("SELECT opportunity_name, am_name, odoo_opp_id, pasx_id FROM pakd WHERE id=? LIMIT 1");
+    $pr->bind_param("i", $pid);
+    $pr->execute();
+    $pk = $pr->get_result()->fetch_assoc();
+    $pr->close();
+
     $body = [
-        'message' => 'Cảm ơn, PASX đã được approve, Sale/AM/BD sẽ chuyển báo giá cho khách hàng. Vui lòng chờ.. ',
+        'message'  => 'Cảm ơn, PASX đã được approve, Sale/AM/BD sẽ chuyển báo giá cho khách hàng. Vui lòng chờ.. ',
+        'oppName'  => $pk['opportunity_name'] ?? null,
+        'amName'   => $pk['am_name']          ?? null,
+        'oppId'    => $pk['odoo_opp_id']      ?? null,
+        'pasxId'   => $pk['pasx_id']          ?? null,
     ];
 
     $timestamp  = (int)(microtime(true) * 1000);
