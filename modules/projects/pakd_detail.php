@@ -598,6 +598,21 @@ function getProjectTypeIcon($type) {
         /* ── Detail Container ── */
         .detail-container { padding: 28px 40px 40px; flex: 1; }
 
+        /* ── Page locked (approved) ── */
+        .page-locked input,
+        .page-locked select,
+        .page-locked textarea {
+            pointer-events: none !important;
+            background: #f8fafc !important;
+            color: #64748b !important;
+            cursor: default !important;
+        }
+        .page-locked .btn-add-cr,
+        .page-locked .btn-del-cr,
+        .page-locked .btn-req-pasx,
+        .page-locked .btn-resend-pasx { display: none !important; }
+        .page-locked .project-type-select { pointer-events: none !important; opacity: .7; }
+
 
         /* ── Actions Row ── */
         .actions-row { display: flex; gap: 10px; margin-bottom: 20px; }
@@ -845,7 +860,7 @@ function getProjectTypeIcon($type) {
             </div>
         </div>
 
-        <div class="detail-container">
+        <div class="detail-container<?= ($pakd['status'] ?? '') === 'approved' ? ' page-locked' : '' ?>">
 
             <!-- Actions Row -->
             <div class="actions-row">
@@ -1529,6 +1544,15 @@ function getProjectTypeIcon($type) {
 
         // ── Wire up autosave + init on DOM ready ──
         document.addEventListener('DOMContentLoaded', function () {
+            if (PAKD_STATUS === 'approved') {
+                // Khoá toàn bộ field khi đã approved
+                document.querySelectorAll('.detail-container input, .detail-container select, .detail-container textarea').forEach(function (el) {
+                    el.disabled = true;
+                });
+                fin_calc(); // vẫn tính để hiển thị đúng số liệu
+                return;     // không wire autosave
+            }
+
             // Attach blur → autosave to all financial table inputs
             document.querySelectorAll('#fin-table .fin-input, #fin-table .pct-inp').forEach(function (inp) {
                 inp.addEventListener('blur', function () { autosave(this); });
@@ -1814,6 +1838,11 @@ function getProjectTypeIcon($type) {
                     const container = document.getElementById('pasx-action-btns');
                     if (container) container.innerHTML =
                         '<span style="font-size:12px;color:rgba(255,255,255,.8);"><i class="fas fa-check-circle"></i> Đã Approve</span>';
+                    // Khoá toàn bộ field ngay lập tức
+                    document.querySelectorAll('.detail-container input, .detail-container select, .detail-container textarea').forEach(function (el) {
+                        el.disabled = true;
+                    });
+                    document.querySelector('.detail-container')?.classList.add('page-locked');
                 } else {
                     showToast(data.msg || 'Có lỗi xảy ra', 'error');
                     btn.disabled = false;
