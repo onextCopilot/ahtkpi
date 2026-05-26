@@ -182,7 +182,7 @@ try {
     )");
     // Migrate: add message column if table existed before this column was added
     try { $conn->query("ALTER TABLE pasx_notifications ADD COLUMN message TEXT DEFAULT NULL"); } catch (\Throwable $e) {}
-    $pn = $conn->prepare("SELECT id, pakd_id, pasx_id, event, status, human_cost, overtime_cost, opp_name, submitted_by, created_at FROM pasx_notifications WHERE user_id=? AND is_read=0 ORDER BY created_at DESC LIMIT 20");
+    $pn = $conn->prepare("SELECT id, pakd_id, pasx_id, event, status, human_cost, overtime_cost, opp_name, submitted_by, message, created_at FROM pasx_notifications WHERE user_id=? AND is_read=0 ORDER BY created_at DESC LIMIT 20");
     $pn->bind_param("i", $current_user_id);
     $pn->execute();
     $pn_res = $pn->get_result();

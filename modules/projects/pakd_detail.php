@@ -668,6 +668,18 @@ $fin_rev_gross    = (float)($pakd['revenue'] ?? 0);
 $fin_human_cost   = (float)($fin_saved['human_cost']    ?? 0); // cập nhật từ ArrowHitech callback
 $fin_overtime     = (float)($fin_saved['overtime_cost'] ?? 0); // cập nhật từ ArrowHitech callback
 $fin_pasx_note    = trim($fin_saved['pasx_note'] ?? '');       // ghi chú từ Profile
+// Fallback: đọc resubmitNote từ webhook log mới nhất nếu fin_data chưa có
+if ($fin_pasx_note === '' && !empty($pakd['id'])) {
+    try {
+        $wl = $conn->prepare("SELECT meta FROM pasx_webhook_logs WHERE pakd_id=? AND meta IS NOT NULL ORDER BY id DESC LIMIT 1");
+        $wl->bind_param("i", $pakd['id']); $wl->execute();
+        $wlRow = $wl->get_result()->fetch_assoc(); $wl->close();
+        if ($wlRow) {
+            $wlMeta = json_decode($wlRow['meta'], true);
+            $fin_pasx_note = trim($wlMeta['resubmitNote'] ?? '');
+        }
+    } catch (\Throwable $e) {}
+}
 // Dùng rev_net đã lưu từ JS (doanh thu thuần sau giảm trừ); fallback về revenue gross
 $fin_rev_net      = !empty($fin_saved['rev_net']) ? (float)$fin_saved['rev_net'] : $fin_rev_gross;
 // Nếu đã nhận được data từ callback thì dùng tổng human+overtime, không thì dùng pasx_value
@@ -1396,8 +1408,15 @@ function getProjectTypeIcon($type) {
                                 <td class="ind-1">
                                     Chi phí sản xuất
                                     <i class="fas fa-lock" style="color:var(--lgray);font-size:9px;margin-left:4px;" title="Khóa – từ Phương án sản xuất"></i>
-                                    <i class="fas fa-circle-info" style="color:<?= $fin_pasx_note ? '#d97706' : 'var(--lgray)' ?>;font-size:10px;margin-left:2px;cursor:<?= $fin_pasx_note ? 'pointer' : 'default' ?>;"
-                                       title="<?= $fin_pasx_note ? htmlspecialchars($fin_pasx_note) : 'Chi phí từ Phương án sản xuất (Profile)' ?>"></i>
+                                    <span class="pasx-note-tip" style="position:relative;display:inline-flex;align-items:center;">
+                                        <i class="fas fa-circle-info" style="color:<?= $fin_pasx_note ? '#d97706' : 'var(--lgray)' ?>;font-size:10px;margin-left:2px;cursor:<?= $fin_pasx_note ? 'help' : 'default' ?>;"></i>
+                                        <?php if ($fin_pasx_note): ?>
+                                        <span class="pasx-note-bubble" style="display:none;position:absolute;bottom:calc(100% + 6px);left:50%;transform:translateX(-50%);background:#1e293b;color:#f1f5f9;font-size:11px;line-height:1.55;padding:8px 12px;border-radius:8px;white-space:pre-wrap;max-width:280px;width:max-content;box-shadow:0 4px 14px rgba(0,0,0,.25);z-index:999;pointer-events:none;">
+                                            <strong style="display:block;color:#fbbf24;font-size:10px;text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px;">Ghi chú từ Profile</strong><?= htmlspecialchars($fin_pasx_note) ?>
+                                            <span style="position:absolute;bottom:-5px;left:50%;transform:translateX(-50%);width:10px;height:10px;background:#1e293b;clip-path:polygon(0 0,100% 0,50% 100%);"></span>
+                                        </span>
+                                        <?php endif; ?>
+                                    </span>
                                     <button class="btn-pasx-history" onclick="openPasxHistory()" title="Xem lịch sử cập nhật từ Profile">
                                         <i class="fas fa-history"></i>
                                     </button>
@@ -2823,6 +2842,14 @@ function phmToggle(rid) {
 // Đóng bằng phím Escape
 document.addEventListener('keydown', e => {
     if (e.key === 'Escape') closePasxHistory({target: document.getElementById('pasxHistoryOverlay')});
+});
+
+// ── Tooltip ghi chú Profile (Chi phí sản xuất) ──
+document.querySelectorAll('.pasx-note-tip').forEach(function(tip) {
+    const bubble = tip.querySelector('.pasx-note-bubble');
+    if (!bubble) return;
+    tip.addEventListener('mouseenter', function() { bubble.style.display = 'block'; });
+    tip.addEventListener('mouseleave', function() { bubble.style.display = 'none'; });
 });
 </script>
 </body>
