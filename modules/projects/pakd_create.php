@@ -685,6 +685,7 @@ if ($res) {
 <div class="app-layout">
     <?php include __DIR__ . '/../includes/sidebar.php'; ?>
     <div class="main-content">
+        <?php $page_title = 'Tạo PAKD'; include __DIR__ . '/../includes/topbar.php'; ?>
 
         <!-- Top Stats Bar -->
         <div class="top-stats-bar">

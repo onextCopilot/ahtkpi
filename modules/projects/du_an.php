@@ -284,6 +284,7 @@ function sortTh2($label, $col, $currentSort, $currentDir, $extraGetParams = []) 
 <div class="app-layout">
     <?php include __DIR__ . '/../includes/sidebar.php'; ?>
     <div class="main-content">
+        <?php $page_title = 'Dự án'; include __DIR__ . '/../includes/topbar.php'; ?>
 
         <div class="page-header">
             <div class="page-header-left">

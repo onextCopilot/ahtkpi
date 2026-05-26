@@ -558,6 +558,7 @@ function formatVND($n) {
 <div class="app-layout">
     <?php include __DIR__ . '/../includes/sidebar.php'; ?>
     <div class="main-content">
+        <?php $page_title = 'Phương án kinh doanh'; include __DIR__ . '/../includes/topbar.php'; ?>
 
         <!-- Page Header -->
         <div class="page-header">

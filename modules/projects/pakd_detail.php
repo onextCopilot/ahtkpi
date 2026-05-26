@@ -749,6 +749,8 @@ function getProjectTypeIcon($type) {
     <?php include __DIR__ . '/../includes/sidebar.php'; ?>
 
     <div class="main-content">
+        <?php $page_title = ($pakd['opportunity_name'] ?? 'Chi tiết PAKD'); include __DIR__ . '/../includes/topbar.php'; ?>
+
         <!-- Top Metrics Row -->
         <div class="top-metrics-bar">
             <div class="metric-item m-revenue">
