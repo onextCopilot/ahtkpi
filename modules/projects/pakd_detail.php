@@ -192,6 +192,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'get_c
     $pid = (int)($_POST['id'] ?? 0);
     if (!$pid) { echo json_encode(['ok'=>false,'msg'=>'ID không hợp lệ']); exit; }
 
+    $ceo_message = trim($_POST['message'] ?? '');
+
+    // Đảm bảo cột message tồn tại
+    try { $conn->query("ALTER TABLE pasx_notifications ADD COLUMN IF NOT EXISTS message TEXT DEFAULT NULL"); } catch (\Throwable $e) {}
+
     // Cập nhật DB: status=pending, pasx_status=pending_ceo
     $st = $conn->prepare("UPDATE pakd SET status='pending', pasx_status='pending_ceo' WHERE id=?");
     $st->bind_param("i", $pid);
@@ -223,10 +228,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'get_c
 
         if ($admins && $pk2) {
             $ni = $conn->prepare("INSERT IGNORE INTO pasx_notifications
-                (user_id, pakd_id, pasx_id, event, status, opp_name, submitted_by)
-                VALUES (?, ?, ?, 'ceo_approve_request', 'pending_ceo', ?, ?)");
+                (user_id, pakd_id, pasx_id, event, status, opp_name, submitted_by, message)
+                VALUES (?, ?, ?, 'ceo_approve_request', 'pending_ceo', ?, ?, ?)");
             while ($adm = $admins->fetch_assoc()) {
-                $ni->bind_param("iisss", $adm['id'], $pid, $pk2['pasx_id'], $pk2['opportunity_name'], $pk2['am_name']);
+                $ni->bind_param("iissss", $adm['id'], $pid, $pk2['pasx_id'], $pk2['opportunity_name'], $pk2['am_name'], $ceo_message);
                 $ni->execute();
             }
             $ni->close();
@@ -272,6 +277,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'get_c
                 $companyName = htmlspecialchars($pkInfo['company_name']     ?? '—');
                 $amName      = htmlspecialchars($pkInfo['am_name']          ?? '—');
                 $reqDate     = date('d/m/Y H:i');
+                $msgBlock    = '';
+                if (!empty($ceo_message)) {
+                    $msgEsc   = nl2br(htmlspecialchars($ceo_message));
+                    $msgBlock = '
+        <!-- AM message -->
+        <div style="margin-bottom:24px;">
+          <div style="font-size:11px;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:.08em;margin-bottom:10px;">Ghi chú từ AM</div>
+          <div style="background:#fffbeb;border:1px solid #fde68a;border-left:3px solid #d97706;border-radius:8px;padding:14px 16px;font-size:13px;color:#78350f;line-height:1.65;">'.$msgEsc.'</div>
+        </div>';
+                }
 
                 $emailBody = '<!DOCTYPE html>
 <html lang="vi">
@@ -339,6 +354,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'get_c
             <td style="padding:12px 16px;font-size:13px;color:#1e293b;">'.$reqDate.'</td>
           </tr>
         </table>
+
+        '.$msgBlock.'
 
         <!-- Margin highlight -->
         <div style="font-size:11px;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:.08em;margin-bottom:12px;">Chỉ số tài chính</div>
@@ -2185,10 +2202,22 @@ function getProjectTypeIcon($type) {
                             <div style="font-size:.78rem;color:#64748b;margin-top:2px;">Gửi PASX này lên CEO để xét duyệt đặc biệt (margin &lt; 20%)</div>
                         </div>
                     </div>
-                    <div style="padding:16px 20px;font-size:.85rem;color:#475569;line-height:1.65;">
+                    <div style="padding:16px 20px 12px;font-size:.85rem;color:#475569;line-height:1.65;">
                         PASX này có <strong>margin &lt; 20%</strong>, không đủ điều kiện tự approve.<br>
                         Bạn muốn gửi yêu cầu phê duyệt lên <strong>CEO</strong>?<br>
                         <span style="color:#94a3b8;font-size:.8rem;">CEO sẽ nhận được thông báo và có thể approve hoặc reject.</span>
+                    </div>
+                    <div style="padding:0 20px 14px;">
+                        <label style="display:block;font-size:.78rem;font-weight:600;color:#374151;margin-bottom:5px;">
+                            Ghi chú gửi CEO <span style="color:#94a3b8;font-weight:400;">(tuỳ chọn)</span>
+                        </label>
+                        <textarea id="ceo-approve-message"
+                            placeholder="Nhập lý do hoặc thông tin bổ sung cho CEO..."
+                            rows="3"
+                            style="width:100%;box-sizing:border-box;padding:8px 10px;border:1px solid #d1d5db;border-radius:7px;font-size:.83rem;font-family:inherit;color:#1e293b;resize:vertical;outline:none;transition:border-color .15s;line-height:1.55;"
+                            onfocus="this.style.borderColor='#d97706';this.style.boxShadow='0 0 0 2px #fef3c7'"
+                            onblur="this.style.borderColor='#d1d5db';this.style.boxShadow='none'"
+                        ></textarea>
                     </div>
                     <div style="padding:0 20px 18px;display:flex;justify-content:flex-end;gap:8px;">
                         <button onclick="document.getElementById('ceo-approve-dialog-overlay').remove()"
@@ -2208,13 +2237,14 @@ function getProjectTypeIcon($type) {
         function submitCeoApproveRequest() {
             const btn = document.getElementById('ceo-approve-confirm-btn');
             if (!btn) return;
+            const message = (document.getElementById('ceo-approve-message')?.value || '').trim();
             btn.disabled = true;
             btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Đang gửi...';
 
             fetch('/projects/pakd/edit?id=' + PAKD_ID, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-                body: new URLSearchParams({ action: 'get_ceo_approve', id: PAKD_ID })
+                body: new URLSearchParams({ action: 'get_ceo_approve', id: PAKD_ID, message: message })
             })
             .then(function(r) { return r.json(); })
             .then(function(data) {
