@@ -1108,7 +1108,9 @@ function getProjectTypeIcon($type) {
                                     <?php if (!empty($pakd['pasx_id'])): ?>
                                         <?php if ($pasx_has_data): ?>
                                             <span id="pasx-action-btns">
-                                            <?php if ($fin_margin_pct >= 20): ?>
+                                            <?php if (($pakd['status'] ?? '') === 'approved'): ?>
+                                                <span style="font-size:12px;color:rgba(255,255,255,.8);"><i class="fas fa-check-circle"></i> Đã Approve</span>
+                                            <?php elseif ($fin_margin_pct >= 20): ?>
                                                 <button class="btn-pasx-action btn-pasx-approve" onclick="pasxApprove()">
                                                     <i class="fas fa-check"></i> Approve
                                                 </button>
@@ -1316,6 +1318,7 @@ function getProjectTypeIcon($type) {
         const FIN_OVERTIME   = <?= (int)$fin_overtime ?>;
         const PAKD_ID        = <?= $pakd_id ?>;
         const PASX_HAS_DATA  = <?= $pasx_has_data ? 'true' : 'false' ?>;
+        const PAKD_STATUS    = <?= json_encode($pakd['status'] ?? 'draft') ?>;
 
         // ── Helpers ──
         function fin_fmt(n) {
@@ -1421,7 +1424,7 @@ function getProjectTypeIcon($type) {
             document.getElementById('r5-amt').textContent = fin_fmt(grossProfit);
 
             // ── Cập nhật PASX action buttons theo margin realtime ──
-            if (PASX_HAS_DATA) {
+            if (PASX_HAS_DATA && PAKD_STATUS !== 'approved') {
                 const marginPct = revNet > 0 ? (grossProfit / revNet * 100) : 0;
                 const container = document.getElementById('pasx-action-btns');
                 if (container) {
