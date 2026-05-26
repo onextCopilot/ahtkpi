@@ -572,12 +572,11 @@ $fin_gross_profit    = $fin_gross_profit_db != 0 ? $fin_gross_profit_db : ($fin_
 $fin_margin_pct      = $fin_rev_net > 0 ? ($fin_gross_profit / $fin_rev_net * 100) : 0;
 
 // ── Kiểm tra user hiện tại có phải CEO Approver không ──
-$isCeoApprover = ($role === 'admin');
-if (!$isCeoApprover) {
-    $caRes = $conn->query("SELECT setting_value FROM system_settings WHERE setting_key='pasx_ceo_approvers' LIMIT 1");
-    if ($caRes && $caRow = $caRes->fetch_assoc()) {
-        $isCeoApprover = in_array($user_id, array_map('intval', json_decode($caRow['setting_value'] ?? '[]', true) ?: []));
-    }
+// Chỉ check danh sách pasx_ceo_approvers — không auto-include admin
+$isCeoApprover = false;
+$caRes = $conn->query("SELECT setting_value FROM system_settings WHERE setting_key='pasx_ceo_approvers' LIMIT 1");
+if ($caRes && $caRow = $caRes->fetch_assoc()) {
+    $isCeoApprover = in_array($user_id, array_map('intval', json_decode($caRow['setting_value'] ?? '[]', true) ?: []));
 }
 
 $statusLabels = [
