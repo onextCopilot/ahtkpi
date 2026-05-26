@@ -115,6 +115,83 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'save_
     exit;
 }
 
+// ── AJAX: Approve PASX → tạo Project bên Profile ──
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'approve_pasx') {
+    header('Content-Type: application/json; charset=utf-8');
+    $pid          = (int)($_POST['id']           ?? 0);
+    $total_amount = (float)($_POST['totalAmount'] ?? 0);
+    $currency     = trim($_POST['currency']       ?? 'VND') ?: 'VND';
+    if (!$pid)          { echo json_encode(['ok'=>false,'msg'=>'ID không hợp lệ']); exit; }
+    if ($total_amount <= 0) { echo json_encode(['ok'=>false,'msg'=>'totalAmount phải > 0']); exit; }
+
+    $configFile = __DIR__ . '/../../config/arrowhitech_config.json';
+    if (!file_exists($configFile)) { echo json_encode(['ok'=>false,'msg'=>'Chưa cấu hình ArrowHitech API']); exit; }
+    $cfg       = json_decode(file_get_contents($configFile), true);
+    $api_url   = rtrim($cfg['api_url']   ?? '', '/');
+    $api_token = $cfg['api_token']        ?? '';
+    if (!$api_url || !$api_token) { echo json_encode(['ok'=>false,'msg'=>'Thiếu URL hoặc Token trong cấu hình']); exit; }
+
+    // Lấy thêm info để đưa vào extraData
+    $pr = $conn->prepare("SELECT opportunity_name, am_name, odoo_opp_id, pasx_id FROM pakd WHERE id=? LIMIT 1");
+    $pr->bind_param("i", $pid);
+    $pr->execute();
+    $pk = $pr->get_result()->fetch_assoc();
+    $pr->close();
+
+    $body = [
+        'totalAmount' => $total_amount,
+        'currency'    => $currency,
+        'extraData'   => [
+            'oppName'  => $pk['opportunity_name'] ?? null,
+            'amName'   => $pk['am_name']          ?? null,
+            'oppId'    => $pk['odoo_opp_id']      ?? null,
+            'pasxId'   => $pk['pasx_id']          ?? null,
+        ],
+    ];
+
+    $timestamp  = (int)(microtime(true) * 1000);
+    $request_id = sprintf('%04x%04x-%04x-%04x-%04x-%04x%04x%04x',
+        mt_rand(0,0xffff),mt_rand(0,0xffff),mt_rand(0,0xffff),
+        mt_rand(0,0x0fff)|0x4000, mt_rand(0,0x3fff)|0x8000,
+        mt_rand(0,0xffff),mt_rand(0,0xffff),mt_rand(0,0xffff));
+
+    $ch = curl_init($api_url . '/integrations/os/pakd/' . $pid . '/approve');
+    curl_setopt_array($ch, [
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_POST           => true,
+        CURLOPT_POSTFIELDS     => json_encode($body, JSON_UNESCAPED_UNICODE),
+        CURLOPT_HTTPHEADER     => [
+            'X-API-Key: '    . $api_token,
+            'X-Timestamp: '  . $timestamp,
+            'X-Request-Id: ' . $request_id,
+            'Content-Type: application/json',
+        ],
+        CURLOPT_SSL_VERIFYPEER => false,
+        CURLOPT_TIMEOUT        => 15,
+    ]);
+    $response  = curl_exec($ch);
+    $http_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    $curl_err  = curl_error($ch);
+    curl_close($ch);
+
+    if ($curl_err) { echo json_encode(['ok'=>false,'msg'=>'Lỗi kết nối: '.$curl_err]); exit; }
+
+    if ($http_code >= 200 && $http_code < 300) {
+        // Cập nhật pasx_status = approved trong DB
+        $st = $conn->prepare("UPDATE pakd SET pasx_status='approved' WHERE id=?");
+        $st->bind_param("i", $pid);
+        $st->execute();
+        $st->close();
+        echo json_encode(['ok'=>true,'msg'=>'Approve thành công — Profile đang tạo Project']);
+    } else {
+        $err     = json_decode($response, true);
+        $err_val = $err['message'] ?? $err['error'] ?? null;
+        if (is_array($err_val)) $err_val = json_encode($err_val, JSON_UNESCAPED_UNICODE);
+        echo json_encode(['ok'=>false,'msg'=>'API lỗi: '.($err_val ?? 'HTTP '.$http_code)]);
+    }
+    exit;
+}
+
 // ── AJAX: Reject PASX ──
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'reject_pasx') {
     header('Content-Type: application/json; charset=utf-8');
@@ -1678,8 +1755,93 @@ function getProjectTypeIcon($type) {
         }
 
         function pasxApprove() {
-            showToast('Đang xử lý Approve...', 'success');
-            // TODO: gọi API approve
+            // Lấy totalAmount từ doanh thu gộp (row 1)
+            const totalAmount = fin_parse(document.getElementById('r1-amt')?.textContent);
+            if (!totalAmount || totalAmount <= 0) {
+                showToast('Doanh thu phải > 0 trước khi Approve', 'error');
+                return;
+            }
+
+            // Dialog xác nhận
+            const overlay = document.createElement('div');
+            overlay.id = 'approve-dialog-overlay';
+            overlay.style.cssText = 'position:fixed;inset:0;background:rgba(15,23,42,.45);z-index:2000;display:flex;align-items:center;justify-content:center;';
+            overlay.innerHTML = `
+                <div style="background:#fff;border-radius:12px;width:420px;max-width:95vw;box-shadow:0 20px 60px rgba(0,0,0,.25);overflow:hidden;">
+                    <div style="padding:18px 20px 14px;border-bottom:1px solid #e2e8f0;display:flex;align-items:center;gap:10px;">
+                        <span style="width:32px;height:32px;border-radius:8px;background:#dcfce7;display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+                            <i class="fas fa-check" style="color:#16a34a;font-size:14px;"></i>
+                        </span>
+                        <div>
+                            <div style="font-weight:700;font-size:15px;color:#0f172a;">Xác nhận Approve PASX</div>
+                            <div style="font-size:12px;color:#64748b;margin-top:2px;">Profile sẽ tạo Project với thông tin bên dưới</div>
+                        </div>
+                    </div>
+                    <div style="padding:16px 20px;">
+                        <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:12px 16px;margin-bottom:14px;">
+                            <div style="display:flex;justify-content:space-between;align-items:center;">
+                                <span style="font-size:12px;color:#64748b;">Total Amount</span>
+                                <strong style="font-size:15px;color:#0f172a;">${totalAmount.toLocaleString('vi-VN')} VND</strong>
+                            </div>
+                        </div>
+                        <p style="font-size:12.5px;color:#475569;margin:0 0 16px;">
+                            Sau khi Approve, Profile sẽ tạo Project và trạng thái PAKD chuyển sang <strong>Approved</strong>.
+                            Hành động này không thể hoàn tác.
+                        </p>
+                        <div style="display:flex;gap:8px;justify-content:flex-end;">
+                            <button onclick="document.getElementById('approve-dialog-overlay').remove()"
+                                style="padding:8px 16px;border:1px solid #e2e8f0;border-radius:7px;background:#fff;color:#475569;font-size:13px;cursor:pointer;font-weight:500;">
+                                Hủy
+                            </button>
+                            <button id="btn-confirm-approve"
+                                style="padding:8px 18px;border:none;border-radius:7px;background:#16a34a;color:#fff;font-size:13px;font-weight:600;cursor:pointer;display:flex;align-items:center;gap:6px;">
+                                <i class="fas fa-check"></i> Approve
+                            </button>
+                        </div>
+                    </div>
+                </div>`;
+            document.body.appendChild(overlay);
+            overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove(); });
+
+            document.getElementById('btn-confirm-approve').addEventListener('click', function() {
+                submitPasxApprove(totalAmount, this, overlay);
+            });
+        }
+
+        function submitPasxApprove(totalAmount, btn, overlay) {
+            btn.disabled = true;
+            btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Đang gửi...';
+
+            fetch(window.location.href, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                body: new URLSearchParams({
+                    action:      'approve_pasx',
+                    id:          PAKD_ID,
+                    totalAmount: totalAmount,
+                    currency:    'VND',
+                })
+            })
+            .then(r => r.json())
+            .then(data => {
+                overlay.remove();
+                if (data.ok) {
+                    showToast(data.msg || 'Approve thành công!', 'success');
+                    updateStatusBanner('PAKD đã được approve', '#16a34a', 'fa-check-square');
+                    // Ẩn nút approve, không cho bấm lại
+                    const container = document.getElementById('pasx-action-btns');
+                    if (container) container.innerHTML =
+                        '<span style="font-size:12px;color:rgba(255,255,255,.8);"><i class="fas fa-check-circle"></i> Đã Approve</span>';
+                } else {
+                    showToast(data.msg || 'Có lỗi xảy ra', 'error');
+                    btn.disabled = false;
+                    btn.innerHTML = '<i class="fas fa-check"></i> Approve';
+                }
+            })
+            .catch(() => {
+                overlay.remove();
+                showToast('Lỗi kết nối, vui lòng thử lại', 'error');
+            });
         }
 
         function pasxGetApproveCEO() {
