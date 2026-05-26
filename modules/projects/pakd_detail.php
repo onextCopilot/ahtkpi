@@ -484,58 +484,49 @@ function getProjectTypeIcon($type) {
         .sidebar.collapsed ~ .main-content { margin-left: 80px; }
 
         /* ── Top Metrics Bar ── */
+        /* ── Combined status + metrics bar ── */
         .top-metrics-bar {
             display: flex;
-            justify-content: flex-end;
+            justify-content: space-between;
             align-items: center;
-            gap: 28px;
-            padding: 10px 40px;
-            background: #ffffff;
-            border-bottom: 1px solid var(--border);
-            font-size: 12.5px;
-            color: var(--slate);
-            flex-shrink: 0;
-        }
-        .metric-item { display: flex; align-items: center; gap: 0; }
-        .metric-item .m-label { color: var(--gray); margin-right: 5px; font-weight: 400; }
-        .metric-item strong { font-size: 13.5px; font-weight: 700; }
-        .metric-item .m-unit { font-size: 10px; color: var(--gray); margin-left: 3px; font-weight: 400; }
-        .metric-item .m-pct { font-size: 11.5px; color: var(--gray); margin-left: 4px; }
-        .m-revenue strong { color: #6366f1; }
-        .m-profit strong { color: #16a34a; }
-        .m-pasx strong { color: #7c3aed; }
-
-        /* ── Detail Container ── */
-        .detail-container { padding: 28px 40px 40px; flex: 1; }
-
-        /* ── Status Banner ── */
-        .status-banner {
+            gap: 20px;
+            padding: 9px 32px;
             background: <?= $statusColor ?>;
-            border: none;
-            border-radius: var(--r-md);
-            padding: 10px 16px;
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            margin-bottom: 20px;
-            font-size: 13px;
-            font-weight: 500;
+            box-shadow: 0 2px 8px <?= $statusColor ?>44;
+            font-size: 12.5px;
             color: #fff;
-            box-shadow: 0 2px 8px <?= $statusColor ?>55;
+            flex-shrink: 0;
+            transition: background .35s, box-shadow .35s;
         }
-        .status-banner .sb-icon {
-            background: rgba(255,255,255,0.2); color: #fff;
+        .tmb-left  { display: flex; align-items: center; gap: 10px; }
+        .tmb-right { display: flex; align-items: center; gap: 22px; }
+
+        /* Status part (left) */
+        .sb-icon {
+            background: rgba(255,255,255,.2); color: #fff;
             width: 26px; height: 26px; border-radius: 5px;
             display: flex; align-items: center; justify-content: center;
             font-size: 13px; flex-shrink: 0;
         }
         .sb-text { display: flex; align-items: center; gap: 7px; font-weight: 600; font-size: 13px; color: #fff; }
-        .sb-text .sb-sep { color: rgba(255,255,255,0.7); font-weight: 400; }
+        .sb-text .sb-sep { color: rgba(255,255,255,.65); font-weight: 400; }
         .sb-badge {
             display: inline-flex; align-items: center; gap: 5px;
-            padding: 2px 8px; background: rgba(255,255,255,0.2);
+            padding: 2px 8px; background: rgba(255,255,255,.2);
             border-radius: 4px; font-size: 12px; color: #fff; font-weight: 500;
         }
+
+        /* Metrics part (right) */
+        .metric-item { display: flex; align-items: center; gap: 0; }
+        .metric-item .m-label { color: rgba(255,255,255,.75); margin-right: 5px; font-weight: 400; font-size: 12px; }
+        .metric-item strong { font-size: 13px; font-weight: 700; color: #fff; }
+        .metric-item .m-unit { font-size: 10px; color: rgba(255,255,255,.7); margin-left: 3px; font-weight: 400; }
+        .metric-item .m-pct  { font-size: 11.5px; color: rgba(255,255,255,.8); margin-left: 4px; }
+        .tmb-divider { width: 1px; height: 18px; background: rgba(255,255,255,.3); }
+
+        /* ── Detail Container ── */
+        .detail-container { padding: 28px 40px 40px; flex: 1; }
+
 
         /* ── Actions Row ── */
         .actions-row { display: flex; gap: 10px; margin-bottom: 20px; }
@@ -751,36 +742,39 @@ function getProjectTypeIcon($type) {
     <div class="main-content">
         <?php $page_title = ($pakd['opportunity_name'] ?? 'Chi tiết PAKD'); include __DIR__ . '/../includes/topbar.php'; ?>
 
-        <!-- Top Metrics Row -->
+        <!-- Combined status + metrics bar -->
         <div class="top-metrics-bar">
-            <div class="metric-item m-revenue">
-                <span class="m-label">Doanh thu thuần:</span>
-                <strong><?= formatVND($pakd['revenue']) ?></strong>
-                <span class="m-unit">VND</span>
+            <div class="tmb-left">
+                <div class="sb-icon"><i class="fas <?= $iconClass ?>"></i></div>
+                <div class="sb-text">
+                    <span id="sb-label-text"><?= $statusLabel ?></span>
+                    <span class="sb-sep">·</span>
+                    <div class="sb-badge"><i class="fas <?= getProjectTypeIcon($pakd['project_type']) ?>"></i> <?= htmlspecialchars($pakd['project_type']) ?></div>
+                </div>
             </div>
-            <div class="metric-item m-profit">
-                <span class="m-label">Lợi nhuận gộp:</span>
-                <strong><?= formatVND($pakd['gross_profit']) ?></strong>
-                <span class="m-unit">VND</span>
-            </div>
-            <div class="metric-item m-pasx">
-                <span class="m-label">PASX:</span>
-                <strong><?= formatVND($pakd['pasx_value']) ?></strong>
-                <span class="m-unit">VND</span>
-                <span class="m-pct">(<?= number_format($pasx_percent, 2) ?>%)</span>
+            <div class="tmb-right">
+                <div class="metric-item">
+                    <span class="m-label">Doanh thu thuần:</span>
+                    <strong><?= formatVND($pakd['revenue']) ?></strong>
+                    <span class="m-unit">VND</span>
+                </div>
+                <div class="tmb-divider"></div>
+                <div class="metric-item">
+                    <span class="m-label">Lợi nhuận gộp:</span>
+                    <strong><?= formatVND($pakd['gross_profit']) ?></strong>
+                    <span class="m-unit">VND</span>
+                </div>
+                <div class="tmb-divider"></div>
+                <div class="metric-item">
+                    <span class="m-label">PASX:</span>
+                    <strong><?= formatVND($pakd['pasx_value']) ?></strong>
+                    <span class="m-unit">VND</span>
+                    <span class="m-pct">(<?= number_format($pasx_percent, 2) ?>%)</span>
+                </div>
             </div>
         </div>
 
         <div class="detail-container">
-            <!-- Status Banner -->
-            <div class="status-banner">
-                <div class="sb-icon"><i class="fas <?= $iconClass ?>"></i></div>
-                <div class="sb-text">
-                    <?= $statusLabel ?>
-                    <span class="sb-sep">· PASX: <?= number_format($pasx_percent, 2) ?>% ·</span>
-                    <div class="sb-badge"><i class="fas <?= getProjectTypeIcon($pakd['project_type']) ?>"></i> <?= htmlspecialchars($pakd['project_type']) ?></div>
-                </div>
-            </div>
 
             <!-- Actions Row -->
             <div class="actions-row">
@@ -1582,27 +1576,14 @@ function getProjectTypeIcon($type) {
 
         // ── Update status banner dynamically (không cần F5) ──
         function updateStatusBanner(label, color, iconCls) {
-            const banner = document.querySelector('.status-banner');
-            if (!banner) return;
-            banner.style.background  = color;
-            banner.style.boxShadow   = '0 2px 8px ' + color + '55';
-            const icon = banner.querySelector('.sb-icon i');
+            const bar = document.querySelector('.top-metrics-bar');
+            if (!bar) return;
+            bar.style.background = color;
+            bar.style.boxShadow  = '0 2px 8px ' + color + '44';
+            const icon = bar.querySelector('.sb-icon i');
             if (icon) icon.className = 'fas ' + iconCls;
-            // Cập nhật text node đầu tiên trong .sb-text (trước <span class="sb-sep">)
-            const sbText = banner.querySelector('.sb-text');
-            if (sbText) {
-                // Tìm và thay text node đầu
-                for (const node of sbText.childNodes) {
-                    if (node.nodeType === Node.TEXT_NODE && node.textContent.trim()) {
-                        node.textContent = label + ' ';
-                        break;
-                    }
-                }
-                // Nếu không có text node thì prepend
-                if (![...sbText.childNodes].some(n => n.nodeType === Node.TEXT_NODE && n.textContent.trim())) {
-                    sbText.insertBefore(document.createTextNode(label + ' '), sbText.firstChild);
-                }
-            }
+            const labelEl = document.getElementById('sb-label-text');
+            if (labelEl) labelEl.textContent = label;
         }
 
         // ── Change Request helpers ──
