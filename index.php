@@ -93,6 +93,7 @@ $routes = [
     '/api/kpi_quarterly_save' => 'api/kpi_quarterly_save.php',
     '/api/mark_notification_read' => 'api/mark_notification_read.php',
     '/api/notifications/mark_read' => 'api/notifications_mark_read.php',
+    '/debug_webhook' => 'debug_webhook.php',
     '/sale-orders' => 'modules/sale_orders/index.php',
     '/api/sale_orders' => 'api/sale_orders.php',
     '/my-reports' => 'modules/sale_reports/index.php',
