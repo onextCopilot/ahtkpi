@@ -6,9 +6,11 @@ if (!isset($_SESSION['user_id'])) {
     exit();
 }
 
-$user_id = $_SESSION['user_id'];
-$role = $_SESSION['role'] ?? 'user';
-$pakd_id = isset($_GET['id']) ? (int)$_GET['id'] : 0;
+$user_id      = $_SESSION['user_id'];
+$role         = $_SESSION['role'] ?? 'user';
+$my_full_name = $_SESSION['full_name'] ?? '';
+$is_admin     = ($role === 'admin');
+$pakd_id      = isset($_GET['id']) ? (int)$_GET['id'] : 0;
 
 // ── AJAX: Request Production Plan ──
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_SERVER['CONTENT_TYPE'] ?? '') === 'application/json') {
@@ -757,6 +759,21 @@ $stmt->bind_param("i", $pakd_id);
 $stmt->execute();
 $pakd = $stmt->get_result()->fetch_assoc();
 $stmt->close();
+
+// ── Kiểm tra quyền truy cập: AM chỉ xem được PAKD của mình ──
+if ($pakd && !$is_admin) {
+    $owner_match = (!empty($pakd['am_user_id']) && (int)$pakd['am_user_id'] === $user_id)
+                || (!empty($pakd['am_name'])    && $pakd['am_name'] === $my_full_name);
+    if (!$owner_match) {
+        header('HTTP/1.1 403 Forbidden');
+        echo '<!DOCTYPE html><html><head><meta charset="UTF-8"><title>403</title></head><body style="font-family:sans-serif;text-align:center;padding:80px;">
+            <h2 style="color:#dc2626;">⛔ Bạn không có quyền xem PAKD này</h2>
+            <p style="color:#64748b;">Chỉ AM phụ trách mới có thể truy cập.</p>
+            <a href="/projects/phuong-an-kinh-doanh" style="color:#6366f1;">← Quay lại danh sách</a>
+        </body></html>';
+        exit;
+    }
+}
 
 // Lấy danh sách divisions để làm dropdown
 $division_options = [];

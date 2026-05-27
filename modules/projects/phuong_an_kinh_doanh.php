@@ -76,6 +76,16 @@ $where  = ['1=1'];
 $params = [];
 $types  = '';
 
+// ── Giới hạn AM chỉ xem PAKD của mình ──
+$is_admin = ($role === 'admin');
+if (!$is_admin) {
+    $my_full_name = $_SESSION['full_name'] ?? '';
+    $where[]  = "(p.am_user_id = ? OR p.am_name = ?)";
+    $params[] = $user_id;
+    $params[] = $my_full_name;
+    $types   .= 'is';
+}
+
 if ($search !== '') {
     $where[]  = "(p.name LIKE ? OR p.company_name LIKE ? OR p.am_name LIKE ?)";
     $like     = "%{$search}%";
