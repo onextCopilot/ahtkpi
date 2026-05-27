@@ -610,14 +610,76 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'send_
     curl_close($ch);
 
     if ($curl_err) { echo json_encode(['ok'=>false,'msg'=>'Lỗi kết nối: '.$curl_err,'images'=>$image_urls]); exit; }
-    if ($http_code >= 200 && $http_code < 300) {
-        echo json_encode(['ok'=>true,'msg'=>'Đã gửi tin nhắn','images'=>$image_urls,'pasxId'=>$pasx_id]);
+
+    $api_ok = ($http_code >= 200 && $http_code < 300);
+
+    // Lưu vào DB dù API thành công hay thất bại (để lịch sử đồng bộ)
+    $conn->query("CREATE TABLE IF NOT EXISTS pakd_chat_messages (
+        id           INT AUTO_INCREMENT PRIMARY KEY,
+        pakd_id      INT NOT NULL,
+        pasx_id      VARCHAR(64)             DEFAULT NULL,
+        direction    ENUM('sent','received') NOT NULL DEFAULT 'sent',
+        sender_name  VARCHAR(255)            DEFAULT NULL,
+        message      TEXT                    DEFAULT NULL,
+        images       JSON                    DEFAULT NULL,
+        created_at   DATETIME                DEFAULT CURRENT_TIMESTAMP,
+        INDEX idx_pakd_time (pakd_id, created_at)
+    )");
+    $imgs_json = $image_urls ? json_encode($image_urls, JSON_UNESCAPED_UNICODE) : null;
+    $ins = $conn->prepare("INSERT INTO pakd_chat_messages (pakd_id, pasx_id, direction, sender_name, message, images) VALUES (?,?,'sent',?,?,?)");
+    $ins->bind_param("issss", $pid, $pasx_id, $sender, $message, $imgs_json);
+    $ins->execute();
+    $msg_id = $conn->insert_id;
+    $ins->close();
+
+    if ($api_ok) {
+        echo json_encode(['ok'=>true,'msg'=>'Đã gửi tin nhắn','images'=>$image_urls,'pasxId'=>$pasx_id,'id'=>$msg_id]);
     } else {
         $err     = json_decode($response, true);
         $err_val = $err['message'] ?? $err['error'] ?? null;
         if (is_array($err_val)) $err_val = json_encode($err_val, JSON_UNESCAPED_UNICODE);
-        echo json_encode(['ok'=>false,'msg'=>'API lỗi: '.($err_val ?? 'HTTP '.$http_code),'images'=>$image_urls]);
+        echo json_encode(['ok'=>false,'msg'=>'API lỗi: '.($err_val ?? 'HTTP '.$http_code),'images'=>$image_urls,'id'=>$msg_id]);
     }
+    exit;
+}
+
+// ── AJAX: Get Chat Messages ──
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'get_chat_messages') {
+    header('Content-Type: application/json; charset=utf-8');
+    $pid      = (int)($_POST['id']      ?? 0);
+    $after_id = (int)($_POST['after_id'] ?? 0); // polling: chỉ lấy message mới hơn ID này
+    if (!$pid) { echo json_encode(['ok'=>false,'msgs',[]]); exit; }
+
+    // Tạo bảng nếu chưa có
+    $conn->query("CREATE TABLE IF NOT EXISTS pakd_chat_messages (
+        id           INT AUTO_INCREMENT PRIMARY KEY,
+        pakd_id      INT NOT NULL,
+        pasx_id      VARCHAR(64)             DEFAULT NULL,
+        direction    ENUM('sent','received') NOT NULL DEFAULT 'sent',
+        sender_name  VARCHAR(255)            DEFAULT NULL,
+        message      TEXT                    DEFAULT NULL,
+        images       JSON                    DEFAULT NULL,
+        created_at   DATETIME                DEFAULT CURRENT_TIMESTAMP,
+        INDEX idx_pakd_time (pakd_id, created_at)
+    )");
+
+    $st = $conn->prepare(
+        "SELECT id, direction, sender_name, message, images, created_at
+         FROM pakd_chat_messages
+         WHERE pakd_id = ? AND id > ?
+         ORDER BY created_at ASC, id ASC
+         LIMIT 100"
+    );
+    $st->bind_param("ii", $pid, $after_id);
+    $st->execute();
+    $res  = $st->get_result();
+    $msgs = [];
+    while ($row = $res->fetch_assoc()) {
+        $row['images'] = !empty($row['images']) ? json_decode($row['images'], true) : [];
+        $msgs[] = $row;
+    }
+    $st->close();
+    echo json_encode(['ok'=>true,'msgs'=>$msgs]);
     exit;
 }
 
@@ -3214,10 +3276,14 @@ document.addEventListener('keydown', e => {
     const PASX_ID_CHAT = <?= json_encode($pakd['pasx_id'] ?? null) ?>;
     const SENDER_NAME  = <?= json_encode($_SESSION['full_name'] ?? $_SESSION['username'] ?? 'AM') ?>;
 
-    let chatOpen = false;
-    let pendingFiles = []; // {file, url}
-    let msgCount = 0;
+    let chatOpen      = false;
+    let pendingFiles  = []; // {file, url}
+    let lastMsgId     = 0;
+    let pollTimer     = null;
+    let unreadCount   = 0;
+    let initialLoaded = false;
 
+    // ── Toggle panel ──
     window.chatToggle = function() {
         chatOpen = !chatOpen;
         const panel = document.getElementById('pakd-chat-panel');
@@ -3225,24 +3291,87 @@ document.addEventListener('keydown', e => {
         panel.classList.toggle('open', chatOpen);
         icon.className = chatOpen ? 'fas fa-times' : 'fas fa-comments';
         if (chatOpen) {
-            document.getElementById('chat-unread-badge').style.display = 'none';
-            document.getElementById('chat-unread-badge').textContent = '';
+            unreadCount = 0;
+            const badge = document.getElementById('chat-unread-badge');
+            badge.style.display = 'none';
+            badge.textContent = '';
+            if (!initialLoaded) loadMessages(true);
+            startPolling();
             setTimeout(() => document.getElementById('chat-textarea')?.focus(), 220);
+        } else {
+            stopPolling();
         }
     };
 
+    // ── Load messages from DB ──
+    async function loadMessages(initial = false) {
+        try {
+            const fd = new FormData();
+            fd.append('action', 'get_chat_messages');
+            fd.append('id', PAKD_ID_CHAT);
+            fd.append('after_id', initial ? 0 : lastMsgId);
+            const res  = await fetch('/projects/pakd/edit?id=' + PAKD_ID_CHAT, { method: 'POST', body: fd });
+            const data = await res.json();
+            if (!data.ok || !data.msgs?.length) return;
+
+            data.msgs.forEach(m => {
+                // Bỏ qua nếu đã render (optimistic sent)
+                if (document.getElementById('db-msg-' + m.id)) return;
+                renderDbMsg(m, !initial);
+                if (m.id > lastMsgId) lastMsgId = parseInt(m.id);
+            });
+            initialLoaded = true;
+        } catch(e) {}
+    }
+
+    function renderDbMsg(m, isNew) {
+        const body = document.getElementById('chat-body');
+        document.getElementById('chat-empty-state')?.remove();
+
+        const isSent = m.direction === 'sent';
+        const div    = document.createElement('div');
+        div.className = 'chat-msg ' + (isSent ? 'sent' : 'recv');
+        div.id = 'db-msg-' + m.id;
+
+        const time = m.created_at ? new Date(m.created_at.replace(' ','T')) : new Date();
+        let imgHtml = '';
+        if (m.images?.length) {
+            imgHtml = '<div class="chat-imgs">' +
+                m.images.map(u => `<img src="${escAttr(u)}" loading="lazy" onclick="chatLightboxOpen('${escAttr(u)}')" alt="">`).join('') +
+            '</div>';
+        }
+        const bubbleHtml = m.message ? `<div class="chat-bubble">${escHtml(m.message)}</div>` : '';
+        const sentMark   = isSent ? ' · <span style="color:#86efac">✓</span>' : '';
+        div.innerHTML = bubbleHtml + imgHtml +
+            `<div class="chat-meta">${escHtml(m.sender_name || '')} · ${chatFmtTime(time)}${sentMark}</div>`;
+
+        body.appendChild(div);
+        if (isNew && !chatOpen) {
+            unreadCount++;
+            const badge = document.getElementById('chat-unread-badge');
+            badge.textContent = unreadCount > 9 ? '9+' : unreadCount;
+            badge.style.display = 'flex';
+        }
+        if (chatOpen) body.scrollTop = body.scrollHeight;
+    }
+
+    // ── Polling ──
+    function startPolling() {
+        stopPolling();
+        pollTimer = setInterval(() => loadMessages(false), 5000);
+    }
+    function stopPolling() {
+        if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
+    }
+
+    // ── Input helpers ──
     window.chatKeydown = function(e) {
-        if (e.key === 'Enter' && !e.shiftKey) {
-            e.preventDefault();
-            chatSend();
-        }
+        if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); chatSend(); }
     };
-
     window.chatAutoResize = function(el) {
         el.style.height = 'auto';
         el.style.height = Math.min(el.scrollHeight, 110) + 'px';
     };
-
     window.chatPreviewImages = function(input) {
         const bar = document.getElementById('chat-preview-bar');
         Array.from(input.files).forEach(file => {
@@ -3252,23 +3381,22 @@ document.addEventListener('keydown', e => {
             const thumb = document.createElement('div');
             thumb.className = 'preview-thumb';
             thumb.dataset.url = url;
-            thumb.innerHTML = `<img src="${url}"><button class="rm-img" onclick="chatRemoveImg(this)" title="Xóa"><i class="fas fa-times"></i></button>`;
+            thumb.innerHTML = `<img src="${url}"><button class="rm-img" onclick="chatRemoveImg(this)"><i class="fas fa-times"></i></button>`;
             bar.appendChild(thumb);
         });
         bar.style.display = pendingFiles.length ? 'flex' : 'none';
         input.value = '';
     };
-
     window.chatRemoveImg = function(btn) {
         const thumb = btn.closest('.preview-thumb');
-        const url = thumb.dataset.url;
+        const url   = thumb.dataset.url;
         pendingFiles = pendingFiles.filter(f => f.url !== url);
         URL.revokeObjectURL(url);
         thumb.remove();
-        const bar = document.getElementById('chat-preview-bar');
-        if (!pendingFiles.length) bar.style.display = 'none';
+        if (!pendingFiles.length) document.getElementById('chat-preview-bar').style.display = 'none';
     };
 
+    // ── Send ──
     window.chatSend = async function() {
         const ta  = document.getElementById('chat-textarea');
         const msg = ta.value.trim();
@@ -3278,11 +3406,10 @@ document.addEventListener('keydown', e => {
         sendBtn.disabled = true;
         sendBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
 
-        // Hiển thị tin nhắn ngay (optimistic)
-        const tempId = 'msg-' + Date.now();
-        chatAddMsg({id: tempId, text: msg, images: pendingFiles.map(f=>f.url), time: new Date(), status: 'sending'});
+        // Optimistic UI
+        const tempId = 'tmp-' + Date.now();
+        renderOptimistic(tempId, msg, pendingFiles.map(f=>f.url));
 
-        // Clear input ngay
         ta.value = '';
         ta.style.height = 'auto';
         const sentFiles = [...pendingFiles];
@@ -3290,7 +3417,6 @@ document.addEventListener('keydown', e => {
         document.getElementById('chat-preview-bar').innerHTML = '';
         document.getElementById('chat-preview-bar').style.display = 'none';
 
-        // Build FormData
         const fd = new FormData();
         fd.append('action', 'send_chat_message');
         fd.append('id', PAKD_ID_CHAT);
@@ -3300,26 +3426,33 @@ document.addEventListener('keydown', e => {
         try {
             const res  = await fetch('/projects/pakd/edit?id=' + PAKD_ID_CHAT, { method: 'POST', body: fd });
             const data = await res.json();
+            const tmpEl = document.getElementById(tempId);
 
-            const msgEl = document.getElementById(tempId);
             if (data.ok) {
-                // Cập nhật ảnh thật (URL server) thay URL blob
-                if (msgEl && data.images?.length) {
-                    const imgs = msgEl.querySelectorAll('.chat-imgs img');
-                    data.images.forEach((url, i) => { if (imgs[i]) imgs[i].src = url; });
+                // Đổi ID sang ID thật, cập nhật ảnh server URL
+                if (tmpEl) {
+                    tmpEl.id = 'db-msg-' + data.id;
+                    if (data.images?.length) {
+                        tmpEl.querySelectorAll('.chat-imgs img').forEach((img, i) => {
+                            if (data.images[i]) img.src = data.images[i];
+                        });
+                    }
+                    tmpEl.querySelector('.chat-meta').innerHTML =
+                        SENDER_NAME + ' · ' + chatFmtTime(new Date()) + ' · <span style="color:#86efac">✓ Đã gửi</span>';
                 }
-                if (msgEl) msgEl.querySelector('.chat-meta').innerHTML = chatFmtTime(new Date()) + ' · <span style="color:#86efac">✓ Đã gửi</span>';
+                if (data.id > lastMsgId) lastMsgId = data.id;
             } else {
-                if (msgEl) {
-                    msgEl.querySelector('.chat-bubble').style.background = '#fee2e2';
-                    msgEl.querySelector('.chat-bubble').style.color = '#991b1b';
-                    msgEl.querySelector('.chat-meta').innerHTML = '<span style="color:#dc2626"><i class="fas fa-exclamation-circle"></i> ' + (data.msg || 'Gửi thất bại') + '</span>';
+                if (tmpEl) {
+                    tmpEl.querySelector('.chat-bubble').style.cssText = 'background:#fee2e2;color:#991b1b;';
+                    tmpEl.querySelector('.chat-meta').innerHTML =
+                        '<span style="color:#dc2626"><i class="fas fa-exclamation-circle"></i> ' + escHtml(data.msg || 'Gửi thất bại') + '</span>';
                 }
                 showToast(data.msg || 'Gửi thất bại', 'error');
             }
         } catch (err) {
-            const msgEl = document.getElementById(tempId);
-            if (msgEl) msgEl.querySelector('.chat-meta').innerHTML = '<span style="color:#dc2626"><i class="fas fa-exclamation-circle"></i> Lỗi kết nối</span>';
+            const tmpEl = document.getElementById(tempId);
+            if (tmpEl) tmpEl.querySelector('.chat-meta').innerHTML =
+                '<span style="color:#dc2626"><i class="fas fa-exclamation-circle"></i> Lỗi kết nối</span>';
             showToast('Lỗi kết nối: ' + err.message, 'error');
         }
 
@@ -3328,40 +3461,36 @@ document.addEventListener('keydown', e => {
         sentFiles.forEach(f => URL.revokeObjectURL(f.url));
     };
 
-    function chatAddMsg({id, text, images, time, status}) {
+    function renderOptimistic(id, text, blobUrls) {
         const body = document.getElementById('chat-body');
         document.getElementById('chat-empty-state')?.remove();
-
         const div = document.createElement('div');
         div.className = 'chat-msg sent';
-        div.id = id || ('msg-' + Date.now());
-
+        div.id = id;
         let imgHtml = '';
-        if (images?.length) {
+        if (blobUrls?.length) {
             imgHtml = '<div class="chat-imgs">' +
-                images.map(u => `<img src="${u}" loading="lazy" onclick="chatLightboxOpen('${u}')" alt="">`).join('') +
+                blobUrls.map(u => `<img src="${u}" loading="lazy" onclick="chatLightboxOpen('${u}')" alt="">`).join('') +
             '</div>';
         }
-
-        const bubbleHtml = text ? `<div class="chat-bubble">${escHtml(text)}</div>` : '';
-
-        div.innerHTML = bubbleHtml + imgHtml +
-            `<div class="chat-meta">${SENDER_NAME} · ${chatFmtTime(time)} · <span style="color:#94a3b8">⏳ đang gửi...</span></div>`;
-
+        div.innerHTML =
+            (text ? `<div class="chat-bubble">${escHtml(text)}</div>` : '') + imgHtml +
+            `<div class="chat-meta">${escHtml(SENDER_NAME)} · ${chatFmtTime(new Date())} · <span style="color:#94a3b8">⏳</span></div>`;
         body.appendChild(div);
         body.scrollTop = body.scrollHeight;
-        msgCount++;
     }
 
     function chatFmtTime(d) {
         return d.toLocaleTimeString('vi-VN', {hour:'2-digit', minute:'2-digit'});
     }
-
     function escHtml(s) {
-        return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\n/g,'<br>');
+        return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\n/g,'<br>');
+    }
+    function escAttr(s) {
+        return String(s||'').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
     }
 
-    // Lightbox
+    // ── Lightbox ──
     window.chatLightboxOpen = function(url) {
         document.getElementById('chat-lightbox-img').src = url;
         document.getElementById('chat-lightbox').classList.add('show');

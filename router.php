@@ -51,6 +51,7 @@ $routes = [
     '/kpi' => 'modules/kpi/index.php',
     '/api/request_production_plan' => 'api/request_production_plan.php',
     '/api/pasx/callback'           => 'api/pasx_callback.php',
+    '/api/pasx/message'            => 'api/pasx_message_receive.php',
     '/api/kpi_tab_order' => 'api/kpi_tab_order.php',
     '/api/kpi_sort' => 'api/kpi_sort.php',
     '/api/kpi_monthly_save' => 'api/kpi_monthly_save.php',
