@@ -3220,7 +3220,7 @@ document.addEventListener('keydown', e => {
     <div class="chat-header">
         <div class="chat-header-icon"><i class="fas fa-headset"></i></div>
         <div class="chat-header-info">
-            <div class="chat-header-title">Chat với ArrowHitech Profile</div>
+            <div class="chat-header-title">Thảo luận với Delivery về opp <?= htmlspecialchars($pakd['opportunity_name'] ?? '') ?></div>
             <div class="chat-header-sub" id="chat-header-pasx">
                 <?php if (!empty($pakd['pasx_id'])): ?>
                     PASX: <strong><?= htmlspecialchars($pakd['pasx_id']) ?></strong>
