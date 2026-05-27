@@ -538,6 +538,89 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'get_p
     exit;
 }
 
+// ── AJAX: Send Chat Message ──
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'send_chat_message') {
+    header('Content-Type: application/json; charset=utf-8');
+    $pid     = (int)($_POST['id']      ?? 0);
+    $message = trim($_POST['message']  ?? '');
+    $sender  = $_SESSION['full_name']  ?? $_SESSION['username'] ?? 'AM';
+
+    if (!$pid) { echo json_encode(['ok'=>false,'msg'=>'ID không hợp lệ']); exit; }
+    $has_images = !empty($_FILES['images']['name'][0]) && $_FILES['images']['name'][0] !== '';
+    if (!$message && !$has_images) { echo json_encode(['ok'=>false,'msg'=>'Vui lòng nhập tin nhắn hoặc đính kèm ảnh']); exit; }
+
+    // Lấy pasx_id từ DB
+    $st = $conn->prepare("SELECT pasx_id FROM pakd WHERE id=? LIMIT 1");
+    $st->bind_param("i", $pid);
+    $st->execute();
+    $row = $st->get_result()->fetch_assoc();
+    $st->close();
+    $pasx_id = $row['pasx_id'] ?? null;
+    if (!$pasx_id) { echo json_encode(['ok'=>false,'msg'=>'PASX chưa được tạo cho PAKD này. Vui lòng gửi Request Production Plan trước.']); exit; }
+
+    // Upload ảnh
+    $image_urls = [];
+    if ($has_images) {
+        $upload_dir = __DIR__ . '/../../uploads/chat/' . $pid . '/';
+        if (!is_dir($upload_dir)) mkdir($upload_dir, 0755, true);
+        $host = (isset($_SERVER['HTTPS']) ? 'https' : 'http') . '://' . ($_SERVER['HTTP_HOST'] ?? 'localhost');
+        $names  = (array)$_FILES['images']['name'];
+        $tmps   = (array)$_FILES['images']['tmp_name'];
+        $errors = (array)$_FILES['images']['error'];
+        foreach ($tmps as $i => $tmp) {
+            if (!$tmp || ($errors[$i] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_OK) continue;
+            $ext = strtolower(pathinfo($names[$i], PATHINFO_EXTENSION));
+            if (!in_array($ext, ['jpg','jpeg','png','gif','webp'])) continue;
+            $fname = uniqid('chat_') . '.' . $ext;
+            if (move_uploaded_file($tmp, $upload_dir . $fname)) {
+                $image_urls[] = $host . '/uploads/chat/' . $pid . '/' . $fname;
+            }
+        }
+    }
+
+    // Gọi API ArrowHitech
+    $configFile = __DIR__ . '/../../config/arrowhitech_config.json';
+    if (!file_exists($configFile)) { echo json_encode(['ok'=>false,'msg'=>'Chưa cấu hình ArrowHitech API','images'=>$image_urls]); exit; }
+    $cfg       = json_decode(file_get_contents($configFile), true);
+    $api_url   = rtrim($cfg['api_url']   ?? '', '/');
+    $api_token = $cfg['api_token']        ?? '';
+    if (!$api_url || !$api_token) { echo json_encode(['ok'=>false,'msg'=>'Thiếu URL hoặc Token trong cấu hình','images'=>$image_urls]); exit; }
+
+    $body = ['pasxId'=>$pasx_id,'message'=>$message,'senderName'=>$sender,'pakdId'=>$pid];
+    if ($image_urls) $body['images'] = $image_urls;
+
+    $timestamp  = (int)(microtime(true) * 1000);
+    $request_id = sprintf('%04x%04x-%04x-%04x-%04x-%04x%04x%04x',
+        mt_rand(0,0xffff),mt_rand(0,0xffff),mt_rand(0,0xffff),
+        mt_rand(0,0x0fff)|0x4000, mt_rand(0,0x3fff)|0x8000,
+        mt_rand(0,0xffff),mt_rand(0,0xffff),mt_rand(0,0xffff));
+
+    $ch = curl_init($api_url . '/integrations/os/pasx/' . urlencode($pasx_id) . '/message');
+    curl_setopt_array($ch, [
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_POST           => true,
+        CURLOPT_POSTFIELDS     => json_encode($body, JSON_UNESCAPED_UNICODE),
+        CURLOPT_HTTPHEADER     => ['X-API-Key: '.$api_token,'X-Timestamp: '.$timestamp,'X-Request-Id: '.$request_id,'Content-Type: application/json'],
+        CURLOPT_SSL_VERIFYPEER => false,
+        CURLOPT_TIMEOUT        => 15,
+    ]);
+    $response  = curl_exec($ch);
+    $http_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    $curl_err  = curl_error($ch);
+    curl_close($ch);
+
+    if ($curl_err) { echo json_encode(['ok'=>false,'msg'=>'Lỗi kết nối: '.$curl_err,'images'=>$image_urls]); exit; }
+    if ($http_code >= 200 && $http_code < 300) {
+        echo json_encode(['ok'=>true,'msg'=>'Đã gửi tin nhắn','images'=>$image_urls,'pasxId'=>$pasx_id]);
+    } else {
+        $err     = json_decode($response, true);
+        $err_val = $err['message'] ?? $err['error'] ?? null;
+        if (is_array($err_val)) $err_val = json_encode($err_val, JSON_UNESCAPED_UNICODE);
+        echo json_encode(['ok'=>false,'msg'=>'API lỗi: '.($err_val ?? 'HTTP '.$http_code),'images'=>$image_urls]);
+    }
+    exit;
+}
+
 // ── AJAX: Save Project Type ──
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'save_project_type') {
     header('Content-Type: application/json; charset=utf-8');
@@ -2837,7 +2920,10 @@ function phmToggle(rid) {
 
 // Đóng bằng phím Escape
 document.addEventListener('keydown', e => {
-    if (e.key === 'Escape') closePasxHistory({target: document.getElementById('pasxHistoryOverlay')});
+    if (e.key === 'Escape') {
+        closePasxHistory({target: document.getElementById('pasxHistoryOverlay')});
+        if (document.getElementById('pakd-chat-panel')?.classList.contains('open')) chatToggle();
+    }
 });
 
 // ── Tooltip ghi chú Profile (position:fixed tránh overflow clip) ──
@@ -2862,6 +2948,429 @@ document.addEventListener('keydown', e => {
             tip.style.top  = (r.top - tip.offsetHeight - 8) + 'px';
         });
         icon.addEventListener('mouseleave', function() { tip.style.display = 'none'; });
+    });
+})();
+</script>
+
+<!-- ══════════════════════════════════════════════
+     PAKD Chat Widget
+══════════════════════════════════════════════ -->
+<style>
+#pakd-chat-btn {
+    position: fixed;
+    bottom: 28px;
+    right: 28px;
+    z-index: 1200;
+    width: 52px; height: 52px;
+    border-radius: 50%;
+    background: #6366f1;
+    border: none;
+    box-shadow: 0 4px 18px rgba(99,102,241,.45);
+    cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    color: #fff; font-size: 20px;
+    transition: background .2s, transform .2s, box-shadow .2s;
+}
+#pakd-chat-btn:hover { background: #4f46e5; transform: scale(1.08); box-shadow: 0 6px 24px rgba(99,102,241,.55); }
+#pakd-chat-btn .chat-unread {
+    position: absolute; top: 2px; right: 2px;
+    background: #dc2626; color: #fff;
+    width: 17px; height: 17px; border-radius: 50%;
+    font-size: 10px; font-weight: 700;
+    display: none; align-items: center; justify-content: center;
+    border: 2px solid #fff;
+}
+
+#pakd-chat-panel {
+    position: fixed;
+    bottom: 90px; right: 28px;
+    z-index: 1200;
+    width: 360px;
+    max-height: 520px;
+    background: #fff;
+    border-radius: 14px;
+    box-shadow: 0 8px 40px rgba(15,23,42,.18);
+    display: flex; flex-direction: column;
+    overflow: hidden;
+    transform: scale(.9) translateY(20px);
+    opacity: 0;
+    pointer-events: none;
+    transition: transform .22s cubic-bezier(.34,1.56,.64,1), opacity .18s;
+}
+#pakd-chat-panel.open {
+    transform: scale(1) translateY(0);
+    opacity: 1;
+    pointer-events: auto;
+}
+
+.chat-header {
+    background: #6366f1;
+    padding: 13px 16px;
+    display: flex; align-items: center; gap: 10px;
+    flex-shrink: 0;
+}
+.chat-header-icon {
+    width: 34px; height: 34px; border-radius: 50%;
+    background: rgba(255,255,255,.2);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 15px; color: #fff; flex-shrink: 0;
+}
+.chat-header-info { flex: 1; min-width: 0; }
+.chat-header-title { font-size: 13px; font-weight: 700; color: #fff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.chat-header-sub   { font-size: 11px; color: rgba(255,255,255,.75); margin-top: 1px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.chat-close-btn {
+    background: rgba(255,255,255,.15); border: none; border-radius: 6px;
+    width: 26px; height: 26px; display: flex; align-items: center; justify-content: center;
+    color: #fff; cursor: pointer; font-size: 12px;
+    transition: background .15s;
+}
+.chat-close-btn:hover { background: rgba(255,255,255,.3); }
+
+.chat-body {
+    flex: 1; overflow-y: auto; padding: 14px 14px 8px;
+    display: flex; flex-direction: column; gap: 10px;
+    min-height: 0;
+    scroll-behavior: smooth;
+}
+.chat-body::-webkit-scrollbar { width: 4px; }
+.chat-body::-webkit-scrollbar-track { background: transparent; }
+.chat-body::-webkit-scrollbar-thumb { background: #e2e8f0; border-radius: 4px; }
+
+.chat-msg { display: flex; flex-direction: column; max-width: 82%; }
+.chat-msg.sent  { align-self: flex-end; align-items: flex-end; }
+.chat-msg.recv  { align-self: flex-start; align-items: flex-start; }
+.chat-msg.system { align-self: center; align-items: center; max-width: 100%; }
+
+.chat-bubble {
+    padding: 8px 12px; border-radius: 12px;
+    font-size: 12.5px; line-height: 1.55; word-break: break-word;
+}
+.chat-msg.sent  .chat-bubble { background: #6366f1; color: #fff; border-bottom-right-radius: 4px; }
+.chat-msg.recv  .chat-bubble { background: #f1f5f9; color: #1e293b; border-bottom-left-radius: 4px; }
+.chat-msg.system .chat-bubble {
+    background: #f8fafc; color: #64748b; font-size: 11px;
+    padding: 5px 10px; border-radius: 8px; border: 1px solid #e2e8f0;
+}
+
+.chat-meta { font-size: 10.5px; color: #94a3b8; margin-top: 3px; }
+
+.chat-imgs { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 5px; }
+.chat-imgs img {
+    width: 80px; height: 80px; object-fit: cover; border-radius: 8px;
+    cursor: zoom-in; border: 1px solid rgba(0,0,0,.08);
+    transition: opacity .15s;
+}
+.chat-imgs img:hover { opacity: .85; }
+
+.chat-empty {
+    flex: 1; display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    color: #94a3b8; font-size: 12px; gap: 6px; padding: 20px;
+}
+.chat-empty i { font-size: 2rem; color: #e2e8f0; }
+
+.chat-preview-bar {
+    padding: 8px 12px 0;
+    display: flex; flex-wrap: wrap; gap: 6px;
+    border-top: 1px solid #f1f5f9;
+    flex-shrink: 0;
+}
+.preview-thumb {
+    position: relative; width: 52px; height: 52px;
+}
+.preview-thumb img {
+    width: 52px; height: 52px; object-fit: cover;
+    border-radius: 7px; border: 1px solid #e2e8f0;
+}
+.preview-thumb .rm-img {
+    position: absolute; top: -5px; right: -5px;
+    background: #dc2626; color: #fff; border: none;
+    border-radius: 50%; width: 16px; height: 16px;
+    font-size: 9px; cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    line-height: 1;
+}
+
+.chat-footer {
+    padding: 10px 12px 12px;
+    border-top: 1px solid #f1f5f9;
+    flex-shrink: 0;
+}
+.chat-input-row {
+    display: flex; align-items: flex-end; gap: 7px;
+}
+.chat-textarea {
+    flex: 1; resize: none; border: 1px solid #e2e8f0; border-radius: 10px;
+    padding: 8px 11px; font-size: 12.5px; font-family: inherit; color: #1e293b;
+    outline: none; line-height: 1.5; max-height: 110px; min-height: 38px;
+    overflow-y: auto; background: #f8fafc;
+    transition: border-color .15s, background .15s;
+}
+.chat-textarea:focus { border-color: #6366f1; background: #fff; }
+.chat-textarea::placeholder { color: #94a3b8; }
+
+.chat-attach-btn, .chat-send-btn {
+    flex-shrink: 0; border: none; border-radius: 9px;
+    width: 36px; height: 36px; cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 14px; transition: background .15s, transform .15s;
+}
+.chat-attach-btn {
+    background: #f1f5f9; color: #64748b;
+}
+.chat-attach-btn:hover { background: #e2e8f0; color: #334155; }
+.chat-send-btn {
+    background: #6366f1; color: #fff;
+}
+.chat-send-btn:hover:not(:disabled) { background: #4f46e5; transform: scale(1.05); }
+.chat-send-btn:disabled { background: #c7d2fe; cursor: not-allowed; }
+
+.chat-pasx-tag {
+    font-size: 10px; color: #94a3b8; text-align: right;
+    margin-top: 5px; padding-right: 2px;
+}
+.chat-pasx-tag code { color: #6366f1; font-size: 10px; }
+
+/* Image lightbox */
+#chat-lightbox {
+    display: none;
+    position: fixed; inset: 0; z-index: 9999;
+    background: rgba(0,0,0,.85);
+    align-items: center; justify-content: center;
+}
+#chat-lightbox.show { display: flex; }
+#chat-lightbox img { max-width: 90vw; max-height: 90vh; border-radius: 10px; box-shadow: 0 8px 40px rgba(0,0,0,.5); }
+#chat-lightbox-close {
+    position: absolute; top: 20px; right: 24px;
+    background: rgba(255,255,255,.15); border: none; border-radius: 8px;
+    color: #fff; font-size: 20px; cursor: pointer; padding: 6px 10px;
+}
+</style>
+
+<!-- Chat toggle button -->
+<button id="pakd-chat-btn" onclick="chatToggle()" title="Chat với Profile">
+    <i class="fas fa-comments" id="chat-btn-icon"></i>
+    <span class="chat-unread" id="chat-unread-badge"></span>
+</button>
+
+<!-- Chat panel -->
+<div id="pakd-chat-panel">
+    <div class="chat-header">
+        <div class="chat-header-icon"><i class="fas fa-headset"></i></div>
+        <div class="chat-header-info">
+            <div class="chat-header-title">Chat với ArrowHitech Profile</div>
+            <div class="chat-header-sub" id="chat-header-pasx">
+                <?php if (!empty($pakd['pasx_id'])): ?>
+                    PASX: <strong><?= htmlspecialchars($pakd['pasx_id']) ?></strong>
+                <?php else: ?>
+                    Chưa có PASX ID
+                <?php endif; ?>
+            </div>
+        </div>
+        <button class="chat-close-btn" onclick="chatToggle()"><i class="fas fa-times"></i></button>
+    </div>
+
+    <div class="chat-body" id="chat-body">
+        <div class="chat-empty" id="chat-empty-state">
+            <i class="fas fa-comments"></i>
+            <div>Chưa có tin nhắn nào</div>
+            <div style="font-size:11px;">Gửi tin nhắn để trao đổi với ArrowHitech Profile về PASX này</div>
+        </div>
+    </div>
+
+    <div class="chat-preview-bar" id="chat-preview-bar" style="display:none"></div>
+
+    <div class="chat-footer">
+        <div class="chat-input-row">
+            <textarea id="chat-textarea" class="chat-textarea" rows="1"
+                placeholder="Nhập tin nhắn..." maxlength="2000"
+                onkeydown="chatKeydown(event)" oninput="chatAutoResize(this)"></textarea>
+            <label class="chat-attach-btn" title="Đính kèm ảnh" for="chat-file-input">
+                <i class="fas fa-paperclip"></i>
+            </label>
+            <input type="file" id="chat-file-input" multiple accept="image/*"
+                style="display:none" onchange="chatPreviewImages(this)">
+            <button class="chat-send-btn" id="chat-send-btn" onclick="chatSend()" title="Gửi (Enter)">
+                <i class="fas fa-paper-plane"></i>
+            </button>
+        </div>
+        <?php if (!empty($pakd['pasx_id'])): ?>
+        <div class="chat-pasx-tag">
+            Gửi tới PASX <code><?= htmlspecialchars($pakd['pasx_id']) ?></code>
+        </div>
+        <?php endif; ?>
+    </div>
+</div>
+
+<!-- Image lightbox -->
+<div id="chat-lightbox" onclick="chatLightboxClose()">
+    <button id="chat-lightbox-close" onclick="chatLightboxClose()"><i class="fas fa-times"></i></button>
+    <img id="chat-lightbox-img" src="" alt="">
+</div>
+
+<script>
+(function() {
+    const PAKD_ID_CHAT = <?= (int)($pakd['id'] ?? 0) ?>;
+    const PASX_ID_CHAT = <?= json_encode($pakd['pasx_id'] ?? null) ?>;
+    const SENDER_NAME  = <?= json_encode($_SESSION['full_name'] ?? $_SESSION['username'] ?? 'AM') ?>;
+
+    let chatOpen = false;
+    let pendingFiles = []; // {file, url}
+    let msgCount = 0;
+
+    window.chatToggle = function() {
+        chatOpen = !chatOpen;
+        const panel = document.getElementById('pakd-chat-panel');
+        const icon  = document.getElementById('chat-btn-icon');
+        panel.classList.toggle('open', chatOpen);
+        icon.className = chatOpen ? 'fas fa-times' : 'fas fa-comments';
+        if (chatOpen) {
+            document.getElementById('chat-unread-badge').style.display = 'none';
+            document.getElementById('chat-unread-badge').textContent = '';
+            setTimeout(() => document.getElementById('chat-textarea')?.focus(), 220);
+        }
+    };
+
+    window.chatKeydown = function(e) {
+        if (e.key === 'Enter' && !e.shiftKey) {
+            e.preventDefault();
+            chatSend();
+        }
+    };
+
+    window.chatAutoResize = function(el) {
+        el.style.height = 'auto';
+        el.style.height = Math.min(el.scrollHeight, 110) + 'px';
+    };
+
+    window.chatPreviewImages = function(input) {
+        const bar = document.getElementById('chat-preview-bar');
+        Array.from(input.files).forEach(file => {
+            if (!file.type.startsWith('image/')) return;
+            const url = URL.createObjectURL(file);
+            pendingFiles.push({file, url});
+            const thumb = document.createElement('div');
+            thumb.className = 'preview-thumb';
+            thumb.dataset.url = url;
+            thumb.innerHTML = `<img src="${url}"><button class="rm-img" onclick="chatRemoveImg(this)" title="Xóa"><i class="fas fa-times"></i></button>`;
+            bar.appendChild(thumb);
+        });
+        bar.style.display = pendingFiles.length ? 'flex' : 'none';
+        input.value = '';
+    };
+
+    window.chatRemoveImg = function(btn) {
+        const thumb = btn.closest('.preview-thumb');
+        const url = thumb.dataset.url;
+        pendingFiles = pendingFiles.filter(f => f.url !== url);
+        URL.revokeObjectURL(url);
+        thumb.remove();
+        const bar = document.getElementById('chat-preview-bar');
+        if (!pendingFiles.length) bar.style.display = 'none';
+    };
+
+    window.chatSend = async function() {
+        const ta  = document.getElementById('chat-textarea');
+        const msg = ta.value.trim();
+        if (!msg && !pendingFiles.length) return;
+
+        const sendBtn = document.getElementById('chat-send-btn');
+        sendBtn.disabled = true;
+        sendBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+
+        // Hiển thị tin nhắn ngay (optimistic)
+        const tempId = 'msg-' + Date.now();
+        chatAddMsg({id: tempId, text: msg, images: pendingFiles.map(f=>f.url), time: new Date(), status: 'sending'});
+
+        // Clear input ngay
+        ta.value = '';
+        ta.style.height = 'auto';
+        const sentFiles = [...pendingFiles];
+        pendingFiles = [];
+        document.getElementById('chat-preview-bar').innerHTML = '';
+        document.getElementById('chat-preview-bar').style.display = 'none';
+
+        // Build FormData
+        const fd = new FormData();
+        fd.append('action', 'send_chat_message');
+        fd.append('id', PAKD_ID_CHAT);
+        fd.append('message', msg);
+        sentFiles.forEach(f => fd.append('images[]', f.file));
+
+        try {
+            const res  = await fetch('/projects/pakd/edit?id=' + PAKD_ID_CHAT, { method: 'POST', body: fd });
+            const data = await res.json();
+
+            const msgEl = document.getElementById(tempId);
+            if (data.ok) {
+                // Cập nhật ảnh thật (URL server) thay URL blob
+                if (msgEl && data.images?.length) {
+                    const imgs = msgEl.querySelectorAll('.chat-imgs img');
+                    data.images.forEach((url, i) => { if (imgs[i]) imgs[i].src = url; });
+                }
+                if (msgEl) msgEl.querySelector('.chat-meta').innerHTML = chatFmtTime(new Date()) + ' · <span style="color:#86efac">✓ Đã gửi</span>';
+            } else {
+                if (msgEl) {
+                    msgEl.querySelector('.chat-bubble').style.background = '#fee2e2';
+                    msgEl.querySelector('.chat-bubble').style.color = '#991b1b';
+                    msgEl.querySelector('.chat-meta').innerHTML = '<span style="color:#dc2626"><i class="fas fa-exclamation-circle"></i> ' + (data.msg || 'Gửi thất bại') + '</span>';
+                }
+                showToast(data.msg || 'Gửi thất bại', 'error');
+            }
+        } catch (err) {
+            const msgEl = document.getElementById(tempId);
+            if (msgEl) msgEl.querySelector('.chat-meta').innerHTML = '<span style="color:#dc2626"><i class="fas fa-exclamation-circle"></i> Lỗi kết nối</span>';
+            showToast('Lỗi kết nối: ' + err.message, 'error');
+        }
+
+        sendBtn.disabled = false;
+        sendBtn.innerHTML = '<i class="fas fa-paper-plane"></i>';
+        sentFiles.forEach(f => URL.revokeObjectURL(f.url));
+    };
+
+    function chatAddMsg({id, text, images, time, status}) {
+        const body = document.getElementById('chat-body');
+        document.getElementById('chat-empty-state')?.remove();
+
+        const div = document.createElement('div');
+        div.className = 'chat-msg sent';
+        div.id = id || ('msg-' + Date.now());
+
+        let imgHtml = '';
+        if (images?.length) {
+            imgHtml = '<div class="chat-imgs">' +
+                images.map(u => `<img src="${u}" loading="lazy" onclick="chatLightboxOpen('${u}')" alt="">`).join('') +
+            '</div>';
+        }
+
+        const bubbleHtml = text ? `<div class="chat-bubble">${escHtml(text)}</div>` : '';
+
+        div.innerHTML = bubbleHtml + imgHtml +
+            `<div class="chat-meta">${SENDER_NAME} · ${chatFmtTime(time)} · <span style="color:#94a3b8">⏳ đang gửi...</span></div>`;
+
+        body.appendChild(div);
+        body.scrollTop = body.scrollHeight;
+        msgCount++;
+    }
+
+    function chatFmtTime(d) {
+        return d.toLocaleTimeString('vi-VN', {hour:'2-digit', minute:'2-digit'});
+    }
+
+    function escHtml(s) {
+        return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\n/g,'<br>');
+    }
+
+    // Lightbox
+    window.chatLightboxOpen = function(url) {
+        document.getElementById('chat-lightbox-img').src = url;
+        document.getElementById('chat-lightbox').classList.add('show');
+    };
+    window.chatLightboxClose = function() {
+        document.getElementById('chat-lightbox').classList.remove('show');
+    };
+    document.addEventListener('keydown', e => {
+        if (e.key === 'Escape') chatLightboxClose();
     });
 })();
 </script>
