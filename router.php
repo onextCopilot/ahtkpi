@@ -49,6 +49,7 @@ $routes = [
     '/customers' => 'modules/customers/index.php',
     '/invoices' => 'modules/invoices/index.php',
     '/kpi' => 'modules/kpi/index.php',
+    '/api/add_debt_from_invoice' => 'api/add_debt_from_invoice.php',
     '/api/request_production_plan' => 'api/request_production_plan.php',
     '/api/pasx/callback'           => 'api/pasx_callback.php',
     '/api/pasx/message'            => 'api/pasx_message_receive.php',
