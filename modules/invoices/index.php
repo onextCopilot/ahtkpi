@@ -825,7 +825,7 @@ function formatDate($date)
             const originalHTML = btn.innerHTML;
             btn.innerHTML = '<span style="display:inline-block; width:14px; height:14px; border:2px solid #ccc; border-top-color:#333; border-radius:50%; animation:spin 1s linear infinite;"></span>';
 
-            fetch('/api/add_debt_from_invoice.php', {
+            fetch('/api/add_debt_from_invoice', {
                 method: 'POST',
                 body: formData
             })
