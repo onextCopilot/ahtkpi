@@ -355,6 +355,7 @@ class OdooAPI
                 'write_date', // Last update date (proxy for payment date if state is paid)
                 'x_studio_project_code',
                 'x_studio_invoice_type_1',
+                'x_studio_client_type',
                 'company_id',
                 'invoice_payments_widget' // JSON blob with payment info
             ];
