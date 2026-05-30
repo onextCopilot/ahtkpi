@@ -151,9 +151,22 @@ try {
         }
     }
 
+    // ── License-type invoices (separate License Bonus, NOT counted in KPI revenue) ──
+    // These are deliberately excluded from $invoices/$collected_invoices above so they
+    // never affect KPI. They get their own section + bonus = 10% × EBT(License).
+    $license_invoices = [];
+    foreach ($all_invoices as $inv) {
+        if (($inv['x_studio_invoice_type_1'] ?? '') !== 'License') continue;
+        if (($inv['state'] ?? '') === 'cancel') continue;
+        $inv_date = $inv['invoice_date'] ?: $inv['date'] ?? '';
+        if (empty($inv_date) || $inv_date < $date_from || $inv_date > $date_to) continue;
+        $license_invoices[] = $inv;
+    }
+
 } catch (Exception $e) {
     $error = $e->getMessage();
 }
+$license_invoices = $license_invoices ?? [];
 
 // ── PAKD data for EBT ──
 $pakd_list = [];
@@ -312,6 +325,46 @@ function mc_yb_rate($ebt_pct) {
     return 0;
 }
 
+// ── Com2 Tier (auto) ──
+// Tier% is derived from the Revenue/Base ratio, NOT chosen by hand.
+//   Base = Invoice(VND) − HV(VND)   (the minimum/floor price)
+//   ratio = Invoice / Base
+//   ratio > 1.5 → 5% · (>1.3–1.5] → 3% · (>1–1.3] → 2% · else 0 (no Com2)
+// HV null/≤0 → 0. If Base ≤ 0 (HV ≥ Invoice) the spread is maximal → top tier 5%.
+function mc_auto_tier($amount_vnd, $hv_vnd) {
+    if ($hv_vnd === null || $hv_vnd <= 0 || $amount_vnd === null || $amount_vnd <= 0) return 0;
+    $base = $amount_vnd - $hv_vnd;
+    if ($base <= 0) return 5;
+    $ratio = $amount_vnd / $base;
+    if ($ratio > 1.5) return 5;
+    if ($ratio > 1.3) return 3;
+    if ($ratio > 1.0) return 2;
+    return 0;
+}
+
+// Rank label of the Revenue/Base ratio band (matches mc_auto_tier).
+function mc_tier_rank($amount_vnd, $hv_vnd) {
+    if ($hv_vnd === null || $hv_vnd <= 0 || $amount_vnd === null || $amount_vnd <= 0) return '';
+    $base = $amount_vnd - $hv_vnd;
+    if ($base <= 0) return '(&gt;1.5)';
+    $ratio = $amount_vnd / $base;
+    if ($ratio > 1.5) return '(&gt;1.5)';
+    if ($ratio > 1.3) return '(&gt;1.3–1.5)';
+    if ($ratio > 1.0) return '(&gt;1–1.3)';
+    return '(≤1)';
+}
+
+// Small sub-line under the Com2 amount: auto Tier % · ratio rank band.
+function mc_com2_meta($tier, $amount_vnd, $hv_vnd) {
+    return '<div class="com2-meta" style="font-size:10px;color:#94a3b8;font-weight:500;line-height:1.2;">' . (int)$tier . '% · ' . mc_tier_rank($amount_vnd, $hv_vnd) . '</div>';
+}
+
+// ── License Bonus ──
+// License-type invoices: Bonus = 10% × EBT(License) when quarter KPI ≥ 80%.
+// License revenue does NOT count toward KPI revenue. EBT(License) = Revenue × EBT%.
+const MC_LICENSE_RATE = 0.10;
+const MC_LICENSE_MIN_KPI = 80;
+
 // Render the AI Add-on <select>.
 // $base_ok = the EBT-independent conditions (KPI ≥ 60% AND paid/Collection = 1).
 // $ebt     = the row's EBT % (null if unknown). The select is only enabled when
@@ -410,10 +463,11 @@ foreach ($invoices as $inv) {
     $com1_amount = $amount_vnd * $com1_rate;
 
     // Com2 (High Value): chỉ áp dụng khi EBT >= 20% (bắt buộc). Com2 = HV(VND) × Tier %, paid-in-quarter.
-    $tier_pct = $inv_map_row && isset($inv_map_row['com2_tier']) && $inv_map_row['com2_tier'] !== null ? (float)$inv_map_row['com2_tier'] : null;
+    // Tier % is auto-derived from the Revenue/Base ratio (Base = Invoice − HV), NOT chosen manually.
     $hv_vnd = mc_hv_to_vnd($inv_map_row, $hv_rates);
+    $tier_pct = mc_auto_tier($amount_vnd, $hv_vnd);
     $com2_ebt_ok = ($linked_ebt_pct !== null && $linked_ebt_pct >= 20);
-    $com2_gross = ($tier_pct !== null && $hv_vnd !== null && $com2_ebt_ok && $is_paid && $paid_in_quarter) ? $hv_vnd * ($tier_pct / 100) : 0;
+    $com2_gross = ($tier_pct > 0 && $hv_vnd !== null && $com2_ebt_ok && $is_paid && $paid_in_quarter) ? $hv_vnd * ($tier_pct / 100) : 0;
 
     // AI Add-on: AI Com = AI Revenue(VND) × rate (rate depends on add-on type + EBT).
     // Requires Collection (paid) here; the KPI ≥ 60% gate is applied after the loop.
@@ -669,10 +723,11 @@ foreach ($collected_details as $idx => $cd) {
     $cci_net = $cd['amount_vnd'] * $cci_rate * $cci_adj;
     $collected_details[$idx]['com1_net'] = $cci_net;
     $total_collected_com1 += $cci_net;
-    // Com2 (recovered): chỉ khi EBT >= 20%. Com2 = HV(VND) × tier % × origin-quarter KPI adj
-    $cci_tier = $cci_map && isset($cci_map['com2_tier']) && $cci_map['com2_tier'] !== null ? (float) $cci_map['com2_tier'] : null;
+    // Com2 (recovered): chỉ khi EBT >= 20%. Com2 = HV(VND) × tier % × origin-quarter KPI adj.
+    // Tier % is auto-derived from the Revenue/Base ratio (Base = Invoice − HV).
     $cci_hv_vnd = mc_hv_to_vnd($cci_map, $hv_rates);
-    if ($cci_tier !== null && $cci_hv_vnd !== null && $cci_ebt !== null && $cci_ebt >= 20) $total_collected_com2 += $cci_hv_vnd * ($cci_tier / 100) * $cci_adj;
+    $cci_tier = mc_auto_tier($cd['amount_vnd'], $cci_hv_vnd);
+    if ($cci_tier > 0 && $cci_hv_vnd !== null && $cci_ebt !== null && $cci_ebt >= 20) $total_collected_com2 += $cci_hv_vnd * ($cci_tier / 100) * $cci_adj;
     // AI Com (recovered): AI Revenue(VND) × ai rate, gated on origin-quarter KPI >= 60% (binary)
     $cci_ai_addon = $cci_map && !empty($cci_map['ai_addon']) ? $cci_map['ai_addon'] : '';
     $cci_ai_rev_vnd = mc_ai_rev_to_vnd($cci_map, $hv_rates);
@@ -700,6 +755,62 @@ $yb_avg_ebt = $yb_rev_total > 0 ? ($yb_ebt_total / $yb_rev_total * 100) : null;
 $yb_rate = mc_yb_rate($yb_avg_ebt);
 $total_yb = $yb_rate * $yb_ebt_main;
 $total_collected_yb = $yb_rate * $yb_ebt_rec;
+
+// ── License Bonus: 10% × EBT(License). Binary gate on quarter KPI ≥ 80%. ──
+// License revenue is NOT part of $total_invoiced (so it never affects KPI).
+$license_kpi_ok = ($kpi_pct >= MC_LICENSE_MIN_KPI);
+$total_license_bonus = 0;
+$license_details = [];
+foreach ($license_invoices as $inv) {
+    $inv_id = (int) $inv['id'];
+    $amount = (float) ($inv['amount_total'] ?? 0);
+    $currency = is_array($inv['currency_id']) ? $inv['currency_id'][1] : 'VND';
+    $amount_vnd = abs((float) ($inv['amount_total_signed'] ?? 0));
+    if ($amount_vnd == 0) $amount_vnd = $amount;
+
+    // EBT from linked PAKD or manual entry (same mechanism as the main rows)
+    $lmap = $inv_pakd_map[$inv_id] ?? null;
+    $l_pakd_id = $lmap ? (int) $lmap['pakd_id'] : 0;
+    $l_manual_ebt = $lmap && $lmap['manual_ebt'] !== null ? (float) $lmap['manual_ebt'] : null;
+    $l_ebt = null;
+    if ($l_manual_ebt !== null) {
+        $l_ebt = $l_manual_ebt;
+    } elseif ($l_pakd_id && isset($pakd_map[$l_pakd_id])) {
+        $lp = $pakd_map[$l_pakd_id];
+        $l_ebt = $lp['revenue'] > 0 ? ($lp['gross_profit'] / $lp['revenue'] * 100) : 0;
+    }
+
+    // Payment date
+    $l_pay_date = null;
+    if (!empty($inv['invoice_payments_widget'])) {
+        $w = $inv['invoice_payments_widget'];
+        if (is_string($w)) $w = json_decode($w, true);
+        if (!empty($w['content'])) { $ds = array_column($w['content'], 'date'); if ($ds) $l_pay_date = max($ds); }
+    }
+    if (!$l_pay_date && ($inv['payment_state'] ?? '') === 'paid') $l_pay_date = $inv['write_date'] ?? null;
+    $l_pay_ymd = $l_pay_date ? substr($l_pay_date, 0, 10) : '';
+    $l_is_paid = ($inv['payment_state'] ?? '') === 'paid';
+    $l_paid_in_quarter = $l_is_paid && $l_pay_ymd >= $date_from && $l_pay_ymd <= $date_to;
+
+    $l_ebt_vnd = $l_ebt !== null ? $amount_vnd * $l_ebt / 100 : null;
+    $l_bonus_pre = ($l_ebt !== null && $l_paid_in_quarter) ? $l_ebt_vnd * MC_LICENSE_RATE : 0;
+    $l_bonus = $license_kpi_ok ? $l_bonus_pre : 0;
+    $total_license_bonus += $l_bonus;
+
+    $license_details[] = [
+        'inv' => $inv,
+        'amount' => $amount,
+        'currency' => $currency,
+        'amount_vnd' => $amount_vnd,
+        'ebt_pct' => $l_ebt,
+        'ebt_vnd' => $l_ebt_vnd,
+        'is_paid' => $l_is_paid,
+        'paid_in_quarter' => $l_paid_in_quarter,
+        'payment_date' => $l_pay_ymd,
+        'bonus_pre' => $l_bonus_pre,
+        'bonus' => $l_bonus,
+    ];
+}
 
 // Grand total commission for this quarter = current-quarter net + recovered (thu hồi)
 $grand_com1 = $net_com1 + $total_collected_com1;
@@ -787,6 +898,7 @@ $month_names_vn = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','
         .com-card.c2::before { background:#8b5cf6; }
         .com-card.yb::before { background:#f59e0b; }
         .com-card.ai::before { background:#06b6d4; }
+        .com-card.lic::before { background:#b45309; }
         .com-card.net::before { background:#22c55e; height:4px; }
         .com-card .cc-label { font-size:11px; color:#94a3b8; text-transform:uppercase; letter-spacing:.04em; margin-bottom:4px; }
         .com-card .cc-value { font-size:20px; font-weight:700; color:#0f172a; }
@@ -996,7 +1108,7 @@ $month_names_vn = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','
                 <div class="com-card c2">
                     <div class="cc-label">Com2 (High Value)</div>
                     <div class="cc-value" style="color:#7c3aed;" id="ccCom2Gross"><?= $grand_com2 > 0 ? mc_fmt_short($grand_com2) : '–' ?></div>
-                    <div class="cc-sub">HV × Tier% (2/3/5) · EBT ≥ 20%</div>
+                    <div class="cc-sub">HV × Tier% (tự tính 2/3/5) · EBT ≥ 20%</div>
                     <div class="cc-sub">Quý này: <strong id="ccCom2ThisQ"><?= mc_fmt_short($net_com2) ?></strong> · Thu hồi: <strong id="ccCom2Recovery"><?= mc_fmt_short($total_collected_com2) ?></strong></div>
                     <span class="cc-tag <?= $grand_com2 > 0 ? 'tag-ok' : 'tag-na' ?>" id="ccCom2Tag"><?= $grand_com2 > 0 ? 'Calculated' : 'Chưa đủ điều kiện' ?></span>
                 </div>
@@ -1017,6 +1129,15 @@ $month_names_vn = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','
                     <div class="cc-sub">AIHive: 5%/2% · AI Solutions: 2% · KPI ≥ 60%</div>
                     <div class="cc-sub">Quý này: <strong id="ccAiThisQ"><?= mc_fmt_short($total_ai_com) ?></strong> · Thu hồi: <strong id="ccAiRecovery"><?= mc_fmt_short($total_collected_ai_com) ?></strong></div>
                     <span class="cc-tag <?= $grand_ai_com > 0 ? 'tag-ok' : 'tag-na' ?>" id="ccAiTag"><?= $grand_ai_com > 0 ? 'Calculated' : 'Cần tag AI Revenue' ?></span>
+                </div>
+
+                <!-- License Bonus -->
+                <div class="com-card lic">
+                    <div class="cc-label">License Bonus</div>
+                    <div class="cc-value" style="color:#b45309;" id="ccLicenseGross"><?= $total_license_bonus > 0 ? mc_fmt_short($total_license_bonus) : '–' ?></div>
+                    <div class="cc-sub">10% × EBT (HĐ License) · KPI quý ≥ 80%</div>
+                    <div class="cc-sub"><?= count($license_details) ?> HĐ License · <?= $license_kpi_ok ? '<span style="color:#16a34a;">Đạt KPI ≥ 80%</span>' : '<span style="color:#dc2626;">Chưa đạt KPI ≥ 80%</span>' ?></div>
+                    <span class="cc-tag <?= $total_license_bonus > 0 ? 'tag-ok' : 'tag-na' ?>" id="ccLicenseTag"><?= $total_license_bonus > 0 ? 'Calculated' : (empty($license_details) ? 'Không có HĐ License' : ($license_kpi_ok ? 'Cần EBT & thanh toán' : 'Chưa đạt KPI')) ?></span>
                 </div>
 
                 <!-- Net Commission -->
@@ -1073,7 +1194,6 @@ $month_names_vn = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','
                         <th style="text-align:right;">Com1 Rate</th>
                         <th style="text-align:right;">Com1</th>
                         <th style="text-align:right;">High Value</th>
-                        <th style="text-align:center;">Tier</th>
                         <th style="text-align:right;">Com2</th>
                         <th>AI Add-on</th>
                         <th style="text-align:right;">AI Revenue</th>
@@ -1081,7 +1201,7 @@ $month_names_vn = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','
                     </tr></thead>
                     <tbody>
                     <?php if (empty($invoice_details)): ?>
-                        <tr><td colspan="21" style="text-align:center;padding:3rem;color:#64748b;">No invoices for Q<?= $selected_quarter ?> <?= $selected_year ?>.</td></tr>
+                        <tr><td colspan="20" style="text-align:center;padding:3rem;color:#64748b;">No invoices for Q<?= $selected_quarter ?> <?= $selected_year ?>.</td></tr>
                     <?php else:
                         $n = 0;
                         foreach ($grouped as $mk => $month_items):
@@ -1097,7 +1217,6 @@ $month_names_vn = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','
                             <td></td>
                             <td></td>
                             <td class="amt m-com1-sub" data-month="<?= htmlspecialchars($mk) ?>" style="color:#1a73e8;"><?= mc_fmt_short($m_com1) ?></td>
-                            <td></td>
                             <td></td>
                             <td class="amt m-com2-sub" data-month="<?= htmlspecialchars($mk) ?>" style="color:#7c3aed;"><?= $m_com2 > 0 ? mc_fmt_short($m_com2) : '' ?></td>
                             <td></td>
@@ -1182,7 +1301,7 @@ $month_names_vn = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','
                                     elseif ($d['ebt_pct'] === null && empty($sel_pakd_id) && !$is_link_mode): ?><span style="color:#94a3b8;" title="Chưa chọn PAKD"><?= mc_rate_pct($d['com1_rate']) ?>%</span><?php
                                     else: ?><?= mc_rate_pct($d['com1_rate']) ?>%<?php if ($d['lead_source'] === 'self' && $d['client_type'] === 'New' && $d['com1_base_rate'] > 0): ?><span class="lead-bonus" title="+1% My Lead"> ★</span><?php endif; ?><?php endif; ?></td>
                                 <td class="amt com1-cell" data-section="main" data-month="<?= htmlspecialchars($mk) ?>" data-amount="<?= $d['amount_vnd'] ?>" data-baserate="<?= $d['com1_base_rate'] ?>" data-isnew="<?= $d['client_type'] === 'New' ? 1 : 0 ?>" data-paidok="<?= ($d['is_paid'] && $d['paid_in_quarter']) ? 1 : 0 ?>" data-ebt="<?= $d['ebt_pct'] !== null ? $d['ebt_pct'] : '' ?>" style="color:<?= $d['com1_rate'] == 0 ? ($d['is_paid'] && $d['paid_in_quarter'] ? '#dc2626' : '#94a3b8') : '#1d4ed8' ?>;font-weight:600;"><?= $d['com1_rate'] == 0 && (!$d['is_paid'] || !$d['paid_in_quarter']) ? '—' : mc_fmt($d['com1_amount']) ?></td>
-                                <?php $row_ebt_ok = !empty($d['com2_ebt_ok']); $row_elig = ($d['is_paid'] && $d['paid_in_quarter'] && $row_ebt_ok) ? 1 : 0; $row_com2 = ($d['com2_gross'] ?? 0) * $kpi_adj; $row_hv_vnd = $d['com2_hv_vnd'] ?? null; ?>
+                                <?php $row_ebt_ok = !empty($d['com2_ebt_ok']); $row_elig = ($d['is_paid'] && $d['paid_in_quarter'] && $row_ebt_ok) ? 1 : 0; $row_com2 = ($d['com2_gross'] ?? 0) * $kpi_adj; $row_hv_vnd = $d['com2_hv_vnd'] ?? null; $row_tier = (float) ($d['com2_tier'] ?? 0); ?>
                                 <td class="hv-cell" data-inv="<?= $inv_id ?>">
                                     <div class="hv-wrap"<?= $row_ebt_ok ? '' : ' title="Com2 yêu cầu EBT ≥ 20%"' ?>>
                                         <input type="number" class="hv-input" value="<?= $sel_hv !== null ? $sel_hv : '' ?>" step="any" placeholder="HV" onchange="saveHv(this)" onblur="saveHv(this)"<?= $row_ebt_ok ? '' : ' disabled' ?>>
@@ -1194,15 +1313,7 @@ $month_names_vn = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','
                                     </div>
                                     <?php if ($sel_hv !== null && $sel_hv_cur !== 'VND'): ?><div class="hv-vnd" title="Quy đổi VND"><?= mc_fmt_short($row_hv_vnd) ?></div><?php endif; ?>
                                 </td>
-                                <td class="tier-cell" style="text-align:center;">
-                                    <select class="tier-select" data-inv="<?= $inv_id ?>" onchange="saveTier(this)"<?= $row_ebt_ok ? '' : ' disabled title="Com2 yêu cầu EBT ≥ 20%"' ?>>
-                                        <option value=""<?= $sel_tier === null ? ' selected' : '' ?>>—</option>
-                                        <option value="2"<?= $sel_tier === 2.0 ? ' selected' : '' ?>>2%</option>
-                                        <option value="3"<?= $sel_tier === 3.0 ? ' selected' : '' ?>>3%</option>
-                                        <option value="5"<?= $sel_tier === 5.0 ? ' selected' : '' ?>>5%</option>
-                                    </select>
-                                </td>
-                                <td class="amt com2-cell" data-section="main" data-month="<?= htmlspecialchars($mk) ?>" data-base="<?= $row_hv_vnd !== null ? $row_hv_vnd : 0 ?>" data-adj="<?= $kpi_adj ?>" data-paidok="<?= ($d['is_paid'] && $d['paid_in_quarter']) ? 1 : 0 ?>" data-ebtok="<?= $row_ebt_ok ? 1 : 0 ?>" style="color:<?= $row_com2 > 0 ? '#7c3aed' : '#94a3b8' ?>;font-weight:600;" title="<?= !$row_ebt_ok ? 'Com2 yêu cầu EBT ≥ 20%' : ($sel_tier !== null && $row_hv_vnd !== null ? 'HV ' . mc_fmt($row_hv_vnd) . ' × Tier ' . $sel_tier . '% × KPI ' . ($kpi_adj * 100) . '%' : 'Nhập HV và chọn Tier') ?>"><?= (!$row_ebt_ok || $sel_tier === null || $row_hv_vnd === null || !$row_elig) ? '—' : mc_fmt($row_com2) ?></td>
+                                <td class="amt com2-cell" data-section="main" data-month="<?= htmlspecialchars($mk) ?>" data-amount="<?= $d['amount_vnd'] ?>" data-base="<?= $row_hv_vnd !== null ? $row_hv_vnd : 0 ?>" data-adj="<?= $kpi_adj ?>" data-paidok="<?= ($d['is_paid'] && $d['paid_in_quarter']) ? 1 : 0 ?>" data-ebtok="<?= $row_ebt_ok ? 1 : 0 ?>" style="color:<?= $row_com2 > 0 ? '#7c3aed' : '#94a3b8' ?>;font-weight:600;" title="<?= !$row_ebt_ok ? 'Com2 yêu cầu EBT ≥ 20%' : ($row_tier > 0 && $row_hv_vnd !== null ? 'HV ' . mc_fmt($row_hv_vnd) . ' × Tier ' . mc_rate_pct($row_tier/100) . '% (auto) × KPI ' . ($kpi_adj * 100) . '%' : 'Nhập HV (Tier tự tính theo ratio Revenue/Base)') ?>"><?= (!$row_ebt_ok || $row_tier <= 0 || $row_hv_vnd === null || !$row_elig) ? '—' : mc_fmt($row_com2) . mc_com2_meta($row_tier, $d['amount_vnd'], $row_hv_vnd) ?></td>
                                 <?php $ai_base_ok = ($ai_kpi_ok && $d['ai_paid_ok']); ?>
                                 <td class="ai-cell"><?= mc_ai_select($inv_id, $d['ai_addon'], $ai_options, $ai_base_ok, $d['ebt_pct']) ?></td>
                                 <?= mc_ai_rev_cell($inv_id, $d['ai_rev'], $d['ai_rev_cur'], $d['ai_rev_vnd'], $hv_currencies, $hv_symbols, $ai_base_ok, $d['ebt_pct']) ?>
@@ -1227,7 +1338,6 @@ $month_names_vn = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','
                                 </span>
                             </td>
                             <td class="amt" style="background:#dcfce7;color:#16a34a;border-color:#bbf7d0;"><?= mc_fmt_short($total_collected_vnd) ?></td>
-                            <td style="background:#dcfce7;border-color:#bbf7d0;"></td>
                             <td style="background:#dcfce7;border-color:#bbf7d0;"></td>
                             <td style="background:#dcfce7;border-color:#bbf7d0;"></td>
                             <td style="background:#dcfce7;border-color:#bbf7d0;"></td>
@@ -1364,16 +1474,8 @@ $month_names_vn = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','
                                     </div>
                                     <?php if ($ci_sel_hv !== null && $ci_sel_hv_cur !== 'VND'): ?><div class="hv-vnd" title="Quy đổi VND"><?= mc_fmt_short($ci_hv_vnd) ?></div><?php endif; ?>
                                 </td>
-                                <td class="tier-cell" style="text-align:center;">
-                                    <select class="tier-select" data-inv="<?= $ci_id ?>" onchange="saveTier(this)"<?= $ci_ebt_ok ? '' : ' disabled title="Com2 yêu cầu EBT ≥ 20%"' ?>>
-                                        <option value=""<?= $ci_sel_tier === null ? ' selected' : '' ?>>—</option>
-                                        <option value="2"<?= $ci_sel_tier === 2.0 ? ' selected' : '' ?>>2%</option>
-                                        <option value="3"<?= $ci_sel_tier === 3.0 ? ' selected' : '' ?>>3%</option>
-                                        <option value="5"<?= $ci_sel_tier === 5.0 ? ' selected' : '' ?>>5%</option>
-                                    </select>
-                                </td>
-                                <?php $ci_com2 = ($ci_sel_tier !== null && $ci_hv_vnd !== null && $ci_ebt_ok) ? $ci_hv_vnd * ($ci_sel_tier / 100) * $ci_kpi_adj : 0; $col_com2_total += $ci_com2; ?>
-                                <td class="amt com2-cell" data-section="recovery" data-base="<?= $ci_hv_vnd !== null ? $ci_hv_vnd : 0 ?>" data-adj="<?= $ci_kpi_adj ?>" data-paidok="1" data-ebtok="<?= $ci_ebt_ok ? 1 : 0 ?>" style="color:<?= $ci_com2 > 0 ? '#7c3aed' : '#94a3b8' ?>;font-weight:600;" title="<?= !$ci_ebt_ok ? 'Com2 yêu cầu EBT ≥ 20%' : ($ci_sel_tier !== null && $ci_hv_vnd !== null ? 'HV ' . mc_fmt($ci_hv_vnd) . ' × Tier ' . $ci_sel_tier . '% × KPI Q' . $cd['origin_quarter'] . '/' . $cd['origin_year'] . ' (×' . $ci_kpi_adj . ')' : 'Nhập HV và chọn Tier') ?>"><?= (!$ci_ebt_ok || $ci_sel_tier === null || $ci_hv_vnd === null) ? '—' : mc_fmt($ci_com2) ?></td>
+                                <?php $ci_tier = mc_auto_tier($cd['amount_vnd'], $ci_hv_vnd); $ci_com2 = ($ci_tier > 0 && $ci_hv_vnd !== null && $ci_ebt_ok) ? $ci_hv_vnd * ($ci_tier / 100) * $ci_kpi_adj : 0; $col_com2_total += $ci_com2; ?>
+                                <td class="amt com2-cell" data-section="recovery" data-amount="<?= $cd['amount_vnd'] ?>" data-base="<?= $ci_hv_vnd !== null ? $ci_hv_vnd : 0 ?>" data-adj="<?= $ci_kpi_adj ?>" data-paidok="1" data-ebtok="<?= $ci_ebt_ok ? 1 : 0 ?>" style="color:<?= $ci_com2 > 0 ? '#7c3aed' : '#94a3b8' ?>;font-weight:600;" title="<?= !$ci_ebt_ok ? 'Com2 yêu cầu EBT ≥ 20%' : ($ci_tier > 0 && $ci_hv_vnd !== null ? 'HV ' . mc_fmt($ci_hv_vnd) . ' × Tier ' . mc_rate_pct($ci_tier/100) . '% (auto) × KPI Q' . $cd['origin_quarter'] . '/' . $cd['origin_year'] . ' (×' . $ci_kpi_adj . ')' : 'Nhập HV (Tier tự tính theo ratio Revenue/Base)') ?>"><?= (!$ci_ebt_ok || $ci_tier <= 0 || $ci_hv_vnd === null) ? '—' : mc_fmt($ci_com2) . mc_com2_meta($ci_tier, $cd['amount_vnd'], $ci_hv_vnd) ?></td>
                                 <?php $ci_ai_base_ok = $ci_ai_kpi_ok; // recovery rows are always paid (Collection = 1) ?>
                                 <td class="ai-cell"><?= mc_ai_select($ci_id, $ci_ai_addon, $ai_options, $ci_ai_base_ok, $ci_linked_ebt) ?></td>
                                 <?= mc_ai_rev_cell($ci_id, $ci_ai_rev, $ci_ai_rev_cur, $ci_ai_rev_vnd, $hv_currencies, $hv_symbols, $ci_ai_base_ok, $ci_linked_ebt) ?>
@@ -1387,7 +1489,6 @@ $month_names_vn = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','
                             </td>
                             <td class="amt" id="recCom1Total" style="background:#dcfce7;color:#16a34a;border-color:#bbf7d0;font-weight:700;"><?= mc_fmt($col_com1_total) ?></td>
                             <td style="background:#dcfce7;border-color:#bbf7d0;"></td>
-                            <td style="background:#dcfce7;border-color:#bbf7d0;"></td>
                             <td class="amt" id="recCom2Total" style="background:#dcfce7;color:#7c3aed;border-color:#bbf7d0;font-weight:700;"><?= $col_com2_total > 0 ? mc_fmt($col_com2_total) : '' ?></td>
                             <td style="background:#dcfce7;border-color:#bbf7d0;"></td>
                             <td style="background:#dcfce7;border-color:#bbf7d0;"></td>
@@ -1399,18 +1500,121 @@ $month_names_vn = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','
                 </table>
             </div>
 
+            <!-- ─── License Bonus (HĐ type License) ─── -->
+            <div style="margin-top:1.75rem;">
+                <div style="display:flex;align-items:center;gap:.5rem;margin-bottom:.5rem;">
+                    <h3 style="margin:0;font-size:15px;color:#b45309;font-weight:700;">License Bonus</h3>
+                    <span style="font-size:12px;color:#94a3b8;">HĐ type <strong>License</strong> · Bonus = 10% × EBT · KPI quý ≥ 80% · không tính vào doanh thu KPI</span>
+                </div>
+                <div class="table-wrap" style="border:1px solid #fde68a;border-radius:10px;overflow:auto;">
+                <table>
+                    <thead><tr>
+                        <th>#</th>
+                        <th>Invoice</th>
+                        <th>Customer</th>
+                        <th>Invoice Date</th>
+                        <th>Payment Date</th>
+                        <th>PAKD</th>
+                        <th style="text-align:center;">EBT</th>
+                        <th style="text-align:right;">Amount</th>
+                        <th style="text-align:right;">VND</th>
+                        <th>Payment</th>
+                        <th style="text-align:right;">EBT (VND)</th>
+                        <th style="text-align:right;">License Bonus</th>
+                    </tr></thead>
+                    <tbody>
+                    <?php if (empty($license_details)): ?>
+                        <tr><td colspan="12" style="text-align:center;padding:2.5rem;color:#64748b;">Không có HĐ License nào trong Q<?= $selected_quarter ?> <?= $selected_year ?>.</td></tr>
+                    <?php else:
+                        $ln = 0;
+                        foreach ($license_details as $d):
+                            $ln++;
+                            $inv = $d['inv'];
+                            $inv_id = (int) $inv['id'];
+                            $inv_name = htmlspecialchars($inv['name'] ?: 'Draft');
+                            $partner = is_array($inv['partner_id']) ? htmlspecialchars($inv['partner_id'][1]) : '—';
+                            $inv_date = $inv['invoice_date'] ? date('d/m/Y', strtotime($inv['invoice_date'])) : '—';
+                            $pay_dt = !empty($d['payment_date']) ? date('d/m/Y', strtotime($d['payment_date'])) : '—';
+                            $amt_orig = $d['amount']; $curr = $d['currency'];
+                            $ps = $inv['payment_state'] ?? '';
+                            $ps_cls = $ps === 'paid' ? 'b-paid' : ($ps === 'in_payment' ? 'b-inp' : 'b-unpaid');
+                            $ps_label = $ps === 'paid' ? 'Paid' : ($ps === 'in_payment' ? 'In Payment' : ($ps === 'not_paid' ? 'Not Paid' : ucfirst($ps)));
+                            $row_map = $inv_pakd_map[$inv_id] ?? null;
+                            $sel_pakd_id = $row_map ? (int)$row_map['pakd_id'] : 0;
+                            $sel_pakd_link = $row_map ? ($row_map['pakd_link'] ?? '') : '';
+                            $sel_manual_ebt = $row_map && $row_map['manual_ebt'] !== null ? (float)$row_map['manual_ebt'] : null;
+                            $sel_pakd_name = $sel_pakd_id && isset($pakd_map[$sel_pakd_id]) ? htmlspecialchars($pakd_map[$sel_pakd_id]['name']) : '';
+                            $is_link_mode = (!$sel_pakd_id && $sel_pakd_link !== '');
+                            $sel_ebt = '';
+                            if ($sel_manual_ebt !== null) { $sel_ebt = $sel_manual_ebt; }
+                            elseif ($sel_pakd_id && isset($pakd_map[$sel_pakd_id])) {
+                                $sp = $pakd_map[$sel_pakd_id];
+                                $sel_ebt = $sp['revenue'] > 0 ? round($sp['gross_profit'] / $sp['revenue'] * 100, 1) : 0;
+                            }
+                            $l_show = ($d['bonus'] > 0);
+                    ?>
+                        <tr<?php if (!$d['is_paid']): ?> style="background:#f1f5f9;opacity:.8;"<?php elseif (!$d['paid_in_quarter']): ?> style="background:#fefce8;"<?php endif; ?>>
+                            <td style="color:#94a3b8;font-size:11px;"><?= $ln ?></td>
+                            <td style="color:#1155cc;"><?= $inv_name ?></td>
+                            <td><?= $partner ?></td>
+                            <td><?= $inv_date ?></td>
+                            <td style="<?= $pay_dt !== '—' ? 'color:#16a34a;font-weight:600;' : '' ?>"><?= $pay_dt ?></td>
+                            <td>
+                                <div class="pakd-wrap" data-inv="<?= $inv_id ?>" data-pakd-id="<?= $sel_pakd_id ?>" data-link="<?= htmlspecialchars($sel_pakd_link) ?>">
+                                    <?php if ($is_link_mode): ?>
+                                        <a href="<?= htmlspecialchars($sel_pakd_link) ?>" target="_blank" class="pakd-link-display" title="<?= htmlspecialchars($sel_pakd_link) ?>"><?= htmlspecialchars(mb_strimwidth($sel_pakd_link, 0, 30, '…')) ?></a>
+                                        <span class="pakd-link-clear" onclick="clearPakd(this)" title="Xóa">&times;</span>
+                                    <?php else: ?>
+                                        <div class="pakd-btn <?= $sel_pakd_id ? 'has-val' : '' ?>" onclick="togglePakd(this)"><?= $sel_pakd_name ?: '— Chọn PAKD —' ?></div>
+                                    <?php endif; ?>
+                                    <div class="pakd-dd">
+                                        <input type="text" placeholder="Tìm PAKD..." oninput="filterPakd(this)">
+                                        <ul></ul>
+                                        <div class="pakd-link-input">
+                                            <input type="text" placeholder="Hoặc dán link PAKD..." class="link-input" onkeydown="if(event.key==='Enter'){savePakdLink(this);event.preventDefault();}">
+                                            <button onclick="savePakdLink(this.previousElementSibling)">OK</button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </td>
+                            <td class="ebt-cell" data-inv="<?= $inv_id ?>" data-mode="<?= $is_link_mode ? 'manual' : 'auto' ?>">
+                                <?php if ($is_link_mode && $sel_manual_ebt !== null): ?>
+                                    <span class="ebt-val editable" style="color:<?= $sel_manual_ebt >= 20 ? '#16a34a' : ($sel_manual_ebt >= 5 ? '#2563eb' : '#dc2626') ?>;font-weight:600;"><?= $sel_manual_ebt ?>%</span>
+                                    <input type="number" class="ebt-edit can-edit" value="<?= $sel_manual_ebt ?>" step="0.1" onchange="saveManualEbt(this)" onblur="saveManualEbt(this)">
+                                <?php elseif ($is_link_mode): ?>
+                                    <input type="number" class="ebt-edit can-edit" value="" step="0.1" placeholder="%" onchange="saveManualEbt(this)" onblur="saveManualEbt(this)" style="display:inline-block;">
+                                <?php elseif ($sel_ebt !== ''): ?>
+                                    <span class="ebt-val" style="color:<?= $sel_ebt >= 20 ? '#16a34a' : ($sel_ebt >= 5 ? '#2563eb' : '#dc2626') ?>;font-weight:600;"><?= $sel_ebt ?>%</span>
+                                <?php endif; ?>
+                            </td>
+                            <td class="amt"><?= mc_fmt($amt_orig) ?> <?= $curr ?></td>
+                            <td class="amt"><?= mc_fmt($d['amount_vnd']) ?></td>
+                            <td><span class="badge <?= $ps_cls ?>"><?= $ps_label ?></span></td>
+                            <td class="amt" style="color:#64748b;"><?= $d['ebt_vnd'] !== null ? mc_fmt($d['ebt_vnd']) : '—' ?></td>
+                            <td class="amt license-bonus-cell" data-amount="<?= $d['amount_vnd'] ?>" data-paidok="<?= $d['paid_in_quarter'] ? 1 : 0 ?>" style="color:<?= $l_show ? '#b45309' : '#94a3b8' ?>;font-weight:600;" title="<?= !$d['paid_in_quarter'] ? 'Chưa thanh toán trong quý' : (!$license_kpi_ok ? 'License Bonus yêu cầu KPI quý ≥ 80%' : ($d['ebt_pct'] !== null ? '10% × EBT ' . mc_fmt($d['ebt_vnd']) : 'Chọn PAKD / nhập EBT')) ?>"><?= $l_show ? mc_fmt($d['bonus']) : '—' ?></td>
+                        </tr>
+                    <?php endforeach; ?>
+                        <tr class="mh">
+                            <td colspan="11" style="background:#fffbeb;color:#b45309;border-color:#fde68a;text-align:right;font-weight:600;">Tổng License Bonus<?= $license_kpi_ok ? '' : ' (chưa đạt KPI ≥ 80%)' ?></td>
+                            <td class="amt" id="licenseTotal" style="background:#fffbeb;color:#b45309;border-color:#fde68a;font-weight:700;"><?= $total_license_bonus > 0 ? mc_fmt($total_license_bonus) : '' ?></td>
+                        </tr>
+                    <?php endif; ?>
+                    </tbody>
+                </table>
+                </div>
+            </div>
+
             <!-- ─── Commission Rules Summary ─── -->
             <details style="margin-top:1rem;font-size:12px;color:#64748b;">
                 <summary style="cursor:pointer;font-weight:600;padding:0.5rem 0;">Quy tắc tính Commission (tham khảo)</summary>
                 <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:1rem;margin-top:0.5rem;line-height:1.8;">
                     <strong>Com1 (Revenue):</strong> New Client = 1% · Old Client = 0.5% · <span style="color:#f59e0b;">Market to Lead = "My Lead" → +1% Com1 ★ (chỉ khách New)</span> · <span style="color:#dc2626;">EBT &lt; 5% → 0 com (chỉ tính KPI)</span><br>
-                    <strong>Com2 (High Value):</strong> Chỉ khi EBT ≥ 20%. HV = Giá chênh = Revenue − Revenue Base (nhập tay, ₫ hoặc $ → quy đổi VND). Com2 = HV(VND) × Tier% (2%/3%/5% theo ratio Revenue/Base). VD: HV 500tr × 3% = 15tr<br>
+                    <strong>Com2 (High Value):</strong> Chỉ khi EBT ≥ 20%. HV = Giá chênh = Revenue − Revenue Base (nhập tay, ₫ hoặc $ → quy đổi VND). Tier <strong>tự tính</strong> theo ratio = Revenue / Base (Base = Revenue − HV): &gt;1.5 → 5% · (&gt;1.3–1.5] → 3% · (&gt;1–1.3] → 2% · ≤1 → không có Com2. Com2 = HV(VND) × Tier%. VD: Revenue 2 tỷ, HV 500tr → Base 1.5 tỷ, ratio 1.33 → rank (&gt;1.3–1.5) → Tier 3% → Com2 = 500tr × 3% = 15tr<br>
                     <strong>KPI Adj:</strong> < 60%: 0 com · 60-80%: 70% com · ≥ 80%: 100% com<br>
                     <strong>Yearly Bonus:</strong> 2% × S_EBT (nếu %A_EBT ≥ 12.5%) hoặc 4% × S_EBT (nếu ≥ 20%)<br>
                     <strong>AI Add-on:</strong> <span style="color:#0891b2;">AI Com = AI Revenue(VND, ₫/$ → quy đổi) × rate.</span> AIHive Solutions: 5% (EBT≥20%) / 2% (EBT≥10%) · AI Solutions: 2% (EBT≥15%) · Bắt buộc KPI ≥ 60% & Collection = 1 (đã thanh toán)<br>
                     <strong>Lương KPI:</strong> < 60%: 0 · 60-80%: 50% · 80-150%: 100% · >150%: 150%<br>
-                    <strong>First PO Bonus:</strong> 1/1000 giá trị HĐ đầu tiên khách mới (> 1 tỷ VND)<br>
-                    <strong>License Bonus:</strong> 10% × EBT License (nếu đạt KPI quý)
+                    <strong style="color:#b45309;">License Bonus:</strong> HĐ type License (bảng riêng). Bonus = 10% × EBT(License) khi <strong>KPI quý ≥ 80%</strong> & đã thanh toán. Doanh thu License <strong>không</strong> tính vào KPI.
                 </div>
             </details>
 
@@ -1532,6 +1736,7 @@ function selectPakd(li) {
     // Sync Tier availability with the PAKD's EBT (Com2 requires EBT >= 20%)
     const p2 = pakdId === 0 ? null : pakdList.find(x => x.id === pakdId);
     syncTierAvailability(wrap.closest('tr'), p2 ? p2.ebt : null);
+    recomputeLicense();
 
     savePakdApi({invoice_id: invId, pakd_id: pakdId, pakd_link: ''});
 }
@@ -1576,6 +1781,7 @@ function savePakdLink(input) {
 
     // EBT now unknown (manual, empty) → disable Tier until user enters EBT >= 20%
     syncTierAvailability(wrap.closest('tr'), null);
+    recomputeLicense();
 
     savePakdApi({invoice_id: invId, pakd_id: 0, pakd_link: link});
 }
@@ -1605,6 +1811,7 @@ function clearPakd(el) {
 
     // EBT cleared → disable Tier (Com2 requires EBT >= 20%)
     syncTierAvailability(wrap.closest('tr'), null);
+    recomputeLicense();
 
     savePakdApi({invoice_id: invId, pakd_id: 0, pakd_link: ''});
 }
@@ -1633,6 +1840,8 @@ function saveManualEbt(input) {
     });
     // Com2 requires EBT >= 20% — toggle the Tier dropdown for this row
     syncTierAvailability(ebtCell.closest('tr'), numVal);
+    // License Bonus rows also key off EBT
+    recomputeLicense();
 }
 
 // Com1 components — mutable because the Market-to-Lead source can add +1% live.
@@ -1642,6 +1851,42 @@ let GRAND_COM1 = <?= json_encode((float)$grand_com1) ?>;
 const KPI_ADJ = <?= json_encode((float)$kpi_adj) ?>;            // current-quarter KPI adjustment
 const SELF_LEAD_BONUS = <?= json_encode((float)MC_SELF_LEAD_BONUS) ?>;
 const HV_RATES = <?= json_encode(array_map('floatval', $hv_rates)) ?>;
+
+// License Bonus: 10% × EBT(License) for paid-in-quarter rows, gated on quarter KPI ≥ 80% (binary).
+const LICENSE_RATE = <?= json_encode((float)MC_LICENSE_RATE) ?>;
+const LICENSE_KPI_OK = <?= json_encode((bool)$license_kpi_ok) ?>;
+
+// Read a row's current EBT % from its .ebt-cell (manual input if present, else the displayed value).
+function rowEbtVal(tr) {
+    if (!tr) return null;
+    const cell = tr.querySelector('.ebt-cell');
+    if (!cell) return null;
+    const input = cell.querySelector('.ebt-edit');
+    if (input && input.value.trim() !== '') { const v = parseFloat(input.value); return isNaN(v) ? null : v; }
+    const span = cell.querySelector('.ebt-val');
+    if (span) { const v = parseFloat(span.textContent); return isNaN(v) ? null : v; }
+    return null;
+}
+
+// Recompute License Bonus across all License rows + the summary card/footer.
+function recomputeLicense() {
+    let total = 0;
+    document.querySelectorAll('.license-bonus-cell').forEach(cell => {
+        const tr = cell.closest('tr');
+        const amount = parseFloat(cell.dataset.amount) || 0;
+        const paidok = cell.dataset.paidok === '1';
+        const ebt = rowEbtVal(tr);
+        let val = 0;
+        if (ebt !== null && paidok && LICENSE_KPI_OK) val = amount * ebt / 100 * LICENSE_RATE;
+        if (val > 0) { cell.textContent = fmtFull(val); cell.style.color = '#b45309'; }
+        else { cell.textContent = '—'; cell.style.color = '#94a3b8'; }
+        total += val;
+    });
+    const foot = document.getElementById('licenseTotal'); if (foot) foot.textContent = total > 0 ? fmtFull(total) : '';
+    const card = document.getElementById('ccLicenseGross'); if (card) card.textContent = total > 0 ? fmtShort(total) : '–';
+    const tag = document.getElementById('ccLicenseTag');
+    if (tag) { tag.textContent = total > 0 ? 'Calculated' : (LICENSE_KPI_OK ? 'Cần EBT & thanh toán' : 'Chưa đạt KPI'); tag.className = 'cc-tag ' + (total > 0 ? 'tag-ok' : 'tag-na'); }
+}
 
 // AI Com components — mutable because the AI add-on type / revenue can change live.
 let NET_AI = <?= json_encode((float)$total_ai_com) ?>;
@@ -1785,20 +2030,47 @@ function ratePct(rate) {
     return s + '%';
 }
 
+// Auto Tier % from the Revenue/Base ratio. Base = amount(VND) − HV(VND). ratio = amount/Base.
+// >1.5 → 5% · (>1.3–1.5] → 3% · (>1–1.3] → 2% · else 0. HV null/≤0 → 0. Base ≤ 0 → 5%.
+function autoTier(amount, hvVnd) {
+    if (!hvVnd || hvVnd <= 0 || !amount || amount <= 0) return 0;
+    const base = amount - hvVnd;
+    if (base <= 0) return 5;
+    const ratio = amount / base;
+    if (ratio > 1.5) return 5;
+    if (ratio > 1.3) return 3;
+    if (ratio > 1.0) return 2;
+    return 0;
+}
+
+// Rank label of the Revenue/Base ratio band (matches autoTier / PHP mc_tier_rank).
+function tierRank(amount, hvVnd) {
+    if (!hvVnd || hvVnd <= 0 || !amount || amount <= 0) return '';
+    const base = amount - hvVnd;
+    if (base <= 0) return '(>1.5)';
+    const ratio = amount / base;
+    if (ratio > 1.5) return '(>1.5)';
+    if (ratio > 1.3) return '(>1.3–1.5)';
+    if (ratio > 1.0) return '(>1–1.3)';
+    return '(≤1)';
+}
+
 function recomputeCom2() {
     const monthSums = {};
     let netCom2Main = 0, com2Recovery = 0;
     document.querySelectorAll('.com2-cell').forEach(cell => {
-        const row = cell.closest('tr');
-        const sel = row.querySelector('.tier-select');
-        const tier = sel && sel.value ? parseFloat(sel.value) : null;
-        const base = parseFloat(cell.dataset.base) || 0;
+        const base = parseFloat(cell.dataset.base) || 0;   // HV in VND
+        const amount = parseFloat(cell.dataset.amount) || 0;
+        const tier = autoTier(amount, base);
         const adj = parseFloat(cell.dataset.adj) || 0;
         const eligible = cell.dataset.paidok === '1' && cell.dataset.ebtok === '1';
         let val = 0;
-        if (tier !== null && eligible) val = base * tier / 100 * adj;
-        if (tier === null || !eligible) { cell.textContent = '—'; cell.style.color = '#94a3b8'; }
-        else { cell.textContent = fmtFull(val); cell.style.color = '#7c3aed'; }
+        if (tier > 0 && eligible) val = base * tier / 100 * adj;
+        if (tier <= 0 || !eligible) { cell.textContent = '—'; cell.style.color = '#94a3b8'; }
+        else {
+            cell.innerHTML = fmtFull(val) + '<div class="com2-meta" style="font-size:10px;color:#94a3b8;font-weight:500;line-height:1.2;">' + tier + '% · ' + tierRank(amount, base) + '</div>';
+            cell.style.color = '#7c3aed';
+        }
         if (cell.dataset.section === 'recovery') {
             com2Recovery += val;
         } else {
@@ -1926,16 +2198,8 @@ function saveAiRev(el) {
     savePakdApi({invoice_id: invId, update_ai_revenue: true, ai_revenue: rev, ai_revenue_currency: cur});
 }
 
-function saveTier(select) {
-    if (select.disabled) return;
-    const invId = parseInt(select.dataset.inv);
-    const val = select.value.trim();
-    const numVal = val === '' ? null : parseFloat(val);
-    recomputeCom2();
-    savePakdApi({invoice_id: invId, update_tier: true, com2_tier: numVal});
-}
-
-// HV (Giá chênh / High Value): user enters amount + currency (₫/$), converted to VND. Com2 = HV(VND) × Tier %.
+// HV (Giá chênh / High Value): user enters amount + currency (₫/$), converted to VND.
+// Com2 = HV(VND) × Tier %, where Tier is auto-derived from the Revenue/Base ratio.
 function saveHv(el) {
     const cell = el.closest('.hv-cell');
     if (!cell) return;
@@ -1964,16 +2228,11 @@ function saveHv(el) {
     savePakdApi({invoice_id: invId, update_hv: true, com2_hv: hv, com2_hv_currency: cur});
 }
 
-// Enable/disable a row's Tier dropdown based on its current EBT (Com2 requires EBT >= 20%).
-// ebtVal: number or null. Keeps the stored Tier value but stops counting Com2 until EBT >= 20% again.
+// Enable/disable a row's HV input based on its current EBT (Com2 requires EBT >= 20%).
+// ebtVal: number or null. Tier is auto-computed from the ratio; Com2 stops counting until EBT >= 20%.
 function syncTierAvailability(tr, ebtVal) {
     if (!tr) return;
     const ok = ebtVal !== null && !isNaN(ebtVal) && ebtVal >= 20;
-    const sel = tr.querySelector('.tier-select');
-    if (sel) {
-        sel.disabled = !ok;
-        if (ok) sel.removeAttribute('title'); else sel.title = 'Com2 yêu cầu EBT ≥ 20%';
-    }
     const hvInput = tr.querySelector('.hv-input');
     const hvCur = tr.querySelector('.hv-cur');
     if (hvInput) hvInput.disabled = !ok;
