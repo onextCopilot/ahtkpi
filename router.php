@@ -50,6 +50,7 @@ $routes = [
     '/invoices' => 'modules/invoices/index.php',
     '/kpi' => 'modules/kpi/index.php',
     '/my-com' => 'modules/my_com/index.php',
+    '/my-com/yearly-bonus' => 'modules/my_com/yearly_bonus.php',
     '/api/invoice_pakd_map' => 'api/invoice_pakd_map.php',
     '/api/quarter_kpi' => 'api/quarter_kpi.php',
     '/api/quarter_kpi.php' => 'api/quarter_kpi.php',

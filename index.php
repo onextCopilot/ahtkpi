@@ -138,6 +138,7 @@ $routes = [
     '/debt' => 'modules/debt/index.php',
     '/my-debt' => 'modules/my_debt/index.php',
     '/my-com' => 'modules/my_com/index.php',
+    '/my-com/yearly-bonus' => 'modules/my_com/yearly_bonus.php',
     '/debt-warning' => 'modules/debt_warning/index.php',
     '/customers' => 'modules/customers/index.php',
     '/invoices' => 'modules/invoices/index.php',

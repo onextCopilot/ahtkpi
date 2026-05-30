@@ -302,6 +302,16 @@ const MC_AI_MIN_EBT = 10;
 // Tooltip shown when the AI add-on can't be chosen yet.
 const MC_AI_GATE_MSG = 'Chỉ chọn được khi KPI ≥ 60%, EBT ≥ 10% & đã thanh toán (Collection)';
 
+// ── Yearly Bonus (end-of-year settlement) ──
+// EBT ≥ 20% → 4% of revenue · EBT ≥ 12.5% → 2% · else 0.
+// Shown as a per-quarter estimate (revenue realized this quarter × rate).
+function mc_yb_rate($ebt_pct) {
+    if ($ebt_pct === null) return 0;
+    if ($ebt_pct >= 20)   return 0.04;
+    if ($ebt_pct >= 12.5) return 0.02;
+    return 0;
+}
+
 // Render the AI Add-on <select>.
 // $base_ok = the EBT-independent conditions (KPI ≥ 60% AND paid/Collection = 1).
 // $ebt     = the row's EBT % (null if unknown). The select is only enabled when
@@ -467,8 +477,18 @@ $net_com2 = $total_com2 * $kpi_adj;
 // AI Add-on: KPI ≥ 60% is a binary gate (not the 0.7/1.0 multiplier).
 $ai_kpi_ok = ($kpi_pct >= 60);
 $total_ai_com = 0;
+// Yearly Bonus = rate × S_EBT, where the rate is chosen from the period's AVERAGE EBT %
+// (S_EBT = Σ profit = Σ revenue × EBT%; %A_EBT = S_EBT / S_revenue). Accumulate the
+// EBT (profit) and revenue of paid-this-quarter invoices; the recovery loop adds its share
+// and the rate + totals are finalised after both loops.
+$yb_ebt_main = 0;   // S_EBT this quarter (profit, VND)
+$yb_rev_main = 0;   // revenue of EBT-known invoices this quarter
 foreach ($invoice_details as $d) {
     if ($ai_kpi_ok) $total_ai_com += $d['ai_com_pre'];
+    if ($d['paid_in_quarter'] && $d['ebt_pct'] !== null) {
+        $yb_ebt_main += $d['amount_vnd'] * $d['ebt_pct'] / 100;
+        $yb_rev_main += $d['amount_vnd'];
+    }
 }
 
 // ── Com2 placeholder: needs Revenue Base per project ──
@@ -625,6 +645,8 @@ foreach ($needed_q as $qk => $qi) {
 $total_collected_com1 = 0;
 $total_collected_com2 = 0;
 $total_collected_ai_com = 0;
+$yb_ebt_rec = 0;   // S_EBT recovered this quarter (profit, VND)
+$yb_rev_rec = 0;   // revenue of EBT-known recovered invoices
 foreach ($collected_details as $idx => $cd) {
     $ci = $cd['inv'];
     $cci_id = (int) $ci['id'];
@@ -664,12 +686,26 @@ foreach ($collected_details as $idx => $cd) {
     $collected_details[$idx]['ai_rev_vnd'] = $cci_ai_rev_vnd;
     $collected_details[$idx]['ai_kpi_ok'] = $cci_ai_kpi_ok;
     $total_collected_ai_com += $cci_ai_net;
+    // Yearly Bonus (recovered): accumulate EBT (profit) + revenue; rate applied after the loop.
+    if ($cci_ebt !== null) {
+        $yb_ebt_rec += $cd['amount_vnd'] * $cci_ebt / 100;
+        $yb_rev_rec += $cd['amount_vnd'];
+    }
 }
+
+// ── Finalise Yearly Bonus estimate: rate from the quarter's average EBT %, × S_EBT ──
+$yb_ebt_total = $yb_ebt_main + $yb_ebt_rec;
+$yb_rev_total = $yb_rev_main + $yb_rev_rec;
+$yb_avg_ebt = $yb_rev_total > 0 ? ($yb_ebt_total / $yb_rev_total * 100) : null;
+$yb_rate = mc_yb_rate($yb_avg_ebt);
+$total_yb = $yb_rate * $yb_ebt_main;
+$total_collected_yb = $yb_rate * $yb_ebt_rec;
 
 // Grand total commission for this quarter = current-quarter net + recovered (thu hồi)
 $grand_com1 = $net_com1 + $total_collected_com1;
 $grand_com2 = $net_com2 + $total_collected_com2;
 $grand_ai_com = $total_ai_com + $total_collected_ai_com;
+$grand_yb = $total_yb + $total_collected_yb;
 $grand_total_com = $grand_com1 + $grand_com2 + $grand_ai_com;
 
 // Available years
@@ -716,6 +752,9 @@ $month_names_vn = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','
         .qt:hover { border-color:#93c5fd; color:#1d4ed8; background:#eff6ff; }
         .qt.active { background:#2563eb; color:#fff; border-color:#2563eb; font-weight:600; }
         .qt.cur { border-color:#93c5fd; }
+        .qt-yb { border-color:#fcd34d; color:#b45309; background:#fffbeb; font-weight:600; }
+        .qt-yb:hover { border-color:#f59e0b; color:#92400e; background:#fef3c7; }
+        .qt-yb.active { background:#d97706; color:#fff; border-color:#d97706; }
         .q-label { font-size:12px; color:#94a3b8; margin-left:0.5rem; }
 
         /* KPI Section */
@@ -886,6 +925,7 @@ $month_names_vn = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','
                     ?>
                         <a href="<?= $href ?>" class="<?= $cls ?>">Q<?= $q ?></a>
                     <?php endfor; ?>
+                    <a href="/my-com/yearly-bonus?year=<?= $selected_year ?>" class="qt qt-yb" title="Yearly Bonus cả năm <?= $selected_year ?>">★ Yearly Bonus</a>
                 </div>
                 <span class="q-label">
                     <?= $month_names_vn[$q_start_month-1] ?> – <?= $month_names_vn[$q_end_month-1] ?> <?= $selected_year ?>
@@ -953,38 +993,27 @@ $month_names_vn = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','
                 </div>
 
                 <!-- Com2 -->
-                <?php
-                $com2_available = false;
-                $total_com2 = 0;
-                foreach ($pakd_ebt_data as $pe) {
-                    if ($pe['ebt_pct'] >= 20) $com2_available = true;
-                }
-                ?>
                 <div class="com-card c2">
                     <div class="cc-label">Com2 (High Value)</div>
-                    <?php if ($com2_available): ?>
-                        <div class="cc-value">–</div>
-                        <div class="cc-sub">EBT ≥ 20% detected. Cần Revenue Base</div>
-                        <span class="cc-tag tag-warn">Cần dữ liệu</span>
-                    <?php else: ?>
-                        <div class="cc-value">N/A</div>
-                        <div class="cc-sub">Cần EBT ≥ 20% từ PAKD</div>
-                        <span class="cc-tag tag-na">Chưa đủ điều kiện</span>
-                    <?php endif; ?>
+                    <div class="cc-value" style="color:#7c3aed;" id="ccCom2Gross"><?= $grand_com2 > 0 ? mc_fmt_short($grand_com2) : '–' ?></div>
+                    <div class="cc-sub">HV × Tier% (2/3/5) · EBT ≥ 20%</div>
+                    <div class="cc-sub">Quý này: <strong id="ccCom2ThisQ"><?= mc_fmt_short($net_com2) ?></strong> · Thu hồi: <strong id="ccCom2Recovery"><?= mc_fmt_short($total_collected_com2) ?></strong></div>
+                    <span class="cc-tag <?= $grand_com2 > 0 ? 'tag-ok' : 'tag-na' ?>" id="ccCom2Tag"><?= $grand_com2 > 0 ? 'Calculated' : 'Chưa đủ điều kiện' ?></span>
                 </div>
 
                 <!-- Yearly Bonus -->
                 <div class="com-card yb">
                     <div class="cc-label">Yearly Bonus (est.)</div>
-                    <div class="cc-value">–</div>
-                    <div class="cc-sub">Tổng kết cuối năm · EBT ≥ 12.5%: 2% · ≥ 20%: 4%</div>
-                    <span class="cc-tag tag-na">Tổng kết năm</span>
+                    <div class="cc-value" style="color:#d97706;" id="ccYbGross"><?= mc_fmt_short($grand_yb) ?></div>
+                    <div class="cc-sub">Tỉ lệ × S_EBT · %A_EBT ≥ 12.5%: 2% · ≥ 20%: 4% · <a href="/my-com/yearly-bonus?year=<?= $selected_year ?>" style="color:#d97706;font-weight:600;">cả năm →</a></div>
+                    <div class="cc-sub">Quý này: <strong id="ccYbThisQ"><?= mc_fmt_short($total_yb) ?></strong> · Thu hồi: <strong id="ccYbRecovery"><?= mc_fmt_short($total_collected_yb) ?></strong></div>
+                    <span class="cc-tag <?= $grand_yb > 0 ? 'tag-ok' : 'tag-na' ?>" id="ccYbTag"><?= $grand_yb > 0 ? 'Ước tính (est.)' : 'Tổng kết năm' ?></span>
                 </div>
 
                 <!-- AI Add-on -->
                 <div class="com-card ai">
                     <div class="cc-label">AI Add-on</div>
-                    <div class="cc-value" style="color:#0891b2;" id="ccAiGross"><?= $grand_ai_com > 0 ? mc_fmt_short($grand_ai_com) : '–' ?></div>
+                    <div class="cc-value" style="color:#0891b2;" id="ccAiGross"><?= mc_fmt_short($grand_ai_com) ?></div>
                     <div class="cc-sub">AIHive: 5%/2% · AI Solutions: 2% · KPI ≥ 60%</div>
                     <div class="cc-sub">Quý này: <strong id="ccAiThisQ"><?= mc_fmt_short($total_ai_com) ?></strong> · Thu hồi: <strong id="ccAiRecovery"><?= mc_fmt_short($total_collected_ai_com) ?></strong></div>
                     <span class="cc-tag <?= $grand_ai_com > 0 ? 'tag-ok' : 'tag-na' ?>" id="ccAiTag"><?= $grand_ai_com > 0 ? 'Calculated' : 'Cần tag AI Revenue' ?></span>
@@ -1152,7 +1181,7 @@ $month_names_vn = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','
                                     elseif ($d['com1_rate'] == 0 && $d['ebt_pct'] !== null): ?><span style="color:#dc2626;" title="EBT < 5%">0%</span><?php
                                     elseif ($d['ebt_pct'] === null && empty($sel_pakd_id) && !$is_link_mode): ?><span style="color:#94a3b8;" title="Chưa chọn PAKD"><?= mc_rate_pct($d['com1_rate']) ?>%</span><?php
                                     else: ?><?= mc_rate_pct($d['com1_rate']) ?>%<?php if ($d['lead_source'] === 'self' && $d['client_type'] === 'New' && $d['com1_base_rate'] > 0): ?><span class="lead-bonus" title="+1% My Lead"> ★</span><?php endif; ?><?php endif; ?></td>
-                                <td class="amt com1-cell" data-section="main" data-month="<?= htmlspecialchars($mk) ?>" data-amount="<?= $d['amount_vnd'] ?>" data-baserate="<?= $d['com1_base_rate'] ?>" data-isnew="<?= $d['client_type'] === 'New' ? 1 : 0 ?>" data-paidok="<?= ($d['is_paid'] && $d['paid_in_quarter']) ? 1 : 0 ?>" style="color:<?= $d['com1_rate'] == 0 ? ($d['is_paid'] && $d['paid_in_quarter'] ? '#dc2626' : '#94a3b8') : '#1d4ed8' ?>;font-weight:600;"><?= $d['com1_rate'] == 0 && (!$d['is_paid'] || !$d['paid_in_quarter']) ? '—' : mc_fmt($d['com1_amount']) ?></td>
+                                <td class="amt com1-cell" data-section="main" data-month="<?= htmlspecialchars($mk) ?>" data-amount="<?= $d['amount_vnd'] ?>" data-baserate="<?= $d['com1_base_rate'] ?>" data-isnew="<?= $d['client_type'] === 'New' ? 1 : 0 ?>" data-paidok="<?= ($d['is_paid'] && $d['paid_in_quarter']) ? 1 : 0 ?>" data-ebt="<?= $d['ebt_pct'] !== null ? $d['ebt_pct'] : '' ?>" style="color:<?= $d['com1_rate'] == 0 ? ($d['is_paid'] && $d['paid_in_quarter'] ? '#dc2626' : '#94a3b8') : '#1d4ed8' ?>;font-weight:600;"><?= $d['com1_rate'] == 0 && (!$d['is_paid'] || !$d['paid_in_quarter']) ? '—' : mc_fmt($d['com1_amount']) ?></td>
                                 <?php $row_ebt_ok = !empty($d['com2_ebt_ok']); $row_elig = ($d['is_paid'] && $d['paid_in_quarter'] && $row_ebt_ok) ? 1 : 0; $row_com2 = ($d['com2_gross'] ?? 0) * $kpi_adj; $row_hv_vnd = $d['com2_hv_vnd'] ?? null; ?>
                                 <td class="hv-cell" data-inv="<?= $inv_id ?>">
                                     <div class="hv-wrap"<?= $row_ebt_ok ? '' : ' title="Com2 yêu cầu EBT ≥ 20%"' ?>>
@@ -1310,7 +1339,7 @@ $month_names_vn = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','
                                 <td class="amt"><?= mc_fmt($cd['amount_vnd']) ?></td>
                                 <td><span class="badge <?= $ci_cls ?>"><?= $ci_label ?></span></td>
                                 <td class="amt"><?php if ($ci_com1_rate == 0 && $ci_linked_ebt !== null): ?><span style="color:#dc2626;" title="EBT < 5% → không tính Com">0%</span><?php elseif ($ci_linked_ebt === null && !$ci_sel_pakd_id && !$ci_is_link): ?><span style="color:#94a3b8;"><?= mc_rate_pct($ci_com1_rate) ?>%</span><?php else: ?><?= mc_rate_pct($ci_com1_rate) ?>%<?php if ($ci_lead_source === 'self' && $ci_is_new && $ci_com1_base_rate > 0): ?><span class="lead-bonus" title="+1% My Lead"> ★</span><?php endif; ?><?php endif; ?></td>
-                                <td class="amt kpi-q-cell com1-cell-rec" data-year="<?= $cd['origin_year'] ?>" data-quarter="<?= $cd['origin_quarter'] ?>" data-amount="<?= $cd['amount_vnd'] ?>" data-baserate="<?= $ci_com1_base_rate ?>" data-isnew="<?= $ci_is_new ? 1 : 0 ?>" data-adj="<?= $ci_kpi_adj ?>">
+                                <td class="amt kpi-q-cell com1-cell-rec" data-year="<?= $cd['origin_year'] ?>" data-quarter="<?= $cd['origin_quarter'] ?>" data-amount="<?= $cd['amount_vnd'] ?>" data-baserate="<?= $ci_com1_base_rate ?>" data-isnew="<?= $ci_is_new ? 1 : 0 ?>" data-adj="<?= $ci_kpi_adj ?>" data-ebt="<?= $ci_linked_ebt !== null ? $ci_linked_ebt : '' ?>">
                                     <div class="com1-rec-val" style="font-weight:600;color:<?= $ci_com1 == 0 ? '#94a3b8' : '#1d4ed8' ?>;"><?= mc_fmt($ci_com1) ?></div>
                                     <?php if ($cd['origin_key'] !== ''):
                                         $kpi_color = $ci_kpi_adj == 0 ? '#dc2626' : ($ci_kpi_adj < 1 ? '#f59e0b' : '#16a34a');
@@ -1627,6 +1656,43 @@ function aiRate(addon, ebt) {
     return 0;
 }
 
+// Yearly Bonus rate chosen from the AVERAGE EBT % (mirrors PHP mc_yb_rate / yb_rate_from_avg).
+function ybRate(avgEbt) {
+    if (avgEbt === null || avgEbt === '' || isNaN(avgEbt)) return 0;
+    if (avgEbt >= 20) return 0.04;
+    if (avgEbt >= 12.5) return 0.02;
+    return 0;
+}
+
+// Recompute the Yearly Bonus estimate: rate(quarter avg EBT %) × S_EBT (Σ revenue × EBT%).
+function recomputeYearlyBonus() {
+    let ebtMain = 0, revMain = 0, ebtRec = 0, revRec = 0;
+    document.querySelectorAll('.com1-cell').forEach(cell => {
+        if (cell.dataset.paidok !== '1') return;
+        const ebt = cell.dataset.ebt === '' ? null : parseFloat(cell.dataset.ebt);
+        if (ebt === null || isNaN(ebt)) return;
+        const amount = parseFloat(cell.dataset.amount) || 0;
+        ebtMain += amount * ebt / 100;
+        revMain += amount;
+    });
+    document.querySelectorAll('.com1-cell-rec').forEach(cell => {
+        const ebt = cell.dataset.ebt === '' ? null : parseFloat(cell.dataset.ebt);
+        if (ebt === null || isNaN(ebt)) return;
+        const amount = parseFloat(cell.dataset.amount) || 0;
+        ebtRec += amount * ebt / 100;   // recovered invoices are always paid this quarter
+        revRec += amount;
+    });
+    const ebtTotal = ebtMain + ebtRec, revTotal = revMain + revRec;
+    const avgEbt = revTotal > 0 ? (ebtTotal / revTotal * 100) : null;
+    const rate = ybRate(avgEbt);
+    const main = rate * ebtMain, rec = rate * ebtRec, grand = rate * ebtTotal;
+    const v = document.getElementById('ccYbGross'); if (v) v.textContent = fmtShort(grand);
+    const tq = document.getElementById('ccYbThisQ'); if (tq) tq.textContent = fmtShort(main);
+    const rc = document.getElementById('ccYbRecovery'); if (rc) rc.textContent = fmtShort(rec);
+    const tag = document.getElementById('ccYbTag');
+    if (tag) { tag.textContent = grand > 0 ? 'Ước tính (est.)' : 'Tổng kết năm'; tag.className = 'cc-tag ' + (grand > 0 ? 'tag-ok' : 'tag-na'); }
+}
+
 function fmtFull(n) { return Math.round(n).toLocaleString('en-US'); }
 function fmtShort(n) {
     const a = Math.abs(n);
@@ -1751,6 +1817,13 @@ function recomputeCom2() {
     if (recTot) recTot.textContent = com2Recovery > 0 ? fmtFull(com2Recovery) : '';
     // Commission summary card
     const grandCom2 = netCom2Main + com2Recovery;
+    // Com2 (High Value) card
+    const c2Gross = document.getElementById('ccCom2Gross');
+    if (c2Gross) c2Gross.textContent = grandCom2 > 0 ? fmtShort(grandCom2) : '–';
+    const c2ThisQ = document.getElementById('ccCom2ThisQ'); if (c2ThisQ) c2ThisQ.textContent = fmtShort(netCom2Main);
+    const c2Rec = document.getElementById('ccCom2Recovery'); if (c2Rec) c2Rec.textContent = fmtShort(com2Recovery);
+    const c2Tag = document.getElementById('ccCom2Tag');
+    if (c2Tag) { c2Tag.textContent = grandCom2 > 0 ? 'Calculated' : 'Chưa đủ điều kiện'; c2Tag.className = 'cc-tag ' + (grandCom2 > 0 ? 'tag-ok' : 'tag-na'); }
     const com2Part = document.getElementById('ccCom2Part');
     if (com2Part) {
         com2Part.style.display = grandCom2 > 0 ? '' : 'none';
@@ -1806,7 +1879,7 @@ function recomputeAiCom() {
     GRAND_AI = netMain + recovery;
     // AI Add-on card
     const aiGross = document.getElementById('ccAiGross');
-    if (aiGross) aiGross.textContent = GRAND_AI > 0 ? fmtShort(GRAND_AI) : '–';
+    if (aiGross) aiGross.textContent = fmtShort(GRAND_AI);
     const aiThisQ = document.getElementById('ccAiThisQ'); if (aiThisQ) aiThisQ.textContent = fmtShort(netMain);
     const aiRec = document.getElementById('ccAiRecovery'); if (aiRec) aiRec.textContent = fmtShort(recovery);
     const aiTag = document.getElementById('ccAiTag');
@@ -1941,6 +2014,11 @@ function syncAiAvailability(tr, ebtVal) {
     const aiComCell = tr.querySelector('.aicom-cell');
     if (aiComCell) aiComCell.dataset.ebt = (ebtVal === null || isNaN(ebtVal)) ? '' : ebtVal;
     recomputeAiCom();
+    // Yearly Bonus also keys off EBT — keep the Com1 cells' EBT in sync and refresh.
+    const ebtStr = (ebtVal === null || isNaN(ebtVal)) ? '' : ebtVal;
+    const c1 = tr.querySelector('.com1-cell'); if (c1) c1.dataset.ebt = ebtStr;
+    const c1r = tr.querySelector('.com1-cell-rec'); if (c1r) c1r.dataset.ebt = ebtStr;
+    recomputeYearlyBonus();
 }
 
 function saveQuarterKpi(input) {
