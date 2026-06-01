@@ -3,8 +3,9 @@ require_once __DIR__ . '/../../config/config.php';
 
 if (!isset($_SESSION['user_id'])) { header('Location: /login'); exit; }
 
-$userId = (int)$_SESSION['user_id'];
-$role   = $_SESSION['role'] ?? 'user';
+$userId      = (int)$_SESSION['user_id'];
+$role        = $_SESSION['role'] ?? 'user';
+$ceoFullName = $_SESSION['full_name'] ?? '';
 
 // ── Access control ────────────────────────────────────────────────────────────
 // Kiểm tra CEO Approver (chỉ user trong danh sách pasx_ceo_approvers)
@@ -273,8 +274,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'ceo_a
     ];
     [$ok, $msg] = callProfileApi($conn, '/integrations/os/pakd/'.$pid.'/approve', $body);
     if ($ok) {
-        $st = $conn->prepare("UPDATE pakd SET status='approved', pasx_status='approved' WHERE id=?");
-        $st->bind_param("i", $pid); $st->execute(); $st->close();
+        $st = $conn->prepare("UPDATE pakd SET status='approved', pasx_status='approved', approved_by_name=?, approved_at=NOW() WHERE id=?");
+        $st->bind_param("si", $ceoFullName, $pid); $st->execute(); $st->close();
         notifyAm($conn, $pid, 'approve');
         echo json_encode(['ok'=>true, 'msg'=>'Đã approve thành công']);
     } else {

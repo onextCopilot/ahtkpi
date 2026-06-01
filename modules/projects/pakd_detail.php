@@ -174,8 +174,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'appro
 
     if ($http_code >= 200 && $http_code < 300) {
         // Cập nhật cả status và pasx_status = approved trong DB
-        $st = $conn->prepare("UPDATE pakd SET status='approved', pasx_status='approved' WHERE id=?");
-        $st->bind_param("i", $pid);
+        $st = $conn->prepare("UPDATE pakd SET status='approved', pasx_status='approved', approved_by_name=?, approved_at=NOW() WHERE id=?");
+        $st->bind_param("si", $my_full_name, $pid);
         $st->execute();
         $st->close();
         echo json_encode(['ok'=>true,'msg'=>'Approve thành công — Profile đang tạo Project']);
@@ -749,6 +749,8 @@ try {
     $conn->query("ALTER TABLE pakd ADD COLUMN contract_no  VARCHAR(255)  DEFAULT NULL");
     $conn->query("ALTER TABLE pakd ADD COLUMN timeline     TEXT          DEFAULT NULL");
     $conn->query("ALTER TABLE pakd ADD COLUMN fin_data     JSON          DEFAULT NULL");
+    $conn->query("ALTER TABLE pakd ADD COLUMN approved_by_name VARCHAR(255) DEFAULT NULL");
+    $conn->query("ALTER TABLE pakd ADD COLUMN approved_at  DATETIME      DEFAULT NULL");
 } catch (Exception $e) {
     // Ignore duplicate column errors on subsequent loads
 }
@@ -1031,6 +1033,21 @@ function getProjectTypeIcon($type) {
             padding: 2px 8px; background: rgba(255,255,255,.2);
             border-radius: 4px; font-size: 12px; color: #fff; font-weight: 500;
         }
+
+        /* ── Authority Seal ── */
+        .sb-authority {
+            display: inline-flex; align-items: center; gap: 7px;
+            padding: 3px 11px 3px 9px;
+            background: rgba(255,255,255,.18);
+            border: 1px solid rgba(255,255,255,.38);
+            border-radius: 20px;
+            font-size: 12px; color: #fff;
+            letter-spacing: .01em; white-space: nowrap;
+        }
+        .sb-authority .auth-icon { font-size: 12px; opacity: .95; }
+        .sb-authority .auth-by   { opacity: .75; font-weight: 400; }
+        .sb-authority .auth-name { font-weight: 700; }
+        .sb-authority .auth-date { opacity: .65; font-size: 11px; }
 
         /* Metrics part (right) */
         .metric-item { display: flex; align-items: center; gap: 0; }
@@ -1319,6 +1336,16 @@ function getProjectTypeIcon($type) {
                     <span id="sb-label-text"><?= $statusLabel ?></span>
                     <span class="sb-sep">·</span>
                     <div class="sb-badge"><i class="fas <?= getProjectTypeIcon($pakd['project_type']) ?>"></i> <?= htmlspecialchars($pakd['project_type']) ?></div>
+                    <?php if (($pakd['status'] ?? '') === 'approved' && !empty($pakd['approved_by_name'])): ?>
+                    <div class="sb-authority">
+                        <i class="fas fa-certificate auth-icon"></i>
+                        <span class="auth-by">Phê duyệt bởi</span>
+                        <span class="auth-name"><?= htmlspecialchars($pakd['approved_by_name']) ?></span>
+                        <?php if (!empty($pakd['approved_at'])): ?>
+                        <span class="auth-date">· <?= date('d/m/Y H:i', strtotime($pakd['approved_at'])) ?></span>
+                        <?php endif; ?>
+                    </div>
+                    <?php endif; ?>
                 </div>
             </div>
             <div class="tmb-right">
