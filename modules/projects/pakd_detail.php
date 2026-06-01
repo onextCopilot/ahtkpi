@@ -1049,7 +1049,7 @@ function getProjectTypeIcon($type) {
             align-items: center;
             gap: 14px;
         }
-        .stamp-svg-wrap { display: flex; justify-content: center; opacity: 0.28; }
+        .stamp-svg-wrap { display: flex; justify-content: center; }
         .stamp-signer { text-align: center; }
         .stamp-signer-label {
             font-size: 10.5px; color: #94a3b8;
@@ -1939,7 +1939,7 @@ function getProjectTypeIcon($type) {
             <div class="approval-stamp-wrap">
             <div class="approval-stamp-inner">
                 <div class="stamp-svg-wrap">
-                    <svg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg" width="165" height="165" style="transform:rotate(-8deg);overflow:visible;display:block">
+                    <svg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg" width="165" height="165" opacity="0.28" style="transform:rotate(-8deg);overflow:visible;display:block">
                         <defs>
                             <path id="<?= $sid ?>_top" d="M 35,100 A 65,65 0 0,1 165,100"/>
                             <path id="<?= $sid ?>_bot" d="M 165,100 A 65,65 0 0,1 35,100"/>
