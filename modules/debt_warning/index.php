@@ -105,14 +105,27 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $currency_val = $_POST['currency'] ?? 'USD';
         $sale_team_id = !empty($_POST['sale_team_id']) ? intval($_POST['sale_team_id']) : NULL;
 
+        // Lookup am_email từ full_name trong bảng users
+        $am_email = '';
+        if (!empty($am)) {
+            $stmt_em = $conn->prepare("SELECT email FROM users WHERE full_name = ? LIMIT 1");
+            $stmt_em->bind_param("s", $am);
+            $stmt_em->execute();
+            $res_em = $stmt_em->get_result();
+            if ($row_em = $res_em->fetch_assoc()) {
+                $am_email = $row_em['email'];
+            }
+            $stmt_em->close();
+        }
+
         if ($_POST['action'] === 'add') {
-            $stmt = $conn->prepare("INSERT INTO debts (company, am, sale_team_id, client_name, project_name, payment_milestone, expected_prod_date, expected_payment_date, invoice_status_class, amount, currency, invoice_status, vat_invoice, invoice_date, payment_status, payment_month, weekly_update, am_notes, delivery_notes, production_status, pl_class) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
-            $stmt->bind_param("ssissssssdsssssssssss", $company, $am, $sale_team_id, $client, $project, $milestone, $prod_date, $pay_date, $inv_class, $amount, $currency_val, $inv_stat, $vat, $invoice_date_val, $pay_stat, $pay_month, $weekly, $am_note, $del_note, $prod_stat, $pl);
+            $stmt = $conn->prepare("INSERT INTO debts (company, am, am_email, sale_team_id, client_name, project_name, payment_milestone, expected_prod_date, expected_payment_date, invoice_status_class, amount, currency, invoice_status, vat_invoice, invoice_date, payment_status, payment_month, weekly_update, am_notes, delivery_notes, production_status, pl_class) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+            $stmt->bind_param("sssissssssdsssssssssss", $company, $am, $am_email, $sale_team_id, $client, $project, $milestone, $prod_date, $pay_date, $inv_class, $amount, $currency_val, $inv_stat, $vat, $invoice_date_val, $pay_stat, $pay_month, $weekly, $am_note, $del_note, $prod_stat, $pl);
         } else {
             // Edit
             $id = intval($_POST['id']);
-            $stmt = $conn->prepare("UPDATE debts SET company=?, am=?, sale_team_id=?, client_name=?, project_name=?, payment_milestone=?, expected_prod_date=?, expected_payment_date=?, invoice_status_class=?, amount=?, currency=?, invoice_status=?, vat_invoice=?, invoice_date=?, payment_status=?, payment_month=?, weekly_update=?, am_notes=?, delivery_notes=?, production_status=?, pl_class=? WHERE id=?");
-            $stmt->bind_param("ssissssssdsssssssssssi", $company, $am, $sale_team_id, $client, $project, $milestone, $prod_date, $pay_date, $inv_class, $amount, $currency_val, $inv_stat, $vat, $invoice_date_val, $pay_stat, $pay_month, $weekly, $am_note, $del_note, $prod_stat, $pl, $id);
+            $stmt = $conn->prepare("UPDATE debts SET company=?, am=?, am_email=?, sale_team_id=?, client_name=?, project_name=?, payment_milestone=?, expected_prod_date=?, expected_payment_date=?, invoice_status_class=?, amount=?, currency=?, invoice_status=?, vat_invoice=?, invoice_date=?, payment_status=?, payment_month=?, weekly_update=?, am_notes=?, delivery_notes=?, production_status=?, pl_class=? WHERE id=?");
+            $stmt->bind_param("sssissssssdsssssssssssi", $company, $am, $am_email, $sale_team_id, $client, $project, $milestone, $prod_date, $pay_date, $inv_class, $amount, $currency_val, $inv_stat, $vat, $invoice_date_val, $pay_stat, $pay_month, $weekly, $am_note, $del_note, $prod_stat, $pl, $id);
         }
 
         if ($stmt->execute()) {

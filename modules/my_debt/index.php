@@ -172,14 +172,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 // --- FILTERING & FETCH DATA ---
 // Filter by current user's email (identical to My Reports logic)
 
-$identity_clauses = [];
-if (!empty($current_user_email)) {
-    $identity_clauses[] = "d.am_email = '" . $conn->real_escape_string($current_user_email) . "'";
-}
-if (!empty($user_team_ids)) {
-    $identity_clauses[] = "d.sale_team_id IN (" . implode(',', $user_team_ids) . ")";
-}
-$identity_sql = count($identity_clauses) > 0 ? "(" . implode(" OR ", $identity_clauses) . ")" : "1=1";
+// my-debt: chỉ lọc theo am_email của user hiện tại
+$identity_sql = !empty($current_user_email)
+    ? "d.am_email = '" . $conn->real_escape_string($current_user_email) . "'"
+    : "1=1";
 
 $filter_clauses = [];
 if (!empty($_GET['invoice_status_class'])) {

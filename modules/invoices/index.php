@@ -439,14 +439,16 @@ function formatDate($date)
                                 $existingInvoiceIds = [];
                                 try {
                                     if (isset($conn)) {
-                                        $checkDebtSql = "SELECT vat_invoice, odoo_invoice_id FROM debts WHERE  odoo_invoice_id IS NOT NULL";
+                                        // Chỉ tính là "đã add" khi debt có am_email — nếu thiếu email, AM vẫn có thể add lại
+                                        $checkDebtSql = "SELECT vat_invoice, odoo_invoice_id, am_email FROM debts WHERE odoo_invoice_id IS NOT NULL";
                                         $debtRes = $conn->query($checkDebtSql);
                                         if ($debtRes) {
                                             while ($row = $debtRes->fetch_assoc()) {
-                                                if (!empty($row['vat_invoice'])) {
+                                                $hasEmail = !empty($row['am_email']);
+                                                if (!empty($row['vat_invoice']) && $hasEmail) {
                                                     $existingInvoiceNames[] = $row['vat_invoice'];
                                                 }
-                                                if (!empty($row['odoo_invoice_id'])) {
+                                                if (!empty($row['odoo_invoice_id']) && $hasEmail) {
                                                     $existingInvoiceIds[] = $row['odoo_invoice_id'];
                                                 }
                                             }
