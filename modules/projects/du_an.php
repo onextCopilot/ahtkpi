@@ -9,31 +9,23 @@ if (!isset($_SESSION['user_id'])) {
 $user_id = $_SESSION['user_id'];
 $role    = $_SESSION['role'] ?? 'user';
 
-// ── Migrate: ensure new columns exist ────────────────────────────────────────
+// ── Migrate: ensure columns exist ────────────────────────────────────────────
 foreach ([
     'assignment_date' => 'DATETIME DEFAULT NULL',
     'expected_closing'=> 'DATE DEFAULT NULL',
     'odoo_stage_id'   => 'INT DEFAULT NULL',
     'division_names'  => 'VARCHAR(500) DEFAULT NULL',
+    'won_status'      => 'VARCHAR(20) DEFAULT NULL',
+    'lost_reason'     => 'VARCHAR(255) DEFAULT NULL',
 ] as $_col => $_def) {
     $r = $conn->query("SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='pakd' AND COLUMN_NAME='$_col'");
     if ($r && $r->num_rows === 0) $conn->query("ALTER TABLE pakd ADD COLUMN `$_col` $_def");
 }
 unset($_col, $_def, $r);
 
-// ── Load won stage from settings ─────────────────────────────────────────────
-$wonStageId = null;
-$wonStageName = null;
-$wonRes = $conn->query("SELECT setting_key, setting_value FROM pakd_settings WHERE setting_key IN ('sync_won_stage_id','sync_stage_names')");
-$wonSettings = [];
-if ($wonRes) while ($r = $wonRes->fetch_assoc()) $wonSettings[$r['setting_key']] = $r['setting_value'];
-
-if (!empty($wonSettings['sync_won_stage_id'])) {
-    $wonStageId = (int)$wonSettings['sync_won_stage_id'];
-}
-
 // ── Load data ─────────────────────────────────────────────────────────────────
-$search = trim($_GET['search'] ?? '');
+$search        = trim($_GET['search'] ?? '');
+$filter_status = trim($_GET['status'] ?? '');
 
 $sortAllowed = [
     'name'             => 'p.name',
@@ -43,6 +35,7 @@ $sortAllowed = [
     'opp_value'        => 'p.opp_value',
     'opp_probability'  => 'p.opp_probability',
     'odoo_stage_name'  => 'p.odoo_stage_name',
+    'status'           => 'p.status',
     'assignment_date'  => 'p.assignment_date',
     'expected_closing' => 'p.expected_closing',
     'created_at'       => 'p.created_at',
@@ -52,12 +45,8 @@ $sortDir = strtoupper($_GET['dir'] ?? 'DESC') === 'ASC' ? 'ASC' : 'DESC';
 if (!array_key_exists($sortCol, $sortAllowed)) { $sortCol = 'assignment_date'; $sortDir = 'DESC'; }
 $orderBy = $sortAllowed[$sortCol] . ' ' . $sortDir;
 
-// Filter: won stage from settings (odoo_stage_id), fallback to status='approved'
-if ($wonStageId) {
-    $where  = ["p.odoo_stage_id = {$wonStageId}"];
-} else {
-    $where  = ["p.status = 'approved'"];
-}
+// Filter: only Deal Won (won_status = 'won')
+$where  = ["p.won_status = 'won'"];
 $params = [];
 $types  = '';
 
@@ -66,6 +55,12 @@ if ($search !== '') {
     $like     = "%{$search}%";
     $params[] = $like; $params[] = $like; $params[] = $like;
     $types   .= 'sss';
+}
+
+if ($filter_status !== '') {
+    $where[]  = "p.status = ?";
+    $params[] = $filter_status;
+    $types   .= 's';
 }
 
 $whereStr = implode(' AND ', $where);
@@ -105,9 +100,13 @@ $uRes = $conn->query("SELECT email, full_name, avatar FROM users WHERE email IS 
 if ($uRes) while ($u = $uRes->fetch_assoc()) $userAvatarMap[strtolower($u['email'])] = $u;
 
 // Stats
-$wonFilter  = $wonStageId ? "odoo_stage_id = {$wonStageId}" : "status = 'approved'";
-$totalWon   = (int)($conn->query("SELECT COUNT(*) as c FROM pakd WHERE {$wonFilter}")->fetch_assoc()['c'] ?? 0);
-$totalValue = (float)($conn->query("SELECT SUM(opp_value) as s FROM pakd WHERE {$wonFilter}")->fetch_assoc()['s'] ?? 0);
+$totalWon   = (int)($conn->query("SELECT COUNT(*) as c FROM pakd WHERE won_status='won'")->fetch_assoc()['c'] ?? 0);
+$totalValue = (float)($conn->query("SELECT SUM(opp_value) as s FROM pakd WHERE won_status='won'")->fetch_assoc()['s'] ?? 0);
+
+// Status counts (among won deals)
+$statusCounts = ['draft'=>0,'pending'=>0,'approved'=>0,'rejected'=>0];
+$scRes = $conn->query("SELECT status, COUNT(*) as c FROM pakd WHERE won_status='won' GROUP BY status");
+if ($scRes) while ($sc = $scRes->fetch_assoc()) $statusCounts[$sc['status']] = (int)$sc['c'];
 
 $viMonths = ['','Tháng 1','Tháng 2','Tháng 3','Tháng 4','Tháng 5','Tháng 6','Tháng 7','Tháng 8','Tháng 9','Tháng 10','Tháng 11','Tháng 12'];
 
@@ -263,6 +262,13 @@ function sortTh2($label, $col, $currentSort, $currentDir, $extraGetParams = []) 
         .page-btn.active { background: var(--success); color: white; border-color: var(--success); }
         .page-btn.disabled { opacity: .5; cursor: not-allowed; background: #f1f5f9; }
 
+        .status-badge { display: inline-flex; align-items: center; gap: 5px; padding: 3px 10px; border-radius: 6px; font-size: 11px; font-weight: 700; }
+        .status-badge.draft    { background: #f1f5f9; color: #64748b; }
+        .status-badge.pending  { background: #fef9c3; color: #d97706; }
+        .status-badge.approved { background: #dcfce7; color: #16a34a; }
+        .status-badge.rejected { background: #fee2e2; color: #dc2626; }
+        .filter-select { padding: 8px 12px; border: 1px solid var(--border); border-radius: var(--r-md); font-size: 13px; font-family: inherit; color: var(--slate); background: white; outline: none; cursor: pointer; }
+
         .toast { position: fixed; top: 20px; right: 20px; z-index: 9999; padding: 12px 20px; border-radius: 10px; font-size: 13px; font-weight: 600; color: white; display: flex; align-items: center; gap: 8px; box-shadow: 0 8px 24px rgba(0,0,0,.18); animation: toastIn .3s ease; font-family: Inter, sans-serif; }
         .toast.success { background: #16a34a; }
         .toast.error   { background: #dc2626; }
@@ -291,7 +297,7 @@ function sortTh2($label, $col, $currentSort, $currentDir, $extraGetParams = []) 
                 <div class="page-icon"><i class="fas fa-trophy"></i></div>
                 <div class="page-title">
                     <h1>My Project</h1>
-                    <p>Business Plans ở stage Won<?= $wonStageId ? " (Stage ID: {$wonStageId})" : ' (status = Approved)' ?></p>
+                    <p>Business Plans đã Deal Won từ Odoo CRM</p>
                 </div>
             </div>
         </div>
@@ -311,6 +317,22 @@ function sortTh2($label, $col, $currentSort, $currentDir, $extraGetParams = []) 
                     <div class="stat-lbl">Tổng giá trị</div>
                 </div>
             </div>
+            <div class="stat-card" style="cursor:pointer;" onclick="filterByStatus('draft')">
+                <div class="stat-icon" style="background:#f1f5f9;color:#64748b;"><i class="fas fa-file"></i></div>
+                <div><div class="stat-val" style="color:#64748b;"><?= $statusCounts['draft'] ?></div><div class="stat-lbl">Nháp</div></div>
+            </div>
+            <div class="stat-card" style="cursor:pointer;" onclick="filterByStatus('pending')">
+                <div class="stat-icon" style="background:#fef9c3;color:#d97706;"><i class="fas fa-clock"></i></div>
+                <div><div class="stat-val" style="color:#d97706;"><?= $statusCounts['pending'] ?></div><div class="stat-lbl">Chờ duyệt</div></div>
+            </div>
+            <div class="stat-card" style="cursor:pointer;" onclick="filterByStatus('approved')">
+                <div class="stat-icon" style="background:#dcfce7;color:#16a34a;"><i class="fas fa-check-circle"></i></div>
+                <div><div class="stat-val" style="color:#16a34a;"><?= $statusCounts['approved'] ?></div><div class="stat-lbl">Đã duyệt</div></div>
+            </div>
+            <div class="stat-card" style="cursor:pointer;" onclick="filterByStatus('rejected')">
+                <div class="stat-icon" style="background:#fee2e2;color:#dc2626;"><i class="fas fa-times-circle"></i></div>
+                <div><div class="stat-val" style="color:#dc2626;"><?= $statusCounts['rejected'] ?></div><div class="stat-lbl">Từ chối</div></div>
+            </div>
         </div>
 
         <div class="toolbar">
@@ -321,6 +343,13 @@ function sortTh2($label, $col, $currentSort, $currentDir, $extraGetParams = []) 
                            value="<?= htmlspecialchars($search) ?>"
                            onkeydown="if(event.key==='Enter')applyFilter()">
                 </div>
+                <select class="filter-select" id="statusFilter" onchange="applyFilter()">
+                    <option value="">Tất cả trạng thái</option>
+                    <option value="draft"    <?= $filter_status==='draft'    ?'selected':'' ?>>Nháp</option>
+                    <option value="pending"  <?= $filter_status==='pending'  ?'selected':'' ?>>Chờ duyệt</option>
+                    <option value="approved" <?= $filter_status==='approved' ?'selected':'' ?>>Đã duyệt</option>
+                    <option value="rejected" <?= $filter_status==='rejected' ?'selected':'' ?>>Từ chối</option>
+                </select>
                 <button class="btn btn-outline" onclick="clearFilter()">
                     <i class="fas fa-times"></i> Xoá lọc
                 </button>
@@ -345,6 +374,7 @@ function sortTh2($label, $col, $currentSort, $currentDir, $extraGetParams = []) 
                             <?php sortTh2('Giá trị',       'opp_value',       $sortCol, $sortDir, $qp) ?>
                             <?php sortTh2('Xác suất',      'opp_probability', $sortCol, $sortDir, $qp) ?>
                             <?php sortTh2('Stage Odoo',    'odoo_stage_name', $sortCol, $sortDir, $qp) ?>
+                            <?php sortTh2('Trạng thái',    'status',          $sortCol, $sortDir, $qp) ?>
                             <?php sortTh2('Ngày assign',   'assignment_date', $sortCol, $sortDir, $qp) ?>
                             <?php sortTh2('Dự kiến đóng',  'expected_closing',$sortCol, $sortDir, $qp) ?>
                         </tr>
@@ -401,6 +431,13 @@ function sortTh2($label, $col, $currentSort, $currentDir, $extraGetParams = []) 
                             <td class="opp-value"><?= formatVND2($p['opp_value']) ?> <?= htmlspecialchars($p['currency']) ?></td>
                             <td><?= renderStars2($p['opp_probability']) ?></td>
                             <td style="font-size:12px;color:var(--gray);"><?= htmlspecialchars($p['odoo_stage_name'] ?: '—') ?></td>
+                            <td>
+                                <?php
+                                $statusLabels = ['draft'=>'Nháp','pending'=>'Chờ duyệt','approved'=>'Đã duyệt','rejected'=>'Từ chối'];
+                                $st = $p['status'] ?? 'draft';
+                                ?>
+                                <span class="status-badge <?= htmlspecialchars($st) ?>"><?= $statusLabels[$st] ?? $st ?></span>
+                            </td>
                             <td style="font-size:12px;color:var(--lgray);"><?= !empty($p['assignment_date']) ? date('d/m/Y', strtotime($p['assignment_date'])) : '—' ?></td>
                             <td style="font-size:12px;color:var(--lgray);"><?= !empty($p['expected_closing']) ? date('d/m/Y', strtotime($p['expected_closing'])) : '—' ?></td>
                         </tr>
@@ -438,8 +475,16 @@ function sortTh2($label, $col, $currentSort, $currentDir, $extraGetParams = []) 
 
 <script>
 function applyFilter() {
-    const s = document.getElementById('searchBox').value.trim();
-    window.location.href = '/projects/du-an' + (s ? '?search=' + encodeURIComponent(s) : '');
+    const s  = document.getElementById('searchBox').value.trim();
+    const st = document.getElementById('statusFilter').value;
+    const p  = new URLSearchParams();
+    if (s)  p.set('search', s);
+    if (st) p.set('status', st);
+    window.location.href = '/projects/du-an' + (p.toString() ? '?' + p.toString() : '');
+}
+function filterByStatus(st) {
+    document.getElementById('statusFilter').value = st;
+    applyFilter();
 }
 function clearFilter() {
     window.location.href = '/projects/du-an';
