@@ -151,6 +151,11 @@ $lastSync = null;
 $syncRes = $conn->query("SELECT MAX(synced_at) as last FROM pakd WHERE synced_at IS NOT NULL");
 if ($syncRes && $row = $syncRes->fetch_assoc()) $lastSync = $row['last'];
 
+// Won stage ID from settings
+$wonStageId = null;
+$wsRes = $conn->query("SELECT setting_value FROM pakd_settings WHERE setting_key = 'sync_won_stage_id'");
+if ($wsRes && $wsRow = $wsRes->fetch_assoc()) $wonStageId = (int)$wsRow['setting_value'] ?: null;
+
 // User avatar map (email → user info)
 $userAvatarMap = [];
 $uRes = $conn->query("SELECT email, full_name, avatar FROM users WHERE email IS NOT NULL AND email != ''");
@@ -398,6 +403,14 @@ function formatVND($n) {
         .status-badge.pending  { background: #fef9c3; color: #d97706; }
         .status-badge.approved { background: #dcfce7; color: #16a34a; }
         .status-badge.rejected { background: #fee2e2; color: #dc2626; }
+        .won-badge {
+            display: inline-flex; align-items: center; gap: 4px;
+            background: linear-gradient(135deg, #f59e0b, #d97706);
+            color: #fff; font-size: 10px; font-weight: 700;
+            padding: 2px 7px; border-radius: 4px; letter-spacing: .04em;
+            box-shadow: 0 1px 4px rgba(245,158,11,.4);
+        }
+        .stage-won-cell { display: flex; flex-direction: column; gap: 3px; align-items: flex-start; }
 
         .opp-value { font-weight: 600; color: #2563eb; }
         .star-rating { display: inline-flex; gap: 1px; line-height: 1; }
@@ -726,7 +739,17 @@ function formatVND($n) {
                             <td style="font-size:12px;color:var(--slate);"><?= !empty($p['division_names']) ? htmlspecialchars($p['division_names']) : '—' ?></td>
                             <td class="opp-value"><?= formatVND($p['opp_value']) ?> <?= htmlspecialchars($p['currency']) ?></td>
                             <td><?= renderStars($p['opp_probability']) ?></td>
-                            <td style="font-size:12px;color:var(--gray);"><?= htmlspecialchars($p['odoo_stage_name'] ?: '—') ?></td>
+                            <td>
+                                <?php $isWonRow = $wonStageId && (int)($p['odoo_stage_id'] ?? 0) === $wonStageId; ?>
+                                <?php if ($isWonRow): ?>
+                                <div class="stage-won-cell">
+                                    <span class="won-badge">🏆 DEAL WON</span>
+                                    <span style="font-size:11px;color:var(--gray);"><?= htmlspecialchars($p['odoo_stage_name'] ?: '') ?></span>
+                                </div>
+                                <?php else: ?>
+                                <span style="font-size:12px;color:var(--gray);"><?= htmlspecialchars($p['odoo_stage_name'] ?: '—') ?></span>
+                                <?php endif; ?>
+                            </td>
                             <td>
                                 <?php
                                 $ps = $p['pasx_status'] ?? '';

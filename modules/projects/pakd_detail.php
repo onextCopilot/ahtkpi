@@ -760,6 +760,12 @@ $stmt->execute();
 $pakd = $stmt->get_result()->fetch_assoc();
 $stmt->close();
 
+// Won stage ID from settings
+$wonStageId = null;
+$wsRes = $conn->query("SELECT setting_value FROM pakd_settings WHERE setting_key = 'sync_won_stage_id'");
+if ($wsRes && $wsRow = $wsRes->fetch_assoc()) $wonStageId = (int)$wsRow['setting_value'] ?: null;
+$isWon = $pakd && $wonStageId && (int)($pakd['odoo_stage_id'] ?? 0) === $wonStageId;
+
 // ── Kiểm tra quyền truy cập: AM chỉ xem được PAKD của mình ──
 if ($pakd && !$is_admin) {
     $owner_match = (!empty($pakd['am_user_id']) && (int)$pakd['am_user_id'] === $user_id)
@@ -1030,6 +1036,31 @@ function getProjectTypeIcon($type) {
         .metric-item .m-unit { font-size: 10px; color: rgba(255,255,255,.7); margin-left: 3px; font-weight: 400; }
         .metric-item .m-pct  { font-size: 11.5px; color: rgba(255,255,255,.8); margin-left: 4px; }
         .tmb-divider { width: 1px; height: 18px; background: rgba(255,255,255,.3); }
+
+        /* ── Deal Won Banner ── */
+        .won-banner {
+            display: flex; align-items: center; gap: 16px;
+            padding: 14px 32px;
+            background: linear-gradient(90deg, #fef3c7 0%, #fde68a 60%, #fef9c3 100%);
+            border-bottom: 2px solid #f59e0b;
+        }
+        .won-banner-icon {
+            font-size: 28px; line-height: 1; flex-shrink: 0;
+        }
+        .won-banner-body { flex: 1; }
+        .won-banner-title {
+            font-size: 15px; font-weight: 800; color: #92400e; letter-spacing: .01em;
+        }
+        .won-banner-sub {
+            font-size: 12px; color: #b45309; margin-top: 2px;
+        }
+        .won-badge-large {
+            display: inline-flex; align-items: center; gap: 6px;
+            background: linear-gradient(135deg, #f59e0b, #d97706);
+            color: #fff; font-size: 12px; font-weight: 800; padding: 5px 14px;
+            border-radius: 6px; letter-spacing: .05em;
+            box-shadow: 0 2px 8px rgba(245,158,11,.45);
+        }
 
         /* ── Detail Container ── */
         .detail-container { padding: 28px 40px 40px; flex: 1; }
@@ -1314,6 +1345,20 @@ function getProjectTypeIcon($type) {
                 style="display:inline-flex;align-items:center;gap:6px;padding:8px 14px;border:1px solid #fca5a5;border-radius:8px;background:#fff;color:#dc2626;font-size:.85rem;font-weight:600;cursor:pointer;font-family:inherit;">
                 <i class="fas fa-times"></i> Từ chối
             </button>
+        </div>
+        <?php endif; ?>
+
+        <?php if ($isWon): ?>
+        <div class="won-banner">
+            <div class="won-banner-icon">🏆</div>
+            <div class="won-banner-body">
+                <div class="won-banner-title">Chúc mừng! Opportunity này đã được Deal Won</div>
+                <div class="won-banner-sub">
+                    Stage Odoo: <strong><?= htmlspecialchars($pakd['odoo_stage_name'] ?? '') ?></strong>
+                    · Cập nhật từ Odoo CRM qua webhook
+                </div>
+            </div>
+            <div class="won-badge-large">🏆 DEAL WON</div>
         </div>
         <?php endif; ?>
 
