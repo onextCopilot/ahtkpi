@@ -148,41 +148,94 @@ class BackupManager {
      */
     public function restoreBackup($filename) {
         $filePath = $this->backupDir . $filename;
-        
+
         if (!file_exists($filePath)) {
             return ['success' => false, 'message' => 'Backup file not found.'];
         }
 
+        // Use a dedicated connection so the shared $conn remains usable after multi_query
+        $restoreConn = new mysqli(DB_HOST, DB_USER, DB_PASS, DB_NAME);
+        if ($restoreConn->connect_error) {
+            return ['success' => false, 'message' => 'Could not open restore connection: ' . $restoreConn->connect_error];
+        }
+        $restoreConn->set_charset("utf8mb4");
+
         try {
-            $sql = file_get_contents($filePath);
-            
-            // Fix collation compatibility (MySQL 8.0 to 5.7)
-            $sql = str_replace('utf8mb4_0900_ai_ci', 'utf8mb4_unicode_ci', $sql);
-            $sql = str_replace('utf8mb4_general_ci', 'utf8mb4_unicode_ci', $sql);
+            $restoreConn->query("SET FOREIGN_KEY_CHECKS=0");
 
-            // Temporary disable foreign key checks
-            $this->conn->query("SET FOREIGN_KEY_CHECKS=0");
+            $handle = fopen($filePath, 'r');
+            if (!$handle) {
+                $restoreConn->close();
+                return ['success' => false, 'message' => 'Cannot open backup file.'];
+            }
 
-            // Execute multi-query
-            if ($this->conn->multi_query($sql)) {
-                do {
-                    // Flush multi_query results
-                    if ($result = $this->conn->store_result()) {
-                        $result->free();
+            $statement = '';
+            $inString  = false;
+            $strChar   = '';
+
+            while (!feof($handle)) {
+                $line = fgets($handle);
+
+                // Fix collation compatibility (MySQL 8.0 to 5.7)
+                $line = str_replace('utf8mb4_0900_ai_ci', 'utf8mb4_unicode_ci', $line);
+                $line = str_replace('utf8mb4_general_ci', 'utf8mb4_unicode_ci', $line);
+
+                // Skip comment-only lines when not inside a statement
+                $trimmed = ltrim($line);
+                if (!$inString && $statement === '' && (
+                    strncmp($trimmed, '--', 2) === 0 ||
+                    strncmp($trimmed, '#', 1) === 0  ||
+                    strncmp($trimmed, '/*', 2) === 0
+                )) {
+                    continue;
+                }
+
+                // Walk character-by-character to track string context
+                $len = strlen($line);
+                for ($i = 0; $i < $len; $i++) {
+                    $ch = $line[$i];
+
+                    if ($inString) {
+                        if ($ch === '\\') {
+                            $statement .= $ch . ($line[++$i] ?? '');
+                            continue;
+                        }
+                        if ($ch === $strChar) {
+                            $inString = false;
+                        }
+                        $statement .= $ch;
+                    } else {
+                        if ($ch === '"' || $ch === "'") {
+                            $inString = true;
+                            $strChar  = $ch;
+                            $statement .= $ch;
+                        } elseif ($ch === ';') {
+                            $statement = trim($statement);
+                            if ($statement !== '') {
+                                if (!$restoreConn->query($statement)) {
+                                    $error = $restoreConn->error;
+                                    fclose($handle);
+                                    $restoreConn->query("SET FOREIGN_KEY_CHECKS=1");
+                                    $restoreConn->close();
+                                    return ['success' => false, 'message' => 'Restore failed: ' . $error];
+                                }
+                            }
+                            $statement = '';
+                        } else {
+                            $statement .= $ch;
+                        }
                     }
-                } while ($this->conn->more_results() && $this->conn->next_result());
+                }
             }
 
-            if ($this->conn->error) {
-                $error = $this->conn->error;
-                $this->conn->query("SET FOREIGN_KEY_CHECKS=1");
-                return ['success' => false, 'message' => 'Restore failed: ' . $error];
-            }
+            fclose($handle);
+            $restoreConn->query("SET FOREIGN_KEY_CHECKS=1");
+            $restoreConn->close();
 
-            $this->conn->query("SET FOREIGN_KEY_CHECKS=1");
             return ['success' => true, 'message' => 'Database restored successfully from ' . $filename];
 
         } catch (Exception $e) {
+            $restoreConn->close();
             return ['success' => false, 'message' => 'Restore error: ' . $e->getMessage()];
         }
     }

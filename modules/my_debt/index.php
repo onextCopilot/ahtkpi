@@ -179,7 +179,7 @@ if (!empty($current_user_email)) {
 if (!empty($user_team_ids)) {
     $identity_clauses[] = "d.sale_team_id IN (" . implode(',', $user_team_ids) . ")";
 }
-$identity_sql = count($identity_clauses) > 0 ? "(" . implode(" AND ", $identity_clauses) . ")" : "1=1";
+$identity_sql = count($identity_clauses) > 0 ? "(" . implode(" OR ", $identity_clauses) . ")" : "1=1";
 
 $filter_clauses = [];
 if (!empty($_GET['invoice_status_class'])) {
