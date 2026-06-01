@@ -272,6 +272,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'ceo_a
         'oppId'   => $pk['odoo_opp_id']      ?? null,
         'pasxId'  => $pk['pasx_id']          ?? null,
     ];
+    try { $conn->query("ALTER TABLE pakd ADD COLUMN approved_by_name VARCHAR(255) DEFAULT NULL"); } catch (\Throwable $e) {}
+    try { $conn->query("ALTER TABLE pakd ADD COLUMN approved_at DATETIME DEFAULT NULL"); } catch (\Throwable $e) {}
+
     [$ok, $msg] = callProfileApi($conn, '/integrations/os/pakd/'.$pid.'/approve', $body);
     if ($ok) {
         $st = $conn->prepare("UPDATE pakd SET status='approved', pasx_status='approved', approved_by_name=?, approved_at=NOW() WHERE id=?");
