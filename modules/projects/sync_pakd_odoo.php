@@ -175,11 +175,11 @@ try {
         }
     }
 
-    // Ensure won_status / lost_reason columns exist
-    foreach ([
-        "ALTER TABLE pakd ADD COLUMN won_status  VARCHAR(20)  DEFAULT NULL",
-        "ALTER TABLE pakd ADD COLUMN lost_reason VARCHAR(255) DEFAULT NULL",
-    ] as $_sql) { $conn->query($_sql); }
+    // Ensure won_status / lost_reason columns exist (MySQL 5.7 compatible)
+    foreach (['won_status' => 'VARCHAR(20)', 'lost_reason' => 'VARCHAR(255)'] as $_col => $_def) {
+        $r = $conn->query("SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='pakd' AND COLUMN_NAME='$_col'");
+        if ($r && $r->num_rows === 0) $conn->query("ALTER TABLE pakd ADD COLUMN `$_col` $_def DEFAULT NULL");
+    }
 
     // ── Sync each opportunity ─────────────────────────────────────────────────
     $created = 0;

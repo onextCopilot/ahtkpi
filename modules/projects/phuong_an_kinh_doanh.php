@@ -151,11 +151,11 @@ $lastSync = null;
 $syncRes = $conn->query("SELECT MAX(synced_at) as last FROM pakd WHERE synced_at IS NOT NULL");
 if ($syncRes && $row = $syncRes->fetch_assoc()) $lastSync = $row['last'];
 
-// Ensure won_status / lost_reason columns exist (idempotent)
-foreach ([
-    "ALTER TABLE pakd ADD COLUMN won_status  VARCHAR(20)  DEFAULT NULL",
-    "ALTER TABLE pakd ADD COLUMN lost_reason VARCHAR(255) DEFAULT NULL",
-] as $_s) { $conn->query($_s); }
+// Ensure won_status / lost_reason columns exist (MySQL 5.7 compatible)
+foreach (['won_status' => 'VARCHAR(20)', 'lost_reason' => 'VARCHAR(255)'] as $_col => $_def) {
+    $r = $conn->query("SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='pakd' AND COLUMN_NAME='$_col'");
+    if ($r && $r->num_rows === 0) $conn->query("ALTER TABLE pakd ADD COLUMN `$_col` $_def DEFAULT NULL");
+}
 
 // User avatar map (email → user info)
 $userAvatarMap = [];
