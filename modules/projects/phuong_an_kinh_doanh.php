@@ -151,10 +151,7 @@ $lastSync = null;
 $syncRes = $conn->query("SELECT MAX(synced_at) as last FROM pakd WHERE synced_at IS NOT NULL");
 if ($syncRes && $row = $syncRes->fetch_assoc()) $lastSync = $row['last'];
 
-// Won stage ID from settings (for Won badge)
-$wonStageId = null;
-$wsRes = $conn->query("SELECT setting_value FROM pakd_settings WHERE setting_key = 'sync_won_stage_id'");
-if ($wsRes && $wsRow = $wsRes->fetch_assoc()) $wonStageId = (int)$wsRow['setting_value'] ?: null;
+// Won stage ID no longer needed — won_status field is used instead
 
 // User avatar map (email → user info)
 $userAvatarMap = [];
@@ -748,7 +745,7 @@ function formatVND($n) {
                             <td><?= renderStars($p['opp_probability']) ?></td>
                             <td>
                                 <?php
-                                $isWonRow  = $wonStageId && (int)($p['odoo_stage_id'] ?? 0) === $wonStageId;
+                                $isWonRow  = ($p['won_status'] ?? '') === 'won';
                                 $isLossRow = ($p['won_status'] ?? '') === 'lost';
                                 ?>
                                 <?php if ($isWonRow): ?>

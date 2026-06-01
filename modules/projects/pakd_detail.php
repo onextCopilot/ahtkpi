@@ -760,12 +760,7 @@ $stmt->execute();
 $pakd = $stmt->get_result()->fetch_assoc();
 $stmt->close();
 
-// Won stage ID from settings
-$wonStageId = null;
-$wsRes = $conn->query("SELECT setting_value FROM pakd_settings WHERE setting_key = 'sync_won_stage_id'");
-if ($wsRes && $wsRow = $wsRes->fetch_assoc()) $wonStageId = (int)$wsRow['setting_value'] ?: null;
-
-$isWon  = $pakd && $wonStageId && (int)($pakd['odoo_stage_id'] ?? 0) === $wonStageId;
+$isWon  = $pakd && ($pakd['won_status'] ?? '') === 'won';
 $isLoss = $pakd && ($pakd['won_status'] ?? '') === 'lost';
 
 // ── Kiểm tra quyền truy cập: AM chỉ xem được PAKD của mình ──
