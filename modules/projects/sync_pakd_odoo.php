@@ -345,9 +345,10 @@ try {
         }
     }
 
-    // ── Pass 2: sync won_status for archived (LOST) opps already in pakd ─────
-    // Lost opps are archived in Odoo (active=false), skipped by main domain.
-    // Fetch by known opp IDs using active_test=false context.
+    // ── Pass 2: sync won_status for ALL pakd opps (won=active, lost=archived) ─
+    // Won opps stay active but leave the proposal stage → missed by main filter.
+    // Lost opps are archived (active=false) → missed by main domain.
+    // Fetch ALL known opp IDs with active_test=false to cover both cases.
     $wonUpdated = 0;
     try {
         $res = $conn->query("SELECT odoo_opp_id FROM pakd WHERE odoo_opp_id IS NOT NULL");
@@ -355,21 +356,23 @@ try {
         if ($res) while ($r = $res->fetch_row()) $knownIds[] = (int)$r[0];
 
         if ($knownIds) {
-            $archivedOpps = $odoo->searchRead(
+            $allOpps = $odoo->searchRead(
                 'crm.lead',
-                [['id', 'in', $knownIds], ['active', '=', false]],
-                ['id', 'won_status', 'lost_reason_id', 'stage_id'],
+                [['id', 'in', $knownIds]],
+                ['id', 'won_status', 'lost_reason_id'],
                 0, 0,
-                ['active_test' => false]
+                ['active_test' => false]   // include both active (won) and archived (lost)
             );
-            foreach ((array)$archivedOpps as $ao) {
-                $aoId = (int)$ao['id'];
-                $aoWonStatus = is_string($ao['won_status'] ?? null) && $ao['won_status'] !== '' ? $ao['won_status'] : null;
-                $aoLostReasonRaw = $ao['lost_reason_id'] ?? null;
+            foreach ((array)$allOpps as $ao) {
+                $aoId        = (int)$ao['id'];
+                $aoWonStatus = (is_string($ao['won_status'] ?? null) && $ao['won_status'] !== '') ? $ao['won_status'] : null;
+                $aoLostRaw   = $ao['lost_reason_id'] ?? null;
                 $aoLostReason = null;
-                if (is_array($aoLostReasonRaw)) $aoLostReason = $aoLostReasonRaw['name'] ?? ($aoLostReasonRaw[1] ?? null);
+                if (is_array($aoLostRaw)) $aoLostReason = $aoLostRaw['name'] ?? ($aoLostRaw[1] ?? null);
 
+                // Update won_status if non-null, always clear lost_reason when won
                 if ($aoWonStatus) {
+                    if ($aoWonStatus === 'won') $aoLostReason = null;
                     $u = $conn->prepare("UPDATE pakd SET won_status = ?, lost_reason = ?, updated_at = NOW() WHERE odoo_opp_id = ?");
                     $u->bind_param('ssi', $aoWonStatus, $aoLostReason, $aoId);
                     $u->execute();
