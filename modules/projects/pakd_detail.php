@@ -1044,33 +1044,7 @@ function getProjectTypeIcon($type) {
             align-items: flex-end;
             gap: 18px;
         }
-        .stamp-badge {
-            width: 152px; height: 152px;
-            border-radius: 50%;
-            background: linear-gradient(145deg, #1e40af 0%, #2563eb 55%, #3b82f6 100%);
-            box-shadow: 0 0 0 5px #fff, 0 0 0 9px #2563eb, 0 14px 40px rgba(37,99,235,.38);
-            display: flex; flex-direction: column;
-            align-items: center; justify-content: center;
-            gap: 2px;
-            transform: rotate(-8deg);
-            color: #fff;
-            position: relative;
-            flex-shrink: 0;
-        }
-        .stamp-badge::before {
-            content: '';
-            position: absolute;
-            inset: 13px;
-            border-radius: 50%;
-            border: 1.5px dashed rgba(255,255,255,.45);
-            pointer-events: none;
-        }
-        .stamp-badge-check { font-size: 52px; line-height: 1; margin-bottom: 3px; }
-        .stamp-badge-text {
-            font-size: 9.5px; font-weight: 800;
-            letter-spacing: .26em; text-transform: uppercase;
-            opacity: .9; line-height: 1;
-        }
+        .stamp-svg-wrap { display: flex; justify-content: flex-end; }
         .stamp-signer { text-align: right; }
         .stamp-signer-label {
             font-size: 10.5px; color: #94a3b8;
@@ -1941,10 +1915,50 @@ function getProjectTypeIcon($type) {
             </div>
 
             <?php if (($pakd['status'] ?? '') === 'approved' && !empty($pakd['approved_by_name'])): ?>
+            <?php
+            // Generate scalloped outer edge path for the authorized stamp SVG
+            if (!function_exists('scallopPath')) {
+                function scallopPath($cx, $cy, $ro, $ri, $n) {
+                    $pts = [];
+                    for ($i = 0; $i < $n * 2; $i++) {
+                        $a = $i * M_PI / $n - M_PI / 2;
+                        $r = ($i % 2 === 0) ? $ro : $ri;
+                        $pts[] = round($cx + $r * cos($a), 2) . ',' . round($cy + $r * sin($a), 2);
+                    }
+                    return 'M ' . implode(' L ', $pts) . ' Z';
+                }
+            }
+            $scallopD = scallopPath(100, 100, 97, 90, 28);
+            $sid = 'stamp_' . (int)$pakd_id;
+            ?>
             <div class="approval-stamp-wrap">
-                <div class="stamp-badge">
-                    <i class="fas fa-check stamp-badge-check"></i>
-                    <div class="stamp-badge-text">APPROVED</div>
+                <div class="stamp-svg-wrap">
+                    <svg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg" width="165" height="165" style="transform:rotate(-8deg);overflow:visible;display:block">
+                        <defs>
+                            <path id="<?= $sid ?>_top" d="M 35,100 A 65,65 0 0,1 165,100"/>
+                            <path id="<?= $sid ?>_bot" d="M 165,100 A 65,65 0 0,1 35,100"/>
+                        </defs>
+                        <!-- Scalloped outer edge -->
+                        <path d="<?= $scallopD ?>" fill="none" stroke="#2563eb" stroke-width="2.5" stroke-linejoin="round"/>
+                        <!-- Inner dotted circle -->
+                        <circle cx="100" cy="100" r="75" fill="none" stroke="#2563eb" stroke-width="1.2" stroke-dasharray="2.8,3.2"/>
+                        <!-- Top curved text -->
+                        <text font-size="10" fill="#2563eb" font-weight="700" font-family="Inter,Arial,sans-serif" letter-spacing="2">
+                            <textPath href="#<?= $sid ?>_top" startOffset="50%" text-anchor="middle">ĐÃ PHÊ DUYỆT</textPath>
+                        </text>
+                        <!-- Bottom curved text (inverted — follows arc right→bottom→left) -->
+                        <text font-size="10" fill="#2563eb" font-weight="700" font-family="Inter,Arial,sans-serif" letter-spacing="2">
+                            <textPath href="#<?= $sid ?>_bot" startOffset="50%" text-anchor="middle">AUTHORIZED</textPath>
+                        </text>
+                        <!-- Two horizontal lines -->
+                        <line x1="26" y1="88" x2="174" y2="88" stroke="#2563eb" stroke-width="1.8"/>
+                        <line x1="26" y1="114" x2="174" y2="114" stroke="#2563eb" stroke-width="1.8"/>
+                        <!-- Stars -->
+                        <text x="36" y="106" text-anchor="middle" font-size="10" fill="#2563eb">★</text>
+                        <text x="164" y="106" text-anchor="middle" font-size="10" fill="#2563eb">★</text>
+                        <!-- Center text -->
+                        <text x="100" y="108" text-anchor="middle" font-size="17" font-weight="800" fill="#2563eb" letter-spacing="1.5" font-family="Inter,Arial,sans-serif">APPROVED</text>
+                    </svg>
                 </div>
                 <div class="stamp-signer">
                     <div class="stamp-signer-label">Phê duyệt bởi</div>
