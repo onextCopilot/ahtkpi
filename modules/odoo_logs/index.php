@@ -64,7 +64,7 @@ $count_stmt->close();
 $total_pages = max(1, (int)ceil($total_rows / $per_page));
 
 // Fetch rows
-$sql  = "SELECT id, event_type, source_ip, created_at, LEFT(payload, 500) AS payload_preview
+$sql  = "SELECT id, event_type, source_ip, created_at, result_notes, LEFT(payload, 500) AS payload_preview
          FROM odoo_webhook_logs $where_sql
          ORDER BY id DESC
          LIMIT ? OFFSET ?";
@@ -267,6 +267,7 @@ if (file_exists($sidebar_file)) {
                 <th>Source IP</th>
                 <th>Received At</th>
                 <th>Payload Preview</th>
+                <th>Result</th>
                 <th></th>
             </tr>
         </thead>
@@ -286,6 +287,36 @@ if (file_exists($sidebar_file)) {
             <td style="color:#64748b;font-size:0.78rem;"><?php echo htmlspecialchars($log['source_ip']); ?></td>
             <td style="color:#94a3b8;white-space:nowrap;"><?php echo $log['created_at']; ?></td>
             <td><div class="payload-preview"><?php echo $preview; ?></div></td>
+            <td style="font-size:0.72rem;max-width:220px;">
+                <?php if (!empty($log['result_notes'])):
+                    $rn = json_decode($log['result_notes'], true) ?: [];
+                    $action = $rn['action'] ?? null;
+                    $actionColor = match($action) {
+                        'auto_create'  => '#10b981',
+                        'update_stage' => '#f59e0b',
+                        'skip'         => '#94a3b8',
+                        'no_opp_id'    => '#ef4444',
+                        default        => '#94a3b8',
+                    };
+                    $actionLabel = match($action) {
+                        'auto_create'  => '✓ Tạo PAKD mới',
+                        'update_stage' => '↻ Update stage',
+                        'skip'         => '— Stage không sync',
+                        'no_opp_id'    => '✗ Thiếu opp_id',
+                        default        => htmlspecialchars($action ?? '—'),
+                    };
+                    $opp = $rn['opp_id_extracted'] ?? null;
+                    $stg = ($rn['stage_id'] ?? '') . ' ' . ($rn['stage_name'] ?? '');
+                    if (!empty($rn['error'])) $actionLabel .= ' ✗ ' . htmlspecialchars(substr($rn['error'], 0, 60));
+                ?>
+                <div style="color:<?php echo $actionColor; ?>;font-weight:600;"><?php echo $actionLabel; ?></div>
+                <?php if ($opp): ?><div style="color:#64748b;">opp #<?php echo $opp; ?></div><?php endif; ?>
+                <?php if (trim($stg)): ?><div style="color:#64748b;"><?php echo htmlspecialchars(trim($stg)); ?></div><?php endif; ?>
+                <?php if (!empty($rn['sync_stage_ids'])): ?>
+                <div style="color:#64748b;">sync: [<?php echo implode(',', $rn['sync_stage_ids']); ?>]</div>
+                <?php endif; ?>
+                <?php endif; ?>
+            </td>
             <td>
                 <button class="btn-detail" onclick="showDetail(<?php echo $log['id']; ?>)">View JSON</button>
             </td>

@@ -34,19 +34,27 @@ if (isset($payload['event_type'])) {
     elseif (str_contains($model, 'account')) $event_type = 'invoice';
     else                                      $event_type = $model;
 }
+// If payload has type=opportunity and no model, treat as crm
+if ($event_type === 'unknown' && isset($payload['type']) && $payload['type'] === 'opportunity') {
+    $event_type = 'crm';
+}
 $header_event = $_SERVER['HTTP_X_ODOO_EVENT'] ?? $_SERVER['HTTP_X_EVENT_TYPE'] ?? null;
 if ($header_event) $event_type = $header_event;
 
-// ── Log webhook ───────────────────────────────────────────────────────────────
+// ── Ensure log table (with result_notes for debugging) ───────────────────────
 $conn->query("CREATE TABLE IF NOT EXISTS odoo_webhook_logs (
-    id          INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-    event_type  VARCHAR(100) NOT NULL DEFAULT 'unknown',
-    payload     LONGTEXT     NOT NULL,
-    source_ip   VARCHAR(45)  NOT NULL DEFAULT '',
-    created_at  DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    id           INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    event_type   VARCHAR(100) NOT NULL DEFAULT 'unknown',
+    payload      LONGTEXT     NOT NULL,
+    source_ip    VARCHAR(45)  NOT NULL DEFAULT '',
+    result_notes TEXT         DEFAULT NULL,
+    created_at   DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
     INDEX idx_event_type (event_type),
     INDEX idx_created_at (created_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+
+// Add result_notes column if table already existed without it
+$conn->query("ALTER TABLE odoo_webhook_logs ADD COLUMN IF NOT EXISTS result_notes TEXT DEFAULT NULL");
 
 $stmt = $conn->prepare("INSERT INTO odoo_webhook_logs (event_type, payload, source_ip) VALUES (?, ?, ?)");
 $stmt->bind_param('sss', $event_type, $payload_json, $source_ip);
@@ -57,14 +65,16 @@ $stmt->close();
 // ── CRM: update stage + auto-create pakd ─────────────────────────────────────
 $pakd_updated = false;
 $pakd_created = false;
+$debug        = ['event_type' => $event_type];
 
 if ($payload && str_contains($event_type, 'crm')) {
 
-    // Extract opportunity ID (support multiple payload formats)
+    // Extract opportunity ID — support multiple Odoo payload formats
     $opp_id = null;
-    if (isset($payload['ids']) && is_array($payload['ids']) && count($payload['ids']) === 1) {
+    if (isset($payload['ids']) && is_array($payload['ids']) && !empty($payload['ids'])) {
+        // ids[] — take first (webhook usually fires per-record)
         $opp_id = (int)$payload['ids'][0];
-    } elseif (isset($payload['id'])) {
+    } elseif (isset($payload['id']) && is_numeric($payload['id'])) {
         $opp_id = (int)$payload['id'];
     } elseif (isset($payload['record']['id'])) {
         $opp_id = (int)$payload['record']['id'];
@@ -72,7 +82,10 @@ if ($payload && str_contains($event_type, 'crm')) {
         $opp_id = (int)$payload['data'][0]['id'];
     }
 
-    // Extract stage_id / stage_name ([id, name] tuple, {id, name} object, or plain int)
+    $debug['opp_id_extracted'] = $opp_id;
+
+    // Extract stage_id / stage_name
+    // Odoo sends many2one as {"id": X, "name": "..."} object OR [id, name] tuple
     $stage_raw = $payload['stage_id']
         ?? $payload['record']['stage_id']
         ?? ($payload['data'][0]['stage_id'] ?? null);
@@ -81,24 +94,40 @@ if ($payload && str_contains($event_type, 'crm')) {
     $stage_name = null;
     if (is_array($stage_raw)) {
         if (isset($stage_raw['id'])) {
+            // Object format: {"id": 3, "name": "L2 Proposals"}
             $stage_id   = (int)$stage_raw['id'];
             $stage_name = $stage_raw['name'] ?? null;
-        } elseif (count($stage_raw) >= 2 && is_int($stage_raw[0])) {
+        } elseif (count($stage_raw) >= 2 && is_numeric($stage_raw[0])) {
+            // Tuple format: [3, "L2 Proposals"]
             $stage_id   = (int)$stage_raw[0];
             $stage_name = (string)$stage_raw[1];
         }
     } elseif (is_numeric($stage_raw)) {
         $stage_id   = (int)$stage_raw;
-        $stage_name = $payload['stage_name'] ?? $payload['record']['stage_name'] ?? ($payload['data'][0]['stage_name'] ?? null);
+        $stage_name = $payload['stage_name'] ?? $payload['record']['stage_name'] ?? null;
     }
 
+    $debug['stage_id']   = $stage_id;
+    $debug['stage_name'] = $stage_name;
+
     if ($opp_id) {
-        // Load configured sync stage IDs from pakd_settings
+        // Ensure pakd_settings table exists before querying
+        $conn->query("CREATE TABLE IF NOT EXISTS pakd_settings (
+            id            INT AUTO_INCREMENT PRIMARY KEY,
+            setting_key   VARCHAR(100) NOT NULL UNIQUE,
+            setting_value TEXT DEFAULT NULL,
+            updated_by    INT DEFAULT NULL,
+            updated_at    DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+
+        // Load configured sync stage IDs
         $syncStageIds = [];
         $sr = $conn->query("SELECT setting_value FROM pakd_settings WHERE setting_key = 'sync_stage_ids'");
         if ($sr && $row = $sr->fetch_assoc()) {
             $syncStageIds = array_map('intval', json_decode($row['setting_value'], true) ?: []);
         }
+        $debug['sync_stage_ids'] = $syncStageIds;
+        $debug['stage_in_list']  = $stage_id ? in_array($stage_id, $syncStageIds, true) : false;
 
         // Check if pakd record already exists for this opportunity
         $chk = $conn->prepare("SELECT id FROM pakd WHERE odoo_opp_id = ?");
@@ -106,6 +135,8 @@ if ($payload && str_contains($event_type, 'crm')) {
         $chk->execute();
         $existing = $chk->get_result()->fetch_assoc();
         $chk->close();
+
+        $debug['pakd_existed'] = (bool)$existing;
 
         if ($existing) {
             // ── Record exists: update stage only ─────────────────────────────
@@ -119,9 +150,11 @@ if ($payload && str_contains($event_type, 'crm')) {
                 $pakd_updated = $upd->affected_rows > 0;
                 $upd->close();
             }
+            $debug['action'] = 'update_stage';
 
         } elseif ($stage_id && in_array($stage_id, $syncStageIds, true)) {
             // ── Record does NOT exist + stage is in sync list: auto-create ───
+            $debug['action'] = 'auto_create';
             try {
                 require_once __DIR__ . '/../libs/OdooAPI.php';
                 $odoo = new OdooAPI();
@@ -133,7 +166,7 @@ if ($payload && str_contains($event_type, 'crm')) {
                     'active', 'type',
                 ], 1);
 
-                if (empty($oppData[0])) throw new Exception('Opportunity not found in Odoo');
+                if (empty($oppData[0])) throw new Exception('Opportunity #' . $opp_id . ' not found in Odoo');
                 $opp = $oppData[0];
 
                 // Company name
@@ -158,8 +191,8 @@ if ($payload && str_contains($event_type, 'crm')) {
                 // Match local user by email
                 $localUserId = null;
                 if ($amEmail) {
-                    $uq  = strtolower($amEmail);
-                    $us  = $conn->prepare("SELECT id FROM users WHERE LOWER(email) = ?");
+                    $uq = strtolower($amEmail);
+                    $us = $conn->prepare("SELECT id FROM users WHERE LOWER(email) = ?");
                     $us->bind_param('s', $uq);
                     $us->execute();
                     $ur = $us->get_result()->fetch_assoc();
@@ -173,7 +206,7 @@ if ($payload && str_contains($event_type, 'crm')) {
                     $department = $opp['team_id'][1] ?? '';
                 }
 
-                // Stage from fetched data (more reliable than webhook payload)
+                // Stage from fetched data (authoritative)
                 $fStageId   = null;
                 $fStageName = null;
                 if (!empty($opp['stage_id']) && is_array($opp['stage_id'])) {
@@ -214,7 +247,6 @@ if ($payload && str_contains($event_type, 'crm')) {
                         ?, 'draft', NOW(), NOW()
                     )
                 ");
-                // i s s s i | s s d d | i s s | s s s s | s
                 $ins->bind_param(
                     'isssissddisssssss',
                     $opp_id, $name, $amName, $amEmail, $localUserId,
@@ -224,15 +256,30 @@ if ($payload && str_contains($event_type, 'crm')) {
                     $divisionNames
                 );
                 $ins->execute();
-                $pakd_created = $ins->affected_rows > 0;
+                $pakd_created       = $ins->affected_rows > 0;
+                $debug['pakd_name'] = $name;
                 $ins->close();
 
             } catch (Exception $e) {
+                $debug['error'] = $e->getMessage();
                 error_log('[odoo_hook] auto-create pakd failed for opp #' . $opp_id . ': ' . $e->getMessage());
             }
+        } else {
+            $debug['action'] = 'skip';
         }
+    } else {
+        $debug['action'] = 'no_opp_id';
     }
 }
+
+// ── Store debug notes back into the log row ───────────────────────────────────
+$debug['pakd_updated'] = $pakd_updated;
+$debug['pakd_created'] = $pakd_created;
+$notesJson = json_encode($debug, JSON_UNESCAPED_UNICODE);
+$upNotes = $conn->prepare("UPDATE odoo_webhook_logs SET result_notes = ? WHERE id = ?");
+$upNotes->bind_param('si', $notesJson, $log_id);
+$upNotes->execute();
+$upNotes->close();
 
 http_response_code(200);
 echo json_encode([
@@ -241,4 +288,5 @@ echo json_encode([
     'event_type'   => $event_type,
     'pakd_updated' => $pakd_updated,
     'pakd_created' => $pakd_created,
+    'debug'        => $debug,
 ]);
