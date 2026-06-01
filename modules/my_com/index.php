@@ -628,6 +628,18 @@ foreach ($collected_invoices as $inv) {
 // not the current quarter. If that quarter's KPI can't be computed → user enters manually.
 $hist_kpi = []; // key "Y-Q" => ['pct','adj','target','invoiced','computed','manual_pct','year','quarter']
 
+// Ensure user_quarter_kpi table exists
+$conn->query("CREATE TABLE IF NOT EXISTS user_quarter_kpi (
+    id             INT AUTO_INCREMENT PRIMARY KEY,
+    user_id        INT NOT NULL,
+    year           INT NOT NULL,
+    quarter        INT NOT NULL,
+    manual_kpi_pct DECIMAL(5,2) DEFAULT NULL,
+    created_at     DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at     DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    UNIQUE KEY uq_user_yq (user_id, year, quarter)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+
 // Load any manual KPI overrides for this user
 $manual_kpi_map = [];
 $mk_stmt = $conn->prepare("SELECT year, quarter, manual_kpi_pct FROM user_quarter_kpi WHERE user_id = ?");
