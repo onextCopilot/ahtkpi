@@ -183,7 +183,27 @@ foreach ($pakd_list as $p) {
     $pakd_map[$p['id']] = $p;
 }
 
-// Load existing invoice→PAKD mappings (pakd_id, pakd_link, manual_ebt)
+// Ensure invoice_pakd_map table exists
+$conn->query("CREATE TABLE IF NOT EXISTS invoice_pakd_map (
+    id                   INT AUTO_INCREMENT PRIMARY KEY,
+    user_id              INT NOT NULL,
+    invoice_id           INT NOT NULL,
+    pakd_id              INT DEFAULT NULL,
+    pakd_link            VARCHAR(500) DEFAULT NULL,
+    manual_ebt           DECIMAL(20,2) DEFAULT NULL,
+    com2_tier            VARCHAR(50) DEFAULT NULL,
+    com2_hv              DECIMAL(20,2) DEFAULT NULL,
+    com2_hv_currency     VARCHAR(10) DEFAULT 'VND',
+    lead_source          VARCHAR(100) DEFAULT NULL,
+    ai_addon             TINYINT(1) DEFAULT 0,
+    ai_revenue           DECIMAL(20,2) DEFAULT NULL,
+    ai_revenue_currency  VARCHAR(10) DEFAULT 'VND',
+    created_at           DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at           DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    UNIQUE KEY uq_user_invoice (user_id, invoice_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+
+// Load existing invoice->PAKD mappings (pakd_id, pakd_link, manual_ebt)
 $inv_pakd_map = [];
 $map_stmt = $conn->prepare("SELECT invoice_id, pakd_id, pakd_link, manual_ebt, com2_tier, com2_hv, com2_hv_currency, lead_source, ai_addon, ai_revenue, ai_revenue_currency FROM invoice_pakd_map WHERE user_id = ?");
 if ($map_stmt) {
