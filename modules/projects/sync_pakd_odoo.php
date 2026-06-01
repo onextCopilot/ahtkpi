@@ -15,6 +15,7 @@ $old_error_level = error_reporting(0);
 require_once __DIR__ . '/../../config/config.php';
 error_reporting($old_error_level);
 require_once __DIR__ . '/../../libs/OdooAPI.php';
+require_once __DIR__ . '/../../includes/notify_pakd_result.php';
 
 // ── Auth check ────────────────────────────────────────────────────────────────
 if (!isset($_SESSION['user_id'])) {
@@ -351,9 +352,13 @@ try {
     // Fetch ALL known opp IDs with active_test=false to cover both cases.
     $wonUpdated = 0;
     try {
-        $res = $conn->query("SELECT odoo_opp_id FROM pakd WHERE odoo_opp_id IS NOT NULL");
+        $res = $conn->query("SELECT id, odoo_opp_id FROM pakd WHERE odoo_opp_id IS NOT NULL");
         $knownIds = [];
-        if ($res) while ($r = $res->fetch_row()) $knownIds[] = (int)$r[0];
+        $pakdIdMap = []; // odoo_opp_id → local pakd id
+        if ($res) while ($r = $res->fetch_assoc()) {
+            $knownIds[]                      = (int)$r['odoo_opp_id'];
+            $pakdIdMap[(int)$r['odoo_opp_id']] = (int)$r['id'];
+        }
 
         if ($knownIds) {
             // Use explicit OR domain so Odoo returns both active and archived records
@@ -393,7 +398,14 @@ try {
                     );
                     $u->bind_param('ssisi', $aoWonStatus, $aoLostReason, $aoStageId, $aoStageName, $aoId);
                     $u->execute();
-                    if ($u->affected_rows > 0) $wonUpdated++;
+                    if ($u->affected_rows > 0) {
+                        $wonUpdated++;
+                        // Notify production system
+                        $localPakdId = $pakdIdMap[$aoId] ?? null;
+                        if ($localPakdId) {
+                            notifyPakdResult($conn, $localPakdId, $aoWonStatus, $aoLostReason);
+                        }
+                    }
                     $u->close();
                 }
             }

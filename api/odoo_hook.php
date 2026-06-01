@@ -9,6 +9,7 @@
  */
 
 require_once __DIR__ . '/../config/config.php';
+require_once __DIR__ . '/../includes/notify_pakd_result.php';
 
 header('Content-Type: application/json');
 
@@ -179,6 +180,12 @@ if ($payload && str_contains($event_type, 'crm')) {
             $pakd_updated = $upd->affected_rows > 0;
             $upd->close();
             $debug['action'] = 'update_stage';
+
+            // Notify production if won_status changed to won/lost
+            if ($pakd_updated && in_array($won_status, ['won', 'lost'], true)) {
+                notifyPakdResult($conn, (int)$existing['id'], $won_status, $lost_reason);
+                $debug['notified_result'] = true;
+            }
 
         } elseif ($stage_id && in_array($stage_id, $syncStageIds, true)) {
             // ── Record does NOT exist + stage is in sync list: auto-create ───
