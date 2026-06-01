@@ -1041,12 +1041,16 @@ function getProjectTypeIcon($type) {
             position: relative;
             z-index: 5;
             display: flex;
+            justify-content: flex-end;
+        }
+        .approval-stamp-inner {
+            display: flex;
             flex-direction: column;
-            align-items: flex-end;
+            align-items: center;
             gap: 14px;
         }
-        .stamp-svg-wrap { display: flex; justify-content: flex-end; opacity: 0.28; }
-        .stamp-signer { text-align: right; }
+        .stamp-svg-wrap { display: flex; justify-content: center; opacity: 0.28; }
+        .stamp-signer { text-align: center; }
         .stamp-signer-label {
             font-size: 10.5px; color: #94a3b8;
             text-transform: uppercase; letter-spacing: .09em;
@@ -1933,6 +1937,7 @@ function getProjectTypeIcon($type) {
             $sid = 'stamp_' . (int)$pakd_id;
             ?>
             <div class="approval-stamp-wrap">
+            <div class="approval-stamp-inner">
                 <div class="stamp-svg-wrap">
                     <svg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg" width="165" height="165" style="transform:rotate(-8deg);overflow:visible;display:block">
                         <defs>
@@ -1968,6 +1973,7 @@ function getProjectTypeIcon($type) {
                     <div class="stamp-signer-date"><i class="fas fa-clock" style="font-size:10px;margin-right:3px;opacity:.6;"></i><?= date('d/m/Y H:i', strtotime($pakd['approved_at'])) ?></div>
                     <?php endif; ?>
                 </div>
+            </div>
             </div>
             <?php endif; ?>
 
