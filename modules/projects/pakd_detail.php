@@ -760,18 +760,13 @@ $stmt->execute();
 $pakd = $stmt->get_result()->fetch_assoc();
 $stmt->close();
 
-// Won / Loss stage IDs from settings
-$wonStageId = null; $lossStageId = null;
-$stRes = $conn->query("SELECT setting_key, setting_value FROM pakd_settings WHERE setting_key IN ('sync_won_stage_id','sync_loss_stage_id')");
-if ($stRes) {
-    while ($stRow = $stRes->fetch_assoc()) {
-        if ($stRow['setting_key'] === 'sync_won_stage_id')  $wonStageId  = (int)$stRow['setting_value'] ?: null;
-        if ($stRow['setting_key'] === 'sync_loss_stage_id') $lossStageId = (int)$stRow['setting_value'] ?: null;
-    }
-}
-$currentStageId = (int)($pakd['odoo_stage_id'] ?? 0);
-$isWon  = $pakd && $wonStageId  && $currentStageId === $wonStageId;
-$isLoss = $pakd && $lossStageId && $currentStageId === $lossStageId;
+// Won stage ID from settings
+$wonStageId = null;
+$wsRes = $conn->query("SELECT setting_value FROM pakd_settings WHERE setting_key = 'sync_won_stage_id'");
+if ($wsRes && $wsRow = $wsRes->fetch_assoc()) $wonStageId = (int)$wsRow['setting_value'] ?: null;
+
+$isWon  = $pakd && $wonStageId && (int)($pakd['odoo_stage_id'] ?? 0) === $wonStageId;
+$isLoss = $pakd && ($pakd['won_status'] ?? '') === 'lost';
 
 // ── Kiểm tra quyền truy cập: AM chỉ xem được PAKD của mình ──
 if ($pakd && !$is_admin) {
@@ -1386,7 +1381,11 @@ function getProjectTypeIcon($type) {
             <div class="won-banner-body">
                 <div class="won-banner-title" style="color:#991b1b;">Opportunity này đã bị Deal Loss</div>
                 <div class="won-banner-sub" style="color:#b91c1c;">
-                    Stage Odoo: <strong><?= htmlspecialchars($pakd['odoo_stage_name'] ?? '') ?></strong>
+                    <?php if (!empty($pakd['lost_reason'])): ?>
+                    Lý do: <strong><?= htmlspecialchars($pakd['lost_reason']) ?></strong>
+                    &nbsp;·&nbsp;
+                    <?php endif; ?>
+                    Stage: <strong><?= htmlspecialchars($pakd['odoo_stage_name'] ?? '') ?></strong>
                     · Cập nhật từ Odoo CRM qua webhook
                 </div>
             </div>

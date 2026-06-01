@@ -113,6 +113,22 @@ if ($payload && str_contains($event_type, 'crm')) {
     $debug['stage_id']   = $stage_id;
     $debug['stage_name'] = $stage_name;
 
+    // Extract won_status ("won" | "lost" | false/null)
+    $won_status_raw = $payload['won_status'] ?? $payload['record']['won_status'] ?? ($payload['data'][0]['won_status'] ?? null);
+    $won_status = (is_string($won_status_raw) && $won_status_raw !== '') ? $won_status_raw : null;
+
+    // Extract lost_reason_id — object {"id":1,"name":"..."} or tuple [1,"..."]
+    $lost_reason_raw = $payload['lost_reason_id'] ?? $payload['record']['lost_reason_id'] ?? ($payload['data'][0]['lost_reason_id'] ?? null);
+    $lost_reason = null;
+    if (is_array($lost_reason_raw)) {
+        $lost_reason = $lost_reason_raw['name'] ?? ($lost_reason_raw[1] ?? null);
+    } elseif (is_string($lost_reason_raw) && $lost_reason_raw !== '') {
+        $lost_reason = $lost_reason_raw;
+    }
+
+    $debug['won_status']  = $won_status;
+    $debug['lost_reason'] = $lost_reason;
+
     if ($opp_id) {
         // Ensure pakd_settings table exists before querying
         $conn->query("CREATE TABLE IF NOT EXISTS pakd_settings (
@@ -142,17 +158,26 @@ if ($payload && str_contains($event_type, 'crm')) {
         $debug['pakd_existed'] = (bool)$existing;
 
         if ($existing) {
-            // ── Record exists: update stage only ─────────────────────────────
-            if ($stage_id || $stage_name) {
-                $upd = $conn->prepare(
-                    "UPDATE pakd SET odoo_stage_id = ?, odoo_stage_name = ?, updated_at = NOW()
-                     WHERE odoo_opp_id = ?"
-                );
-                $upd->bind_param('isi', $stage_id, $stage_name, $opp_id);
-                $upd->execute();
-                $pakd_updated = $upd->affected_rows > 0;
-                $upd->close();
-            }
+            // ── Record exists: update stage + won_status + lost_reason ────────
+            // Ensure columns exist (idempotent, ignore duplicate-column errors)
+            foreach ([
+                "ALTER TABLE pakd ADD COLUMN won_status   VARCHAR(20)  DEFAULT NULL",
+                "ALTER TABLE pakd ADD COLUMN lost_reason  VARCHAR(255) DEFAULT NULL",
+            ] as $_sql) { $conn->query($_sql); }
+
+            $upd = $conn->prepare(
+                "UPDATE pakd
+                 SET odoo_stage_id   = COALESCE(?, odoo_stage_id),
+                     odoo_stage_name = COALESCE(?, odoo_stage_name),
+                     won_status       = COALESCE(?, won_status),
+                     lost_reason      = ?,
+                     updated_at       = NOW()
+                 WHERE odoo_opp_id = ?"
+            );
+            $upd->bind_param('isssi', $stage_id, $stage_name, $won_status, $lost_reason, $opp_id);
+            $upd->execute();
+            $pakd_updated = $upd->affected_rows > 0;
+            $upd->close();
             $debug['action'] = 'update_stage';
 
         } elseif ($stage_id && in_array($stage_id, $syncStageIds, true)) {

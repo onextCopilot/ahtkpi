@@ -151,16 +151,10 @@ $lastSync = null;
 $syncRes = $conn->query("SELECT MAX(synced_at) as last FROM pakd WHERE synced_at IS NOT NULL");
 if ($syncRes && $row = $syncRes->fetch_assoc()) $lastSync = $row['last'];
 
-// Won / Loss stage IDs from settings
+// Won stage ID from settings (for Won badge)
 $wonStageId = null;
-$lossStageId = null;
-$stRes = $conn->query("SELECT setting_key, setting_value FROM pakd_settings WHERE setting_key IN ('sync_won_stage_id','sync_loss_stage_id')");
-if ($stRes) {
-    while ($stRow = $stRes->fetch_assoc()) {
-        if ($stRow['setting_key'] === 'sync_won_stage_id')  $wonStageId  = (int)$stRow['setting_value'] ?: null;
-        if ($stRow['setting_key'] === 'sync_loss_stage_id') $lossStageId = (int)$stRow['setting_value'] ?: null;
-    }
-}
+$wsRes = $conn->query("SELECT setting_value FROM pakd_settings WHERE setting_key = 'sync_won_stage_id'");
+if ($wsRes && $wsRow = $wsRes->fetch_assoc()) $wonStageId = (int)$wsRow['setting_value'] ?: null;
 
 // User avatar map (email → user info)
 $userAvatarMap = [];
@@ -754,9 +748,8 @@ function formatVND($n) {
                             <td><?= renderStars($p['opp_probability']) ?></td>
                             <td>
                                 <?php
-                                $stageOppId  = (int)($p['odoo_stage_id'] ?? 0);
-                                $isWonRow    = $wonStageId  && $stageOppId === $wonStageId;
-                                $isLossRow   = $lossStageId && $stageOppId === $lossStageId;
+                                $isWonRow  = $wonStageId && (int)($p['odoo_stage_id'] ?? 0) === $wonStageId;
+                                $isLossRow = ($p['won_status'] ?? '') === 'lost';
                                 ?>
                                 <?php if ($isWonRow): ?>
                                 <div class="stage-won-cell">
@@ -767,6 +760,9 @@ function formatVND($n) {
                                 <div class="stage-won-cell">
                                     <span class="loss-badge">💔 DEAL LOSS</span>
                                     <span style="font-size:11px;color:var(--gray);"><?= htmlspecialchars($p['odoo_stage_name'] ?: '') ?></span>
+                                    <?php if (!empty($p['lost_reason'])): ?>
+                                    <span style="font-size:10px;color:#dc2626;font-style:italic;"><?= htmlspecialchars($p['lost_reason']) ?></span>
+                                    <?php endif; ?>
                                 </div>
                                 <?php else: ?>
                                 <span style="font-size:12px;color:var(--gray);"><?= htmlspecialchars($p['odoo_stage_name'] ?: '—') ?></span>
