@@ -151,10 +151,16 @@ $lastSync = null;
 $syncRes = $conn->query("SELECT MAX(synced_at) as last FROM pakd WHERE synced_at IS NOT NULL");
 if ($syncRes && $row = $syncRes->fetch_assoc()) $lastSync = $row['last'];
 
-// Won stage ID from settings
+// Won / Loss stage IDs from settings
 $wonStageId = null;
-$wsRes = $conn->query("SELECT setting_value FROM pakd_settings WHERE setting_key = 'sync_won_stage_id'");
-if ($wsRes && $wsRow = $wsRes->fetch_assoc()) $wonStageId = (int)$wsRow['setting_value'] ?: null;
+$lossStageId = null;
+$stRes = $conn->query("SELECT setting_key, setting_value FROM pakd_settings WHERE setting_key IN ('sync_won_stage_id','sync_loss_stage_id')");
+if ($stRes) {
+    while ($stRow = $stRes->fetch_assoc()) {
+        if ($stRow['setting_key'] === 'sync_won_stage_id')  $wonStageId  = (int)$stRow['setting_value'] ?: null;
+        if ($stRow['setting_key'] === 'sync_loss_stage_id') $lossStageId = (int)$stRow['setting_value'] ?: null;
+    }
+}
 
 // User avatar map (email → user info)
 $userAvatarMap = [];
@@ -409,6 +415,13 @@ function formatVND($n) {
             color: #fff; font-size: 10px; font-weight: 700;
             padding: 2px 7px; border-radius: 4px; letter-spacing: .04em;
             box-shadow: 0 1px 4px rgba(245,158,11,.4);
+        }
+        .loss-badge {
+            display: inline-flex; align-items: center; gap: 4px;
+            background: linear-gradient(135deg, #ef4444, #dc2626);
+            color: #fff; font-size: 10px; font-weight: 700;
+            padding: 2px 7px; border-radius: 4px; letter-spacing: .04em;
+            box-shadow: 0 1px 4px rgba(220,38,38,.4);
         }
         .stage-won-cell { display: flex; flex-direction: column; gap: 3px; align-items: flex-start; }
 
@@ -740,10 +753,19 @@ function formatVND($n) {
                             <td class="opp-value"><?= formatVND($p['opp_value']) ?> <?= htmlspecialchars($p['currency']) ?></td>
                             <td><?= renderStars($p['opp_probability']) ?></td>
                             <td>
-                                <?php $isWonRow = $wonStageId && (int)($p['odoo_stage_id'] ?? 0) === $wonStageId; ?>
+                                <?php
+                                $stageOppId  = (int)($p['odoo_stage_id'] ?? 0);
+                                $isWonRow    = $wonStageId  && $stageOppId === $wonStageId;
+                                $isLossRow   = $lossStageId && $stageOppId === $lossStageId;
+                                ?>
                                 <?php if ($isWonRow): ?>
                                 <div class="stage-won-cell">
                                     <span class="won-badge">🏆 DEAL WON</span>
+                                    <span style="font-size:11px;color:var(--gray);"><?= htmlspecialchars($p['odoo_stage_name'] ?: '') ?></span>
+                                </div>
+                                <?php elseif ($isLossRow): ?>
+                                <div class="stage-won-cell">
+                                    <span class="loss-badge">💔 DEAL LOSS</span>
                                     <span style="font-size:11px;color:var(--gray);"><?= htmlspecialchars($p['odoo_stage_name'] ?: '') ?></span>
                                 </div>
                                 <?php else: ?>
@@ -884,14 +906,24 @@ function formatVND($n) {
             <span class="stage-count-label" id="stageCountLabel"></span>
         </div>
 
-        <!-- Won stage selection -->
-        <div style="padding: 16px 24px; background: #fff; border-top: 1px solid var(--border);">
-            <label style="display:block; font-size:13px; font-weight:600; color:var(--slate); margin-bottom:8px;">
-                Chọn Stage đánh dấu là "Deal Won" <span style="color:var(--danger);">*</span>
-            </label>
-            <select id="wonStageSelect" style="width:100%; padding:9px 12px; border:1px solid var(--border); border-radius:var(--r-md); font-size:13px; outline:none; background:white;">
-                <option value="">-- Chọn Stage Won --</option>
-            </select>
+        <!-- Won / Loss stage selection -->
+        <div style="padding: 16px 24px; background: #fff; border-top: 1px solid var(--border); display:grid; grid-template-columns:1fr 1fr; gap:16px;">
+            <div>
+                <label style="display:block; font-size:13px; font-weight:600; color:var(--slate); margin-bottom:8px;">
+                    🏆 Stage "Deal Won"
+                </label>
+                <select id="wonStageSelect" style="width:100%; padding:9px 12px; border:1px solid var(--border); border-radius:var(--r-md); font-size:13px; outline:none; background:white;">
+                    <option value="">-- Chọn Stage Won --</option>
+                </select>
+            </div>
+            <div>
+                <label style="display:block; font-size:13px; font-weight:600; color:var(--slate); margin-bottom:8px;">
+                    💔 Stage "Deal Loss"
+                </label>
+                <select id="lossStageSelect" style="width:100%; padding:9px 12px; border:1px solid var(--border); border-radius:var(--r-md); font-size:13px; outline:none; background:white;">
+                    <option value="">-- Chọn Stage Loss --</option>
+                </select>
+            </div>
         </div>
 
         <div class="modal-footer">
@@ -907,6 +939,7 @@ function formatVND($n) {
 let allStages = [];
 let savedStageIds = new Set();
 let savedWonStageId = null;
+let savedLossStageId = null;
 
 function openSettings() {
     document.getElementById('settingsModal').style.display = 'flex';
@@ -939,7 +972,8 @@ function loadStages() {
             if (data.success) {
                 allStages = data.stages || [];
                 savedStageIds = new Set(data.saved_ids || []);
-                savedWonStageId = data.saved_won_stage_id;
+                savedWonStageId  = data.saved_won_stage_id;
+                savedLossStageId = data.saved_loss_stage_id;
                 renderStages();
             } else {
                 list.innerHTML = `<div style="padding:24px;text-align:center;color:#dc2626;">Lỗi tải dữ liệu: ${data.error}</div>`;
@@ -953,28 +987,31 @@ function loadStages() {
 function renderStages() {
     const list = document.getElementById('stageList');
     const q = document.getElementById('stageSearch').value.toLowerCase();
-    const wonSelect = document.getElementById('wonStageSelect');
-    
+    const wonSelect  = document.getElementById('wonStageSelect');
+    const lossSelect = document.getElementById('lossStageSelect');
+
     list.innerHTML = '';
-    
-    // Clear dropdown except first option
-    while (wonSelect.options.length > 1) {
-        wonSelect.remove(1);
-    }
-    
+
+    // Clear dropdowns except first option
+    while (wonSelect.options.length  > 1) wonSelect.remove(1);
+    while (lossSelect.options.length > 1) lossSelect.remove(1);
+
     let visibleCount = 0;
-    
+
     allStages.forEach(stage => {
         const name = stage.name || '';
-        
-        // Populate dropdown
-        const opt = document.createElement('option');
-        opt.value = stage.id;
-        opt.textContent = name;
-        if (savedWonStageId && savedWonStageId == stage.id) {
-            opt.selected = true;
-        }
-        wonSelect.appendChild(opt);
+
+        // Populate won dropdown
+        const optW = document.createElement('option');
+        optW.value = stage.id; optW.textContent = name;
+        if (savedWonStageId && savedWonStageId == stage.id) optW.selected = true;
+        wonSelect.appendChild(optW);
+
+        // Populate loss dropdown
+        const optL = document.createElement('option');
+        optL.value = stage.id; optL.textContent = name;
+        if (savedLossStageId && savedLossStageId == stage.id) optL.selected = true;
+        lossSelect.appendChild(optL);
 
         if (q && !name.toLowerCase().includes(q)) return;
         
@@ -1039,9 +1076,10 @@ function saveSettings() {
     formData.append('stage_names', JSON.stringify(selectedNames));
     
     const wonStageId = document.getElementById('wonStageSelect').value;
-    if (wonStageId) {
-        formData.append('won_stage_id', wonStageId);
-    }
+    if (wonStageId) formData.append('won_stage_id', wonStageId);
+
+    const lossStageId = document.getElementById('lossStageSelect').value;
+    if (lossStageId) formData.append('loss_stage_id', lossStageId);
     
     fetch('/projects/pakd/settings', {
         method: 'POST',

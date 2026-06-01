@@ -760,11 +760,18 @@ $stmt->execute();
 $pakd = $stmt->get_result()->fetch_assoc();
 $stmt->close();
 
-// Won stage ID from settings
-$wonStageId = null;
-$wsRes = $conn->query("SELECT setting_value FROM pakd_settings WHERE setting_key = 'sync_won_stage_id'");
-if ($wsRes && $wsRow = $wsRes->fetch_assoc()) $wonStageId = (int)$wsRow['setting_value'] ?: null;
-$isWon = $pakd && $wonStageId && (int)($pakd['odoo_stage_id'] ?? 0) === $wonStageId;
+// Won / Loss stage IDs from settings
+$wonStageId = null; $lossStageId = null;
+$stRes = $conn->query("SELECT setting_key, setting_value FROM pakd_settings WHERE setting_key IN ('sync_won_stage_id','sync_loss_stage_id')");
+if ($stRes) {
+    while ($stRow = $stRes->fetch_assoc()) {
+        if ($stRow['setting_key'] === 'sync_won_stage_id')  $wonStageId  = (int)$stRow['setting_value'] ?: null;
+        if ($stRow['setting_key'] === 'sync_loss_stage_id') $lossStageId = (int)$stRow['setting_value'] ?: null;
+    }
+}
+$currentStageId = (int)($pakd['odoo_stage_id'] ?? 0);
+$isWon  = $pakd && $wonStageId  && $currentStageId === $wonStageId;
+$isLoss = $pakd && $lossStageId && $currentStageId === $lossStageId;
 
 // ── Kiểm tra quyền truy cập: AM chỉ xem được PAKD của mình ──
 if ($pakd && !$is_admin) {
@@ -1060,6 +1067,19 @@ function getProjectTypeIcon($type) {
             color: #fff; font-size: 12px; font-weight: 800; padding: 5px 14px;
             border-radius: 6px; letter-spacing: .05em;
             box-shadow: 0 2px 8px rgba(245,158,11,.45);
+        }
+        .loss-banner {
+            display: flex; align-items: center; gap: 16px;
+            padding: 14px 32px;
+            background: linear-gradient(90deg, #fee2e2 0%, #fecaca 60%, #fee2e2 100%);
+            border-bottom: 2px solid #ef4444;
+        }
+        .loss-badge-large {
+            display: inline-flex; align-items: center; gap: 6px;
+            background: linear-gradient(135deg, #ef4444, #dc2626);
+            color: #fff; font-size: 12px; font-weight: 800; padding: 5px 14px;
+            border-radius: 6px; letter-spacing: .05em;
+            box-shadow: 0 2px 8px rgba(220,38,38,.4);
         }
 
         /* ── Detail Container ── */
@@ -1359,6 +1379,18 @@ function getProjectTypeIcon($type) {
                 </div>
             </div>
             <div class="won-badge-large">🏆 DEAL WON</div>
+        </div>
+        <?php elseif ($isLoss): ?>
+        <div class="loss-banner">
+            <div class="won-banner-icon">💔</div>
+            <div class="won-banner-body">
+                <div class="won-banner-title" style="color:#991b1b;">Opportunity này đã bị Deal Loss</div>
+                <div class="won-banner-sub" style="color:#b91c1c;">
+                    Stage Odoo: <strong><?= htmlspecialchars($pakd['odoo_stage_name'] ?? '') ?></strong>
+                    · Cập nhật từ Odoo CRM qua webhook
+                </div>
+            </div>
+            <div class="loss-badge-large">💔 DEAL LOSS</div>
         </div>
         <?php endif; ?>
 

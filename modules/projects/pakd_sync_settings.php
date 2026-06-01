@@ -54,22 +54,26 @@ if ($action === 'get_stages') {
         // Load saved settings
         $savedIds = [];
         $savedWonId = null;
-        $res = $conn->query("SELECT setting_key, setting_value FROM pakd_settings WHERE setting_key IN ('sync_stage_ids', 'sync_won_stage_id')");
+        $savedLossId = null;
+        $res = $conn->query("SELECT setting_key, setting_value FROM pakd_settings WHERE setting_key IN ('sync_stage_ids', 'sync_won_stage_id', 'sync_loss_stage_id')");
         if ($res) {
             while ($row = $res->fetch_assoc()) {
                 if ($row['setting_key'] === 'sync_stage_ids') {
                     $savedIds = json_decode($row['setting_value'], true) ?: [];
                 } elseif ($row['setting_key'] === 'sync_won_stage_id') {
                     $savedWonId = (int)$row['setting_value'];
+                } elseif ($row['setting_key'] === 'sync_loss_stage_id') {
+                    $savedLossId = (int)$row['setting_value'];
                 }
             }
         }
 
         echo json_encode([
-            'success'   => true,
-            'stages'    => $stages,
-            'saved_ids' => array_map('intval', $savedIds),
-            'saved_won_stage_id' => $savedWonId,
+            'success'              => true,
+            'stages'               => $stages,
+            'saved_ids'            => array_map('intval', $savedIds),
+            'saved_won_stage_id'   => $savedWonId,
+            'saved_loss_stage_id'  => $savedLossId,
         ]);
 
     } catch (Exception $e) {
@@ -98,7 +102,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $action === 'save_stages') {
         $stageNames = json_decode($stageNames, true) ?: [];
     }
     
-    $wonStageId = isset($_POST['won_stage_id']) ? (int)$_POST['won_stage_id'] : null;
+    $wonStageId  = isset($_POST['won_stage_id'])  ? (int)$_POST['won_stage_id']  : null;
+    $lossStageId = isset($_POST['loss_stage_id']) ? (int)$_POST['loss_stage_id'] : null;
 
     $userId = (int)$_SESSION['user_id'];
     $idsJson   = json_encode($stageIds,  JSON_UNESCAPED_UNICODE);
@@ -129,6 +134,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $action === 'save_stages') {
         $s3->bind_param('si', $strWonId, $userId);
         $s3->execute();
         $s3->close();
+    }
+
+    // Upsert sync_loss_stage_id
+    if ($lossStageId !== null) {
+        $s4 = $conn->prepare("INSERT INTO pakd_settings (setting_key, setting_value, updated_by)
+                               VALUES ('sync_loss_stage_id', ?, ?)
+                               ON DUPLICATE KEY UPDATE setting_value = VALUES(setting_value), updated_by = VALUES(updated_by)");
+        $strLossId = (string)$lossStageId;
+        $s4->bind_param('si', $strLossId, $userId);
+        $s4->execute();
+        $s4->close();
     }
 
     echo json_encode([
