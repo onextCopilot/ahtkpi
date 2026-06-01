@@ -188,6 +188,30 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'appro
     exit;
 }
 
+// ── AJAX: Reset PAKD về Draft để làm lại PASX ──
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'reset_pakd') {
+    header('Content-Type: application/json; charset=utf-8');
+    $pid = (int)($_POST['id'] ?? 0);
+    if (!$pid) { echo json_encode(['ok'=>false,'msg'=>'ID không hợp lệ']); exit; }
+
+    // Chỉ admin hoặc AM phụ trách mới được reset
+    if (!$is_admin) {
+        $chk = $conn->prepare("SELECT am_user_id FROM pakd WHERE id=? LIMIT 1");
+        $chk->bind_param("i", $pid); $chk->execute();
+        $chkRow = $chk->get_result()->fetch_assoc(); $chk->close();
+        if ((int)($chkRow['am_user_id'] ?? 0) !== $user_id) {
+            echo json_encode(['ok'=>false,'msg'=>'Bạn không có quyền thực hiện thao tác này']); exit;
+        }
+    }
+
+    $st = $conn->prepare("UPDATE pakd SET status='draft', pasx_status=NULL, pasx_id=NULL, approved_by_name=NULL, approved_at=NULL WHERE id=?");
+    $st->bind_param("i", $pid);
+    $ok = $st->execute();
+    $st->close();
+    echo json_encode(['ok' => $ok, 'msg' => $ok ? 'Đã reset thành công' : 'Lỗi DB: '.$conn->error]);
+    exit;
+}
+
 // ── AJAX: Yêu cầu CEO duyệt PASX ──
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'get_ceo_approve') {
     header('Content-Type: application/json; charset=utf-8');
@@ -1461,6 +1485,11 @@ function getProjectTypeIcon($type) {
                 <a href="#" class="btn-outline yellow">
                     <i class="fas fa-history" style="font-size:11px;"></i> Lịch sử (1 version)
                 </a>
+                <?php if (($pakd['status'] ?? '') === 'approved' && !$isWon && !$isLoss && ($is_admin || (int)($pakd['am_user_id'] ?? 0) === $user_id)): ?>
+                <button onclick="openResetModal()" style="display:inline-flex;align-items:center;gap:6px;padding:6px 14px;border:1.5px solid #f97316;border-radius:6px;background:#fff;color:#ea580c;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;">
+                    <i class="fas fa-rotate-left" style="font-size:11px;"></i> Mở lại & làm lại PASX
+                </button>
+                <?php endif; ?>
             </div>
 
             <!-- Title -->
@@ -3712,6 +3741,69 @@ document.addEventListener('keydown', e => {
         if (e.key === 'Escape') chatLightboxClose();
     });
 })();
+</script>
+
+<!-- Reset PAKD Modal -->
+<div id="reset-pakd-modal" style="display:none;position:fixed;inset:0;z-index:9999;background:rgba(15,23,42,.45);backdrop-filter:blur(3px);align-items:center;justify-content:center;">
+    <div style="background:#fff;border-radius:14px;padding:32px 28px 24px;max-width:420px;width:90%;box-shadow:0 24px 60px rgba(0,0,0,.18);font-family:'Inter',sans-serif;">
+        <div style="display:flex;align-items:center;gap:14px;margin-bottom:18px;">
+            <div style="width:44px;height:44px;border-radius:10px;background:#fff7ed;display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+                <i class="fas fa-rotate-left" style="font-size:18px;color:#ea580c;"></i>
+            </div>
+            <div>
+                <div style="font-size:15px;font-weight:700;color:#1e293b;">Mở lại & làm lại PASX?</div>
+                <div style="font-size:12px;color:#64748b;margin-top:2px;">Thao tác này sẽ không thể hoàn tác</div>
+            </div>
+        </div>
+        <div style="font-size:13px;color:#475569;line-height:1.65;background:#f8fafc;border-radius:8px;padding:12px 14px;margin-bottom:22px;border-left:3px solid #f97316;">
+            PAKD sẽ được reset về trạng thái <strong>Nháp</strong>. Toàn bộ thông tin tài chính được giữ nguyên, nhưng trạng thái Approve và PASX cũ sẽ bị xoá để AM có thể yêu cầu làm lại PASX từ đầu.
+        </div>
+        <div style="display:flex;gap:10px;justify-content:flex-end;">
+            <button onclick="closeResetModal()" style="padding:8px 18px;border:1.5px solid #e2e8f0;border-radius:8px;background:#fff;color:#64748b;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;">
+                Huỷ
+            </button>
+            <button id="reset-confirm-btn" onclick="doResetPakd()" style="padding:8px 20px;border:none;border-radius:8px;background:#ea580c;color:#fff;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;display:inline-flex;align-items:center;gap:6px;">
+                <i class="fas fa-rotate-left"></i> Xác nhận Reset
+            </button>
+        </div>
+    </div>
+</div>
+
+<script>
+function openResetModal() {
+    const m = document.getElementById('reset-pakd-modal');
+    m.style.display = 'flex';
+}
+function closeResetModal() {
+    document.getElementById('reset-pakd-modal').style.display = 'none';
+}
+async function doResetPakd() {
+    const btn = document.getElementById('reset-confirm-btn');
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Đang reset...';
+    try {
+        const fd = new FormData();
+        fd.append('action', 'reset_pakd');
+        fd.append('id', '<?= (int)$pakd_id ?>');
+        const res = await fetch('', { method: 'POST', body: fd });
+        const data = await res.json();
+        if (data.ok) {
+            closeResetModal();
+            window.location.reload();
+        } else {
+            alert('Lỗi: ' + data.msg);
+            btn.disabled = false;
+            btn.innerHTML = '<i class="fas fa-rotate-left"></i> Xác nhận Reset';
+        }
+    } catch(e) {
+        alert('Lỗi kết nối');
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fas fa-rotate-left"></i> Xác nhận Reset';
+    }
+}
+document.getElementById('reset-pakd-modal').addEventListener('click', function(e) {
+    if (e.target === this) closeResetModal();
+});
 </script>
 </body>
 </html>
