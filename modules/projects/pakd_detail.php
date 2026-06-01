@@ -1037,50 +1037,52 @@ function getProjectTypeIcon($type) {
         /* ── Approval Stamp (bottom of form) ── */
         .approval-stamp-wrap {
             margin-top: 52px;
-            padding: 28px 0 8px;
+            padding: 32px 0 12px;
             border-top: 1px solid #e2e8f0;
             display: flex;
-            justify-content: flex-end;
-            align-items: center;
-            gap: 36px;
+            flex-direction: column;
+            align-items: flex-end;
+            gap: 18px;
         }
-        .stamp-info-block { text-align: right; }
-        .stamp-info-label {
-            font-size: 11px; color: #94a3b8;
-            text-transform: uppercase; letter-spacing: .09em;
-            font-weight: 700; margin-bottom: 6px;
-        }
-        .stamp-info-name {
-            font-size: 22px; font-weight: 700;
-            color: #1a56db; letter-spacing: -.01em; line-height: 1.2;
-        }
-        .stamp-info-date {
-            font-size: 12.5px; color: #64748b; margin-top: 5px;
-        }
-        .stamp-circle {
-            width: 164px; height: 164px;
+        .stamp-badge {
+            width: 152px; height: 152px;
             border-radius: 50%;
-            border: 4px solid #1a56db;
-            box-shadow: 0 0 0 6px #fff, 0 0 0 10px #1a56db;
+            background: linear-gradient(145deg, #1e40af 0%, #2563eb 55%, #3b82f6 100%);
+            box-shadow: 0 0 0 5px #fff, 0 0 0 9px #2563eb, 0 14px 40px rgba(37,99,235,.38);
             display: flex; flex-direction: column;
             align-items: center; justify-content: center;
-            gap: 3px;
-            background: rgba(26,86,219,.035);
+            gap: 2px;
+            transform: rotate(-8deg);
+            color: #fff;
+            position: relative;
             flex-shrink: 0;
-            transform: rotate(-10deg);
         }
-        .stamp-ring-text {
+        .stamp-badge::before {
+            content: '';
+            position: absolute;
+            inset: 13px;
+            border-radius: 50%;
+            border: 1.5px dashed rgba(255,255,255,.45);
+            pointer-events: none;
+        }
+        .stamp-badge-check { font-size: 52px; line-height: 1; margin-bottom: 3px; }
+        .stamp-badge-text {
             font-size: 9.5px; font-weight: 800;
-            color: #1a56db; letter-spacing: .22em;
-            text-transform: uppercase; line-height: 1;
+            letter-spacing: .26em; text-transform: uppercase;
+            opacity: .9; line-height: 1;
         }
-        .stamp-ring-icon {
-            font-size: 48px; color: #1a56db;
-            line-height: 1; margin: 4px 0;
+        .stamp-signer { text-align: right; }
+        .stamp-signer-label {
+            font-size: 10.5px; color: #94a3b8;
+            text-transform: uppercase; letter-spacing: .09em;
+            font-weight: 700; margin-bottom: 5px;
         }
-        .stamp-divider {
-            width: 62%; height: 1.5px;
-            background: #1a56db; opacity: .3;
+        .stamp-signer-name {
+            font-size: 22px; font-weight: 800;
+            color: #1e293b; letter-spacing: -.02em; line-height: 1.15;
+        }
+        .stamp-signer-date {
+            font-size: 12px; color: #64748b; margin-top: 4px;
         }
 
         /* ── Authority Seal (status bar) ── */
@@ -1940,19 +1942,16 @@ function getProjectTypeIcon($type) {
 
             <?php if (($pakd['status'] ?? '') === 'approved' && !empty($pakd['approved_by_name'])): ?>
             <div class="approval-stamp-wrap">
-                <div class="stamp-info-block">
-                    <div class="stamp-info-label">Phê duyệt bởi</div>
-                    <div class="stamp-info-name"><?= htmlspecialchars($pakd['approved_by_name']) ?></div>
-                    <?php if (!empty($pakd['approved_at'])): ?>
-                    <div class="stamp-info-date"><i class="fas fa-clock" style="font-size:11px;margin-right:4px;"></i><?= date('d/m/Y H:i', strtotime($pakd['approved_at'])) ?></div>
-                    <?php endif; ?>
+                <div class="stamp-badge">
+                    <i class="fas fa-check stamp-badge-check"></i>
+                    <div class="stamp-badge-text">APPROVED</div>
                 </div>
-                <div class="stamp-circle">
-                    <div class="stamp-ring-text">ĐÃ PHÊ DUYỆT</div>
-                    <div class="stamp-divider"></div>
-                    <i class="fas fa-check stamp-ring-icon"></i>
-                    <div class="stamp-divider"></div>
-                    <div class="stamp-ring-text">APPROVED</div>
+                <div class="stamp-signer">
+                    <div class="stamp-signer-label">Phê duyệt bởi</div>
+                    <div class="stamp-signer-name"><?= htmlspecialchars($pakd['approved_by_name']) ?></div>
+                    <?php if (!empty($pakd['approved_at'])): ?>
+                    <div class="stamp-signer-date"><i class="fas fa-clock" style="font-size:10px;margin-right:3px;opacity:.6;"></i><?= date('d/m/Y H:i', strtotime($pakd['approved_at'])) ?></div>
+                    <?php endif; ?>
                 </div>
             </div>
             <?php endif; ?>
