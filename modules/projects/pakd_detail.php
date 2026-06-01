@@ -1036,10 +1036,10 @@ function getProjectTypeIcon($type) {
 
         /* ── Approval Stamp (bottom of form) ── */
         .approval-stamp-wrap {
-            margin-top: -135px;
+            margin-top: -75px;
             padding: 0 200px 12px 0;
             position: relative;
-            z-index: 5;
+            z-index: 50;
             display: flex;
             justify-content: flex-end;
         }
