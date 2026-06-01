@@ -54,7 +54,10 @@ $conn->query("CREATE TABLE IF NOT EXISTS odoo_webhook_logs (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
 
 // Add result_notes column if table already existed without it
-$conn->query("ALTER TABLE odoo_webhook_logs ADD COLUMN IF NOT EXISTS result_notes TEXT DEFAULT NULL");
+$col = $conn->query("SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='odoo_webhook_logs' AND COLUMN_NAME='result_notes'");
+if ($col && $col->num_rows === 0) {
+    $conn->query("ALTER TABLE odoo_webhook_logs ADD COLUMN result_notes TEXT DEFAULT NULL");
+}
 
 $stmt = $conn->prepare("INSERT INTO odoo_webhook_logs (event_type, payload, source_ip) VALUES (?, ?, ?)");
 $stmt->bind_param('sss', $event_type, $payload_json, $source_ip);
