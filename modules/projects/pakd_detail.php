@@ -760,6 +760,12 @@ $stmt->execute();
 $pakd = $stmt->get_result()->fetch_assoc();
 $stmt->close();
 
+// Ensure won_status / lost_reason columns exist
+foreach ([
+    "ALTER TABLE pakd ADD COLUMN won_status  VARCHAR(20)  DEFAULT NULL",
+    "ALTER TABLE pakd ADD COLUMN lost_reason VARCHAR(255) DEFAULT NULL",
+] as $_s) { $conn->query($_s); }
+
 $isWon  = $pakd && ($pakd['won_status'] ?? '') === 'won';
 $isLoss = $pakd && ($pakd['won_status'] ?? '') === 'lost';
 

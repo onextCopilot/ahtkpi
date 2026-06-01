@@ -356,12 +356,13 @@ try {
         if ($res) while ($r = $res->fetch_row()) $knownIds[] = (int)$r[0];
 
         if ($knownIds) {
+            // Use explicit OR domain so Odoo returns both active and archived records
             $allOpps = $odoo->searchRead(
                 'crm.lead',
-                [['id', 'in', $knownIds]],
-                ['id', 'won_status', 'lost_reason_id'],
+                ['|', ['active', '=', true], ['active', '=', false], ['id', 'in', $knownIds]],
+                ['id', 'won_status', 'lost_reason_id', 'stage_id'],
                 0, 0,
-                ['active_test' => false]   // include both active (won) and archived (lost)
+                ['active_test' => false]
             );
             foreach ((array)$allOpps as $ao) {
                 $aoId        = (int)$ao['id'];
@@ -370,11 +371,27 @@ try {
                 $aoLostReason = null;
                 if (is_array($aoLostRaw)) $aoLostReason = $aoLostRaw['name'] ?? ($aoLostRaw[1] ?? null);
 
-                // Update won_status if non-null, always clear lost_reason when won
+                // Extract stage from pass-2 data
+                $aoStageId   = null;
+                $aoStageName = null;
+                if (!empty($ao['stage_id']) && is_array($ao['stage_id'])) {
+                    $aoStageId   = (int)($ao['stage_id']['id'] ?? $ao['stage_id'][0] ?? null);
+                    $aoStageName = $ao['stage_id']['name'] ?? ($ao['stage_id'][1] ?? null);
+                }
+
+                // Update won_status (+ stage) for won/lost records
                 if ($aoWonStatus) {
                     if ($aoWonStatus === 'won') $aoLostReason = null;
-                    $u = $conn->prepare("UPDATE pakd SET won_status = ?, lost_reason = ?, updated_at = NOW() WHERE odoo_opp_id = ?");
-                    $u->bind_param('ssi', $aoWonStatus, $aoLostReason, $aoId);
+                    $u = $conn->prepare(
+                        "UPDATE pakd
+                         SET won_status       = ?,
+                             lost_reason      = ?,
+                             odoo_stage_id    = COALESCE(?, odoo_stage_id),
+                             odoo_stage_name  = COALESCE(?, odoo_stage_name),
+                             updated_at       = NOW()
+                         WHERE odoo_opp_id = ?"
+                    );
+                    $u->bind_param('ssisi', $aoWonStatus, $aoLostReason, $aoStageId, $aoStageName, $aoId);
                     $u->execute();
                     if ($u->affected_rows > 0) $wonUpdated++;
                     $u->close();

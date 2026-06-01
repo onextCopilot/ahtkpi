@@ -151,7 +151,11 @@ $lastSync = null;
 $syncRes = $conn->query("SELECT MAX(synced_at) as last FROM pakd WHERE synced_at IS NOT NULL");
 if ($syncRes && $row = $syncRes->fetch_assoc()) $lastSync = $row['last'];
 
-// Won stage ID no longer needed — won_status field is used instead
+// Ensure won_status / lost_reason columns exist (idempotent)
+foreach ([
+    "ALTER TABLE pakd ADD COLUMN won_status  VARCHAR(20)  DEFAULT NULL",
+    "ALTER TABLE pakd ADD COLUMN lost_reason VARCHAR(255) DEFAULT NULL",
+] as $_s) { $conn->query($_s); }
 
 // User avatar map (email → user info)
 $userAvatarMap = [];
