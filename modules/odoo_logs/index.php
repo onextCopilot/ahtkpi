@@ -13,14 +13,18 @@ if ($_SESSION['role'] !== 'admin') {
 
 // Ensure table exists (in case hook hasn't been called yet)
 $conn->query("CREATE TABLE IF NOT EXISTS odoo_webhook_logs (
-    id          INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-    event_type  VARCHAR(100) NOT NULL DEFAULT 'unknown',
-    payload     LONGTEXT     NOT NULL,
-    source_ip   VARCHAR(45)  NOT NULL DEFAULT '',
-    created_at  DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    id           INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    event_type   VARCHAR(100) NOT NULL DEFAULT 'unknown',
+    payload      LONGTEXT     NOT NULL,
+    source_ip    VARCHAR(45)  NOT NULL DEFAULT '',
+    result_notes TEXT         DEFAULT NULL,
+    created_at   DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
     INDEX idx_event_type (event_type),
     INDEX idx_created_at (created_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+
+// Add result_notes column if table already existed without it
+$conn->query("ALTER TABLE odoo_webhook_logs ADD COLUMN IF NOT EXISTS result_notes TEXT DEFAULT NULL");
 
 // Filters
 $filter_type = trim($_GET['type'] ?? '');
