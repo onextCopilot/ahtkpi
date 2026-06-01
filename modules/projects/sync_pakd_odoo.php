@@ -97,21 +97,22 @@ try {
     // Fields to fetch from crm.lead (CRM opportunities in Odoo)
     $fields = [
         'id',
-        'name',                  // Opportunity name
-        'partner_id',            // Customer (company)
-        'partner_name',          // Customer name if partner not set
-        'user_id',               // Salesperson (AM)
-        'team_id',               // Sales team (→ Department)
-        'stage_id',              // Current stage
-        'probability',           // Win probability %
-        'expected_revenue',      // Expected revenue
-        'date_open',             // Assignment date
-        'date_deadline',         // Expected closing date
-        'division_ids',          // Lead/Opp Divisions (analytic accounts)
-        'description',           // Internal notes
-        // NOTE: currency_id does NOT exist on crm.lead in all Odoo versions — removed
-        'active',                // active flag
-        'type',                  // 'opportunity' or 'lead'
+        'name',
+        'partner_id',
+        'partner_name',
+        'user_id',
+        'team_id',
+        'stage_id',
+        'probability',
+        'expected_revenue',
+        'date_open',
+        'date_deadline',
+        'division_ids',
+        'description',
+        'active',
+        'type',
+        'won_status',            // "won" | "lost" | false
+        'lost_reason_id',        // Many2one: {id, name}
     ];
 
     // Fetch ALL active opportunities (not archived)
@@ -174,6 +175,12 @@ try {
         }
     }
 
+    // Ensure won_status / lost_reason columns exist
+    foreach ([
+        "ALTER TABLE pakd ADD COLUMN won_status  VARCHAR(20)  DEFAULT NULL",
+        "ALTER TABLE pakd ADD COLUMN lost_reason VARCHAR(255) DEFAULT NULL",
+    ] as $_sql) { $conn->query($_sql); }
+
     // ── Sync each opportunity ─────────────────────────────────────────────────
     $created = 0;
     $updated = 0;
@@ -235,6 +242,17 @@ try {
             // Currency — crm.lead does not expose currency_id directly; default to VND
             $currency = 'VND';
 
+            // Won / Lost status
+            $wonStatus  = null;
+            $ws = $opp['won_status'] ?? null;
+            if (is_string($ws) && $ws !== '') $wonStatus = $ws;
+
+            $lostReason = null;
+            $lr = $opp['lost_reason_id'] ?? null;
+            if (is_array($lr)) {
+                $lostReason = $lr['name'] ?? ($lr[1] ?? null);
+            }
+
             $probability      = (float)($opp['probability'] ?? 0);
             $oppValue         = (float)($opp['expected_revenue'] ?? 0);
             $internalNote     = $opp['description'] ?? '';
@@ -273,16 +291,19 @@ try {
                         assignment_date  = ?,
                         expected_closing = ?,
                         division_names   = ?,
+                        won_status       = ?,
+                        lost_reason      = ?,
                         synced_at        = NOW(),
                         updated_at       = NOW()
                     WHERE odoo_opp_id = ?
                 ");
                 $upd->bind_param(
-                    "sssissddissssssi",
+                    "sssissddisssssssi",
                     $name, $amName, $amEmail, $localUserId,
                     $department, $companyName, $oppValue, $probability,
                     $stageId, $stageName, $currency, $odooUrl,
-                    $assignmentDate, $expectedClosing, $divisionNames, $odooId
+                    $assignmentDate, $expectedClosing, $divisionNames,
+                    $wonStatus, $lostReason, $odooId
                 );
                 $upd->execute();
                 $upd->close();
@@ -324,16 +345,54 @@ try {
         }
     }
 
+    // ── Pass 2: sync won_status for archived (LOST) opps already in pakd ─────
+    // Lost opps are archived in Odoo (active=false), skipped by main domain.
+    // Fetch by known opp IDs using active_test=false context.
+    $wonUpdated = 0;
+    try {
+        $res = $conn->query("SELECT odoo_opp_id FROM pakd WHERE odoo_opp_id IS NOT NULL");
+        $knownIds = [];
+        if ($res) while ($r = $res->fetch_row()) $knownIds[] = (int)$r[0];
+
+        if ($knownIds) {
+            $archivedOpps = $odoo->searchRead(
+                'crm.lead',
+                [['id', 'in', $knownIds], ['active', '=', false]],
+                ['id', 'won_status', 'lost_reason_id', 'stage_id'],
+                0, 0,
+                ['active_test' => false]
+            );
+            foreach ((array)$archivedOpps as $ao) {
+                $aoId = (int)$ao['id'];
+                $aoWonStatus = is_string($ao['won_status'] ?? null) && $ao['won_status'] !== '' ? $ao['won_status'] : null;
+                $aoLostReasonRaw = $ao['lost_reason_id'] ?? null;
+                $aoLostReason = null;
+                if (is_array($aoLostReasonRaw)) $aoLostReason = $aoLostReasonRaw['name'] ?? ($aoLostReasonRaw[1] ?? null);
+
+                if ($aoWonStatus) {
+                    $u = $conn->prepare("UPDATE pakd SET won_status = ?, lost_reason = ?, updated_at = NOW() WHERE odoo_opp_id = ?");
+                    $u->bind_param('ssi', $aoWonStatus, $aoLostReason, $aoId);
+                    $u->execute();
+                    if ($u->affected_rows > 0) $wonUpdated++;
+                    $u->close();
+                }
+            }
+        }
+    } catch (Exception $e) {
+        $errors[] = 'won_status sync: ' . $e->getMessage();
+    }
+
     // ── Response ──────────────────────────────────────────────────────────────
     echo json_encode([
-        'success'      => true,
-        'total_fetched'=> count($opportunities),
-        'proposal_count'=> count($proposalOpps),
-        'created'      => $created,
-        'updated'      => $updated,
-        'skipped'      => $skipped,
-        'errors'       => $errors,
-        'message'      => "Đồng bộ thành công: {$created} tạo mới, {$updated} cập nhật" . ($skipped > 0 ? ", {$skipped} lỗi" : '') . '.',
+        'success'        => true,
+        'total_fetched'  => count($opportunities),
+        'proposal_count' => count($proposalOpps),
+        'created'        => $created,
+        'updated'        => $updated,
+        'won_status_updated' => $wonUpdated,
+        'skipped'        => $skipped,
+        'errors'         => $errors,
+        'message'        => "Đồng bộ thành công: {$created} tạo mới, {$updated} cập nhật, {$wonUpdated} cập nhật won/loss" . ($skipped > 0 ? ", {$skipped} lỗi" : '') . '.',
     ]);
 
 } catch (Exception $e) {

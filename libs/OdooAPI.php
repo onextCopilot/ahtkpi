@@ -99,9 +99,18 @@ class OdooAPI
         return $this->uid;
     }
 
-    public function searchRead($model, $domain = [], $fields = [], $limit = 0, $offset = 0)
+    public function searchRead($model, $domain = [], $fields = [], $limit = 0, $offset = 0, $context = [])
     {
         $this->authenticate();
+
+        $kwargs = [
+            'fields' => $fields,
+            'limit'  => $limit,
+            'offset' => $offset,
+        ];
+        if (!empty($context)) {
+            $kwargs['context'] = $context;
+        }
 
         $params = [
             $this->database,
@@ -110,11 +119,7 @@ class OdooAPI
             $model,
             'search_read',
             [$domain],
-            [
-                'fields' => $fields,
-                'limit' => $limit,
-                'offset' => $offset
-            ]
+            $kwargs,
         ];
 
         return $this->jsonRpcCall('object', 'execute_kw', $params);
