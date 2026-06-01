@@ -421,6 +421,15 @@ function formatVND($n) {
         .stage-won-cell { display: flex; flex-direction: column; gap: 3px; align-items: flex-start; }
 
         .opp-value { font-weight: 600; color: #2563eb; }
+        .mini-stamp-wrap {
+            display: inline-flex; align-items: center; gap: 5px;
+            margin-top: 3px;
+        }
+        .mini-stamp-wrap svg { opacity: .55; flex-shrink: 0; }
+        .mini-stamp-approver {
+            font-size: 10px; font-weight: 600; color: #2563eb;
+            white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 110px;
+        }
         .star-rating { display: inline-flex; gap: 1px; line-height: 1; }
         .star-rating .fa-star     { font-size: 13px; color: #f59e0b; }
         .star-rating .fa-star.off { color: #d1d5db; }
@@ -793,6 +802,25 @@ function formatVND($n) {
                                         <span style="width:5px;height:5px;border-radius:50%;background:<?= $psInfo[1] ?>;flex-shrink:0;"></span>
                                         <?= htmlspecialchars($psInfo[0]) ?>
                                     </span>
+                                    <?php endif; ?>
+                                    <?php if (($p['status'] ?? '') === 'approved' && !empty($p['approved_by_name'] ?? '')): ?>
+                                    <?php
+                                    $mpts = [];
+                                    for ($mi = 0; $mi < 40; $mi++) {
+                                        $ma = $mi * M_PI / 20 - M_PI / 2;
+                                        $mr = ($mi % 2 === 0) ? 11 : 9.5;
+                                        $mpts[] = round(12 + $mr * cos($ma), 2) . ',' . round(12 + $mr * sin($ma), 2);
+                                    }
+                                    $miniD = 'M ' . implode(' L ', $mpts) . ' Z';
+                                    ?>
+                                    <div class="mini-stamp-wrap" title="Phê duyệt bởi: <?= htmlspecialchars($p['approved_by_name']) ?>">
+                                        <svg viewBox="0 0 24 24" width="22" height="22" xmlns="http://www.w3.org/2000/svg">
+                                            <path d="<?= $miniD ?>" fill="none" stroke="#2563eb" stroke-width="1.2" stroke-linejoin="round"/>
+                                            <circle cx="12" cy="12" r="7.5" fill="none" stroke="#2563eb" stroke-width=".8" stroke-dasharray="1.8,2"/>
+                                            <polyline points="8.5,12 11,14.5 15.5,9.5" fill="none" stroke="#2563eb" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+                                        </svg>
+                                        <span class="mini-stamp-approver"><?= htmlspecialchars($p['approved_by_name']) ?></span>
+                                    </div>
                                     <?php endif; ?>
                                 </div>
                             </td>

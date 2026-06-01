@@ -1036,13 +1036,14 @@ function getProjectTypeIcon($type) {
 
         /* ── Approval Stamp (bottom of form) ── */
         .approval-stamp-wrap {
-            margin-top: 52px;
-            padding: 32px 200px 12px 0;
-            border-top: 1px solid #e2e8f0;
+            margin-top: -75px;
+            padding: 0 200px 12px 0;
+            position: relative;
+            z-index: 5;
             display: flex;
             flex-direction: column;
             align-items: flex-end;
-            gap: 18px;
+            gap: 14px;
         }
         .stamp-svg-wrap { display: flex; justify-content: flex-end; opacity: 0.28; }
         .stamp-signer { text-align: right; }
