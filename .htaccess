@@ -76,6 +76,9 @@ RewriteRule ^hrm/ajax-handler/?$ modules/hrm/ajax_handler.php [L]
 
 # Presale Module
 RewriteRule ^projects/ceo-review/?$ modules/projects/ceo_review.php [L]
+RewriteRule ^projects/du-an/detail/?$ modules/projects/du_an_detail.php [L]
+RewriteRule ^projects/du-an/?$ modules/projects/du_an.php [L]
+RewriteRule ^projects/pakd/edit/?$ modules/projects/pakd_detail.php [L]
 RewriteRule ^presale/?$ modules/presale/index.php [L]
 RewriteRule ^presale/ajax-handler/?$ modules/presale/ajax_handler.php [L]
 RewriteRule ^presale/vision/thumbnails/(.+)$ modules/presale/vision/thumbnails/$1 [L]
