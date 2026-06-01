@@ -201,6 +201,7 @@ $routes = [
     '/tai-lieu-quy-trinh' => 'modules/documents/tai_lieu_quy_trinh.php',
     '/projects/phuong-an-kinh-doanh' => 'modules/projects/phuong_an_kinh_doanh.php',
     '/projects/du-an' => 'modules/projects/du_an.php',
+    '/projects/du-an/detail' => 'modules/projects/du_an_detail.php',
     '/projects/pakd/create' => 'modules/projects/pakd_create.php',
     '/projects/pakd/edit' => 'modules/projects/pakd_detail.php',
     '/projects/pakd/sync-odoo' => 'modules/projects/sync_pakd_odoo.php',
