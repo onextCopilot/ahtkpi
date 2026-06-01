@@ -227,7 +227,7 @@ function sortTh2($label, $col, $currentSort, $currentDir, $extraGetParams = []) 
         .sort-icon { margin-left: 4px; font-size: 10px; opacity: .5; }
         thead th.sort-asc .sort-icon, thead th.sort-desc .sort-icon { opacity: 1; }
 
-        tbody tr { border-bottom: 1px solid var(--border); transition: background .12s; }
+        tbody tr { border-bottom: 1px solid var(--border); transition: background .12s; cursor: pointer; }
         tbody tr:last-child { border-bottom: none; }
         tbody tr:nth-child(odd)  { background: #ffffff; }
         tbody tr:nth-child(even) { background: #eef2f7; }
@@ -377,11 +377,12 @@ function sortTh2($label, $col, $currentSort, $currentDir, $extraGetParams = []) 
                             <?php sortTh2('Trạng thái',    'status',          $sortCol, $sortDir, $qp) ?>
                             <?php sortTh2('Ngày assign',   'assignment_date', $sortCol, $sortDir, $qp) ?>
                             <?php sortTh2('Dự kiến đóng',  'expected_closing',$sortCol, $sortDir, $qp) ?>
+                            <th></th>
                         </tr>
                     </thead>
                     <tbody>
                     <?php if (empty($pakdList)): ?>
-                        <tr><td colspan="11">
+                        <tr><td colspan="12">
                             <div class="empty-state">
                                 <div class="empty-icon"><i class="fas fa-trophy"></i></div>
                                 <h3>Chưa có dự án nào</h3>
@@ -407,12 +408,12 @@ function sortTh2($label, $col, $currentSort, $currentDir, $extraGetParams = []) 
                                         $y = date('Y', strtotime($p['assignment_date']));
                                         $groupLabel = $viMonths[$m] . ' ' . $y;
                                     }
-                                    echo "<tr class=\"month-group-row\"><td colspan=\"11\"><i class=\"fas fa-calendar-alt\" style=\"margin-right:6px;\"></i>{$groupLabel}</td></tr>";
+                                    echo "<tr class=\"month-group-row\"><td colspan=\"12\"><i class=\"fas fa-calendar-alt\" style=\"margin-right:6px;\"></i>{$groupLabel}</td></tr>";
                                 }
                             }
                             $rowNum++;
                         ?>
-                        <tr>
+                        <tr onclick="window.location='/projects/du-an/detail?id=<?= $p['id'] ?>'" style="cursor:pointer;">
                             <td style="color:var(--lgray);font-size:12px;"><?= $rowNum ?></td>
                             <td style="max-width:280px;">
                                 <div style="font-weight:600;color:var(--slate);margin-bottom:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="<?= htmlspecialchars($p['name']) ?>">
@@ -440,6 +441,11 @@ function sortTh2($label, $col, $currentSort, $currentDir, $extraGetParams = []) 
                             </td>
                             <td style="font-size:12px;color:var(--lgray);"><?= !empty($p['assignment_date']) ? date('d/m/Y', strtotime($p['assignment_date'])) : '—' ?></td>
                             <td style="font-size:12px;color:var(--lgray);"><?= !empty($p['expected_closing']) ? date('d/m/Y', strtotime($p['expected_closing'])) : '—' ?></td>
+                            <td style="text-align:center;" onclick="event.stopPropagation();">
+                                <a href="/projects/du-an/detail?id=<?= $p['id'] ?>" style="display:inline-flex;align-items:center;gap:4px;padding:4px 10px;border-radius:6px;background:#f0fdf4;color:#16a34a;font-size:11px;font-weight:600;text-decoration:none;border:1px solid #bbf7d0;white-space:nowrap;" title="Xem chi tiết">
+                                    <i class="fas fa-eye" style="font-size:10px;"></i> Chi tiết
+                                </a>
+                            </td>
                         </tr>
                         <?php endforeach; ?>
                     <?php endif; ?>
