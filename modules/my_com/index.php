@@ -337,8 +337,9 @@ $conn->query("CREATE TABLE IF NOT EXISTS so_first_po_map (
     UNIQUE KEY uq_user_so (user_id, so_odoo_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
 
-$so_list   = [];
-$so_error  = null;
+$so_list      = [];
+$so_error     = null;
+$odoo_user_id = null;
 try {
     if (isset($odoo) && $odoo && !empty($user_email)) {
         $ou = $odoo->searchRead('res.users', [['login', '=', $user_email]], ['id'], 1);
@@ -785,8 +786,38 @@ foreach ($collected_invoices as $inv) {
 
 // ── Historical KPI adjustment per origin quarter (for Thu hồi công nợ) ──
 // Each collected invoice gets its Com adjusted by the KPI% of the quarter it was INVOICED in,
-// not the current quarter. If that quarter's KPI can't be computed → user enters manually.
+// not the current quarter. KPI basis follows the ROLE held in that quarter:
+//   BD (BDE/BCE) → tổng Sale Orders của quý đó · AM/CSM... → tổng Invoiced của quý đó.
+// If that quarter's KPI can't be computed → user enters manually.
 $hist_kpi = []; // key "Y-Q" => ['pct','adj','target','invoiced','computed','manual_pct','year','quarter']
+
+// Sum confirmed/sent/done Sale Orders (VND) for a given quarter — used for BD-role KPI basis.
+function mc_so_revenue_quarter($odoo, $odoo_user_id, $year, $q) {
+    static $rate_cache = ['VND' => 1.0];
+    if (!$odoo || !$odoo_user_id) return null;
+    $qm = [1 => [1, 3], 2 => [4, 6], 3 => [7, 9], 4 => [10, 12]];
+    if (!isset($qm[$q])) return null;
+    $from = sprintf('%04d-%02d-01', $year, $qm[$q][0]);
+    $to   = date('Y-m-t', strtotime(sprintf('%04d-%02d-01', $year, $qm[$q][1])));
+    try {
+        $rows = $odoo->searchRead('sale.order', [
+            ['user_id', '=', $odoo_user_id],
+            ['state', 'in', ['sent', 'sale', 'done']],
+            ['date_order', '>=', $from],
+            ['date_order', '<=', $to],
+        ], ['amount_total', 'currency_id'], 0, 0);
+    } catch (Throwable $e) { return null; }
+    $sum = 0.0;
+    foreach ((array) $rows as $so) {
+        $cur = is_array($so['currency_id']) ? ($so['currency_id'][1] ?? 'USD') : 'USD';
+        if (!isset($rate_cache[$cur])) {
+            $r = (float) $odoo->getRate($cur, date('Y-m-d'));
+            $rate_cache[$cur] = $r > 0 ? 1.0 / $r : 1.0;
+        }
+        $sum += (float) $so['amount_total'] * $rate_cache[$cur];
+    }
+    return $sum;
+}
 
 // Ensure user_quarter_kpi table exists
 $conn->query("CREATE TABLE IF NOT EXISTS user_quarter_kpi (
@@ -826,30 +857,40 @@ foreach ($needed_q as $qk => $qi) {
     // KPI target = LEVEL for that quarter using NEAREST-quarter rule (prior preferred, else nearest future)
     $htarget = 0;
     $hlevel_name = '';
+    $hposition = '';
     $hrow = mc_level_for_quarter($conn, $u_id, $hy, $hq);
     if ($hrow) {
         $htarget = (float) $hrow['kpi_quarter_vnd'];
         $hlevel_name = $hrow['level_name'];
+        $hposition = $hrow['position_type'] ?? '';
         // Mark when the level was actually borrowed from a different quarter
         if ((int)$hrow['h_year'] !== $hy || (int)$hrow['h_quarter'] !== $hq) {
             $hlevel_name .= " (theo Q{$hrow['h_quarter']}/{$hrow['h_year']})";
         }
     }
     // Fallback: current users.sale_level_id (only if no history at all)
-    if ($htarget == 0 && $user_level) { $htarget = (float) $user_level['kpi_quarter_vnd']; $hlevel_name = ($user_level['level_name'] ?? '') . ' (hiện tại)'; }
+    if ($htarget == 0 && $user_level) { $htarget = (float) $user_level['kpi_quarter_vnd']; $hlevel_name = ($user_level['level_name'] ?? '') . ' (hiện tại)'; $hposition = $user_level['position_type'] ?? $hposition; }
 
-    // Total invoiced in that quarter (by invoice_date), excluding the same excluded types
-    [$qsm, $qem] = $quarter_months[$hq];
-    $qfrom = sprintf('%04d-%02d-01', $hy, $qsm);
-    $qto = date('Y-m-t', strtotime(sprintf('%04d-%02d-01', $hy, $qem)));
+    // KPI revenue basis follows the role held in that quarter.
+    $h_is_bd = (strpos($hposition, 'BDE') !== false || strpos($hposition, 'BCE') !== false);
     $hinv = 0;
-    foreach ($all_invoices as $iv) {
-        $it = $iv['x_studio_invoice_type_1'] ?? '';
-        if (in_array($it, $excluded_types)) continue;
-        if (($iv['state'] ?? '') === 'cancel') continue;
-        $ivd = $iv['invoice_date'] ?: $iv['date'] ?? '';
-        if (!$ivd || $ivd < $qfrom || $ivd > $qto) continue;
-        $hinv += mc_inv_to_vnd($iv, $inv_cur_rates);
+    if ($h_is_bd) {
+        // BD: tổng Sale Orders của quý đó (confirmed/sent/done)
+        $hso = mc_so_revenue_quarter($odoo ?? null, $odoo_user_id, $hy, $hq);
+        $hinv = ($hso !== null) ? $hso : 0;
+    } else {
+        // AM/CSM...: tổng Invoiced của quý đó (by invoice_date), excluding the same excluded types
+        [$qsm, $qem] = $quarter_months[$hq];
+        $qfrom = sprintf('%04d-%02d-01', $hy, $qsm);
+        $qto = date('Y-m-t', strtotime(sprintf('%04d-%02d-01', $hy, $qem)));
+        foreach ($all_invoices as $iv) {
+            $it = $iv['x_studio_invoice_type_1'] ?? '';
+            if (in_array($it, $excluded_types)) continue;
+            if (($iv['state'] ?? '') === 'cancel') continue;
+            $ivd = $iv['invoice_date'] ?: $iv['date'] ?? '';
+            if (!$ivd || $ivd < $qfrom || $ivd > $qto) continue;
+            $hinv += mc_inv_to_vnd($iv, $inv_cur_rates);
+        }
     }
 
     $manual_pct = $manual_kpi_map[$qk] ?? null;
@@ -879,7 +920,9 @@ foreach ($needed_q as $qk => $qi) {
         'invoiced'   => $hinv,
         'computed'   => $computed,
         'manual_pct' => $manual_pct,
-        'level_name' => $hlevel_name,
+        'level_name' => $hlevel_name . ($h_is_bd ? ' · KPI theo Sale Orders (BD)' : ''),
+        'position'   => $hposition,
+        'is_bd'      => $h_is_bd,
         'year'       => $hy,
         'quarter'    => $hq,
     ];
