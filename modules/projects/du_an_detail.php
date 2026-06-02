@@ -792,89 +792,91 @@ $pst = $pakd['pasx_status'] ?? '';
                                     $bordered     = $soIdx > 0 ? 'border-top:2px solid var(--border);' : '';
                                 ?>
                                 <!-- SO block -->
-                                <div style="<?= $bordered ?>">
+                                <div style="<?= $bordered ?>padding:20px;">
 
-                                    <!-- SO header row -->
-                                    <div style="display:flex;align-items:center;gap:12px;padding:12px 20px;background:#f8fafc;flex-wrap:wrap;">
+                                    <!-- SO header -->
+                                    <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;flex-wrap:wrap;">
                                         <a href="<?= htmlspecialchars($soUrl) ?>" target="_blank"
-                                           style="font-size:15px;font-weight:800;color:var(--primary);text-decoration:none;display:inline-flex;align-items:center;gap:6px;">
-                                            <i class="fas fa-external-link-alt" style="font-size:11px;"></i>
+                                           style="font-size:14px;font-weight:700;color:var(--primary);text-decoration:none;display:inline-flex;align-items:center;gap:5px;">
+                                            <i class="fas fa-arrow-up-right-from-square" style="font-size:10px;"></i>
                                             <?= htmlspecialchars($so['name']) ?>
                                         </a>
                                         <?= soStateBadge($so['state'] ?? 'draft') ?>
                                         <?= invoiceStatusBadge($so['invoice_status'] ?? 'nothing') ?>
-                                        <span style="margin-left:auto;font-size:13px;font-weight:800;color:#2563eb;white-space:nowrap;">
-                                            <?= number_format($amtTotal, 0, ',', '.') ?>
-                                            <span style="font-size:11px;font-weight:500;color:var(--lgray);margin-left:2px;"><?= htmlspecialchars($ccy) ?></span>
-                                        </span>
+                                        <div style="margin-left:auto;text-align:right;">
+                                            <div style="font-size:18px;font-weight:800;color:#1e293b;line-height:1;">
+                                                <?= number_format($amtTotal, 0, ',', '.') ?>
+                                                <span style="font-size:11px;font-weight:500;color:var(--lgray);margin-left:3px;"><?= htmlspecialchars($ccy) ?></span>
+                                            </div>
+                                        </div>
                                     </div>
 
-                                    <!-- SO meta grid -->
-                                    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:0;border-bottom:1px solid var(--border);">
+                                    <!-- SO meta — 2 rows, pill style -->
+                                    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:14px;">
                                         <?php
                                         $metaCells = [
-                                            ['Ngày đặt hàng',   !empty($so['date_order'])       ? date('d/m/Y', strtotime($so['date_order']))       : '—'],
-                                            ['Hạn xác nhận',    !empty($so['validity_date'])     ? date('d/m/Y', strtotime($so['validity_date']))     : '—'],
-                                            ['Ngày giao hàng',  !empty($so['commitment_date'])   ? date('d/m/Y', strtotime($so['commitment_date']))   : (!empty($so['effective_date']) ? date('d/m/Y', strtotime($so['effective_date'])) : '—')],
-                                            ['Ref khách hàng',  $so['client_order_ref'] ?: '—'],
-                                            ['Salesperson',     $salesperson],
-                                            ['Sales Team',      $team],
-                                            ['Điều khoản TT',   $payTerm],
-                                            ['Nguồn gốc',       $so['origin'] ?: '—'],
+                                            ['<i class="fas fa-calendar-day"></i>', 'Ngày đặt hàng', !empty($so['date_order'])     ? date('d/m/Y', strtotime($so['date_order']))   : '—'],
+                                            ['<i class="fas fa-calendar-check"></i>','Hạn xác nhận',  !empty($so['validity_date'])  ? date('d/m/Y', strtotime($so['validity_date'])) : '—'],
+                                            ['<i class="fas fa-truck"></i>',         'Ngày giao',     !empty($so['commitment_date']) ? date('d/m/Y', strtotime($so['commitment_date'])) : (!empty($so['effective_date']) ? date('d/m/Y', strtotime($so['effective_date'])) : '—')],
+                                            ['<i class="fas fa-tag"></i>',           'Ref KH',        $so['client_order_ref'] ?: '—'],
+                                            ['<i class="fas fa-user"></i>',          'Salesperson',   $salesperson],
+                                            ['<i class="fas fa-users"></i>',         'Sales Team',    $team],
+                                            ['<i class="fas fa-file-invoice"></i>',  'Điều khoản TT', $payTerm],
+                                            ['<i class="fas fa-link"></i>',          'Nguồn gốc',     $so['origin'] ?: '—'],
                                         ];
                                         foreach ($metaCells as $cell): ?>
-                                        <div style="padding:10px 16px;border-right:1px solid var(--border);border-bottom:1px solid var(--border);">
-                                            <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--lgray);margin-bottom:3px;"><?= $cell[0] ?></div>
-                                            <div style="font-size:12.5px;color:var(--slate);font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="<?= htmlspecialchars($cell[1]) ?>"><?= htmlspecialchars($cell[1]) ?></div>
+                                        <div style="background:#f8fafc;border-radius:8px;padding:9px 12px;">
+                                            <div style="font-size:10px;color:var(--lgray);margin-bottom:3px;display:flex;align-items:center;gap:4px;">
+                                                <span style="color:var(--lgray);"><?= $cell[0] ?></span>
+                                                <?= $cell[1] ?>
+                                            </div>
+                                            <div style="font-size:12.5px;color:var(--slate);font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="<?= htmlspecialchars($cell[2]) ?>"><?= htmlspecialchars($cell[2]) ?></div>
                                         </div>
                                         <?php endforeach; ?>
                                     </div>
 
-                                    <!-- Amounts bar -->
-                                    <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;border-bottom:1px solid var(--border);">
-                                        <div style="padding:12px 16px;border-right:1px solid var(--border);">
-                                            <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--lgray);margin-bottom:4px;">Chưa thuế</div>
-                                            <div style="font-size:14px;font-weight:700;color:var(--slate);"><?= number_format($amtUntaxed, 0, ',', '.') ?> <span style="font-size:10px;color:var(--lgray);"><?= htmlspecialchars($ccy) ?></span></div>
+                                    <!-- Amounts row -->
+                                    <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;">
+                                        <?php
+                                        $amtItems = [
+                                            ['Chưa thuế',       number_format($amtUntaxed,   0,',','.').' '.$ccy, '#1e293b', '#f8fafc', '#e2e8f0'],
+                                            ['Thuế',            number_format($amtTax,        0,',','.').' '.$ccy, '#64748b', '#f8fafc', '#e2e8f0'],
+                                            ['Đã xuất HĐ',      number_format($amtInvoiced,  0,',','.').' '.$ccy, '#16a34a', '#f0fdf4', '#bbf7d0'],
+                                            ['Còn xuất HĐ',     number_format($amtToInvoice, 0,',','.').' '.$ccy, $amtToInvoice > 0 ? '#d97706' : '#94a3b8', $amtToInvoice > 0 ? '#fffbeb' : '#f8fafc', $amtToInvoice > 0 ? '#fde68a' : '#e2e8f0'],
+                                        ];
+                                        foreach ($amtItems as $ai): ?>
+                                        <div style="flex:1;min-width:100px;background:<?= $ai[3] ?>;border:1px solid <?= $ai[4] ?>;border-radius:8px;padding:10px 14px;">
+                                            <div style="font-size:10px;color:<?= $ai[2] ?>;margin-bottom:4px;font-weight:600;opacity:.75;"><?= $ai[0] ?></div>
+                                            <div style="font-size:13px;font-weight:700;color:<?= $ai[2] ?>;white-space:nowrap;"><?= $ai[1] ?></div>
                                         </div>
-                                        <div style="padding:12px 16px;border-right:1px solid var(--border);">
-                                            <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--lgray);margin-bottom:4px;">Thuế</div>
-                                            <div style="font-size:14px;font-weight:700;color:var(--slate);"><?= number_format($amtTax, 0, ',', '.') ?> <span style="font-size:10px;color:var(--lgray);"><?= htmlspecialchars($ccy) ?></span></div>
-                                        </div>
-                                        <div style="padding:12px 16px;border-right:1px solid var(--border);">
-                                            <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#16a34a;margin-bottom:4px;">Đã xuất HĐ</div>
-                                            <div style="font-size:14px;font-weight:700;color:#16a34a;"><?= number_format($amtInvoiced, 0, ',', '.') ?> <span style="font-size:10px;color:var(--lgray);"><?= htmlspecialchars($ccy) ?></span></div>
-                                        </div>
-                                        <div style="padding:12px 16px;">
-                                            <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#d97706;margin-bottom:4px;">Còn cần xuất HĐ</div>
-                                            <div style="font-size:14px;font-weight:700;color:#d97706;"><?= number_format($amtToInvoice, 0, ',', '.') ?> <span style="font-size:10px;color:var(--lgray);"><?= htmlspecialchars($ccy) ?></span></div>
-                                        </div>
+                                        <?php endforeach; ?>
                                     </div>
 
                                     <!-- Invoice progress bar -->
                                     <?php if ($amtTotal > 0): ?>
-                                    <div style="padding:10px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:12px;">
-                                        <span style="font-size:11px;color:var(--gray);white-space:nowrap;">Tiến độ xuất HĐ</span>
-                                        <div style="flex:1;background:#e2e8f0;border-radius:4px;height:7px;overflow:hidden;">
-                                            <div style="width:<?= $invoicedPct ?>%;background:<?= $invoicedPct >= 100 ? '#16a34a' : '#3b82f6' ?>;height:100%;border-radius:4px;transition:width .4s;"></div>
+                                    <div style="display:flex;align-items:center;gap:10px;margin-bottom:<?= !empty($lines) ? '16px' : '0' ?>;">
+                                        <span style="font-size:11px;color:var(--lgray);white-space:nowrap;min-width:90px;">Tiến độ xuất HĐ</span>
+                                        <div style="flex:1;background:#e2e8f0;border-radius:99px;height:6px;overflow:hidden;">
+                                            <div style="width:<?= $invoicedPct ?>%;background:<?= $invoicedPct >= 100 ? '#16a34a' : '#3b82f6' ?>;height:100%;border-radius:99px;"></div>
                                         </div>
-                                        <span style="font-size:11px;font-weight:700;color:<?= $invoicedPct >= 100 ? '#16a34a' : '#2563eb' ?>;white-space:nowrap;"><?= $invoicedPct ?>%</span>
-                                        <span style="font-size:11px;color:var(--lgray);"><?= $so['invoice_count'] ?? 0 ?> hoá đơn</span>
+                                        <span style="font-size:12px;font-weight:700;color:<?= $invoicedPct >= 100 ? '#16a34a' : '#2563eb' ?>;white-space:nowrap;min-width:32px;text-align:right;"><?= $invoicedPct ?>%</span>
+                                        <span style="font-size:11px;color:var(--lgray);white-space:nowrap;"><?= $so['invoice_count'] ?? 0 ?> HĐ</span>
                                     </div>
                                     <?php endif; ?>
 
                                     <!-- Order lines -->
                                     <?php if (!empty($lines)): ?>
-                                    <div style="overflow-x:auto;">
+                                    <div style="border:1px solid var(--border);border-radius:8px;overflow:hidden;">
                                     <table style="width:100%;border-collapse:collapse;font-size:12px;">
                                         <thead>
-                                            <tr style="background:#1e293b;">
-                                                <th style="padding:7px 16px;text-align:left;color:#94a3b8;font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;">Sản phẩm / Dịch vụ</th>
-                                                <th style="padding:7px 12px;text-align:right;color:#94a3b8;font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;white-space:nowrap;">SL</th>
-                                                <th style="padding:7px 12px;text-align:right;color:#94a3b8;font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;white-space:nowrap;">Đơn giá</th>
-                                                <th style="padding:7px 12px;text-align:right;color:#94a3b8;font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;white-space:nowrap;">CK%</th>
-                                                <th style="padding:7px 12px;text-align:right;color:#94a3b8;font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;white-space:nowrap;">Thành tiền</th>
-                                                <th style="padding:7px 12px;text-align:right;color:#94a3b8;font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;white-space:nowrap;">Đã XHĐ</th>
-                                                <th style="padding:7px 12px;text-align:right;color:#94a3b8;font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;white-space:nowrap;">Còn XHĐ</th>
+                                            <tr style="background:#f1f5f9;border-bottom:1px solid var(--border);">
+                                                <th style="padding:7px 14px;text-align:left;font-size:10.5px;font-weight:700;color:var(--gray);letter-spacing:.03em;">Sản phẩm / Dịch vụ</th>
+                                                <th style="padding:7px 12px;text-align:right;font-size:10.5px;font-weight:700;color:var(--gray);white-space:nowrap;">SL</th>
+                                                <th style="padding:7px 12px;text-align:right;font-size:10.5px;font-weight:700;color:var(--gray);white-space:nowrap;">Đơn giá</th>
+                                                <th style="padding:7px 12px;text-align:right;font-size:10.5px;font-weight:700;color:var(--gray);white-space:nowrap;">CK%</th>
+                                                <th style="padding:7px 12px;text-align:right;font-size:10.5px;font-weight:700;color:var(--gray);white-space:nowrap;">Thành tiền</th>
+                                                <th style="padding:7px 12px;text-align:right;font-size:10.5px;font-weight:700;color:#16a34a;white-space:nowrap;">Đã XHĐ</th>
+                                                <th style="padding:7px 12px;text-align:right;font-size:10.5px;font-weight:700;color:#d97706;white-space:nowrap;">Còn XHĐ</th>
                                             </tr>
                                         </thead>
                                         <tbody>
@@ -883,28 +885,28 @@ $pst = $pakd['pasx_status'] ?? '';
                                             $uom  = is_array($line['product_uom']) ? ($line['product_uom'][1] ?? '') : '';
                                             $disc = (float)($line['discount'] ?? 0);
                                         ?>
-                                        <tr style="border-bottom:1px solid #f1f5f9;" onmouseover="this.style.background='#f8fafc'" onmouseout="this.style.background=''">
-                                            <td style="padding:8px 16px;max-width:320px;">
-                                                <div style="font-weight:600;color:var(--slate);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="<?= htmlspecialchars($line['name'] ?? '') ?>"><?= htmlspecialchars($prod) ?></div>
-                                                <?php if ($line['name'] !== $prod): ?>
-                                                <div style="font-size:11px;color:var(--lgray);margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;"><?= htmlspecialchars($line['name'] ?? '') ?></div>
+                                        <tr style="border-bottom:1px solid #f1f5f9;" onmouseover="this.style.background='#fafafa'" onmouseout="this.style.background=''">
+                                            <td style="padding:8px 14px;max-width:280px;">
+                                                <div style="font-weight:600;color:var(--slate);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="<?= htmlspecialchars($line['name'] ?? '') ?>"><?= htmlspecialchars($prod) ?></div>
+                                                <?php if (($line['name'] ?? '') !== $prod): ?>
+                                                <div style="font-size:10.5px;color:var(--lgray);margin-top:1px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"><?= htmlspecialchars($line['name'] ?? '') ?></div>
                                                 <?php endif; ?>
                                             </td>
-                                            <td style="padding:8px 12px;text-align:right;color:var(--gray);white-space:nowrap;"><?= number_format((float)($line['product_uom_qty'] ?? 0), 2, ',', '.') ?> <span style="font-size:10px;color:var(--lgray);"><?= htmlspecialchars($uom) ?></span></td>
-                                            <td style="padding:8px 12px;text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap;"><?= number_format((float)($line['price_unit'] ?? 0), 0, ',', '.') ?></td>
+                                            <td style="padding:8px 12px;text-align:right;color:var(--gray);"><?= number_format((float)($line['product_uom_qty'] ?? 0), 2, ',', '.') ?><span style="font-size:9px;color:var(--lgray);margin-left:2px;"><?= htmlspecialchars($uom) ?></span></td>
+                                            <td style="padding:8px 12px;text-align:right;font-variant-numeric:tabular-nums;"><?= number_format((float)($line['price_unit'] ?? 0), 0, ',', '.') ?></td>
                                             <td style="padding:8px 12px;text-align:right;color:<?= $disc > 0 ? '#d97706' : 'var(--lgray)' ?>;"><?= $disc > 0 ? number_format($disc, 1).'%' : '—' ?></td>
-                                            <td style="padding:8px 12px;text-align:right;font-weight:700;font-variant-numeric:tabular-nums;white-space:nowrap;"><?= number_format((float)($line['price_subtotal'] ?? 0), 0, ',', '.') ?></td>
-                                            <td style="padding:8px 12px;text-align:right;color:#16a34a;font-variant-numeric:tabular-nums;white-space:nowrap;"><?= number_format((float)($line['qty_invoiced'] ?? 0), 2, ',', '.') ?></td>
-                                            <td style="padding:8px 12px;text-align:right;color:<?= (float)($line['qty_to_invoice'] ?? 0) > 0 ? '#d97706' : 'var(--lgray)' ?>;font-variant-numeric:tabular-nums;white-space:nowrap;"><?= number_format((float)($line['qty_to_invoice'] ?? 0), 2, ',', '.') ?></td>
+                                            <td style="padding:8px 12px;text-align:right;font-weight:700;font-variant-numeric:tabular-nums;"><?= number_format((float)($line['price_subtotal'] ?? 0), 0, ',', '.') ?></td>
+                                            <td style="padding:8px 12px;text-align:right;color:#16a34a;font-variant-numeric:tabular-nums;"><?= number_format((float)($line['qty_invoiced'] ?? 0), 2, ',', '.') ?></td>
+                                            <td style="padding:8px 12px;text-align:right;color:<?= (float)($line['qty_to_invoice'] ?? 0) > 0 ? '#d97706' : 'var(--lgray)' ?>;font-variant-numeric:tabular-nums;"><?= number_format((float)($line['qty_to_invoice'] ?? 0), 2, ',', '.') ?></td>
                                         </tr>
                                         <?php endforeach; ?>
                                         </tbody>
                                         <tfoot>
-                                            <tr style="background:#f8fafc;border-top:2px solid var(--border);">
-                                                <td colspan="4" style="padding:8px 16px;font-size:12px;font-weight:700;color:var(--gray);">Tổng</td>
-                                                <td style="padding:8px 12px;text-align:right;font-weight:800;color:#2563eb;font-variant-numeric:tabular-nums;white-space:nowrap;">
+                                            <tr style="background:#f8fafc;border-top:1px solid var(--border);">
+                                                <td colspan="4" style="padding:7px 14px;font-size:11.5px;font-weight:700;color:var(--gray);">Tổng cộng</td>
+                                                <td style="padding:7px 12px;text-align:right;font-weight:800;color:#2563eb;font-variant-numeric:tabular-nums;">
                                                     <?= number_format($amtUntaxed, 0, ',', '.') ?>
-                                                    <span style="font-size:10px;font-weight:500;color:var(--lgray);margin-left:2px;"><?= htmlspecialchars($ccy) ?></span>
+                                                    <span style="font-size:9px;font-weight:500;color:var(--lgray);margin-left:2px;"><?= htmlspecialchars($ccy) ?></span>
                                                 </td>
                                                 <td colspan="2"></td>
                                             </tr>
@@ -914,7 +916,7 @@ $pst = $pakd['pasx_status'] ?? '';
                                     <?php endif; ?>
 
                                     <?php if (!empty($so['note'])): ?>
-                                    <div style="padding:10px 20px;background:#fffbeb;border-top:1px solid #fde68a;font-size:12px;color:#92400e;">
+                                    <div style="margin-top:10px;padding:10px 14px;background:#fffbeb;border:1px solid #fde68a;border-radius:8px;font-size:12px;color:#92400e;">
                                         <i class="fas fa-sticky-note" style="margin-right:5px;color:#d97706;"></i>
                                         <?= nl2br(htmlspecialchars($so['note'])) ?>
                                     </div>
