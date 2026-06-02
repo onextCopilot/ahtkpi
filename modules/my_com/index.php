@@ -168,6 +168,32 @@ try {
 }
 $license_invoices = $license_invoices ?? [];
 
+// ── Per-currency VND rates for invoice conversion ──
+// Uses 1/r_cur (not r_vnd/r_cur) to avoid cross-company contamination
+// (r_vnd picks up MYR-base company entries giving nonsense values).
+// VND is always 1.0; for other currencies: VND_amount = amount_total / r_cur
+$inv_cur_rates = ['VND' => 1.0];
+try {
+    if (isset($odoo) && $odoo) {
+        $all_inv_curs = [];
+        foreach ($all_invoices as $_i) {
+            $c = is_array($_i['currency_id']) ? ($_i['currency_id'][1] ?? 'VND') : 'VND';
+            if ($c !== 'VND') $all_inv_curs[$c] = true;
+        }
+        foreach (array_keys($all_inv_curs) as $c) {
+            $r = (float)$odoo->getRate($c, date('Y-m-d'));
+            $inv_cur_rates[$c] = $r > 0 ? 1.0 / $r : 1.0;
+        }
+    }
+} catch (Throwable $e) { /* keep 1.0 fallback */ }
+
+// Helper: convert invoice amount_total (in invoice currency) to VND
+function mc_inv_to_vnd($inv, $inv_cur_rates) {
+    $cur  = is_array($inv['currency_id']) ? ($inv['currency_id'][1] ?? 'VND') : 'VND';
+    $rate = $inv_cur_rates[$cur] ?? 1.0;
+    return abs((float)($inv['amount_total'] ?? 0)) * $rate;
+}
+
 // ── PAKD data for EBT ──
 $pakd_list = [];
 $pakd_stmt = $conn->prepare("SELECT id, name, company_name, revenue, gross_profit, currency, status, contract_no, sales_order_no FROM pakd WHERE am_user_id = ? OR am_email = ? ORDER BY name");
@@ -517,8 +543,7 @@ foreach ($invoices as $inv) {
     $currency = is_array($inv['currency_id']) ? $inv['currency_id'][1] : 'VND';
     $inv_date = $inv['invoice_date'] ?: $inv['date'] ?? date('Y-m-d');
 
-    $amount_vnd = abs((float) ($inv['amount_total_signed'] ?? 0));
-    if ($amount_vnd == 0) $amount_vnd = $amount;
+    $amount_vnd = mc_inv_to_vnd($inv, $inv_cur_rates);
 
     $client_type_raw = $inv['x_studio_client_type'] ?? '';
     $is_new = (stripos($client_type_raw, 'new') !== false);
@@ -673,8 +698,7 @@ foreach ($all_invoices as $inv) {
     $inv_date = $inv['invoice_date'] ?: $inv['date'] ?? '';
     if (empty($inv_date) || $inv_date < $yearly_date_from || $inv_date > $yearly_date_to) continue;
     if (($inv['state'] ?? '') === 'cancel') continue;
-    $amount_vnd = abs((float) ($inv['amount_total_signed'] ?? 0));
-    if ($amount_vnd == 0) $amount_vnd = (float) ($inv['amount_total'] ?? 0);
+    $amount_vnd = mc_inv_to_vnd($inv, $inv_cur_rates);
     $yearly_invoiced += $amount_vnd;
 }
 
@@ -691,8 +715,7 @@ $total_collected_vnd = 0;
 foreach ($collected_invoices as $inv) {
     $amount = (float) ($inv['amount_total'] ?? 0);
     $currency = is_array($inv['currency_id']) ? $inv['currency_id'][1] : 'VND';
-    $amount_vnd = abs((float) ($inv['amount_total_signed'] ?? 0));
-    if ($amount_vnd == 0) $amount_vnd = $amount;
+    $amount_vnd = mc_inv_to_vnd($inv, $inv_cur_rates);
     $total_collected_vnd += $amount_vnd;
     $idate = $inv['invoice_date'] ?: $inv['date'] ?? '';
     $oy = $idate ? (int) substr($idate, 0, 4) : 0;
@@ -773,9 +796,7 @@ foreach ($needed_q as $qk => $qi) {
         if (($iv['state'] ?? '') === 'cancel') continue;
         $ivd = $iv['invoice_date'] ?: $iv['date'] ?? '';
         if (!$ivd || $ivd < $qfrom || $ivd > $qto) continue;
-        $av = abs((float) ($iv['amount_total_signed'] ?? 0));
-        if ($av == 0) $av = (float) ($iv['amount_total'] ?? 0);
-        $hinv += $av;
+        $hinv += mc_inv_to_vnd($iv, $inv_cur_rates);
     }
 
     $manual_pct = $manual_kpi_map[$qk] ?? null;
@@ -881,8 +902,7 @@ foreach ($license_invoices as $inv) {
     $inv_id = (int) $inv['id'];
     $amount = (float) ($inv['amount_total'] ?? 0);
     $currency = is_array($inv['currency_id']) ? $inv['currency_id'][1] : 'VND';
-    $amount_vnd = abs((float) ($inv['amount_total_signed'] ?? 0));
-    if ($amount_vnd == 0) $amount_vnd = $amount;
+    $amount_vnd = mc_inv_to_vnd($inv, $inv_cur_rates);
 
     // EBT from linked PAKD or manual entry (same mechanism as the main rows)
     $lmap = $inv_pakd_map[$inv_id] ?? null;
