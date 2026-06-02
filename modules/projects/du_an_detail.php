@@ -153,56 +153,49 @@ try {
     $so_fetch_error = $e->getMessage();
 }
 
-// Fetch Invoices via invoice_pakd_map → odoo_webhook_logs
-$invoices       = [];
-$inv_map_rows   = [];   // keyed by odoo invoice_id → map metadata
+// Fetch Invoices từ odoo_webhook_logs dựa vào invoice_origin = SO name
+$invoices        = [];
 $inv_fetch_error = null;
 try {
-    // Step 1: get all invoice_ids mapped to this pakd
-    $imStmt = $conn->prepare(
-        "SELECT invoice_id, com2_tier, com2_hv, com2_hv_currency, manual_ebt,
-                lead_source, ai_addon, ai_revenue, ai_revenue_currency
-         FROM invoice_pakd_map WHERE pakd_id = ?"
-    );
-    $imStmt->bind_param("i", $pakd_id);
-    $imStmt->execute();
-    $imRes = $imStmt->get_result();
-    $invoice_ids = [];
-    while ($imRow = $imRes->fetch_assoc()) {
-        $iid = (int)$imRow['invoice_id'];
-        if ($iid > 0) {
-            $invoice_ids[]          = $iid;
-            $inv_map_rows[$iid]     = $imRow;
-        }
-    }
-    $imStmt->close();
+    // Lấy danh sách SO names từ sale_orders đã fetch (e.g. ["S00436", "S00437"])
+    $so_names = array_values(array_filter(array_column($sale_orders, 'name')));
 
-    if (!empty($invoice_ids)) {
-        // Step 2: fetch latest webhook log per invoice Odoo ID
-        // IDs are all ints — safe to inline
-        $idList = implode(',', $invoice_ids);
-        $logRes = $conn->query(
+    if (!empty($so_names)) {
+        // Dùng prepared statement với dynamic IN (...)
+        $placeholders = implode(',', array_fill(0, count($so_names), '?'));
+        $types        = str_repeat('s', count($so_names));
+
+        $logStmt = $conn->prepare(
             "SELECT payload, created_at
              FROM odoo_webhook_logs
              WHERE event_type = 'invoice'
-               AND JSON_UNQUOTE(JSON_EXTRACT(payload, '$.id')) IN ($idList)
+               AND JSON_UNQUOTE(JSON_EXTRACT(payload, '$.invoice_origin')) IN ($placeholders)
              ORDER BY id DESC"
         );
+        $logStmt->bind_param($types, ...$so_names);
+        $logStmt->execute();
+        $logRes = $logStmt->get_result();
+
         $seen = [];
-        if ($logRes) {
-            while ($logRow = $logRes->fetch_assoc()) {
-                $p     = json_decode($logRow['payload'], true) ?? [];
-                $oid   = (int)($p['id'] ?? 0);
-                if ($oid && !isset($seen[$oid])) {
-                    $seen[$oid] = true;
-                    $p['_map'] = $inv_map_rows[$oid] ?? [];
-                    $p['_log_at'] = $logRow['created_at'];
-                    $invoices[] = $p;
-                }
+        while ($logRow = $logRes->fetch_assoc()) {
+            $p   = json_decode($logRow['payload'], true) ?? [];
+            $oid = (int)($p['id'] ?? $p['record_id'] ?? 0);
+            if ($oid && !isset($seen[$oid])) {
+                $seen[$oid]   = true;
+                $p['_log_at'] = $logRow['created_at'];
+                $invoices[]   = $p;
             }
         }
-        // Sort by invoice_date desc
-        usort($invoices, fn($a, $b) => strcmp($b['invoice_date'] ?? '', $a['invoice_date'] ?? ''));
+        $logStmt->close();
+
+        // Sort: posted trước, rồi theo invoice_date desc
+        usort($invoices, function ($a, $b) {
+            $stateOrder = ['posted' => 0, 'draft' => 1, 'cancel' => 2];
+            $sa = $stateOrder[$a['state'] ?? ''] ?? 9;
+            $sb = $stateOrder[$b['state'] ?? ''] ?? 9;
+            if ($sa !== $sb) return $sa - $sb;
+            return strcmp($b['invoice_date'] ?? $b['create_date'] ?? '', $a['invoice_date'] ?? $a['create_date'] ?? '');
+        });
     }
 } catch (\Throwable $e) {
     $inv_fetch_error = $e->getMessage();
