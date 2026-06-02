@@ -534,13 +534,122 @@ if ($payload && $event_type === 'invoice') {
     $inv_odoo_id  = (int)($payload['id'] ?? $payload['record_id'] ?? 0);
     $inv_event    = $payload['event'] ?? 'write';
 
+    // Helper: xóa debt liên quan đến invoice
+    $removeDebtByInvId = function(int $odoo_inv_id) use ($conn, &$debug) {
+        $conn->query("DELETE FROM debts WHERE odoo_invoice_id = $odoo_inv_id");
+        $debug['debt_deleted_for_inv'] = $odoo_inv_id;
+    };
+
+    // Helper: upsert debt từ invoice payload
+    $upsertDebt = function(array $p) use ($conn, &$debug) {
+        $inv_id       = (int)($p['id'] ?? $p['record_id'] ?? 0);
+        if (!$inv_id) return;
+
+        $inv_name     = $p['name'] ?: ($p['highest_name'] ?: 'Draft Invoice');
+        $partner_name = is_array($p['partner_id']) ? ($p['partner_id']['name'] ?? '') : '';
+        $com_partner  = is_array($p['commercial_partner_id']) ? ($p['commercial_partner_id']['name'] ?? $partner_name) : $partner_name;
+        $client_name  = $com_partner ?: $partner_name;
+
+        $am_name      = is_array($p['invoice_user_id']) ? ($p['invoice_user_id']['name']  ?? '') : '';
+        $am_odoo_id   = is_array($p['invoice_user_id']) ? (int)($p['invoice_user_id']['id'] ?? 0) : 0;
+        $team_name    = is_array($p['team_id'])          ? ($p['team_id']['name']           ?? '') : '';
+        $ccy          = is_array($p['currency_id'])      ? ($p['currency_id']['name']       ?? 'VND') : 'VND';
+        $co_ccy       = is_array($p['company_currency_id']) ? ($p['company_currency_id']['name'] ?? 'VND') : 'VND';
+
+        $amt_orig     = (float)($p['amount_total']        ?? 0);
+        $amt_vnd      = abs((float)($p['amount_total_signed'] ?? $amt_orig));
+        $inv_date     = ($p['invoice_date'] && $p['invoice_date'] !== false) ? $p['invoice_date'] : null;
+        $pay_state    = $p['payment_state'] ?? 'not_paid';
+        $inv_origin   = $p['invoice_origin'] ?? '';
+
+        // Lấy am_email từ DB theo tên (best-effort)
+        $am_email = '';
+        if ($am_name) {
+            $uRow = $conn->query("SELECT email FROM users WHERE full_name = '" . $conn->real_escape_string($am_name) . "' LIMIT 1");
+            if ($uRow && $u = $uRow->fetch_assoc()) $am_email = $u['email'] ?? '';
+        }
+
+        // Lấy sale_team_id từ sale_teams theo tên
+        $sale_team_id = null;
+        if ($team_name) {
+            $tRow = $conn->query("SELECT id FROM sale_teams WHERE name = '" . $conn->real_escape_string($team_name) . "' LIMIT 1");
+            if ($tRow && $t = $tRow->fetch_assoc()) $sale_team_id = (int)$t['id'];
+        }
+
+        // payment_status
+        $payment_status = ($pay_state === 'paid' || $pay_state === 'in_payment') ? 'Paid' : 'Not paid';
+
+        // invoice_status_class
+        $inv_status_class = '';
+        if ($pay_state === 'paid' || $pay_state === 'in_payment') {
+            $inv_status_class = 'Done';
+        } elseif ($inv_date) {
+            $days = floor((time() - strtotime($inv_date)) / 86400);
+            if ($days > 60) $inv_status_class = 'Đỏ';
+        }
+
+        // payment_month & weekly_update
+        $payment_month = '';
+        $weekly_update = '';
+        if (($pay_state === 'paid' || $pay_state === 'in_payment') && !empty($p['write_date'])) {
+            $ts = strtotime($p['write_date']);
+            $payment_month = date('m/Y', $ts);
+            $weekly_update = 'Tuần ' . ceil(date('j', $ts) / 7);
+        }
+
+        $notes      = "Auto from Invoice: $inv_name ($ccy)" . ($inv_origin ? " · SO: $inv_origin" : '');
+        $pl_class   = 'Xấu';
+        $company    = 'AHT TECH';
+
+        // Upsert: update nếu đã tồn tại, insert nếu chưa
+        $existing = $conn->query("SELECT id FROM debts WHERE odoo_invoice_id = $inv_id LIMIT 1");
+        if ($existing && $existing->num_rows > 0) {
+            $existRow = $existing->fetch_assoc();
+            $esc = fn($v) => $v === null ? 'NULL' : "'" . $conn->real_escape_string((string)$v) . "'";
+            $conn->query("UPDATE debts SET
+                am                 = {$esc($am_name)},
+                am_email           = {$esc($am_email)},
+                sale_team_id       = " . ($sale_team_id ? $sale_team_id : 'NULL') . ",
+                client_name        = {$esc($client_name)},
+                vat_invoice        = {$esc($inv_name)},
+                invoice_date       = {$esc($inv_date)},
+                amount             = $amt_vnd,
+                original_amount    = $amt_orig,
+                currency           = {$esc($co_ccy)},
+                original_currency  = {$esc($ccy)},
+                payment_status     = {$esc($payment_status)},
+                invoice_status_class = {$esc($inv_status_class)},
+                payment_month      = {$esc($payment_month)},
+                weekly_update      = {$esc($weekly_update)},
+                am_notes           = {$esc($notes)},
+                updated_at         = NOW()
+            WHERE id = " . (int)$existRow['id']);
+            $debug['debt_updated'] = $existRow['id'];
+        } else {
+            $esc = fn($v) => $v === null ? 'NULL' : "'" . $conn->real_escape_string((string)$v) . "'";
+            $stmid = $sale_team_id ? $sale_team_id : 'NULL';
+            $conn->query("INSERT INTO debts
+                (company,am,am_email,sale_team_id,client_name,project_name,
+                 amount,original_amount,currency,original_currency,
+                 vat_invoice,invoice_date,payment_status,invoice_status_class,
+                 payment_month,weekly_update,pl_class,am_notes,odoo_invoice_id,created_at)
+                VALUES ({$esc($company)},{$esc($am_name)},{$esc($am_email)},$stmid,
+                 {$esc($client_name)},'',
+                 $amt_vnd,$amt_orig,{$esc($co_ccy)},{$esc($ccy)},
+                 {$esc($inv_name)},{$esc($inv_date)},{$esc($payment_status)},{$esc($inv_status_class)},
+                 {$esc($payment_month)},{$esc($weekly_update)},{$esc($pl_class)},{$esc($notes)},$inv_id,NOW())");
+            $debug['debt_inserted'] = $conn->insert_id;
+        }
+    };
+
     // ── Xử lý delete invoice ─────────────────────────────────────────────────
     if ($inv_odoo_id && $inv_event === 'delete') {
         // Lấy invoice_origin từ payload (có sẵn trong delete payload)
         $inv_origin_del = $payload['invoice_origin'] ?? null;
 
-        // Xóa khỏi odoo_invoices
+        // Xóa khỏi odoo_invoices và debts
         $conn->query("DELETE FROM odoo_invoices WHERE odoo_id = $inv_odoo_id");
+        $removeDebtByInvId($inv_odoo_id);
         $debug['inv_deleted'] = $inv_odoo_id;
 
         // Cập nhật invoice_ids của SO tương ứng
@@ -633,6 +742,15 @@ if ($payload && $event_type === 'invoice') {
         ");
         $debug['inv_upserted'] = $inv_odoo_id;
         $debug['inv_error']    = $conn->error ?: null;
+
+        // ── Sync vào debts ────────────────────────────────────────────────────
+        if (($g['state'] ?? '') === 'cancel') {
+            // Invoice bị cancel → xóa khỏi debts
+            $removeDebtByInvId($inv_odoo_id);
+        } else {
+            // Invoice create/update → upsert vào debts
+            $upsertDebt($payload);
+        }
 
         // ── Cập nhật ngược invoice_ids của SO tương ứng ──────────────────────
         // invoice_origin = SO name (e.g. "S00436") → tìm SO, thêm invoice_id vào mảng
