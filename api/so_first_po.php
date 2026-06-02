@@ -1,16 +1,16 @@
 <?php
-session_start();
+require_once __DIR__ . '/../config/config.php';
+header('Content-Type: application/json');
+
 if (!isset($_SESSION['user_id'])) {
     http_response_code(401);
     echo json_encode(['ok' => false, 'error' => 'Unauthorized']);
     exit;
 }
 
-header('Content-Type: application/json');
-require_once __DIR__ . '/../config/config.php';
-
 $u_id = (int) $_SESSION['user_id'];
 $body = json_decode(file_get_contents('php://input'), true);
+
 if (!$body || !isset($body['so_odoo_id'])) {
     echo json_encode(['ok' => false, 'error' => 'Missing so_odoo_id']);
     exit;
@@ -30,8 +30,15 @@ $conn->query("CREATE TABLE IF NOT EXISTS so_first_po_map (
 
 $stmt = $conn->prepare("INSERT INTO so_first_po_map (user_id, so_odoo_id, is_first_po) VALUES (?,?,?)
     ON DUPLICATE KEY UPDATE is_first_po = VALUES(is_first_po)");
+
+if (!$stmt) {
+    echo json_encode(['ok' => false, 'error' => 'Prepare failed: ' . $conn->error]);
+    exit;
+}
+
 $stmt->bind_param("iii", $u_id, $so_odoo_id, $is_first_po);
-$stmt->execute();
+$ok = $stmt->execute();
+$err = $stmt->error;
 $stmt->close();
 
-echo json_encode(['ok' => true]);
+echo json_encode(['ok' => $ok, 'error' => $ok ? null : $err]);
