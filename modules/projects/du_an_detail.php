@@ -619,6 +619,7 @@ $pst = $pakd['pasx_status'] ?? '';
             .info-grid { grid-template-columns: 1fr; }
         }
     </style>
+    <script src="https://cdn.jsdelivr.net/npm/docx-preview@0.3.1/dist/docx-preview.min.js"></script>
     <script>
     (function() {
         var _prev = localStorage.getItem('sidebar-collapsed');
@@ -1654,17 +1655,49 @@ function previewDoc(url, name, ext) {
         body.innerHTML = `<img src="${url}" style="width:100%;height:100%;object-fit:contain;background:#1e293b;">`;
     } else if (ext === 'pdf') {
         body.innerHTML = `<iframe src="${url}" style="width:100%;height:100%;border:none;" type="application/pdf"></iframe>`;
-    } else if (officeFmt.includes(ext)) {
-        const extLabel = { doc:'Word', docx:'Word', xls:'Excel', xlsx:'Excel', ppt:'PowerPoint', pptx:'PowerPoint' };
+    } else if (ext === 'docx' || ext === 'doc') {
+        // Render DOCX client-side bằng docx-preview
+        body.innerHTML = `
+            <div id="docx-loading" style="display:flex;align-items:center;justify-content:center;height:100%;gap:10px;color:#64748b;font-size:13px;">
+                <i class="fas fa-spinner fa-spin"></i> Đang tải tài liệu...
+            </div>`;
+        fetch(url)
+            .then(r => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.arrayBuffer(); })
+            .then(buf => {
+                body.innerHTML = '<div id="docx-container" style="height:100%;overflow-y:auto;background:#f1f5f9;padding:0;"></div>';
+                const container = document.getElementById('docx-container');
+                return docx.renderAsync(buf, container, null, {
+                    className: 'docx-render',
+                    inWrapper: true,
+                    ignoreWidth: false,
+                    ignoreHeight: true,
+                    ignoreFonts: false,
+                    breakPages: true,
+                    experimental: false,
+                    useBase64URL: true,
+                });
+            })
+            .catch(err => {
+                body.innerHTML = `
+                    <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;gap:14px;background:#f8fafc;">
+                        <i class="fas fa-exclamation-circle" style="font-size:40px;color:#dc2626;"></i>
+                        <div style="font-size:13px;color:#64748b;">Không thể render file này (${err.message})</div>
+                        <a href="${url}" download="${escHtml(name)}" style="display:inline-flex;align-items:center;gap:7px;padding:9px 20px;background:#2563eb;color:#fff;border-radius:8px;font-size:13px;font-weight:600;text-decoration:none;">
+                            <i class="fas fa-download"></i> Tải về máy
+                        </a>
+                    </div>`;
+            });
+    } else if (['xls','xlsx','ppt','pptx'].includes(ext)) {
+        const extLabel = { xls:'Excel', xlsx:'Excel', ppt:'PowerPoint', pptx:'PowerPoint' };
         body.innerHTML = `
             <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;gap:16px;background:#f8fafc;">
-                <i class="fas fa-file-${ext.includes('doc')?'word':ext.includes('xls')?'excel':'powerpoint'}" style="font-size:56px;color:${ext.includes('doc')?'#2563eb':ext.includes('xls')?'#16a34a':'#ea580c'};"></i>
+                <i class="fas fa-file-${ext.includes('xls')?'excel':'powerpoint'}" style="font-size:56px;color:${ext.includes('xls')?'#16a34a':'#ea580c'};"></i>
                 <div style="font-size:15px;font-weight:700;color:#1e293b;">${escHtml(name)}</div>
                 <div style="font-size:13px;color:#64748b;text-align:center;max-width:320px;">
-                    File ${extLabel[ext]||ext.toUpperCase()} không thể xem trực tiếp trên trình duyệt.<br>Vui lòng tải về để mở bằng ứng dụng phù hợp.
+                    File ${extLabel[ext]||ext.toUpperCase()} chưa hỗ trợ xem trực tiếp.<br>Vui lòng tải về để mở bằng ứng dụng phù hợp.
                 </div>
                 <a href="${url}" download="${escHtml(name)}"
-                   style="display:inline-flex;align-items:center;gap:8px;padding:10px 24px;background:#2563eb;color:#fff;border-radius:8px;font-size:14px;font-weight:600;text-decoration:none;">
+                   style="display:inline-flex;align-items:center;gap:8px;padding:10px 24px;background:#${ext.includes('xls')?'16a34a':'ea580c'};color:#fff;border-radius:8px;font-size:14px;font-weight:600;text-decoration:none;">
                     <i class="fas fa-download"></i> Tải về máy
                 </a>
             </div>`;
@@ -1694,6 +1727,9 @@ function showToast(msg, type='success') {
 </script>
 
 <style>
+/* docx-preview styles */
+#docx-container .docx-wrapper { background:#f1f5f9 !important; padding:24px !important; }
+#docx-container .docx-wrapper > section.docx { box-shadow: 0 2px 12px rgba(0,0,0,.15) !important; margin-bottom:24px !important; }
 .toast { position:fixed; top:20px; right:20px; z-index:9999; padding:11px 18px; border-radius:9px; font-size:13px; font-weight:600; color:#fff; display:flex; align-items:center; gap:7px; box-shadow:0 6px 20px rgba(0,0,0,.18); animation:toastIn .25s ease; font-family:inherit; }
 .toast.success { background:#16a34a; }
 .toast.error   { background:#dc2626; }
