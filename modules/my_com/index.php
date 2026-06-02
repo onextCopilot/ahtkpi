@@ -301,9 +301,24 @@ try {
             ];
             $so_fields = ['id', 'name', 'partner_id', 'date_order', 'amount_total', 'currency_id', 'state', 'client_order_ref'];
             $raw_sos = $odoo->searchRead('sale.order', $so_domain, $so_fields, 0, 0);
+
+            // Build per-currency rates for SO conversion.
+            // $hv_rates uses r_vnd/r_cur which picks up cross-company VND entries
+            // from non-VND-base companies (e.g. MYR-base → VND≈6622). For VN context
+            // VND is base, so the correct factor is simply 1/r_cur (inverse factor).
+            $so_currency_rates = ['VND' => 1.0];
+            foreach ((array)$raw_sos as $so) {
+                $cur = is_array($so['currency_id']) ? ($so['currency_id'][1] ?? 'USD') : 'USD';
+                if ($cur !== 'VND' && !isset($so_currency_rates[$cur])) {
+                    $r = (float)$odoo->getRate($cur, date('Y-m-d'));
+                    $so_currency_rates[$cur] = ($r > 0) ? (1.0 / $r) : 1.0;
+                }
+            }
+
             foreach ((array)$raw_sos as $so) {
                 $cur        = is_array($so['currency_id']) ? ($so['currency_id'][1] ?? 'USD') : 'USD';
-                $amount_vnd = mc_to_vnd((float)$so['amount_total'], $cur, $hv_rates);
+                $rate       = $so_currency_rates[$cur] ?? 1.0;
+                $amount_vnd = (float)$so['amount_total'] * $rate;
                 $so['_cur']          = $cur;
                 $so['_amount_vnd']   = $amount_vnd;
                 $so['_partner_name'] = is_array($so['partner_id']) ? ($so['partner_id'][1] ?? '') : '';
