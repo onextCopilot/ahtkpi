@@ -1639,23 +1639,35 @@ async function deleteDoc(docId, pid) {
 
 // ── Preview ──────────────────────────────────────────────────────────────────
 function previewDoc(url, name, ext) {
-    const modal  = document.getElementById('preview-modal');
-    const body   = document.getElementById('preview-body');
-    const title  = document.getElementById('preview-title');
-    const dl     = document.getElementById('preview-download');
+    const modal = document.getElementById('preview-modal');
+    const body  = document.getElementById('preview-body');
+    const title = document.getElementById('preview-title');
+    const dl    = document.getElementById('preview-download');
     title.textContent = name;
     dl.href = url; dl.download = name;
     body.innerHTML = '';
 
-    const images = ['png','jpg','jpeg','gif','webp'];
+    const images   = ['png','jpg','jpeg','gif','webp'];
+    const officeFmt = ['doc','docx','xls','xlsx','ppt','pptx'];
+
     if (images.includes(ext)) {
-        body.innerHTML = `<img src="${url}" style="width:100%;height:100%;object-fit:contain;">`;
+        body.innerHTML = `<img src="${url}" style="width:100%;height:100%;object-fit:contain;background:#1e293b;">`;
     } else if (ext === 'pdf') {
-        body.innerHTML = `<iframe src="${url}#toolbar=1&view=FitH" style="width:100%;height:100%;border:none;"></iframe>`;
-    } else {
-        // DOCX, PPTX, XLSX → Google Docs Viewer
-        const encoded = encodeURIComponent(url);
-        body.innerHTML = `<iframe src="https://docs.google.com/viewer?url=${encoded}&embedded=true" style="width:100%;height:100%;border:none;" allowfullscreen></iframe>`;
+        body.innerHTML = `<iframe src="${url}" style="width:100%;height:100%;border:none;" type="application/pdf"></iframe>`;
+    } else if (officeFmt.includes(ext)) {
+        const extLabel = { doc:'Word', docx:'Word', xls:'Excel', xlsx:'Excel', ppt:'PowerPoint', pptx:'PowerPoint' };
+        body.innerHTML = `
+            <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;gap:16px;background:#f8fafc;">
+                <i class="fas fa-file-${ext.includes('doc')?'word':ext.includes('xls')?'excel':'powerpoint'}" style="font-size:56px;color:${ext.includes('doc')?'#2563eb':ext.includes('xls')?'#16a34a':'#ea580c'};"></i>
+                <div style="font-size:15px;font-weight:700;color:#1e293b;">${escHtml(name)}</div>
+                <div style="font-size:13px;color:#64748b;text-align:center;max-width:320px;">
+                    File ${extLabel[ext]||ext.toUpperCase()} không thể xem trực tiếp trên trình duyệt.<br>Vui lòng tải về để mở bằng ứng dụng phù hợp.
+                </div>
+                <a href="${url}" download="${escHtml(name)}"
+                   style="display:inline-flex;align-items:center;gap:8px;padding:10px 24px;background:#2563eb;color:#fff;border-radius:8px;font-size:14px;font-weight:600;text-decoration:none;">
+                    <i class="fas fa-download"></i> Tải về máy
+                </a>
+            </div>`;
     }
     modal.classList.add('open');
     document.body.style.overflow = 'hidden';

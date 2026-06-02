@@ -27,21 +27,37 @@ if ($uri === '' || $uri === false) {
     $uri = '/';
 }
 
-// ── Serve static files under /public/ directly ───────────────────────────
-if (strpos($uri, '/public/') === 0) {
-    $file_path = __DIR__ . $uri;
-    if (file_exists($file_path) && is_file($file_path)) {
-        $ext = strtolower(pathinfo($file_path, PATHINFO_EXTENSION));
-        $mime_map = [
-            'jpg' => 'image/jpeg', 'jpeg' => 'image/jpeg',
-            'png' => 'image/png',  'gif' => 'image/gif',
-            'webp'=> 'image/webp', 'svg' => 'image/svg+xml',
-            'css' => 'text/css',   'js'  => 'application/javascript',
-            'pdf' => 'application/pdf',
-        ];
-        header('Content-Type: ' . ($mime_map[$ext] ?? 'application/octet-stream'));
-        readfile($file_path);
-        exit();
+// ── Serve static files (public + uploads) ────────────────────────────────
+$_static_prefixes = ['/public/', '/uploads/'];
+foreach ($_static_prefixes as $_pfx) {
+    if (strpos($uri, $_pfx) === 0) {
+        $file_path = __DIR__ . $uri;
+        if (file_exists($file_path) && is_file($file_path)) {
+            $ext = strtolower(pathinfo($file_path, PATHINFO_EXTENSION));
+            $mime_map = [
+                'jpg'  => 'image/jpeg',       'jpeg' => 'image/jpeg',
+                'png'  => 'image/png',         'gif'  => 'image/gif',
+                'webp' => 'image/webp',        'svg'  => 'image/svg+xml',
+                'css'  => 'text/css',          'js'   => 'application/javascript',
+                'pdf'  => 'application/pdf',
+                'doc'  => 'application/msword',
+                'docx' => 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+                'xls'  => 'application/vnd.ms-excel',
+                'xlsx' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                'ppt'  => 'application/vnd.ms-powerpoint',
+                'pptx' => 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+                'zip'  => 'application/zip',
+                'txt'  => 'text/plain; charset=utf-8',
+                'csv'  => 'text/csv; charset=utf-8',
+            ];
+            $mime = $mime_map[$ext] ?? 'application/octet-stream';
+            header('Content-Type: ' . $mime);
+            header('Content-Length: ' . filesize($file_path));
+            header('X-Content-Type-Options: nosniff');
+            readfile($file_path);
+            exit();
+        }
+        break;
     }
 }
 
