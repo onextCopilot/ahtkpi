@@ -577,9 +577,10 @@ if ($payload && $event_type === 'invoice') {
         $debug['am_odoo_id'] = $am_odoo_id;
         $debug['move_type']  = $move_type ?: 'N/A';
 
-        // Dùng amount gốc theo currency của invoice (USD, VND...), không quy đổi
-        $amt_orig     = (float)($p['amount_total'] ?? 0);
-        $amt_vnd      = abs((float)($p['amount_total_signed'] ?? $amt_orig)); // chỉ dùng để tham khảo
+        // amount/currency = company currency (VND) để hiển thị trong debts
+        // original_amount/original_currency = invoice currency gốc (USD, VND...)
+        $amt_orig     = (float)($p['amount_total']        ?? 0);                    // số tiền gốc (USD)
+        $amt_vnd      = abs((float)($p['amount_total_signed'] ?? $amt_orig));       // VND equivalent
         $inv_date     = ($p['invoice_date']     && $p['invoice_date']     !== false) ? $p['invoice_date']     : null;
         $inv_date_due = ($p['invoice_date_due'] && $p['invoice_date_due'] !== false) ? $p['invoice_date_due'] : null;
         $pay_state    = $p['payment_state'] ?? 'not_paid';
@@ -668,9 +669,9 @@ if ($payload && $event_type === 'invoice') {
                 vat_invoice          = {$esc($inv_name)},
                 invoice_date         = {$esc($inv_date)},
                 expected_payment_date= {$esc($inv_date_due)},
-                amount               = $amt_orig,
+                amount               = $amt_vnd,
                 original_amount      = $amt_orig,
-                currency             = {$esc($ccy)},
+                currency             = {$esc($co_ccy)},
                 original_currency    = {$esc($ccy)},
                 payment_status       = {$esc($payment_status)},
                 invoice_status_class = {$esc($inv_status_class)},
@@ -692,7 +693,7 @@ if ($payload && $event_type === 'invoice') {
                 VALUES (
                  {$esc($company)},{$esc($am_name)},{$esc($am_email)},$stmid,
                  {$esc($client_name)},'',
-                 $amt_orig,$amt_orig,{$esc($ccy)},{$esc($ccy)},
+                 $amt_vnd,$amt_orig,{$esc($co_ccy)},{$esc($ccy)},
                  {$esc($inv_name)},{$esc($inv_date)},{$esc($inv_date_due)},
                  {$esc($payment_status)},{$esc($inv_status_class)},
                  {$esc($payment_month)},{$esc($weekly_update)},
