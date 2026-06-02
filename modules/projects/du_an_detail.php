@@ -36,15 +36,12 @@ $conn->query("CREATE TABLE IF NOT EXISTS pakd_documents (
 // ── AJAX: Update gross_profit ─────────────────────────────────────────────────
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'update_gp') {
     header('Content-Type: application/json; charset=utf-8');
-    $pid = (int)($_POST['pakd_id'] ?? $pakd_id);
+    $pid = (int)($_POST['pakd_id'] ?? 0);
     $gp  = (float)preg_replace('/[^\d.]/', '', $_POST['gross_profit'] ?? '0');
     $rev = (float)preg_replace('/[^\d.]/', '', $_POST['revenue']      ?? '0');
-    if (!$pid) { echo json_encode(['ok' => false, 'msg' => 'Invalid ID']); exit; }
-    $stmt = $conn->prepare("UPDATE pakd SET gross_profit = ?, revenue = ?, updated_at = NOW() WHERE id = ?");
-    $stmt->bind_param("ddi", $gp, $rev, $pid);
-    $ok = $stmt->execute();
-    $stmt->close();
-    echo json_encode(['ok' => $ok, 'gross_profit' => $gp, 'revenue' => $rev, 'err' => $conn->error ?: null]);
+    if (!$pid) { echo json_encode(['ok' => false, 'msg' => 'Invalid pakd_id']); exit; }
+    $ok  = $conn->query("UPDATE pakd SET gross_profit = $gp, revenue = $rev WHERE id = $pid");
+    echo json_encode(['ok' => (bool)$ok, 'gross_profit' => $gp, 'revenue' => $rev, 'err' => $conn->error ?: null]);
     exit;
 }
 
@@ -1557,7 +1554,7 @@ async function saveFinancials() {
     fd.append('gross_profit', grossProfit.toString());
 
     try {
-        const res  = await fetch('<?= '/projects/du-an/detail?id=' . $pakd_id ?>', { method: 'POST', body: fd });
+        const res  = await fetch("/projects/du-an/detail?id=<?= $pakd_id ?>", { method: 'POST', body: fd });
         const text = await res.text();
         let data;
         try { data = JSON.parse(text); } catch(e) { console.error('Non-JSON response:', text); showToast('Lỗi server', 'error'); return; }
