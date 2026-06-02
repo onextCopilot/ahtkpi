@@ -138,11 +138,12 @@ foreach ($users as $uid => $u) {
         .cb-table th { background:#f8fafc; color:#5f6368; font-weight:700; text-align:left; padding:10px 12px; border-bottom:2px solid #e2e8f0; white-space:nowrap; }
         .cb-table th.num, .cb-table td.num { text-align:right; }
         .cb-table td { padding:9px 12px; border-bottom:1px solid #f1f5f9; }
-        .cb-table tbody tr:nth-child(odd) td { background:#fbfcfe; }
+        .cb-table tbody tr:nth-child(odd) td { background:#eef2f7; }
         .cb-table tbody tr:nth-child(even) td { background:#fff; }
-        .cb-table tbody tr:hover td { background:#eef4ff; }
-        .cb-table tbody tr td.cb-total-col { background:#eff3f9; }
-        .cb-table tbody tr:hover td.cb-total-col { background:#e2eaf5; }
+        .cb-table tbody tr:hover td { background:#e0ebff; }
+        .cb-table tbody tr:nth-child(odd) td.cb-total-col { background:#e3e9f1; }
+        .cb-table tbody tr:nth-child(even) td.cb-total-col { background:#eff3f9; }
+        .cb-table tbody tr:hover td.cb-total-col { background:#d4e0f5; }
         .cb-name-col { width:230px; }
         .cb-email { color:#64748b; font-size:12px; }
         .cb-rev-yr { font-size:12px; color:#475569; font-weight:600; }
