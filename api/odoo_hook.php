@@ -590,6 +590,29 @@ if ($payload && $event_type === 'invoice') {
         ");
         $debug['inv_upserted'] = $inv_odoo_id;
         $debug['inv_error']    = $conn->error ?: null;
+
+        // ── Cập nhật ngược invoice_ids của SO tương ứng ──────────────────────
+        // invoice_origin = SO name (e.g. "S00436") → tìm SO, thêm invoice_id vào mảng
+        if ($inv_odoo_id && !empty($g['invoice_origin'])) {
+            $soLookup = $conn->query(
+                "SELECT odoo_id, invoice_ids, invoice_count FROM odoo_sale_orders
+                 WHERE name = '" . $conn->real_escape_string($g['invoice_origin']) . "' LIMIT 1"
+            );
+            if ($soLookup && $soRow = $soLookup->fetch_assoc()) {
+                $existingIds = !empty($soRow['invoice_ids']) ? (json_decode($soRow['invoice_ids'], true) ?: []) : [];
+                if (!in_array($inv_odoo_id, $existingIds, true)) {
+                    $existingIds[] = $inv_odoo_id;
+                    $newJson  = $conn->real_escape_string(json_encode(array_values($existingIds)));
+                    $newCount = count($existingIds);
+                    $conn->query(
+                        "UPDATE odoo_sale_orders
+                         SET invoice_ids = '$newJson', invoice_count = $newCount, updated_at = NOW()
+                         WHERE odoo_id = " . (int)$soRow['odoo_id']
+                    );
+                    $debug['so_invoice_ids_updated'] = $soRow['odoo_id'];
+                }
+            }
+        }
     }
 }
 

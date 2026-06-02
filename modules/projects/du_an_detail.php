@@ -152,6 +152,7 @@ try {
 $invoices        = [];
 $inv_fetch_error = null;
 try {
+    // Hướng 1: invoice_ids từ SO (đã được sync bởi hook)
     $all_invoice_ids = [];
     foreach ($sale_orders as $so) {
         foreach ((array)$so['invoice_ids'] as $iid) {
@@ -159,16 +160,33 @@ try {
             if ($iid > 0) $all_invoice_ids[$iid] = true;
         }
     }
-    $all_invoice_ids = array_keys($all_invoice_ids);
 
+    // Hướng 2: invoice_origin = SO name (phòng trường hợp SO chưa kịp cập nhật invoice_ids)
+    $so_names = array_values(array_filter(array_column($sale_orders, 'name')));
+
+    // Build query kết hợp cả 2 hướng
+    $whereParts = [];
     if (!empty($all_invoice_ids)) {
-        $idList = implode(',', $all_invoice_ids);
+        $idList = implode(',', array_keys($all_invoice_ids));
+        $whereParts[] = "odoo_id IN ($idList)";
+    }
+    if (!empty($so_names)) {
+        $escapedNames = implode(',', array_map(fn($n) => "'" . $conn->real_escape_string($n) . "'", $so_names));
+        $whereParts[] = "invoice_origin IN ($escapedNames)";
+    }
+
+    if (!empty($whereParts)) {
+        $whereSQL = implode(' OR ', $whereParts);
         $invRes = $conn->query(
-            "SELECT * FROM odoo_invoices WHERE odoo_id IN ($idList)
-             ORDER BY FIELD(state,'posted','draft','cancel'), invoice_date DESC"
+            "SELECT * FROM odoo_invoices
+             WHERE $whereSQL
+             ORDER BY FIELD(state,'posted','draft','cancel'), invoice_date DESC, odoo_id DESC"
         );
+        $seen = [];
         if ($invRes) {
             while ($row = $invRes->fetch_assoc()) {
+                if (isset($seen[$row['odoo_id']])) continue; // dedup
+                $seen[$row['odoo_id']] = true;
                 $row['invoice_line_ids'] = !empty($row['invoice_line_ids']) ? json_decode($row['invoice_line_ids'], true) : [];
                 $invoices[] = $row;
             }
