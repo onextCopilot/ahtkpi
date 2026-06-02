@@ -818,8 +818,8 @@ if ($payload && $event_type === 'invoice') {
             // Invoice bị cancel → xóa khỏi debts
             $removeDebtByInvId($inv_odoo_id);
         } else {
-            // Invoice create/update → upsert vào debts
-            $upsertDebt($payload);
+            // Tạm thời vô hiệu hóa theo yêu cầu của user
+            // $upsertDebt($payload);
         }
 
         // ── Cập nhật ngược invoice_ids của SO tương ứng ──────────────────────
