@@ -863,14 +863,16 @@ $pst = $pakd['pasx_status'] ?? '';
                             </div>
                             <?php endif; ?>
                             <hr class="divider">
-                            <div class="fin-row cat" style="<?= $fin_margin_pct >= 20 ? 'background:#f0fdf4;' : ($fin_margin_pct > 0 ? 'background:#fffbeb;' : '') ?>">
+                            <?php
+                            $gpRowBg    = !$gpSet ? '' : ($fin_gross_profit < 0 ? 'background:#fef2f2;' : ($fin_margin_pct >= 20 ? 'background:#f0fdf4;' : 'background:#fffbeb;'));
+                            $gpRowColor = !$gpSet ? 'var(--lgray)' : ($fin_gross_profit < 0 ? '#dc2626' : ($fin_margin_pct >= 20 ? '#16a34a' : '#d97706'));
+                            $gpRowPct   = $gpSet ? number_format($fin_margin_pct, 1).'%' : '—';
+                            $gpRowVal   = $gpSet ? (($fin_gross_profit < 0 ? '-' : '') . formatVNDFull(abs($fin_gross_profit)) . ' VND') : '—';
+                            ?>
+                            <div class="fin-row cat" style="<?= $gpRowBg ?>">
                                 <div class="fin-row-label">Lợi nhuận gộp</div>
-                                <div class="fin-row-pct" style="color:<?= $fin_margin_pct >= 20 ? '#16a34a' : ($fin_margin_pct > 0 ? '#d97706' : 'var(--lgray)') ?>;">
-                                    <?= $fin_margin_pct > 0 ? number_format($fin_margin_pct, 1).'%' : '—' ?>
-                                </div>
-                                <div class="fin-row-val" style="color:<?= $fin_gross_profit > 0 ? ($fin_margin_pct >= 20 ? '#16a34a' : '#d97706') : 'var(--lgray)' ?>;">
-                                    <?= $fin_gross_profit > 0 ? formatVNDFull($fin_gross_profit).' VND' : '—' ?>
-                                </div>
+                                <div class="fin-row-pct" style="color:<?= $gpRowColor ?>;"><?= $gpRowPct ?></div>
+                                <div class="fin-row-val" style="color:<?= $gpRowColor ?>;"><?= $gpRowVal ?></div>
                             </div>
                         </div>
                     </div>
