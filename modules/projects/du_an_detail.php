@@ -179,8 +179,8 @@ try {
         $whereSQL = implode(' OR ', $whereParts);
         $invRes = $conn->query(
             "SELECT * FROM odoo_invoices
-             WHERE $whereSQL
-             ORDER BY FIELD(state,'posted','draft','cancel'), invoice_date DESC, odoo_id DESC"
+             WHERE ($whereSQL) AND state = 'posted'
+             ORDER BY invoice_date DESC, odoo_id DESC"
         );
         $seen = [];
         if ($invRes) {
