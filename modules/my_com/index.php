@@ -272,6 +272,74 @@ function mc_ai_rev_to_vnd($row_map, $hv_rates) {
     return mc_to_vnd((float) $row_map['ai_revenue'], $cur, $hv_rates);
 }
 
+// ── Sale Orders — First PO Commission (1/1000) ──
+// Rule: Contract/PO đầu tiên > 1 tỷ VND → bonus = amount_vnd / 1000
+define('SO_MIN_VND', 1_000_000_000);
+define('SO_COM_RATE', 0.001);
+
+$conn->query("CREATE TABLE IF NOT EXISTS so_first_po_map (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    user_id INT NOT NULL,
+    so_odoo_id INT NOT NULL,
+    is_first_po TINYINT(1) DEFAULT 0,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    UNIQUE KEY uq_user_so (user_id, so_odoo_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+
+$so_list   = [];
+$so_error  = null;
+try {
+    if (isset($odoo) && $odoo && !empty($user_email)) {
+        $ou = $odoo->searchRead('res.users', [['login', '=', $user_email]], ['id'], 1);
+        $odoo_user_id = !empty($ou[0]['id']) ? (int)$ou[0]['id'] : null;
+        if ($odoo_user_id) {
+            $so_domain = [
+                ['user_id', '=', $odoo_user_id],
+                ['state', '!=', 'cancel'],
+                ['date_order', '>=', $selected_year . '-01-01'],
+                ['date_order', '<=', $selected_year . '-12-31'],
+            ];
+            $so_fields = ['id', 'name', 'partner_id', 'date_order', 'amount_total', 'currency_id', 'state', 'client_order_ref'];
+            $raw_sos = $odoo->searchRead('sale.order', $so_domain, $so_fields, 0, 0);
+            foreach ((array)$raw_sos as $so) {
+                $cur        = is_array($so['currency_id']) ? ($so['currency_id'][1] ?? 'USD') : 'USD';
+                $amount_vnd = mc_to_vnd((float)$so['amount_total'], $cur, $hv_rates);
+                if ($amount_vnd < SO_MIN_VND) continue;
+                $so['_cur']          = $cur;
+                $so['_amount_vnd']   = $amount_vnd;
+                $so['_partner_name'] = is_array($so['partner_id']) ? ($so['partner_id'][1] ?? '') : '';
+                $so_list[] = $so;
+            }
+            usort($so_list, fn($a, $b) => strcmp($b['date_order'] ?? '', $a['date_order'] ?? ''));
+        }
+    }
+} catch (Throwable $e) {
+    $so_error = $e->getMessage();
+}
+
+// Load saved First PO flags
+$so_first_po_flags = [];
+if (!empty($so_list)) {
+    $so_ids = array_map(fn($s) => (int)$s['id'], $so_list);
+    $ph     = implode(',', array_fill(0, count($so_ids), '?'));
+    $params = array_merge([$u_id], $so_ids);
+    $types  = 'i' . str_repeat('i', count($so_ids));
+    $fp_stmt = $conn->prepare("SELECT so_odoo_id, is_first_po FROM so_first_po_map WHERE user_id = ? AND so_odoo_id IN ($ph)");
+    if ($fp_stmt) {
+        $fp_stmt->bind_param($types, ...$params);
+        $fp_stmt->execute();
+        $fp_res = $fp_stmt->get_result();
+        while ($r = $fp_res->fetch_assoc()) $so_first_po_flags[(int)$r['so_odoo_id']] = (bool)$r['is_first_po'];
+        $fp_stmt->close();
+    }
+}
+
+// Pre-compute total First PO commission
+$total_so_com = 0.0;
+foreach ($so_list as $so) {
+    if ($so_first_po_flags[$so['id']] ?? false) $total_so_com += $so['_amount_vnd'] * SO_COM_RATE;
+}
+
 // ── Market to Lead source ──
 // If the salesperson sourced the lead themselves ("My Lead"), Com1 gets +1%.
 $lead_options = [
@@ -1636,6 +1704,80 @@ $month_names_vn = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','
                 </div>
             </div>
 
+            <!-- ─── Sale Orders — First PO Commission ─── -->
+            <div style="margin-top:1.5rem;">
+                <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:0.5rem;">
+                    <h3 style="margin:0;font-size:15px;color:#7c3aed;font-weight:700;">Sale Orders &gt; 1 tỷ — First PO Commission</h3>
+                    <span style="font-size:11px;color:#64748b;">Năm <?= $selected_year ?> · Tỷ lệ 1/1000 khi là First PO</span>
+                </div>
+                <div style="overflow-x:auto;">
+                <table style="width:100%;border-collapse:collapse;font-size:12px;">
+                    <thead>
+                        <tr style="background:#f5f3ff;color:#5b21b6;">
+                            <th style="padding:7px 10px;text-align:left;border:1px solid #e2e8f0;white-space:nowrap;">SO #</th>
+                            <th style="padding:7px 10px;text-align:left;border:1px solid #e2e8f0;">Khách hàng</th>
+                            <th style="padding:7px 10px;text-align:center;border:1px solid #e2e8f0;white-space:nowrap;">Ngày</th>
+                            <th style="padding:7px 10px;text-align:center;border:1px solid #e2e8f0;">Trạng thái</th>
+                            <th style="padding:7px 10px;text-align:right;border:1px solid #e2e8f0;">Amount</th>
+                            <th style="padding:7px 10px;text-align:right;border:1px solid #e2e8f0;">VND</th>
+                            <th style="padding:7px 10px;text-align:center;border:1px solid #e2e8f0;white-space:nowrap;">First PO?</th>
+                            <th style="padding:7px 10px;text-align:right;border:1px solid #e2e8f0;white-space:nowrap;">Commission (1/1000)</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                    <?php if (!empty($so_error)): ?>
+                        <tr><td colspan="8" style="padding:12px;text-align:center;color:#dc2626;border:1px solid #e2e8f0;">Lỗi tải Sale Orders: <?= htmlspecialchars($so_error) ?></td></tr>
+                    <?php elseif (empty($so_list)): ?>
+                        <tr><td colspan="8" style="padding:12px;text-align:center;color:#94a3b8;border:1px solid #e2e8f0;">Không có Sale Order nào &gt; 1 tỷ VND trong năm <?= $selected_year ?></td></tr>
+                    <?php else: ?>
+                        <?php foreach ($so_list as $so):
+                            $so_id       = (int)$so['id'];
+                            $is_first    = $so_first_po_flags[$so_id] ?? false;
+                            $amount_orig = (float)$so['amount_total'];
+                            $amount_vnd  = $so['_amount_vnd'];
+                            $so_com      = $is_first ? $amount_vnd * SO_COM_RATE : 0;
+                            $state_map   = ['draft' => ['Nháp', '#94a3b8'], 'sale' => ['Confirmed', '#16a34a'], 'done' => ['Done', '#2563eb']];
+                            [$state_label, $state_color] = $state_map[$so['state']] ?? [$so['state'], '#64748b'];
+                        ?>
+                        <tr class="so-row" data-soid="<?= $so_id ?>" data-vnd="<?= (int)$amount_vnd ?>">
+                            <td style="padding:7px 10px;border:1px solid #e2e8f0;font-weight:600;color:#5b21b6;white-space:nowrap;">
+                                <?= htmlspecialchars($so['name']) ?>
+                                <?php if (!empty($so['client_order_ref'])): ?>
+                                <div style="font-size:10px;color:#94a3b8;font-weight:400;"><?= htmlspecialchars($so['client_order_ref']) ?></div>
+                                <?php endif; ?>
+                            </td>
+                            <td style="padding:7px 10px;border:1px solid #e2e8f0;"><?= htmlspecialchars($so['_partner_name']) ?></td>
+                            <td style="padding:7px 10px;border:1px solid #e2e8f0;text-align:center;color:#64748b;white-space:nowrap;"><?= substr($so['date_order'], 0, 10) ?></td>
+                            <td style="padding:7px 10px;border:1px solid #e2e8f0;text-align:center;">
+                                <span style="background:<?= $state_color ?>20;color:<?= $state_color ?>;border-radius:4px;padding:2px 7px;font-size:11px;font-weight:600;"><?= $state_label ?></span>
+                            </td>
+                            <td style="padding:7px 10px;border:1px solid #e2e8f0;text-align:right;color:#374151;">
+                                <?= $so['_cur'] !== 'VND' ? number_format($amount_orig, 0) . ' ' . htmlspecialchars($so['_cur']) : mc_fmt($amount_orig) ?>
+                            </td>
+                            <td style="padding:7px 10px;border:1px solid #e2e8f0;text-align:right;font-weight:600;color:#1d4ed8;"><?= mc_fmt($amount_vnd) ?></td>
+                            <td style="padding:7px 10px;border:1px solid #e2e8f0;text-align:center;">
+                                <select class="so-first-po-sel" data-soid="<?= $so_id ?>" onchange="saveFirstPo(this)"
+                                        style="padding:3px 6px;border:1px solid #e2e8f0;border-radius:5px;font-size:11px;background:#fff;cursor:pointer;">
+                                    <option value="0"<?= !$is_first ? ' selected' : '' ?>>— Chọn —</option>
+                                    <option value="1"<?= $is_first ? ' selected' : '' ?>>Yes — First PO</option>
+                                </select>
+                            </td>
+                            <td class="so-com-cell" style="padding:7px 10px;border:1px solid #e2e8f0;text-align:right;font-weight:700;color:<?= $so_com > 0 ? '#7c3aed' : '#94a3b8' ?>;">
+                                <?= $so_com > 0 ? mc_fmt($so_com) : '—' ?>
+                            </td>
+                        </tr>
+                        <?php endforeach; ?>
+                        <tr style="background:#f5f3ff;">
+                            <td colspan="7" style="padding:7px 10px;border:1px solid #e2e8f0;text-align:right;font-weight:600;color:#5b21b6;">Tổng First PO Commission</td>
+                            <td class="amt" id="soComTotal" style="padding:7px 10px;border:1px solid #e2e8f0;text-align:right;font-weight:700;color:#7c3aed;"><?= $total_so_com > 0 ? mc_fmt($total_so_com) : '—' ?></td>
+                        </tr>
+                    <?php endif; ?>
+                    </tbody>
+                </table>
+                </div>
+                <div style="font-size:11px;color:#94a3b8;margin-top:4px;">Bonus = Contract value (VND) × 1/1000 · Chỉ áp dụng cho hợp đồng đầu tiên của khách (trong vòng 1 năm kể từ ký kết)</div>
+            </div>
+
             <!-- ─── Commission Rules Summary ─── -->
             <details style="margin-top:1rem;font-size:12px;color:#64748b;">
                 <summary style="cursor:pointer;font-weight:600;padding:0.5rem 0;">Quy tắc tính Commission (tham khảo)</summary>
@@ -2343,6 +2485,45 @@ function saveQuarterKpi(input) {
         }
     })
     .catch(err => showToast('Lỗi kết nối: ' + err.message, false));
+}
+
+// ── Sale Orders First PO Commission ──
+const SO_COM_RATE = <?= SO_COM_RATE ?>;
+
+function saveFirstPo(select) {
+    const soId    = parseInt(select.dataset.soid);
+    const isFirst = select.value === '1';
+    const row     = select.closest('tr.so-row');
+    const comCell = row ? row.querySelector('.so-com-cell') : null;
+    const amtVnd  = row ? (parseFloat(row.dataset.vnd) || 0) : 0;
+
+    // Update commission cell immediately
+    if (comCell) {
+        const com = isFirst ? amtVnd * SO_COM_RATE : 0;
+        comCell.textContent = com > 0 ? fmtFull(com) : '—';
+        comCell.style.color = com > 0 ? '#7c3aed' : '#94a3b8';
+    }
+    recomputeSoCom();
+
+    fetch('/api/so_first_po.php', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({so_odoo_id: soId, is_first_po: isFirst ? 1 : 0})
+    }).then(r => r.json()).then(d => {
+        if (d.ok) showToast('Đã lưu', true); else showToast(d.error || 'Lỗi', false);
+    }).catch(err => showToast('Lỗi kết nối', false));
+}
+
+function recomputeSoCom() {
+    let total = 0;
+    document.querySelectorAll('tr.so-row').forEach(row => {
+        const sel = row.querySelector('.so-first-po-sel');
+        if (sel && sel.value === '1') {
+            total += (parseFloat(row.dataset.vnd) || 0) * SO_COM_RATE;
+        }
+    });
+    const foot = document.getElementById('soComTotal');
+    if (foot) { foot.textContent = total > 0 ? fmtFull(total) : '—'; foot.style.color = total > 0 ? '#7c3aed' : '#94a3b8'; }
 }
 
 function esc(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
