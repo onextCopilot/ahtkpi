@@ -89,118 +89,90 @@ $fin_gross_profit = (float)($pakd['gross_profit'] ?? 0);
 $fin_margin_pct   = $fin_rev_net > 0 ? ($fin_gross_profit / $fin_rev_net * 100) : 0;
 $fin_total_cost   = $fin_rev_net - $fin_gross_profit;
 
-// Fetch Sale Orders from Odoo linked to this opportunity
-$sale_orders   = [];
+// Fetch Sale Orders từ odoo_sale_orders (được upsert bởi webhook hook)
+$sale_orders    = [];
 $so_fetch_error = null;
 try {
-    require_once __DIR__ . '/../../libs/OdooAPI.php';
-    $odoo   = new OdooAPI();
     $opp_id = (int)($pakd['odoo_opp_id'] ?? 0);
-    $so_domain = [];
-
     if ($opp_id) {
-        // Primary: filter by opportunity_id
-        $so_domain = [['opportunity_id', '=', $opp_id]];
-    } elseif (!empty($pakd['sales_order_no'])) {
-        // Fallback: match by SO name
-        $so_domain = [['name', '=', $pakd['sales_order_no']]];
+        $soRes = $conn->prepare(
+            "SELECT * FROM odoo_sale_orders WHERE opportunity_id = ? ORDER BY date_order DESC"
+        );
+        $soRes->bind_param('i', $opp_id);
+        $soRes->execute();
+        $soRows = $soRes->get_result();
+        while ($row = $soRows->fetch_assoc()) {
+            // Normalise invoice_ids và order_line_ids từ JSON string → array
+            $row['invoice_ids']    = !empty($row['invoice_ids'])    ? json_decode($row['invoice_ids'],    true) : [];
+            $row['order_line_ids'] = !empty($row['order_line_ids']) ? json_decode($row['order_line_ids'], true) : [];
+            $row['_lines']         = []; // sẽ fetch bên dưới
+            // Map field names để tương thích với view code cũ
+            $row['id']             = $row['odoo_id'];
+            $sale_orders[]         = $row;
+        }
+        $soRes->close();
     }
 
-    if ($so_domain) {
-        $so_fields = [
-            'id', 'name', 'state', 'date_order', 'commitment_date', 'effective_date',
-            'validity_date', 'amount_untaxed', 'amount_tax', 'amount_total',
-            'amount_invoiced', 'amount_to_invoice',
-            'currency_id', 'partner_id', 'user_id', 'team_id',
-            'client_order_ref', 'note', 'invoice_status', 'invoice_ids', 'invoice_count',
-            'payment_term_id', 'origin', 'opportunity_id', 'order_line', 'tag_ids',
-        ];
-        $sale_orders = $odoo->searchRead('sale.order', $so_domain, $so_fields, 0, 0) ?: [];
-        // Sort newest first
-        usort($sale_orders, fn($a, $b) => strcmp($b['date_order'] ?? '', $a['date_order'] ?? ''));
-
-        // Fetch order lines for all SOs
+    // Fetch order lines từ Odoo API cho các SO đã có trong DB
+    if (!empty($sale_orders)) {
         $all_line_ids = [];
         foreach ($sale_orders as $so) {
-            if (!empty($so['order_line']) && is_array($so['order_line'])) {
-                $all_line_ids = array_merge($all_line_ids, $so['order_line']);
+            foreach ($so['order_line_ids'] as $lid) {
+                $lid = (int)$lid;
+                if ($lid > 0) $all_line_ids[$lid] = true;
             }
         }
-        $so_lines_map = []; // keyed by so_id
         if (!empty($all_line_ids)) {
-            $line_fields = [
-                'id', 'order_id', 'name', 'product_id', 'product_uom_qty', 'product_uom',
-                'price_unit', 'price_subtotal', 'price_total', 'discount',
-                'qty_invoiced', 'qty_to_invoice',
-            ];
-            $lines = $odoo->searchRead(
-                'sale.order.line',
-                [['id', 'in', $all_line_ids]],
-                $line_fields, 0, 0
+            require_once __DIR__ . '/../../libs/OdooAPI.php';
+            $odoo      = new OdooAPI();
+            $line_ids  = array_keys($all_line_ids);
+            $lines     = $odoo->searchRead('sale.order.line',
+                [['id', 'in', $line_ids]],
+                ['id','order_id','name','product_id','product_uom_qty','product_uom',
+                 'price_unit','price_subtotal','price_total','discount',
+                 'qty_invoiced','qty_to_invoice'],
+                0, 0
             ) ?: [];
+            $so_lines_map = [];
             foreach ($lines as $line) {
                 $soid = is_array($line['order_id']) ? (int)$line['order_id'][0] : (int)$line['order_id'];
                 $so_lines_map[$soid][] = $line;
             }
+            foreach ($sale_orders as &$so) {
+                $so['_lines'] = $so_lines_map[$so['odoo_id']] ?? [];
+            }
+            unset($so);
         }
-        // Attach lines to each SO
-        foreach ($sale_orders as &$so) {
-            $so['_lines'] = $so_lines_map[$so['id']] ?? [];
-        }
-        unset($so);
     }
 } catch (\Throwable $e) {
     $so_fetch_error = $e->getMessage();
 }
 
-// Fetch Invoices: SO.invoice_ids (Odoo IDs) → odoo_webhook_logs WHERE payload->id IN (...)
+// Fetch Invoices từ odoo_invoices: dùng invoice_ids từ các SO
 $invoices        = [];
 $inv_fetch_error = null;
 try {
-    // Thu thập tất cả invoice_ids từ các SO đã fetch
     $all_invoice_ids = [];
     foreach ($sale_orders as $so) {
-        if (!empty($so['invoice_ids']) && is_array($so['invoice_ids'])) {
-            foreach ($so['invoice_ids'] as $iid) {
-                $iid = (int)$iid;
-                if ($iid > 0) $all_invoice_ids[$iid] = true;
-            }
+        foreach ((array)$so['invoice_ids'] as $iid) {
+            $iid = (int)$iid;
+            if ($iid > 0) $all_invoice_ids[$iid] = true;
         }
     }
-    $all_invoice_ids = array_keys($all_invoice_ids); // unique int list
+    $all_invoice_ids = array_keys($all_invoice_ids);
 
     if (!empty($all_invoice_ids)) {
-        // IDs là int — safe to inline
         $idList = implode(',', $all_invoice_ids);
-        $logRes = $conn->query(
-            "SELECT payload, created_at
-             FROM odoo_webhook_logs
-             WHERE event_type = 'invoice'
-               AND JSON_UNQUOTE(JSON_EXTRACT(payload, '$.id')) IN ($idList)
-             ORDER BY id DESC"
+        $invRes = $conn->query(
+            "SELECT * FROM odoo_invoices WHERE odoo_id IN ($idList)
+             ORDER BY FIELD(state,'posted','draft','cancel'), invoice_date DESC"
         );
-
-        $seen = [];
-        if ($logRes) {
-            while ($logRow = $logRes->fetch_assoc()) {
-                $p   = json_decode($logRow['payload'], true) ?? [];
-                $oid = (int)($p['id'] ?? $p['record_id'] ?? 0);
-                if ($oid && !isset($seen[$oid])) {
-                    $seen[$oid]   = true;
-                    $p['_log_at'] = $logRow['created_at'];
-                    $invoices[]   = $p;
-                }
+        if ($invRes) {
+            while ($row = $invRes->fetch_assoc()) {
+                $row['invoice_line_ids'] = !empty($row['invoice_line_ids']) ? json_decode($row['invoice_line_ids'], true) : [];
+                $invoices[] = $row;
             }
         }
-
-        // Sort: posted trước, rồi invoice_date desc
-        usort($invoices, function ($a, $b) {
-            $stateOrder = ['posted' => 0, 'draft' => 1, 'cancel' => 2];
-            $sa = $stateOrder[$a['state'] ?? ''] ?? 9;
-            $sb = $stateOrder[$b['state'] ?? ''] ?? 9;
-            if ($sa !== $sb) return $sa - $sb;
-            return strcmp($b['invoice_date'] ?? $b['create_date'] ?? '', $a['invoice_date'] ?? $a['create_date'] ?? '');
-        });
     }
 } catch (\Throwable $e) {
     $inv_fetch_error = $e->getMessage();
@@ -804,19 +776,20 @@ $pst = $pakd['pasx_status'] ?? '';
                                 </div>
                             <?php else: ?>
                                 <?php foreach ($sale_orders as $soIdx => $so):
-                                    $ccy    = is_array($so['currency_id']) ? ($so['currency_id'][1] ?? 'VND') : ($so['currency_id'] ?? 'VND');
-                                    $soUrl  = $odooBaseUrl ? $odooBaseUrl . '/web#id=' . $so['id'] . '&model=sale.order&view_type=form' : '#';
-                                    $lines  = $so['_lines'] ?? [];
-                                    $amtInvoiced   = (float)($so['amount_invoiced']   ?? 0);
-                                    $amtToInvoice  = (float)($so['amount_to_invoice'] ?? 0);
-                                    $amtTotal      = (float)($so['amount_total']      ?? 0);
-                                    $amtUntaxed    = (float)($so['amount_untaxed']    ?? 0);
-                                    $amtTax        = (float)($so['amount_tax']        ?? 0);
-                                    $invoicedPct   = $amtTotal > 0 ? min(100, round($amtInvoiced / $amtTotal * 100)) : 0;
-                                    $salesperson   = is_array($so['user_id'])  ? ($so['user_id'][1]  ?? '—') : '—';
-                                    $team          = is_array($so['team_id'])  ? ($so['team_id'][1]  ?? '—') : '—';
-                                    $payTerm       = is_array($so['payment_term_id']) ? ($so['payment_term_id'][1] ?? '—') : '—';
-                                    $bordered      = $soIdx > 0 ? 'border-top:2px solid var(--border);' : '';
+                                    // Fields từ odoo_sale_orders table (flat strings, not Odoo API arrays)
+                                    $ccy          = $so['currency_name'] ?? 'VND';
+                                    $soUrl        = $odooBaseUrl ? $odooBaseUrl . '/web#id=' . $so['odoo_id'] . '&model=sale.order&view_type=form' : '#';
+                                    $lines        = $so['_lines'] ?? [];
+                                    $amtInvoiced  = (float)($so['amount_invoiced']   ?? 0);
+                                    $amtToInvoice = (float)($so['amount_to_invoice'] ?? 0);
+                                    $amtTotal     = (float)($so['amount_total']      ?? 0);
+                                    $amtUntaxed   = (float)($so['amount_untaxed']    ?? 0);
+                                    $amtTax       = (float)($so['amount_tax']        ?? 0);
+                                    $invoicedPct  = $amtTotal > 0 ? min(100, round($amtInvoiced / $amtTotal * 100)) : 0;
+                                    $salesperson  = $so['user_name']         ?? '—';
+                                    $team         = $so['team_name']         ?? '—';
+                                    $payTerm      = $so['payment_term_name'] ?? '—';
+                                    $bordered     = $soIdx > 0 ? 'border-top:2px solid var(--border);' : '';
                                 ?>
                                 <!-- SO block -->
                                 <div style="<?= $bordered ?>">
@@ -955,7 +928,7 @@ $pst = $pakd['pasx_status'] ?? '';
                                     $soGrandTotal    = array_sum(array_column($sale_orders, 'amount_total'));
                                     $soGrandInvoiced = array_sum(array_column($sale_orders, 'amount_invoiced'));
                                     $soGrandPending  = array_sum(array_column($sale_orders, 'amount_to_invoice'));
-                                    $ccy0 = is_array($sale_orders[0]['currency_id']) ? ($sale_orders[0]['currency_id'][1] ?? 'VND') : 'VND';
+                                    $ccy0 = $sale_orders[0]['currency_name'] ?? 'VND';
                                 ?>
                                 <div style="display:grid;grid-template-columns:1fr 1fr 1fr;background:#1e293b;padding:12px 20px;gap:16px;">
                                     <div>
@@ -1005,27 +978,27 @@ $pst = $pakd['pasx_status'] ?? '';
                                 </div>
                             <?php else: ?>
                                 <?php foreach ($invoices as $invIdx => $inv):
-                                    // Name: draft invoice may have name=false, use highest_name as fallback
-                                    $invName     = $inv['name'] ?: ($inv['highest_name'] ?? ($inv['display_name'] ?? 'Draft Invoice'));
-                                    $invId       = (int)($inv['id'] ?? $inv['record_id'] ?? 0);
+                                    // Fields từ odoo_invoices table (flat strings)
+                                    $invName     = $inv['name'] ?: ($inv['highest_name'] ?? 'Draft Invoice');
+                                    $invId       = (int)($inv['odoo_id'] ?? 0);
                                     $invUrl      = $odooBaseUrl ? $odooBaseUrl . '/web#id=' . $invId . '&model=account.move&view_type=form' : '#';
-                                    $invCcy      = is_array($inv['currency_id']) ? ($inv['currency_id']['name'] ?? ($inv['currency_id'][1] ?? 'VND')) : ($inv['currency_id'] ?? 'VND');
-                                    $companyCcy  = is_array($inv['company_currency_id']) ? ($inv['company_currency_id']['name'] ?? 'VND') : 'VND';
+                                    $invCcy      = $inv['currency_name']         ?? 'VND';
+                                    $companyCcy  = $inv['company_currency_name'] ?? 'VND';
                                     $isMultiCcy  = $invCcy !== $companyCcy;
                                     $amtTotal    = (float)($inv['amount_total']    ?? 0);
                                     $amtUntaxed  = (float)($inv['amount_untaxed'] ?? 0);
                                     $amtTax      = (float)($inv['amount_tax']     ?? 0);
                                     $amtResidual = (float)($inv['amount_residual'] ?? 0);
                                     $amtTotalVND = (float)($inv['amount_total_signed'] ?? 0);
-                                    $partner     = is_array($inv['partner_id']) ? ($inv['partner_id']['name'] ?? ($inv['partner_id'][1] ?? '—')) : '—';
-                                    $salesperson = is_array($inv['invoice_user_id']) ? ($inv['invoice_user_id']['name'] ?? '—') : (is_array($inv['user_id']) ? ($inv['user_id']['name'] ?? '—') : '—');
-                                    $team        = is_array($inv['team_id']) ? ($inv['team_id']['name'] ?? '—') : '—';
-                                    $journal     = is_array($inv['journal_id']) ? ($inv['journal_id']['name'] ?? '—') : '—';
+                                    $partner     = $inv['partner_name']      ?? '—';
+                                    $salesperson = $inv['invoice_user_name'] ?? '—';
+                                    $team        = $inv['team_name']         ?? '—';
+                                    $journal     = $inv['journal_name']      ?? '—';
                                     $isRefund    = ($inv['move_type'] ?? '') === 'out_refund';
-                                    $eInvNo      = $inv['l10n_vn_e_invoice_number'] ?? false;
+                                    $eInvNo      = $inv['l10n_vn_e_invoice_number'] ?: null;
                                     $origin      = $inv['invoice_origin'] ?? '';
                                     $ref         = $inv['ref'] ?? '';
-                                    $payRef      = $inv['payment_reference'] ?? '';
+                                    $payRef      = '';
                                     $bordered    = $invIdx > 0 ? 'border-top:2px solid var(--border);' : '';
                                     $paidPct     = $amtTotal > 0 ? min(100, round(($amtTotal - $amtResidual) / $amtTotal * 100)) : 0;
                                 ?>
@@ -1118,7 +1091,7 @@ $pst = $pakd['pasx_status'] ?? '';
                                     $invGrandTotal    = array_sum(array_column($invoices, 'amount_total'));
                                     $invGrandResidual = array_sum(array_column($invoices, 'amount_residual'));
                                     $invGrandPaid     = $invGrandTotal - $invGrandResidual;
-                                    $ccy0inv = is_array($invoices[0]['currency_id']) ? ($invoices[0]['currency_id']['name'] ?? ($invoices[0]['currency_id'][1] ?? 'VND')) : 'VND';
+                                    $ccy0inv = $invoices[0]['currency_name'] ?? 'VND';
                                 ?>
                                 <div style="display:grid;grid-template-columns:1fr 1fr 1fr;background:#1e293b;padding:12px 20px;gap:16px;">
                                     <div>

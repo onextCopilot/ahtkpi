@@ -307,6 +307,292 @@ if ($payload && str_contains($event_type, 'crm')) {
     }
 }
 
+// ── SALE ORDER: upsert vào odoo_sale_orders ──────────────────────────────────
+if ($payload && $event_type === 'sale') {
+    $conn->query("CREATE TABLE IF NOT EXISTS odoo_sale_orders (
+        id                INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+        odoo_id           INT NOT NULL,
+        name              VARCHAR(100)  DEFAULT NULL,
+        state             VARCHAR(50)   DEFAULT NULL,
+        date_order        DATETIME      DEFAULT NULL,
+        commitment_date   DATETIME      DEFAULT NULL,
+        validity_date     DATE          DEFAULT NULL,
+        effective_date    DATE          DEFAULT NULL,
+        partner_id        INT           DEFAULT NULL,
+        partner_name      VARCHAR(500)  DEFAULT NULL,
+        user_id           INT           DEFAULT NULL,
+        user_name         VARCHAR(255)  DEFAULT NULL,
+        team_id           INT           DEFAULT NULL,
+        team_name         VARCHAR(255)  DEFAULT NULL,
+        amount_untaxed    DECIMAL(20,2) DEFAULT 0,
+        amount_tax        DECIMAL(20,2) DEFAULT 0,
+        amount_total      DECIMAL(20,2) DEFAULT 0,
+        amount_invoiced   DECIMAL(20,2) DEFAULT 0,
+        amount_to_invoice DECIMAL(20,2) DEFAULT 0,
+        currency_id       INT           DEFAULT NULL,
+        currency_name     VARCHAR(10)   DEFAULT NULL,
+        invoice_status    VARCHAR(50)   DEFAULT NULL,
+        invoice_count     INT           DEFAULT 0,
+        invoice_ids       JSON          DEFAULT NULL,
+        order_line_ids    JSON          DEFAULT NULL,
+        client_order_ref  VARCHAR(500)  DEFAULT NULL,
+        origin            VARCHAR(500)  DEFAULT NULL,
+        opportunity_id    INT           DEFAULT NULL,
+        payment_term_id   INT           DEFAULT NULL,
+        payment_term_name VARCHAR(255)  DEFAULT NULL,
+        note              TEXT          DEFAULT NULL,
+        created_at        DATETIME      DEFAULT CURRENT_TIMESTAMP,
+        updated_at        DATETIME      DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        UNIQUE KEY uq_odoo_id (odoo_id),
+        INDEX idx_opp_id (opportunity_id),
+        INDEX idx_name (name)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+
+    $so_odoo_id = (int)($payload['id'] ?? 0);
+    if ($so_odoo_id) {
+        try {
+            require_once __DIR__ . '/../libs/OdooAPI.php';
+            $odoo   = new OdooAPI();
+            $soData = $odoo->searchRead('sale.order', [['id', '=', $so_odoo_id]], [
+                'id','name','state','date_order','commitment_date','validity_date','effective_date',
+                'partner_id','user_id','team_id','amount_untaxed','amount_tax','amount_total',
+                'amount_invoiced','amount_to_invoice','currency_id','invoice_status','invoice_count',
+                'invoice_ids','order_line','client_order_ref','origin','opportunity_id',
+                'payment_term_id','note',
+            ], 1);
+
+            if (!empty($soData[0])) {
+                $so = $soData[0];
+
+                $f = []; // safe field extraction helper
+                $f['partner_id']        = is_array($so['partner_id'])       ? (int)($so['partner_id'][0] ?? 0)         : null;
+                $f['partner_name']      = is_array($so['partner_id'])       ? ($so['partner_id'][1] ?? null)            : null;
+                $f['user_id']           = is_array($so['user_id'])          ? (int)($so['user_id'][0] ?? 0)            : null;
+                $f['user_name']         = is_array($so['user_id'])          ? ($so['user_id'][1] ?? null)               : null;
+                $f['team_id']           = is_array($so['team_id'])          ? (int)($so['team_id'][0] ?? 0)            : null;
+                $f['team_name']         = is_array($so['team_id'])          ? ($so['team_id'][1] ?? null)               : null;
+                $f['currency_id']       = is_array($so['currency_id'])      ? (int)($so['currency_id'][0] ?? 0)        : null;
+                $f['currency_name']     = is_array($so['currency_id'])      ? ($so['currency_id'][1] ?? null)           : null;
+                $f['opportunity_id']    = is_array($so['opportunity_id'])   ? (int)($so['opportunity_id'][0] ?? 0)     : (is_numeric($so['opportunity_id'] ?? null) ? (int)$so['opportunity_id'] : null);
+                $f['payment_term_id']   = is_array($so['payment_term_id'])  ? (int)($so['payment_term_id'][0] ?? 0)    : null;
+                $f['payment_term_name'] = is_array($so['payment_term_id'])  ? ($so['payment_term_id'][1] ?? null)       : null;
+                $f['date_order']        = ($so['date_order']       && $so['date_order']       !== false) ? $so['date_order']       : null;
+                $f['commitment_date']   = ($so['commitment_date']  && $so['commitment_date']  !== false) ? $so['commitment_date']  : null;
+                $f['validity_date']     = ($so['validity_date']    && $so['validity_date']    !== false) ? $so['validity_date']    : null;
+                $f['effective_date']    = ($so['effective_date']   && $so['effective_date']   !== false) ? $so['effective_date']   : null;
+                $f['invoice_ids']       = !empty($so['invoice_ids'])  ? json_encode($so['invoice_ids'])  : null;
+                $f['order_line_ids']    = !empty($so['order_line'])   ? json_encode($so['order_line'])   : null;
+                $f['client_order_ref']  = $so['client_order_ref']  ?: null;
+                $f['origin']            = $so['origin']            ?: null;
+                $f['note']              = is_string($so['note'] ?? null) ? $so['note'] : null;
+                $f['name']              = $so['name']              ?? null;
+                $f['state']             = $so['state']             ?? null;
+                $f['invoice_status']    = $so['invoice_status']    ?? null;
+                $f['invoice_count']     = (int)($so['invoice_count'] ?? 0);
+                $f['amount_untaxed']    = (float)($so['amount_untaxed']    ?? 0);
+                $f['amount_tax']        = (float)($so['amount_tax']        ?? 0);
+                $f['amount_total']      = (float)($so['amount_total']      ?? 0);
+                $f['amount_invoiced']   = (float)($so['amount_invoiced']   ?? 0);
+                $f['amount_to_invoice'] = (float)($so['amount_to_invoice'] ?? 0);
+
+                $conn->query("INSERT INTO odoo_sale_orders
+                    (odoo_id,name,state,date_order,commitment_date,validity_date,effective_date,
+                     partner_id,partner_name,user_id,user_name,team_id,team_name,
+                     amount_untaxed,amount_tax,amount_total,amount_invoiced,amount_to_invoice,
+                     currency_id,currency_name,invoice_status,invoice_count,invoice_ids,
+                     order_line_ids,client_order_ref,origin,opportunity_id,
+                     payment_term_id,payment_term_name,note)
+                    VALUES (
+                     $so_odoo_id,
+                     " . ($f['name']              === null ? 'NULL' : "'" . $conn->real_escape_string($f['name']) . "'") . ",
+                     " . ($f['state']             === null ? 'NULL' : "'" . $conn->real_escape_string($f['state']) . "'") . ",
+                     " . ($f['date_order']        === null ? 'NULL' : "'" . $conn->real_escape_string($f['date_order']) . "'") . ",
+                     " . ($f['commitment_date']   === null ? 'NULL' : "'" . $conn->real_escape_string($f['commitment_date']) . "'") . ",
+                     " . ($f['validity_date']     === null ? 'NULL' : "'" . $conn->real_escape_string($f['validity_date']) . "'") . ",
+                     " . ($f['effective_date']    === null ? 'NULL' : "'" . $conn->real_escape_string($f['effective_date']) . "'") . ",
+                     " . ($f['partner_id']        === null ? 'NULL' : (int)$f['partner_id']) . ",
+                     " . ($f['partner_name']      === null ? 'NULL' : "'" . $conn->real_escape_string($f['partner_name']) . "'") . ",
+                     " . ($f['user_id']           === null ? 'NULL' : (int)$f['user_id']) . ",
+                     " . ($f['user_name']         === null ? 'NULL' : "'" . $conn->real_escape_string($f['user_name']) . "'") . ",
+                     " . ($f['team_id']           === null ? 'NULL' : (int)$f['team_id']) . ",
+                     " . ($f['team_name']         === null ? 'NULL' : "'" . $conn->real_escape_string($f['team_name']) . "'") . ",
+                     {$f['amount_untaxed']}, {$f['amount_tax']}, {$f['amount_total']},
+                     {$f['amount_invoiced']}, {$f['amount_to_invoice']},
+                     " . ($f['currency_id']       === null ? 'NULL' : (int)$f['currency_id']) . ",
+                     " . ($f['currency_name']     === null ? 'NULL' : "'" . $conn->real_escape_string($f['currency_name']) . "'") . ",
+                     " . ($f['invoice_status']    === null ? 'NULL' : "'" . $conn->real_escape_string($f['invoice_status']) . "'") . ",
+                     {$f['invoice_count']},
+                     " . ($f['invoice_ids']       === null ? 'NULL' : "'" . $conn->real_escape_string($f['invoice_ids']) . "'") . ",
+                     " . ($f['order_line_ids']    === null ? 'NULL' : "'" . $conn->real_escape_string($f['order_line_ids']) . "'") . ",
+                     " . ($f['client_order_ref']  === null ? 'NULL' : "'" . $conn->real_escape_string($f['client_order_ref']) . "'") . ",
+                     " . ($f['origin']            === null ? 'NULL' : "'" . $conn->real_escape_string($f['origin']) . "'") . ",
+                     " . ($f['opportunity_id']    === null ? 'NULL' : (int)$f['opportunity_id']) . ",
+                     " . ($f['payment_term_id']   === null ? 'NULL' : (int)$f['payment_term_id']) . ",
+                     " . ($f['payment_term_name'] === null ? 'NULL' : "'" . $conn->real_escape_string($f['payment_term_name']) . "'") . ",
+                     " . ($f['note']              === null ? 'NULL' : "'" . $conn->real_escape_string($f['note']) . "'") . "
+                    )
+                    ON DUPLICATE KEY UPDATE
+                     name              = VALUES(name),
+                     state             = VALUES(state),
+                     date_order        = VALUES(date_order),
+                     commitment_date   = VALUES(commitment_date),
+                     validity_date     = VALUES(validity_date),
+                     effective_date    = VALUES(effective_date),
+                     partner_id        = VALUES(partner_id),
+                     partner_name      = VALUES(partner_name),
+                     user_id           = VALUES(user_id),
+                     user_name         = VALUES(user_name),
+                     team_id           = VALUES(team_id),
+                     team_name         = VALUES(team_name),
+                     amount_untaxed    = VALUES(amount_untaxed),
+                     amount_tax        = VALUES(amount_tax),
+                     amount_total      = VALUES(amount_total),
+                     amount_invoiced   = VALUES(amount_invoiced),
+                     amount_to_invoice = VALUES(amount_to_invoice),
+                     currency_id       = VALUES(currency_id),
+                     currency_name     = VALUES(currency_name),
+                     invoice_status    = VALUES(invoice_status),
+                     invoice_count     = VALUES(invoice_count),
+                     invoice_ids       = VALUES(invoice_ids),
+                     order_line_ids    = VALUES(order_line_ids),
+                     client_order_ref  = VALUES(client_order_ref),
+                     origin            = VALUES(origin),
+                     opportunity_id    = VALUES(opportunity_id),
+                     payment_term_id   = VALUES(payment_term_id),
+                     payment_term_name = VALUES(payment_term_name),
+                     note              = VALUES(note),
+                     updated_at        = NOW()
+                ");
+                $debug['so_upserted'] = $so_odoo_id;
+                $debug['so_error']    = $conn->error ?: null;
+            }
+        } catch (Exception $e) {
+            $debug['so_error'] = $e->getMessage();
+        }
+    }
+}
+
+// ── INVOICE: upsert vào odoo_invoices ────────────────────────────────────────
+if ($payload && $event_type === 'invoice') {
+    $conn->query("CREATE TABLE IF NOT EXISTS odoo_invoices (
+        id                     INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+        odoo_id                INT NOT NULL,
+        name                   VARCHAR(255)  DEFAULT NULL,
+        highest_name           VARCHAR(255)  DEFAULT NULL,
+        state                  VARCHAR(50)   DEFAULT NULL,
+        move_type              VARCHAR(50)   DEFAULT NULL,
+        invoice_date           DATE          DEFAULT NULL,
+        invoice_date_due       DATE          DEFAULT NULL,
+        partner_id             INT           DEFAULT NULL,
+        partner_name           VARCHAR(500)  DEFAULT NULL,
+        currency_id            INT           DEFAULT NULL,
+        currency_name          VARCHAR(10)   DEFAULT NULL,
+        company_currency_name  VARCHAR(10)   DEFAULT NULL,
+        amount_untaxed         DECIMAL(20,2) DEFAULT 0,
+        amount_tax             DECIMAL(20,2) DEFAULT 0,
+        amount_total           DECIMAL(20,2) DEFAULT 0,
+        amount_residual        DECIMAL(20,2) DEFAULT 0,
+        amount_total_signed    DECIMAL(20,2) DEFAULT 0,
+        amount_residual_signed DECIMAL(20,2) DEFAULT 0,
+        payment_state          VARCHAR(50)   DEFAULT NULL,
+        invoice_origin         VARCHAR(500)  DEFAULT NULL,
+        invoice_user_id        INT           DEFAULT NULL,
+        invoice_user_name      VARCHAR(255)  DEFAULT NULL,
+        team_id                INT           DEFAULT NULL,
+        team_name              VARCHAR(255)  DEFAULT NULL,
+        journal_id             INT           DEFAULT NULL,
+        journal_name           VARCHAR(255)  DEFAULT NULL,
+        ref                    VARCHAR(500)  DEFAULT NULL,
+        l10n_vn_e_invoice_number VARCHAR(255) DEFAULT NULL,
+        sale_order_count       INT           DEFAULT 0,
+        invoice_line_ids       JSON          DEFAULT NULL,
+        created_at             DATETIME      DEFAULT CURRENT_TIMESTAMP,
+        updated_at             DATETIME      DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        UNIQUE KEY uq_odoo_id (odoo_id),
+        INDEX idx_origin (invoice_origin),
+        INDEX idx_state (state)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+
+    $inv_odoo_id = (int)($payload['id'] ?? $payload['record_id'] ?? 0);
+    if ($inv_odoo_id) {
+        $g = []; // field extractor
+        $g['name']              = $payload['name'] ?: null;
+        $g['highest_name']      = $payload['highest_name'] ?: null;
+        $g['state']             = $payload['state'] ?? null;
+        $g['move_type']         = $payload['move_type'] ?? null;
+        $g['invoice_date']      = ($payload['invoice_date']     && $payload['invoice_date']     !== false) ? $payload['invoice_date']     : null;
+        $g['invoice_date_due']  = ($payload['invoice_date_due'] && $payload['invoice_date_due'] !== false) ? $payload['invoice_date_due'] : null;
+        $g['partner_id']        = is_array($payload['partner_id'])           ? (int)($payload['partner_id']['id']           ?? 0) : null;
+        $g['partner_name']      = is_array($payload['partner_id'])           ? ($payload['partner_id']['name']               ?? null) : null;
+        $g['currency_id']       = is_array($payload['currency_id'])          ? (int)($payload['currency_id']['id']           ?? 0) : null;
+        $g['currency_name']     = is_array($payload['currency_id'])          ? ($payload['currency_id']['name']               ?? null) : null;
+        $g['company_currency']  = is_array($payload['company_currency_id'])  ? ($payload['company_currency_id']['name']       ?? 'VND') : 'VND';
+        $g['invoice_user_id']   = is_array($payload['invoice_user_id'])      ? (int)($payload['invoice_user_id']['id']        ?? 0) : null;
+        $g['invoice_user_name'] = is_array($payload['invoice_user_id'])      ? ($payload['invoice_user_id']['name']            ?? null) : null;
+        $g['team_id']           = is_array($payload['team_id'])              ? (int)($payload['team_id']['id']                ?? 0) : null;
+        $g['team_name']         = is_array($payload['team_id'])              ? ($payload['team_id']['name']                   ?? null) : null;
+        $g['journal_id']        = is_array($payload['journal_id'])           ? (int)($payload['journal_id']['id']             ?? 0) : null;
+        $g['journal_name']      = is_array($payload['journal_id'])           ? ($payload['journal_id']['name']                ?? null) : null;
+        $g['payment_state']     = $payload['payment_state'] ?? null;
+        $g['invoice_origin']    = $payload['invoice_origin'] ?: null;
+        $g['ref']               = $payload['ref'] ?: null;
+        $g['e_invoice']         = $payload['l10n_vn_e_invoice_number'] ?: null;
+        $g['so_count']          = (int)($payload['sale_order_count'] ?? 0);
+        $g['line_ids']          = !empty($payload['invoice_line_ids']) ? json_encode($payload['invoice_line_ids']) : null;
+        $g['amount_untaxed']    = (float)($payload['amount_untaxed']    ?? 0);
+        $g['amount_tax']        = (float)($payload['amount_tax']        ?? 0);
+        $g['amount_total']      = (float)($payload['amount_total']      ?? 0);
+        $g['amount_residual']   = (float)($payload['amount_residual']   ?? 0);
+        $g['amount_total_signed']    = (float)($payload['amount_total_signed']    ?? 0);
+        $g['amount_residual_signed'] = (float)($payload['amount_residual_signed'] ?? 0);
+
+        $esc = fn($v) => $v === null ? 'NULL' : "'" . $conn->real_escape_string((string)$v) . "'";
+        $escInt = fn($v) => $v === null ? 'NULL' : (int)$v;
+
+        $conn->query("INSERT INTO odoo_invoices
+            (odoo_id,name,highest_name,state,move_type,invoice_date,invoice_date_due,
+             partner_id,partner_name,currency_id,currency_name,company_currency_name,
+             amount_untaxed,amount_tax,amount_total,amount_residual,
+             amount_total_signed,amount_residual_signed,payment_state,invoice_origin,
+             invoice_user_id,invoice_user_name,team_id,team_name,
+             journal_id,journal_name,ref,l10n_vn_e_invoice_number,sale_order_count,invoice_line_ids)
+            VALUES (
+             $inv_odoo_id,
+             {$esc($g['name'])},{$esc($g['highest_name'])},{$esc($g['state'])},{$esc($g['move_type'])},
+             {$esc($g['invoice_date'])},{$esc($g['invoice_date_due'])},
+             {$escInt($g['partner_id'])},{$esc($g['partner_name'])},
+             {$escInt($g['currency_id'])},{$esc($g['currency_name'])},{$esc($g['company_currency'])},
+             {$g['amount_untaxed']},{$g['amount_tax']},{$g['amount_total']},{$g['amount_residual']},
+             {$g['amount_total_signed']},{$g['amount_residual_signed']},
+             {$esc($g['payment_state'])},{$esc($g['invoice_origin'])},
+             {$escInt($g['invoice_user_id'])},{$esc($g['invoice_user_name'])},
+             {$escInt($g['team_id'])},{$esc($g['team_name'])},
+             {$escInt($g['journal_id'])},{$esc($g['journal_name'])},
+             {$esc($g['ref'])},{$esc($g['e_invoice'])},{$g['so_count']},{$esc($g['line_ids'])}
+            )
+            ON DUPLICATE KEY UPDATE
+             name=VALUES(name), highest_name=VALUES(highest_name), state=VALUES(state),
+             invoice_date=VALUES(invoice_date), invoice_date_due=VALUES(invoice_date_due),
+             partner_id=VALUES(partner_id), partner_name=VALUES(partner_name),
+             currency_id=VALUES(currency_id), currency_name=VALUES(currency_name),
+             company_currency_name=VALUES(company_currency_name),
+             amount_untaxed=VALUES(amount_untaxed), amount_tax=VALUES(amount_tax),
+             amount_total=VALUES(amount_total), amount_residual=VALUES(amount_residual),
+             amount_total_signed=VALUES(amount_total_signed),
+             amount_residual_signed=VALUES(amount_residual_signed),
+             payment_state=VALUES(payment_state), invoice_origin=VALUES(invoice_origin),
+             invoice_user_id=VALUES(invoice_user_id), invoice_user_name=VALUES(invoice_user_name),
+             team_id=VALUES(team_id), team_name=VALUES(team_name),
+             journal_id=VALUES(journal_id), journal_name=VALUES(journal_name),
+             ref=VALUES(ref), l10n_vn_e_invoice_number=VALUES(l10n_vn_e_invoice_number),
+             sale_order_count=VALUES(sale_order_count), invoice_line_ids=VALUES(invoice_line_ids),
+             updated_at=NOW()
+        ");
+        $debug['inv_upserted'] = $inv_odoo_id;
+        $debug['inv_error']    = $conn->error ?: null;
+    }
+}
+
 // ── Store debug notes back into the log row ───────────────────────────────────
 $debug['pakd_updated'] = $pakd_updated;
 $debug['pakd_created'] = $pakd_created;
