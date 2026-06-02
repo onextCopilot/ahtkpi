@@ -33,6 +33,20 @@ $conn->query("CREATE TABLE IF NOT EXISTS pakd_documents (
     INDEX idx_pakd (pakd_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
 
+// ── AJAX: Update financials (revenue + gross_profit) ─────────────────────────
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'update_financials') {
+    header('Content-Type: application/json; charset=utf-8');
+    $pid          = (int)($_POST['pakd_id']     ?? $pakd_id);
+    $revenue      = (float)str_replace([',','.',' '], ['','','.'], $_POST['revenue']      ?? 0);
+    $gross_profit = (float)str_replace([',','.',' '], ['','','.'], $_POST['gross_profit'] ?? 0);
+    $stmt = $conn->prepare("UPDATE pakd SET revenue=?, gross_profit=?, updated_at=NOW() WHERE id=?");
+    $stmt->bind_param("ddi", $revenue, $gross_profit, $pid);
+    $ok = $stmt->execute();
+    $stmt->close();
+    echo json_encode(['ok' => $ok, 'revenue' => $revenue, 'gross_profit' => $gross_profit]);
+    exit;
+}
+
 // ── AJAX: Upload file ─────────────────────────────────────────────────────────
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'upload_doc') {
     header('Content-Type: application/json; charset=utf-8');
@@ -700,12 +714,19 @@ $pst = $pakd['pasx_status'] ?? '';
                     <div class="metric-val green"><?= $fin_rev_gross > 0 ? formatVND3($fin_rev_gross) : '—' ?></div>
                     <div class="metric-sub">VND</div>
                 </div>
-                <div class="metric-card <?= $fin_gross_profit > 0 ? ($fin_margin_pct >= 20 ? 'highlight' : 'highlight-warn') : '' ?>">
-                    <div class="metric-label"><i class="fas fa-coins" style="margin-right:4px;color:#7c3aed;"></i> Lợi nhuận gộp</div>
-                    <div class="metric-val" style="color:<?= $fin_gross_profit > 0 ? ($fin_margin_pct >= 20 ? '#16a34a' : '#d97706') : 'var(--lgray)' ?>">
+                <div class="metric-card <?= $fin_gross_profit > 0 ? ($fin_margin_pct >= 20 ? 'highlight' : 'highlight-warn') : '' ?>" id="gp-card" style="position:relative;">
+                    <div style="display:flex;align-items:center;justify-content:space-between;">
+                        <div class="metric-label"><i class="fas fa-coins" style="margin-right:4px;color:#7c3aed;"></i> Lợi nhuận gộp</div>
+                        <button onclick="openFinModal()" title="Cập nhật"
+                            style="border:none;background:none;cursor:pointer;color:var(--lgray);padding:2px 4px;border-radius:4px;font-size:12px;line-height:1;"
+                            onmouseover="this.style.color='var(--primary)'" onmouseout="this.style.color='var(--lgray)'">
+                            <i class="fas fa-pen"></i>
+                        </button>
+                    </div>
+                    <div class="metric-val" id="gp-val" style="color:<?= $fin_gross_profit > 0 ? ($fin_margin_pct >= 20 ? '#16a34a' : '#d97706') : 'var(--lgray)' ?>">
                         <?= $fin_gross_profit > 0 ? formatVND3($fin_gross_profit) : '—' ?>
                     </div>
-                    <div class="metric-sub"><?= $fin_margin_pct > 0 ? 'Margin: ' . number_format($fin_margin_pct, 1) . '%' : 'Chưa cập nhật' ?></div>
+                    <div class="metric-sub" id="gp-margin"><?= $fin_margin_pct > 0 ? 'Margin: ' . number_format($fin_margin_pct, 1) . '%' : 'Chưa cập nhật' ?></div>
                 </div>
                 <?php
                 $prob = (int)($pakd['opp_probability'] ?? 0);
@@ -1466,6 +1487,88 @@ $pst = $pakd['pasx_status'] ?? '';
         </div><!-- /page-content -->
     </div>
 </div>
+
+<!-- ── Financial Edit Modal ── -->
+<div id="fin-modal" style="display:none;position:fixed;inset:0;z-index:8000;background:rgba(15,23,42,.6);align-items:center;justify-content:center;" onclick="if(event.target===this)closeFinModal()">
+    <div style="background:#fff;border-radius:14px;width:420px;padding:28px;box-shadow:0 20px 60px rgba(0,0,0,.25);">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;">
+            <div style="font-size:16px;font-weight:700;color:#1e293b;display:flex;align-items:center;gap:8px;">
+                <i class="fas fa-coins" style="color:#7c3aed;"></i> Cập nhật tài chính
+            </div>
+            <button onclick="closeFinModal()" style="border:none;background:#f1f5f9;border-radius:50%;width:28px;height:28px;cursor:pointer;font-size:13px;color:#64748b;display:flex;align-items:center;justify-content:center;"><i class="fas fa-times"></i></button>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:14px;">
+            <div>
+                <label style="display:block;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#64748b;margin-bottom:6px;">Doanh thu (VND)</label>
+                <input id="fin-revenue" type="number" min="0" step="1000000" placeholder="vd: 280000000"
+                    style="width:100%;padding:9px 12px;border:1px solid #e2e8f0;border-radius:8px;font-size:14px;font-family:inherit;outline:none;box-sizing:border-box;"
+                    onfocus="this.style.borderColor='#7c3aed'" onblur="this.style.borderColor='#e2e8f0'"
+                    value="<?= (int)$pakd['revenue'] ?>">
+            </div>
+            <div>
+                <label style="display:block;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#64748b;margin-bottom:6px;">Lợi nhuận gộp (VND)</label>
+                <input id="fin-gp" type="number" min="0" step="1000000" placeholder="vd: 83000000"
+                    style="width:100%;padding:9px 12px;border:1px solid #e2e8f0;border-radius:8px;font-size:14px;font-family:inherit;outline:none;box-sizing:border-box;"
+                    onfocus="this.style.borderColor='#7c3aed'" onblur="this.style.borderColor='#e2e8f0'"
+                    value="<?= (int)$pakd['gross_profit'] ?>">
+            </div>
+            <!-- Live margin preview -->
+            <div id="fin-preview" style="background:#f8fafc;border-radius:8px;padding:10px 14px;font-size:13px;color:#64748b;text-align:center;">
+                Margin: <strong id="fin-margin-live" style="color:#1e293b;">—</strong>
+            </div>
+        </div>
+        <div style="display:flex;gap:10px;margin-top:20px;">
+            <button onclick="closeFinModal()" style="flex:1;padding:9px;border:1px solid #e2e8f0;border-radius:8px;background:#fff;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;color:#64748b;">Hủy</button>
+            <button onclick="saveFinancials()" style="flex:2;padding:9px;border:none;border-radius:8px;background:#7c3aed;color:#fff;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;">
+                <i class="fas fa-save" style="margin-right:5px;"></i> Lưu
+            </button>
+        </div>
+    </div>
+</div>
+
+<script>
+function openFinModal() {
+    document.getElementById('fin-modal').style.display = 'flex';
+    calcMarginLive();
+}
+function closeFinModal() {
+    document.getElementById('fin-modal').style.display = 'none';
+}
+function calcMarginLive() {
+    const rev = parseFloat(document.getElementById('fin-revenue').value) || 0;
+    const gp  = parseFloat(document.getElementById('fin-gp').value) || 0;
+    const pct = rev > 0 ? (gp / rev * 100).toFixed(1) : '—';
+    const el  = document.getElementById('fin-margin-live');
+    el.textContent = pct !== '—' ? pct + '%' : '—';
+    el.style.color = pct !== '—' ? (parseFloat(pct) >= 20 ? '#16a34a' : '#d97706') : '#1e293b';
+}
+document.getElementById('fin-revenue')?.addEventListener('input', calcMarginLive);
+document.getElementById('fin-gp')?.addEventListener('input', calcMarginLive);
+
+async function saveFinancials() {
+    const revenue     = parseFloat(document.getElementById('fin-revenue').value) || 0;
+    const grossProfit = parseFloat(document.getElementById('fin-gp').value) || 0;
+    const fd = new FormData();
+    fd.append('action', 'update_financials');
+    fd.append('pakd_id', <?= $pakd_id ?>);
+    fd.append('revenue', revenue);
+    fd.append('gross_profit', grossProfit);
+    const res  = await fetch(window.location.pathname + '?id=<?= $pakd_id ?>', { method: 'POST', body: fd });
+    const data = await res.json();
+    if (data.ok) {
+        // Cập nhật metric card
+        const margin = revenue > 0 ? (grossProfit / revenue * 100) : 0;
+        const fmt = n => n >= 1e9 ? (n/1e9).toFixed(2)+' tỷ' : n >= 1e6 ? (n/1e6).toFixed(1)+' triệu' : n >= 1e3 ? Math.round(n/1e3)+'K' : n;
+        document.getElementById('gp-val').textContent  = grossProfit > 0 ? fmt(grossProfit) : '—';
+        document.getElementById('gp-val').style.color  = grossProfit > 0 ? (margin >= 20 ? '#16a34a' : '#d97706') : 'var(--lgray)';
+        document.getElementById('gp-margin').textContent = margin > 0 ? 'Margin: ' + margin.toFixed(1) + '%' : 'Chưa cập nhật';
+        closeFinModal();
+        showToast('Đã lưu thành công', 'success');
+    } else {
+        showToast('Lỗi lưu dữ liệu', 'error');
+    }
+}
+</script>
 
 <!-- ── Preview Modal ── -->
 <div class="preview-modal" id="preview-modal" onclick="closePreview(event)">
