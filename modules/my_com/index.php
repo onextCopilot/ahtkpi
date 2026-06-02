@@ -640,7 +640,11 @@ foreach ($invoices as $inv) {
 $total_com2 = $total_com2 ?? 0;
 
 // ── KPI calculation ──
-$kpi_pct = $kpi_quarter_target > 0 ? ($total_invoiced / $kpi_quarter_target * 100) : 0;
+// BD role (BDE/BCE): doanh thu KPI = tổng SO confirmed/done trong quý (không tính draft/cancel)
+$is_bd_role = (strpos($position_type, 'BDE') !== false || strpos($position_type, 'BCE') !== false);
+$total_so_revenue = array_sum(array_column($so_list, '_amount_vnd'));
+$kpi_revenue = $is_bd_role ? $total_so_revenue : $total_invoiced;
+$kpi_pct = $kpi_quarter_target > 0 ? ($kpi_revenue / $kpi_quarter_target * 100) : 0;
 $kpi_adj = 0;
 $kpi_adj_label = '';
 if ($kpi_pct < 60) {
@@ -1198,11 +1202,15 @@ $month_names_vn = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','
                 </div>
                 <div class="kpi-main">
                     <span class="kpi-pct kpi-pct-<?= $pct_cls ?>"><?= mc_pct($kpi_pct) ?></span>
-                    <span class="kpi-vals"><?= mc_fmt_short($total_invoiced) ?> / <?= mc_fmt_short($kpi_quarter_target) ?> VND</span>
+                    <span class="kpi-vals"><?= mc_fmt_short($kpi_revenue) ?> / <?= mc_fmt_short($kpi_quarter_target) ?> VND</span>
                 </div>
                 <div class="kpi-bar-bg"><div class="kpi-bar kpi-bar-<?= $pct_cls ?>" style="width:<?= $bar_w ?>%"></div></div>
                 <div class="kpi-footer">
+                    <?php if ($is_bd_role): ?>
+                    <span>Sale Orders: <?= count($so_list) ?> SO (confirmed/done) · Invoiced: <?= count($invoices) ?> inv</span>
+                    <?php else: ?>
                     <span>Invoiced: <?= count($invoices) ?> invoices (<?= $paid_count ?> paid, <?= $unpaid_count ?> unpaid)</span>
+                    <?php endif; ?>
                     <span>
                         Com adj:
                         <span class="kpi-adj-tag adj-<?= $pct_cls ?>"><?= $kpi_adj_label ?></span>
@@ -1222,8 +1230,11 @@ $month_names_vn = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','
                     <div class="sv"><?= $kpi_salary_label ?></div>
                 </div>
                 <div class="sal-card">
-                    <div class="sl">Invoiced (Quý)</div>
-                    <div class="sv"><?= mc_fmt_short($total_invoiced) ?></div>
+                    <div class="sl"><?= $is_bd_role ? 'Sale Orders (Quý)' : 'Invoiced (Quý)' ?></div>
+                    <div class="sv"><?= mc_fmt_short($kpi_revenue) ?></div>
+                    <?php if ($is_bd_role && $total_invoiced > 0): ?>
+                    <div style="font-size:10px;color:#94a3b8;margin-top:2px;">Invoiced: <?= mc_fmt_short($total_invoiced) ?></div>
+                    <?php endif; ?>
                 </div>
                 <div class="sal-card">
                     <div class="sl">Invoiced (Năm <?= $selected_year ?>)</div>
