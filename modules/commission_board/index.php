@@ -103,18 +103,18 @@ unset($u);
 
 // Column totals (confirmed only)
 $col_totals = [1 => 0, 2 => 0, 3 => 0, 4 => 0];
-$grand_total = 0;
+$grand_total = 0; $grand_rev = 0; $confirmed_count = 0;
 foreach ($users as $uid => $u) {
     for ($q = 1; $q <= 4; $q++) {
         $c = $confirm[$uid][$q] ?? null;
         if ($c && $c['status'] === 'confirmed') {
             $col_totals[$q] += (float) $c['snap_total'];
             $grand_total    += (float) $c['snap_total'];
+            $grand_rev      += (float) $c['snap_revenue'];
+            $confirmed_count++;
         }
     }
 }
-$confirmed_count = 0;
-foreach ($confirm as $uid => $qs) foreach ($qs as $c) if (($c['status'] ?? '') === 'confirmed') $confirmed_count++;
 ?>
 <!DOCTYPE html>
 <html lang="vi">
@@ -143,6 +143,11 @@ foreach ($confirm as $uid => $qs) foreach ($qs as $c) if (($c['status'] ?? '') =
         .cb-table tbody tr:hover td { background:#eef4ff; }
         .cb-table tbody tr td.cb-total-col { background:#eff3f9; }
         .cb-table tbody tr:hover td.cb-total-col { background:#e2eaf5; }
+        .cb-name-col { width:230px; }
+        .cb-email { color:#64748b; font-size:12px; }
+        .cb-rev-yr { font-size:12px; color:#475569; font-weight:600; }
+        .cb-conf-pill { display:inline-block; font-size:11px; font-weight:700; color:#94a3b8; background:#f1f5f9; border-radius:10px; padding:1px 8px; }
+        .cb-conf-pill.on { color:#16a34a; background:#dcfce7; }
         .cb-user { font-weight:600; color:#1e293b; }
         .cb-pos { display:inline-block; background:#3b82f615; color:#3b82f6; border:1px solid #3b82f630; border-radius:4px; padding:1px 7px; font-size:10px; font-weight:700; margin-top:2px; }
         .cb-cell { display:inline-flex; flex-direction:column; align-items:flex-end; gap:2px; text-decoration:none; min-width:74px; }
@@ -200,32 +205,36 @@ foreach ($confirm as $uid => $qs) foreach ($qs as $c) if (($c['status'] ?? '') =
                 <table class="cb-table">
                     <thead>
                         <tr>
-                            <th>Nhân viên</th>
+                            <th class="cb-name-col">Nhân viên</th>
+                            <th>Email</th>
                             <th class="num">Q1</th>
                             <th class="num">Q2</th>
                             <th class="num">Q3</th>
                             <th class="num">Q4</th>
-                            <th class="num cb-total-col">Tổng năm</th>
+                            <th class="num">DT năm</th>
+                            <th class="num">Đã XN</th>
+                            <th class="num cb-total-col">Tổng Com năm</th>
                         </tr>
                     </thead>
                     <tbody>
                         <?php if (empty($users)): ?>
-                            <tr><td colspan="6" class="cb-empty">Không có nhân viên AM / BD nào (cần bật cờ <code>is_am_bd</code>)</td></tr>
+                            <tr><td colspan="9" class="cb-empty">Không có nhân viên AM / BD nào (cần bật cờ <code>is_am_bd</code>)</td></tr>
                         <?php else: foreach ($users as $uid => $u):
                             $pos     = $u['_pos'] ?? '';
                             $lvlname = $u['_lvl'] ?? '';
-                            $row_total = 0;
+                            $row_total = 0; $row_rev = 0; $row_conf = 0;
                         ?>
                         <tr>
-                            <td>
+                            <td class="cb-name-col">
                                 <div class="cb-user"><?= htmlspecialchars($u['full_name'] ?: ('User #' . $uid)) ?></div>
                                 <?php if ($pos): ?><span class="cb-pos"><?= htmlspecialchars($pos) ?></span> <span style="font-size:10px;color:#94a3b8;"><?= htmlspecialchars($lvlname) ?></span><?php endif; ?>
                             </td>
+                            <td class="cb-email"><?= htmlspecialchars($u['email'] ?? '') ?></td>
                             <?php for ($q = 1; $q <= 4; $q++):
                                 $c = $confirm[$uid][$q] ?? null;
                                 $is_conf = $c && $c['status'] === 'confirmed';
                                 $amt = $is_conf ? (float) $c['snap_total'] : 0;
-                                if ($is_conf) $row_total += $amt;
+                                if ($is_conf) { $row_total += $amt; $row_rev += (float) $c['snap_revenue']; $row_conf++; }
                                 $kpi  = $is_conf ? (float) $c['snap_kpi_pct'] : 0;
                                 $rev  = $is_conf ? (float) $c['snap_revenue'] : 0;
                                 $tgt  = $is_conf ? (float) $c['snap_kpi_target'] : 0;
@@ -255,6 +264,8 @@ foreach ($confirm as $uid => $qs) foreach ($qs as $c) if (($c['status'] ?? '') =
                                 </a>
                             </td>
                             <?php endfor; ?>
+                            <td class="num"><span class="cb-rev-yr"><?= $row_rev > 0 ? cb_fmt_short($row_rev) : '—' ?></span></td>
+                            <td class="num"><span class="cb-conf-pill <?= $row_conf > 0 ? 'on' : '' ?>"><?= $row_conf ?>/4</span></td>
                             <td class="num cb-total-col"><?= $row_total > 0 ? cb_fmt_short($row_total) : '—' ?></td>
                         </tr>
                         <?php endforeach; endif; ?>
@@ -262,11 +273,13 @@ foreach ($confirm as $uid => $qs) foreach ($qs as $c) if (($c['status'] ?? '') =
                     <?php if (!empty($users)): ?>
                     <tfoot>
                         <tr class="cb-foot">
-                            <td>Tổng (đã xác nhận)</td>
+                            <td colspan="2">Tổng (đã xác nhận)</td>
                             <td class="num"><?= $col_totals[1] > 0 ? cb_fmt_short($col_totals[1]) : '—' ?></td>
                             <td class="num"><?= $col_totals[2] > 0 ? cb_fmt_short($col_totals[2]) : '—' ?></td>
                             <td class="num"><?= $col_totals[3] > 0 ? cb_fmt_short($col_totals[3]) : '—' ?></td>
                             <td class="num"><?= $col_totals[4] > 0 ? cb_fmt_short($col_totals[4]) : '—' ?></td>
+                            <td class="num"><?= $grand_rev > 0 ? cb_fmt_short($grand_rev) : '—' ?></td>
+                            <td class="num"><?= $confirmed_count ?></td>
                             <td class="num cb-total-col"><?= $grand_total > 0 ? cb_fmt_short($grand_total) : '—' ?></td>
                         </tr>
                     </tfoot>
