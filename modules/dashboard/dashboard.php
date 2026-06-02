@@ -109,7 +109,9 @@ if ($res) {
         // Fallback to manual rate calculation using robust ratio method
         if ($vnd_value <= 0) {
             $rateSource = $odoo->getRate($curr, $date) ?: 1.0;
-            $vnd_value = ($rateSource > 0) ? (($amount / $rateSource) * $vnd_multiplier) : $amount;
+            // AHT TECH is a VND company: getRate(curr) = foreign_currency per 1 VND,
+            // so amount / rate already yields VND directly. No vnd_multiplier needed.
+            $vnd_value = ($rateSource > 0) ? ($amount / $rateSource) : $amount;
         }
 
         $total_debts++; // Count every record in the filtered result

@@ -470,9 +470,9 @@ if ($res) {
         // Fallback to manual rate calculation if needed
         if ($vnd_value <= 0) {
             $rate = $odoo->getRate($curr, $date);
-            $vnd_multiplier = $odoo->getRate('VND', $date);
-            // (Amount / Rate) = Amount in Company Currency. Then multiply by getRate('VND') to get VND.
-            $vnd_value = ($rate > 0) ? (($amount / $rate) * $vnd_multiplier) : $amount;
+            // AHT TECH is a VND company: getRate(curr) = foreign_currency per 1 VND,
+            // so amount / rate already yields VND directly. No vnd_multiplier needed.
+            $vnd_value = ($rate > 0) ? ($amount / $rate) : $amount;
         }
 
         $total_amount_vnd += $vnd_value;
