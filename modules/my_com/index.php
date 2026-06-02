@@ -1118,8 +1118,10 @@ $month_names_vn = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','
         .pakd-btn { display:flex; align-items:center; gap:4px; padding:3px 6px; border:1px solid #e2e8f0; border-radius:5px; background:#fff; cursor:pointer; font-size:11px; color:#374151; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:200px; min-height:22px; }
         .pakd-btn:hover { border-color:#93c5fd; }
         .pakd-btn.has-val { border-color:#3b82f6; background:#eff6ff; color:#1d4ed8; font-weight:500; }
-        .pakd-dd { display:none; position:absolute; top:100%; left:0; z-index:50; background:#fff; border:1px solid #d1d5db; border-radius:8px; box-shadow:0 8px 24px rgba(0,0,0,.15); width:320px; max-height:260px; overflow:hidden; }
+        .pakd-dd { display:none; position:absolute; top:100%; left:0; z-index:9999; background:#fff; border:1px solid #d1d5db; border-radius:8px; box-shadow:0 8px 24px rgba(0,0,0,.15); width:320px; max-height:260px; overflow:hidden; }
         .pakd-dd.open { display:block; }
+        /* Portal: khi dropdown thoát ra body thì dùng fixed */
+        .pakd-dd.portal { position:fixed; }
         .pakd-dd input { width:100%; padding:8px 10px; border:none; border-bottom:1px solid #e5e7eb; font-size:12px; outline:none; box-sizing:border-box; }
         .pakd-dd ul { list-style:none; margin:0; padding:0; max-height:200px; overflow-y:auto; }
         .pakd-dd li { padding:6px 10px; cursor:pointer; font-size:12px; border-bottom:1px solid #f3f4f6; }
@@ -1964,21 +1966,57 @@ function savePakdApi(body) {
     });
 }
 
-function togglePakd(btn) {
-    document.querySelectorAll('.pakd-dd.open').forEach(d => { if (d !== btn.nextElementSibling) d.classList.remove('open'); });
-    const dd = btn.closest('.pakd-wrap').querySelector('.pakd-dd');
-    dd.classList.toggle('open');
-    if (dd.classList.contains('open')) {
-        const input = dd.querySelector('input:first-child');
-        input.value = '';
-        input.focus();
-        renderPakdList(dd, '');
+// Active portal dropdown — kept as direct child of <body> while open
+let _portalDd = null;
+
+function closePakdPortal() {
+    if (_portalDd) {
+        _portalDd.classList.remove('open');
+        // Move back into its original wrap
+        if (_portalDd._origWrap) _portalDd._origWrap.appendChild(_portalDd);
+        _portalDd.classList.remove('portal');
+        _portalDd._origWrap = null;
+        _portalDd = null;
     }
+}
+
+function positionPortal(dd, btn) {
+    const r = btn.getBoundingClientRect();
+    const spaceBelow = window.innerHeight - r.bottom;
+    const dropH = 260;
+    if (spaceBelow >= dropH || spaceBelow >= 120) {
+        dd.style.top  = (r.bottom + window.scrollY + 2) + 'px';
+    } else {
+        dd.style.top  = (r.top + window.scrollY - dropH - 2) + 'px';
+    }
+    dd.style.left = (r.left + window.scrollX) + 'px';
+    dd.style.width = '320px';
+}
+
+function togglePakd(btn) {
+    const wrap = btn.closest('.pakd-wrap');
+    const dd = wrap.querySelector('.pakd-dd');
+
+    // Clicking same dropdown → close
+    if (_portalDd === dd) { closePakdPortal(); return; }
+    closePakdPortal();
+
+    // Portal: move to body so overflow:hidden/auto parents can't clip it
+    dd._origWrap = wrap;
+    document.body.appendChild(dd);
+    dd.classList.add('portal', 'open');
+    positionPortal(dd, btn);
+    _portalDd = dd;
+
+    const input = dd.querySelector('input:first-child');
+    input.value = '';
+    input.focus();
+    renderPakdList(dd, '');
 }
 
 function renderPakdList(dd, q) {
     const ul = dd.querySelector('ul');
-    const wrap = dd.closest('.pakd-wrap');
+    const wrap = dd._origWrap || dd.closest('.pakd-wrap');
     const curId = parseInt(wrap.dataset.pakdId || '0');
     const lower = q.toLowerCase();
     let html = '<li class="p-clear" data-id="0">Bỏ chọn</li>';
@@ -1997,7 +2035,7 @@ function filterPakd(input) {
 
 function selectPakd(li) {
     const dd = li.closest('.pakd-dd');
-    const wrap = dd.closest('.pakd-wrap');
+    const wrap = dd._origWrap || dd.closest('.pakd-wrap');
     const pakdId = parseInt(li.dataset.id);
     const invId = parseInt(wrap.dataset.inv);
     const ebtCell = wrap.closest('tr').querySelector('.ebt-cell');
@@ -2034,7 +2072,7 @@ function selectPakd(li) {
             ebtCell.innerHTML = `<span class="ebt-val" style="color:${color};font-weight:600;">${p.ebt}%</span>`;
         }
     }
-    dd.classList.remove('open');
+    closePakdPortal();
 
     // Sync Tier availability with the PAKD's EBT (Com2 requires EBT >= 20%)
     const p2 = pakdId === 0 ? null : pakdList.find(x => x.id === pakdId);
@@ -2048,7 +2086,7 @@ function savePakdLink(input) {
     const link = input.value.trim();
     if (!link) return;
     const dd = input.closest('.pakd-dd');
-    const wrap = dd.closest('.pakd-wrap');
+    const wrap = dd._origWrap || dd.closest('.pakd-wrap');
     const invId = parseInt(wrap.dataset.inv);
     const ebtCell = wrap.closest('tr').querySelector('.ebt-cell');
 
@@ -2061,6 +2099,7 @@ function savePakdLink(input) {
     const oldClear = wrap.querySelector('.pakd-link-clear');
     if (oldLink) oldLink.remove();
     if (oldClear) oldClear.remove();
+    closePakdPortal();
 
     // Create link display
     const a = document.createElement('a');
@@ -2716,7 +2755,7 @@ savePakdApi = function(body) {
 function esc(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
 
 document.addEventListener('click', e => {
-    if (!e.target.closest('.pakd-wrap')) document.querySelectorAll('.pakd-dd.open').forEach(d => d.classList.remove('open'));
+    if (_portalDd && !e.target.closest('.pakd-dd') && !e.target.closest('.pakd-btn')) closePakdPortal();
 });
 </script>
 </body>
