@@ -1254,6 +1254,15 @@ $month_names_vn = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','
                     <span class="cc-tag <?= $total_license_bonus > 0 ? 'tag-ok' : 'tag-na' ?>" id="ccLicenseTag"><?= $total_license_bonus > 0 ? 'Calculated' : (empty($license_details) ? 'Không có HĐ License' : ($license_kpi_ok ? 'Cần EBT & thanh toán' : 'Chưa đạt KPI')) ?></span>
                 </div>
 
+                <!-- First PO Commission -->
+                <div class="com-card" style="border-top-color:#7c3aed;">
+                    <div class="cc-label">First PO Commission</div>
+                    <div class="cc-value" style="color:#7c3aed;" id="ccFirstPoCom"><?= $total_so_com > 0 ? mc_fmt_short($total_so_com) : '–' ?></div>
+                    <div class="cc-sub">Contract (VND) × 1/1000 · SO ≥ 1 tỷ</div>
+                    <div class="cc-sub"><?= count($so_list) ?> SO trong quý · <strong id="ccFirstPoCount"><?= count(array_filter($so_list, fn($s) => ($so_first_po_flags[$s['id']] ?? false))) ?></strong> First PO</div>
+                    <span class="cc-tag <?= $total_so_com > 0 ? 'tag-ok' : 'tag-na' ?>" id="ccFirstPoTag"><?= $total_so_com > 0 ? 'Calculated' : (empty($so_list) ? 'Không có SO' : 'Chọn First PO') ?></span>
+                </div>
+
                 <!-- Net Commission -->
                 <div class="com-card net">
                     <div class="cc-label">Ước tính Commission Q<?= $selected_quarter ?></div>
@@ -2536,16 +2545,25 @@ function saveFirstPo(select) {
 }
 
 function recomputeSoCom() {
-    let total = 0;
+    let total = 0, firstPoCount = 0;
     document.querySelectorAll('tr.so-row').forEach(row => {
         if (row.dataset.qualifies !== '1') return;
         const sel = row.querySelector('.so-first-po-sel');
         if (sel && sel.value === '1') {
             total += (parseFloat(row.dataset.vnd) || 0) * SO_COM_RATE;
+            firstPoCount++;
         }
     });
+    // Footer row in SO table
     const foot = document.getElementById('soComTotal');
     if (foot) { foot.textContent = total > 0 ? fmtFull(total) : '—'; foot.style.color = total > 0 ? '#7c3aed' : '#94a3b8'; }
+    // Summary card
+    const card = document.getElementById('ccFirstPoCom');
+    if (card) { card.textContent = total > 0 ? fmtShort(total) : '–'; }
+    const cnt = document.getElementById('ccFirstPoCount');
+    if (cnt) cnt.textContent = firstPoCount;
+    const tag = document.getElementById('ccFirstPoTag');
+    if (tag) { tag.textContent = total > 0 ? 'Calculated' : 'Chọn First PO'; tag.className = 'cc-tag ' + (total > 0 ? 'tag-ok' : 'tag-na'); }
 }
 
 function esc(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
