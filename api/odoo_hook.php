@@ -581,6 +581,7 @@ if ($payload && $event_type === 'invoice') {
         // original_amount/original_currency = invoice currency gốc (USD, VND...)
         $amt_orig     = (float)($p['amount_total']        ?? 0);                    // số tiền gốc (USD)
         $amt_vnd      = abs((float)($p['amount_total_signed'] ?? $amt_orig));       // VND equivalent
+        $debug['debt_calc'] = ['amt_orig'=>$amt_orig,'amt_vnd'=>$amt_vnd,'ccy'=>$ccy ?? '?','co_ccy'=>$co_ccy ?? '?','pay_state'=>($p['payment_state']??'?'),'inv_name'=>$inv_name];
         $inv_date     = ($p['invoice_date']     && $p['invoice_date']     !== false) ? $p['invoice_date']     : null;
         $inv_date_due = ($p['invoice_date_due'] && $p['invoice_date_due'] !== false) ? $p['invoice_date_due'] : null;
         $pay_state    = $p['payment_state'] ?? 'not_paid';
