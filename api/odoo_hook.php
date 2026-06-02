@@ -552,12 +552,10 @@ if ($payload && $event_type === 'invoice') {
             return;
         }
 
-        // Chỉ sync invoice đã posted, bỏ qua draft
         $inv_state = $p['state'] ?? '';
-        if ($inv_state === 'draft') {
-            $debug['debt_skipped_draft'] = $inv_id;
-            return;
-        }
+        // Không skip draft ở đây — webhook Odoo có thể gửi activity_state thay vì invoice state
+        // Thay vào đó log giá trị state thực tế để debug
+        $debug['inv_state_raw'] = $inv_state;
 
         $inv_name     = $p['name'] ?: ($p['highest_name'] ?: 'Draft Invoice');
 
@@ -575,9 +573,9 @@ if ($payload && $event_type === 'invoice') {
         $ccy        = $m2o_name($p['currency_id']) ?: 'VND';
         $co_ccy     = $m2o_name($p['company_currency_id'] ?? null) ?: 'VND';
 
-        $debug['am_name']     = $am_name;
-        $debug['am_odoo_id']  = $am_odoo_id;
-        $debug['move_type']   = $p['move_type'] ?? 'N/A';
+        $debug['am_name']    = $am_name;
+        $debug['am_odoo_id'] = $am_odoo_id;
+        $debug['move_type']  = $move_type ?: 'N/A';
 
         // Dùng amount gốc theo currency của invoice (USD, VND...), không quy đổi
         $amt_orig     = (float)($p['amount_total'] ?? 0);
@@ -681,7 +679,8 @@ if ($payload && $event_type === 'invoice') {
                 am_notes             = {$esc($notes)},
                 updated_at           = NOW()
             WHERE id = " . (int)$existRow['id']);
-            $debug['debt_updated'] = $existRow['id'];
+            $debug['debt_updated']       = $existRow['id'];
+            $debug['debt_update_error']  = $conn->error ?: null;
         } else {
             $stmid = $sale_team_id ?: 'NULL';
             $conn->query("INSERT INTO debts
@@ -698,7 +697,8 @@ if ($payload && $event_type === 'invoice') {
                  {$esc($payment_status)},{$esc($inv_status_class)},
                  {$esc($payment_month)},{$esc($weekly_update)},
                  {$esc($pl_class)},{$esc($notes)},$inv_id,NOW())");
-            $debug['debt_inserted'] = $conn->insert_id;
+            $debug['debt_insert_error'] = $conn->error ?: null;
+            $debug['debt_inserted']     = $conn->insert_id ?: null;
         }
     };
 
