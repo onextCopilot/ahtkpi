@@ -302,14 +302,14 @@ if (file_exists($sidebar_file)) {
                         'auto_create'  => '#10b981',
                         'update_stage' => '#f59e0b',
                         'skip'         => '#94a3b8',
-                        'no_opp_id'    => '#ef4444',
+                        'no_opp_id'   => '#ef4444',
                         default        => '#94a3b8',
                     };
                     $actionLabel = match($action) {
                         'auto_create'  => '✓ Tạo PAKD mới',
                         'update_stage' => '↻ Update stage',
                         'skip'         => '— Stage không sync',
-                        'no_opp_id'    => '✗ Thiếu opp_id',
+                        'no_opp_id'   => '✗ Thiếu opp_id',
                         default        => htmlspecialchars($action ?? '—'),
                     };
                     $opp = $rn['opp_id_extracted'] ?? null;
@@ -322,6 +322,16 @@ if (file_exists($sidebar_file)) {
                 <?php if (!empty($rn['sync_stage_ids'])): ?>
                 <div style="color:#64748b;">sync: [<?php echo implode(',', $rn['sync_stage_ids']); ?>]</div>
                 <?php endif; ?>
+                <?php
+                // Invoice-specific debug info
+                if (!empty($rn['debt_inserted'])):
+                ?><div style="color:#10b981;font-weight:600;">✓ Debt inserted #<?php echo $rn['debt_inserted']; ?></div><?php endif; ?>
+                <?php if (!empty($rn['debt_updated'])): ?><div style="color:#f59e0b;">↻ Debt updated #<?php echo $rn['debt_updated']; ?></div><?php endif; ?>
+                <?php if (!empty($rn['debt_deleted_for_inv'])): ?><div style="color:#ef4444;">✗ Debt deleted for inv #<?php echo $rn['debt_deleted_for_inv']; ?></div><?php endif; ?>
+                <?php if (isset($rn['am_odoo_id'])): ?><div style="color:#64748b;">am_id=<?php echo $rn['am_odoo_id']; ?> <?php echo htmlspecialchars($rn['am_name'] ?? ''); ?></div><?php endif; ?>
+                <?php if (!empty($rn['debt_skipped_move_type'])): ?><div style="color:#94a3b8;">skip: move_type=<?php echo htmlspecialchars($rn['debt_skipped_move_type']); ?></div><?php endif; ?>
+                <?php if (!empty($rn['debt_skipped_draft'])): ?><div style="color:#94a3b8;">skip: draft inv #<?php echo $rn['debt_skipped_draft']; ?></div><?php endif; ?>
+                <?php if (!empty($rn['inv_error'])): ?><div style="color:#ef4444;">✗ <?php echo htmlspecialchars(substr($rn['inv_error'], 0, 80)); ?></div><?php endif; ?>
                 <?php endif; ?>
             </td>
             <td>

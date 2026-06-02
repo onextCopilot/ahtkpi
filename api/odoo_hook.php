@@ -560,15 +560,24 @@ if ($payload && $event_type === 'invoice') {
         }
 
         $inv_name     = $p['name'] ?: ($p['highest_name'] ?: 'Draft Invoice');
-        $partner_name = is_array($p['partner_id']) ? ($p['partner_id']['name'] ?? '') : '';
-        $com_partner  = is_array($p['commercial_partner_id']) ? ($p['commercial_partner_id']['name'] ?? $partner_name) : $partner_name;
+
+        // Helper: lấy id từ many2one field (cả 2 format: object {id,name} và tuple [id,name])
+        $m2o_id   = function($v) { return is_array($v) ? (int)(isset($v['id']) ? $v['id'] : ($v[0] ?? 0)) : 0; };
+        $m2o_name = function($v) { return is_array($v) ? (string)(isset($v['name']) ? $v['name'] : ($v[1] ?? '')) : ''; };
+
+        $partner_name = $m2o_name($p['partner_id']);
+        $com_partner  = $m2o_name($p['commercial_partner_id'] ?? null) ?: $partner_name;
         $client_name  = $com_partner ?: $partner_name;
 
-        $am_name      = is_array($p['invoice_user_id']) ? ($p['invoice_user_id']['name']  ?? '') : '';
-        $am_odoo_id   = is_array($p['invoice_user_id']) ? (int)($p['invoice_user_id']['id'] ?? 0) : 0;
-        $team_name    = is_array($p['team_id'])          ? ($p['team_id']['name']           ?? '') : '';
-        $ccy          = is_array($p['currency_id'])      ? ($p['currency_id']['name']       ?? 'VND') : 'VND';
-        $co_ccy       = is_array($p['company_currency_id']) ? ($p['company_currency_id']['name'] ?? 'VND') : 'VND';
+        $am_name    = $m2o_name($p['invoice_user_id']);
+        $am_odoo_id = $m2o_id($p['invoice_user_id']);
+        $team_name  = $m2o_name($p['team_id']);
+        $ccy        = $m2o_name($p['currency_id']) ?: 'VND';
+        $co_ccy     = $m2o_name($p['company_currency_id'] ?? null) ?: 'VND';
+
+        $debug['am_name']     = $am_name;
+        $debug['am_odoo_id']  = $am_odoo_id;
+        $debug['move_type']   = $p['move_type'] ?? 'N/A';
 
         // Dùng amount gốc theo currency của invoice (USD, VND...), không quy đổi
         $amt_orig     = (float)($p['amount_total'] ?? 0);
