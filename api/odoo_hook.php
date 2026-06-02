@@ -642,17 +642,12 @@ if ($payload && $event_type === 'invoice') {
         $company  = 'AHT TECH';
         $esc      = fn($v) => $v === null ? 'NULL' : "'" . $conn->real_escape_string((string)$v) . "'";
 
-        // Lookup: ưu tiên odoo_invoice_id, fallback tìm theo vat_invoice + client_name
+        // Lookup chỉ theo odoo_invoice_id — mỗi Odoo invoice có 1 debt record riêng
+        // Không dùng vat_invoice name vì nhiều invoice có thể trùng highest_name
         $existRow = null;
         $q1 = $conn->query("SELECT id, am_email FROM debts WHERE odoo_invoice_id = $inv_id LIMIT 1");
         if ($q1 && $q1->num_rows > 0) {
             $existRow = $q1->fetch_assoc();
-        } else {
-            // Fallback: tìm theo tên invoice (cho records cũ chưa có odoo_invoice_id)
-            $q2 = $conn->query("SELECT id, am_email FROM debts WHERE vat_invoice = '" . $conn->real_escape_string($inv_name) . "' AND odoo_invoice_id IS NULL LIMIT 1");
-            if ($q2 && $q2->num_rows > 0) {
-                $existRow = $q2->fetch_assoc();
-            }
         }
 
         if ($existRow) {
