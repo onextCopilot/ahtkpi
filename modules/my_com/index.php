@@ -931,7 +931,7 @@ $grand_com1 = $net_com1 + $total_collected_com1;
 $grand_com2 = $net_com2 + $total_collected_com2;
 $grand_ai_com = $total_ai_com + $total_collected_ai_com;
 $grand_yb = $total_yb + $total_collected_yb;
-$grand_total_com = $grand_com1 + $grand_com2 + $grand_ai_com;
+$grand_total_com = $grand_com1 + $grand_com2 + $grand_ai_com + $total_so_com;
 
 // Available years
 $available_years = [$current_year, $current_year - 1, $current_year - 2];
@@ -1014,6 +1014,7 @@ $month_names_vn = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','
         .com-card.ai::before { background:#06b6d4; }
         .com-card.lic::before { background:#b45309; }
         .com-card.net::before { background:#22c55e; height:4px; }
+        .com-card.net { background:linear-gradient(135deg,#f0fdf4 0%,#dcfce7 100%); border:1.5px solid #86efac; }
         .com-card .cc-label { font-size:11px; color:#94a3b8; text-transform:uppercase; letter-spacing:.04em; margin-bottom:4px; }
         .com-card .cc-value { font-size:20px; font-weight:700; color:#0f172a; }
         .com-card .cc-sub { font-size:11px; color:#64748b; margin-top:4px; }
@@ -1267,7 +1268,7 @@ $month_names_vn = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','
                 <div class="com-card net">
                     <div class="cc-label">Ước tính Commission Q<?= $selected_quarter ?></div>
                     <div class="cc-value" style="color:#16a34a;" id="ccGrandTotal"><?= mc_fmt_short($grand_total_com) ?></div>
-                    <div class="cc-sub">Com1: <strong id="ccCom1Grand"><?= mc_fmt_short($grand_com1) ?></strong><span id="ccCom2Part"<?= $grand_com2 > 0 ? '' : ' style="display:none;"' ?>> · <span style="color:#7c3aed;">Com2: <strong id="ccCom2"><?= mc_fmt_short($grand_com2) ?></strong></span></span><span id="ccAiPart"<?= $grand_ai_com > 0 ? '' : ' style="display:none;"' ?>> · <span style="color:#0891b2;">AI: <strong id="ccAi"><?= mc_fmt_short($grand_ai_com) ?></strong></span></span></div>
+                    <div class="cc-sub">Com1: <strong id="ccCom1Grand"><?= mc_fmt_short($grand_com1) ?></strong><span id="ccCom2Part"<?= $grand_com2 > 0 ? '' : ' style="display:none;"' ?>> · <span style="color:#7c3aed;">Com2: <strong id="ccCom2"><?= mc_fmt_short($grand_com2) ?></strong></span></span><span id="ccAiPart"<?= $grand_ai_com > 0 ? '' : ' style="display:none;"' ?>> · <span style="color:#0891b2;">AI: <strong id="ccAi"><?= mc_fmt_short($grand_ai_com) ?></strong></span></span><span id="ccFirstPoPart"<?= $total_so_com > 0 ? '' : ' style="display:none;"' ?>> · <span style="color:#7c3aed;">1st PO: <strong id="ccFirstPoGrandVal"><?= mc_fmt_short($total_so_com) ?></strong></span></span></div>
                     <div class="cc-sub">Quý này: <strong id="ccThisQ"><?= mc_fmt_short($net_com1 + $net_com2 + $total_ai_com) ?></strong> (× KPI <?= $kpi_adj * 100 ?>%)</div>
                     <div class="cc-sub" id="ccRecoveryPart" style="color:#16a34a;<?= ($total_collected_com1 + $total_collected_com2 + $total_collected_ai_com) > 0 ? '' : 'display:none;' ?>">+ Thu hồi công nợ: <strong id="ccRecovery"><?= mc_fmt_short($total_collected_com1 + $total_collected_com2 + $total_collected_ai_com) ?></strong> (KPI từng quý gốc)</div>
                     <div class="cc-sub" style="color:#94a3b8;">Chưa gồm YB</div>
@@ -2093,7 +2094,9 @@ function recomputeLicense() {
 // AI Com components — mutable because the AI add-on type / revenue can change live.
 let NET_AI = <?= json_encode((float)$total_ai_com) ?>;
 let COLLECTED_AI = <?= json_encode((float)$total_collected_ai_com) ?>;
-let GRAND_AI = <?= json_encode((float)$grand_ai_com) ?>;
+let GRAND_AI     = <?= json_encode((float)$grand_ai_com) ?>;
+let GRAND_COM2   = <?= json_encode((float)$grand_com2) ?>;
+let GRAND_SO_COM = <?= json_encode((float)$total_so_com) ?>;
 
 // AI commission rate given add-on type + EBT % (mirrors PHP mc_ai_rate).
 function aiRate(addon, ebt) {
@@ -2290,7 +2293,8 @@ function recomputeCom2() {
     const recTot = document.getElementById('recCom2Total');
     if (recTot) recTot.textContent = com2Recovery > 0 ? fmtFull(com2Recovery) : '';
     // Commission summary card
-    const grandCom2 = netCom2Main + com2Recovery;
+    GRAND_COM2 = netCom2Main + com2Recovery;
+    const grandCom2 = GRAND_COM2;
     // Com2 (High Value) card
     const c2Gross = document.getElementById('ccCom2Gross');
     if (c2Gross) c2Gross.textContent = grandCom2 > 0 ? fmtShort(grandCom2) : '–';
@@ -2313,8 +2317,7 @@ function recomputeCom2() {
         const rc = document.getElementById('ccRecovery');
         if (rc) rc.textContent = fmtShort(recSum);
     }
-    const grandTotal = document.getElementById('ccGrandTotal');
-    if (grandTotal) grandTotal.textContent = fmtShort(GRAND_COM1 + grandCom2 + GRAND_AI);
+    refreshGrandTotal();
 }
 
 // Recompute AI Com across both sections after an add-on / revenue change, then refresh summary.
@@ -2557,13 +2560,25 @@ function recomputeSoCom() {
     // Footer row in SO table
     const foot = document.getElementById('soComTotal');
     if (foot) { foot.textContent = total > 0 ? fmtFull(total) : '—'; foot.style.color = total > 0 ? '#7c3aed' : '#94a3b8'; }
-    // Summary card
+    GRAND_SO_COM = total;
+    // First PO summary card
     const card = document.getElementById('ccFirstPoCom');
     if (card) { card.textContent = total > 0 ? fmtShort(total) : '–'; }
     const cnt = document.getElementById('ccFirstPoCount');
     if (cnt) cnt.textContent = firstPoCount;
     const tag = document.getElementById('ccFirstPoTag');
     if (tag) { tag.textContent = total > 0 ? 'Calculated' : 'Chọn First PO'; tag.className = 'cc-tag ' + (total > 0 ? 'tag-ok' : 'tag-na'); }
+    // 1st PO breakdown in grand total card
+    const firstPoPart = document.getElementById('ccFirstPoPart');
+    if (firstPoPart) firstPoPart.style.display = total > 0 ? '' : 'none';
+    const firstPoGrandVal = document.getElementById('ccFirstPoGrandVal');
+    if (firstPoGrandVal) firstPoGrandVal.textContent = fmtShort(total);
+    refreshGrandTotal();
+}
+
+function refreshGrandTotal() {
+    const grandTotal = document.getElementById('ccGrandTotal');
+    if (grandTotal) grandTotal.textContent = fmtShort(GRAND_COM1 + GRAND_COM2 + GRAND_AI + GRAND_SO_COM);
 }
 
 function esc(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
