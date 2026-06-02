@@ -69,6 +69,7 @@ function isMenuItemActive($path, $current_uri)
             $is_debt_open = strpos($current_uri, '/debt') !== false ||
                 strpos($current_uri, '/my-debt') !== false ||
                 strpos($current_uri, '/my-com') !== false ||
+                strpos($current_uri, '/commission-board') !== false ||
                 strpos($current_uri, '/debt-warning') !== false ||
                 (strpos($current_uri, '/my-reports') !== false && strpos($current_uri, '/sale-reports-admin') === false);
             echo $is_debt_open ? 'active open' : ''; ?>" onclick="toggleSubmenu(this)">
@@ -105,6 +106,12 @@ function isMenuItemActive($path, $current_uri)
                 <a href="/my-com"
                     class="submenu-item <?php echo strpos($current_uri, '/my-com') !== false ? 'active' : ''; ?>">
                     <span>My Com</span>
+                </a>
+                <?php endif; ?>
+                <?php if ($_SESSION['role'] === 'admin' || ($_SESSION['full_name'] ?? '') === 'Hyun Cao'): ?>
+                <a href="/commission-board"
+                    class="submenu-item <?php echo strpos($current_uri, '/commission-board') !== false ? 'active' : ''; ?>">
+                    <span>Commission Board</span>
                 </a>
                 <?php endif; ?>
             </div>

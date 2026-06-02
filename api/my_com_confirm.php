@@ -36,20 +36,66 @@ $conn->query("CREATE TABLE IF NOT EXISTS my_com_confirmation (
     UNIQUE KEY uq_user_yq (user_id, year, quarter)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
 
+// Ensure snapshot columns exist (idempotent — CREATE IF NOT EXISTS won't alter an existing table).
+function mc_ensure_col($conn, $col, $ddl) {
+    $col = $conn->real_escape_string($col);
+    $r = $conn->query("SELECT 1 FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='my_com_confirmation' AND COLUMN_NAME='$col'");
+    if ($r && $r->num_rows === 0) $conn->query("ALTER TABLE my_com_confirmation ADD COLUMN $col $ddl");
+}
+mc_ensure_col($conn, 'snap_total',      "DECIMAL(20,2) DEFAULT 0");
+mc_ensure_col($conn, 'snap_com1',       "DECIMAL(20,2) DEFAULT 0");
+mc_ensure_col($conn, 'snap_com2',       "DECIMAL(20,2) DEFAULT 0");
+mc_ensure_col($conn, 'snap_ai',         "DECIMAL(20,2) DEFAULT 0");
+mc_ensure_col($conn, 'snap_so_com',     "DECIMAL(20,2) DEFAULT 0");
+mc_ensure_col($conn, 'snap_license',    "DECIMAL(20,2) DEFAULT 0");
+mc_ensure_col($conn, 'snap_yb',         "DECIMAL(20,2) DEFAULT 0");
+mc_ensure_col($conn, 'snap_kpi_pct',    "DECIMAL(8,2) DEFAULT 0");
+mc_ensure_col($conn, 'snap_revenue',    "DECIMAL(20,2) DEFAULT 0");
+mc_ensure_col($conn, 'snap_kpi_target', "DECIMAL(20,2) DEFAULT 0");
+mc_ensure_col($conn, 'snap_position',   "VARCHAR(50) DEFAULT ''");
+mc_ensure_col($conn, 'snap_level',      "VARCHAR(100) DEFAULT ''");
+
 if ($action === 'confirm') {
+    $snap = is_array($body['snapshot'] ?? null) ? $body['snapshot'] : [];
+    $total      = (float) ($snap['total']      ?? 0);
+    $com1       = (float) ($snap['com1']       ?? 0);
+    $com2       = (float) ($snap['com2']       ?? 0);
+    $ai         = (float) ($snap['ai']         ?? 0);
+    $so_com     = (float) ($snap['so_com']     ?? 0);
+    $license    = (float) ($snap['license']    ?? 0);
+    $yb         = (float) ($snap['yb']         ?? 0);
+    $kpi_pct    = (float) ($snap['kpi_pct']    ?? 0);
+    $revenue    = (float) ($snap['revenue']    ?? 0);
+    $kpi_target = (float) ($snap['kpi_target'] ?? 0);
+    $position   = (string) ($snap['position']  ?? '');
+    $level      = (string) ($snap['level']     ?? '');
     $now = date('Y-m-d H:i:s');
-    $stmt = $conn->prepare("INSERT INTO my_com_confirmation (user_id, year, quarter, status, confirmed_at)
-        VALUES (?,?,?,'confirmed',?)
-        ON DUPLICATE KEY UPDATE status='confirmed', confirmed_at=VALUES(confirmed_at)");
-    $stmt->bind_param("iiis", $u_id, $year, $quarter, $now);
+
+    $stmt = $conn->prepare("INSERT INTO my_com_confirmation
+        (user_id, year, quarter, status, confirmed_at,
+         snap_total, snap_com1, snap_com2, snap_ai, snap_so_com, snap_license, snap_yb,
+         snap_kpi_pct, snap_revenue, snap_kpi_target, snap_position, snap_level)
+        VALUES (?,?,?,'confirmed',?, ?,?,?,?,?,?,?, ?,?,?,?,?)
+        ON DUPLICATE KEY UPDATE status='confirmed', confirmed_at=VALUES(confirmed_at),
+         snap_total=VALUES(snap_total), snap_com1=VALUES(snap_com1), snap_com2=VALUES(snap_com2),
+         snap_ai=VALUES(snap_ai), snap_so_com=VALUES(snap_so_com), snap_license=VALUES(snap_license),
+         snap_yb=VALUES(snap_yb), snap_kpi_pct=VALUES(snap_kpi_pct), snap_revenue=VALUES(snap_revenue),
+         snap_kpi_target=VALUES(snap_kpi_target), snap_position=VALUES(snap_position), snap_level=VALUES(snap_level)");
+    if (!$stmt) { echo json_encode(['ok' => false, 'error' => $conn->error]); exit; }
+    $stmt->bind_param(
+        "iiisddddddddddss",
+        $u_id, $year, $quarter, $now,
+        $total, $com1, $com2, $ai, $so_com, $license, $yb,
+        $kpi_pct, $revenue, $kpi_target, $position, $level
+    );
 } else {
     $stmt = $conn->prepare("INSERT INTO my_com_confirmation (user_id, year, quarter, status)
         VALUES (?,?,?,'draft')
         ON DUPLICATE KEY UPDATE status='draft', confirmed_at=NULL");
+    if (!$stmt) { echo json_encode(['ok' => false, 'error' => $conn->error]); exit; }
     $stmt->bind_param("iii", $u_id, $year, $quarter);
 }
 
-if (!$stmt) { echo json_encode(['ok' => false, 'error' => $conn->error]); exit; }
 $ok  = $stmt->execute();
 $err = $stmt->error;
 $stmt->close();

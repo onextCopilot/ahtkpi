@@ -24,6 +24,30 @@ if (empty($user_email)) {
     }
 }
 
+// ── Commission Board: admin / Hyun Cao can view another user's commission (read-only) ──
+$viewer_id      = (int) $_SESSION['user_id'];
+$is_board_admin = ($role === 'admin' || ($full_name ?? '') === 'Hyun Cao');
+$viewing_other  = false;
+$viewed_name    = $full_name;
+if ($is_board_admin && isset($_GET['user_id']) && (int) $_GET['user_id'] > 0 && (int) $_GET['user_id'] !== $viewer_id) {
+    $target_id = (int) $_GET['user_id'];
+    $tu = $conn->prepare("SELECT id, full_name, email FROM users WHERE id = ?");
+    $tu->bind_param("i", $target_id);
+    $tu->execute();
+    $tr = $tu->get_result()->fetch_assoc();
+    $tu->close();
+    if ($tr) {
+        $u_id          = (int) $tr['id'];
+        $user_email    = $tr['email'] ?? '';
+        $viewed_name   = $tr['full_name'] ?? '';
+        $viewing_other = true;
+    }
+}
+// View-only when an admin is viewing someone else (save APIs scope writes to session user).
+$view_only = $viewing_other;
+// Query-string suffix to preserve the viewed user across nav links.
+$mc_qs = $viewing_other ? ('&user_id=' . $u_id) : '';
+
 // ── User's Sale Level & KPI Target ──
 $user_level = null;
 $kpi_quarter_target = 0;
@@ -1187,9 +1211,18 @@ $month_names_vn = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','
                 </div>
             <?php endif; ?>
 
+            <?php if ($viewing_other): ?>
+            <div style="background:#eff6ff;border:1.5px solid #bfdbfe;border-radius:10px;padding:0.7rem 1rem;margin-bottom:1rem;display:flex;align-items:center;justify-content:space-between;gap:1rem;">
+                <div style="font-size:13px;color:#1e40af;">
+                    <strong>Đang xem (chỉ đọc):</strong> Commission của <strong><?= htmlspecialchars($viewed_name) ?></strong> · chế độ admin
+                </div>
+                <a href="/commission-board?year=<?= $selected_year ?>" style="font-size:12px;font-weight:600;color:#2563eb;text-decoration:none;white-space:nowrap;">← Commission Board</a>
+            </div>
+            <?php endif; ?>
+
             <!-- ─── Quarter Navigation ─── -->
             <div class="q-nav">
-                <select class="year-sel" onchange="location.href='/my-com?year='+this.value+'&quarter=<?= $selected_quarter ?>'">
+                <select class="year-sel" onchange="location.href='/my-com?year='+this.value+'&quarter=<?= $selected_quarter ?><?= $mc_qs ?>'">
                     <?php foreach ($available_years as $yr): ?>
                         <option value="<?= $yr ?>" <?= $yr === $selected_year ? 'selected' : '' ?>><?= $yr ?></option>
                     <?php endforeach; ?>
@@ -1201,11 +1234,14 @@ $month_names_vn = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','
                         elseif ($q === $current_quarter && $selected_year === $current_year) $cls .= ' cur';
                         $href = '/my-com?year=' . $selected_year . '&quarter=' . $q
                             . ($search ? '&search=' . urlencode($search) : '')
-                            . ($status_filter ? '&status=' . urlencode($status_filter) : '');
+                            . ($status_filter ? '&status=' . urlencode($status_filter) : '')
+                            . $mc_qs;
                     ?>
                         <a href="<?= $href ?>" class="<?= $cls ?>">Q<?= $q ?></a>
                     <?php endfor; ?>
+                    <?php if (!$viewing_other): ?>
                     <a href="/my-com/yearly-bonus?year=<?= $selected_year ?>" class="qt qt-yb" title="Yearly Bonus cả năm <?= $selected_year ?>">★ Yearly Bonus</a>
+                    <?php endif; ?>
                 </div>
                 <span class="q-label">
                     <?= $month_names_vn[$q_start_month-1] ?> – <?= $month_names_vn[$q_end_month-1] ?> <?= $selected_year ?>
@@ -1345,6 +1381,7 @@ $month_names_vn = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','
             <form method="GET" class="ctrl">
                 <input type="hidden" name="year" value="<?= $selected_year ?>">
                 <input type="hidden" name="quarter" value="<?= $selected_quarter ?>">
+                <?php if ($viewing_other): ?><input type="hidden" name="user_id" value="<?= $u_id ?>"><?php endif; ?>
                 <div style="display:flex;gap:0.5rem;align-items:center;">
                     <div class="s-box">
                         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
@@ -1901,7 +1938,9 @@ $month_names_vn = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','
                     <?php endif; ?>
                 </div>
                 <div style="display:flex;gap:8px;flex-shrink:0;">
-                    <?php if ($is_confirmed): ?>
+                    <?php if ($viewing_other): ?>
+                    <span style="font-size:11px;color:#64748b;font-style:italic;">Chế độ admin · chỉ đọc</span>
+                    <?php elseif ($is_confirmed): ?>
                     <button onclick="mcConfirm('reset')" style="padding:8px 18px;border-radius:7px;border:1.5px solid #f87171;background:#fff;color:#dc2626;font-size:12px;font-weight:600;cursor:pointer;">↩ Reset to Draft</button>
                     <?php else: ?>
                     <button onclick="mcConfirm('confirm')" style="padding:8px 22px;border-radius:7px;border:none;background:#16a34a;color:#fff;font-size:13px;font-weight:700;cursor:pointer;box-shadow:0 2px 6px #16a34a40;">✓ Xác nhận</button>
@@ -2726,19 +2765,47 @@ function refreshGrandTotal() {
 
 // ── Confirmation lock ──
 const MC_CONFIRMED = <?= json_encode($is_confirmed) ?>;
-if (MC_CONFIRMED) document.body.classList.add('mc-locked');
+const MC_VIEW_ONLY = <?= json_encode($view_only) ?>;
+if (MC_CONFIRMED || MC_VIEW_ONLY) document.body.classList.add('mc-locked');
+
+// Snapshot values stored at confirm time (for the Commission Board overview).
+const SNAP_LICENSE    = <?= json_encode((float)$total_license_bonus) ?>;
+const SNAP_YB         = <?= json_encode((float)$grand_yb) ?>;
+const SNAP_KPI_PCT    = <?= json_encode((float)$kpi_pct) ?>;
+const SNAP_REVENUE    = <?= json_encode((float)$kpi_revenue) ?>;
+const SNAP_KPI_TARGET = <?= json_encode((float)$kpi_quarter_target) ?>;
+const SNAP_POSITION   = <?= json_encode((string)$position_type) ?>;
+const SNAP_LEVEL      = <?= json_encode((string)($user_level['level_name'] ?? '')) ?>;
 
 function mcIsLocked() {
     return document.body.classList.contains('mc-locked');
 }
 
 function mcConfirm(action) {
+    if (MC_VIEW_ONLY) return;
     const label = action === 'confirm' ? 'xác nhận và khóa' : 'reset về draft';
     if (!confirm('Bạn có chắc muốn ' + label + ' Commission Q<?= $selected_quarter ?>/<?= $selected_year ?>?')) return;
+    const payload = {year: <?= $selected_year ?>, quarter: <?= $selected_quarter ?>, action};
+    if (action === 'confirm') {
+        payload.snapshot = {
+            total:      GRAND_COM1 + GRAND_COM2 + GRAND_AI + GRAND_SO_COM,
+            com1:       GRAND_COM1,
+            com2:       GRAND_COM2,
+            ai:         GRAND_AI,
+            so_com:     GRAND_SO_COM,
+            license:    SNAP_LICENSE,
+            yb:         SNAP_YB,
+            kpi_pct:    SNAP_KPI_PCT,
+            revenue:    SNAP_REVENUE,
+            kpi_target: SNAP_KPI_TARGET,
+            position:   SNAP_POSITION,
+            level:      SNAP_LEVEL
+        };
+    }
     fetch('/api/my_com_confirm', {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({year: <?= $selected_year ?>, quarter: <?= $selected_quarter ?>, action})
+        body: JSON.stringify(payload)
     }).then(r => r.json()).then(d => {
         if (d.ok) { showToast(action === 'confirm' ? '✓ Đã xác nhận & khóa' : '↩ Đã reset về Draft', true); setTimeout(() => location.reload(), 700); }
         else showToast(d.error || 'Lỗi', false);

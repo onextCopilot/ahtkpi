@@ -159,6 +159,7 @@ $routes = [
     '/my-debt' => 'modules/my_debt/index.php',
     '/my-com' => 'modules/my_com/index.php',
     '/my-com/yearly-bonus' => 'modules/my_com/yearly_bonus.php',
+    '/commission-board' => 'modules/commission_board/index.php',
     '/debt-warning' => 'modules/debt_warning/index.php',
     '/customers' => 'modules/customers/index.php',
     '/invoices' => 'modules/invoices/index.php',
