@@ -145,13 +145,20 @@ foreach ($confirm as $uid => $qs) foreach ($qs as $c) if (($c['status'] ?? '') =
         .cb-table tbody tr:hover td.cb-total-col { background:#e2eaf5; }
         .cb-user { font-weight:600; color:#1e293b; }
         .cb-pos { display:inline-block; background:#3b82f615; color:#3b82f6; border:1px solid #3b82f630; border-radius:4px; padding:1px 7px; font-size:10px; font-weight:700; margin-top:2px; }
-        .cb-cell { display:inline-flex; align-items:center; gap:5px; justify-content:flex-end; text-decoration:none; }
-        .cb-cell .amt { font-weight:600; color:#1d4ed8; }
+        .cb-cell { display:inline-flex; flex-direction:column; align-items:flex-end; gap:2px; text-decoration:none; min-width:74px; }
+        .cb-amt-row { display:inline-flex; align-items:center; gap:5px; }
+        .cb-cell .amt { font-weight:700; color:#1d4ed8; }
         .cb-cell.confirmed .amt { color:#16a34a; }
         .cb-cell.draft .amt { color:#cbd5e1; font-weight:500; }
         .cb-check { color:#16a34a; flex-shrink:0; }
         .cb-link { color:#94a3b8; }
         .cb-link:hover { color:#2563eb; }
+        .cb-sub { display:inline-flex; align-items:center; gap:5px; }
+        .cb-rev { font-size:10px; color:#94a3b8; }
+        .kpi-badge { font-size:10px; font-weight:700; border-radius:4px; padding:0 5px; line-height:15px; }
+        .kpi-badge.kpi-good { background:#dcfce7; color:#16a34a; }
+        .kpi-badge.kpi-warn { background:#fef9c3; color:#a16207; }
+        .kpi-badge.kpi-bad  { background:#fee2e2; color:#dc2626; }
         .cb-total-col { background:#f8fafc; font-weight:700; }
         .cb-foot td { background:#f0fdf4; font-weight:700; color:#15803d; border-top:2px solid #bbf7d0; }
         .cb-empty { text-align:center; color:#94a3b8; padding:2rem; }
@@ -219,19 +226,31 @@ foreach ($confirm as $uid => $qs) foreach ($qs as $c) if (($c['status'] ?? '') =
                                 $is_conf = $c && $c['status'] === 'confirmed';
                                 $amt = $is_conf ? (float) $c['snap_total'] : 0;
                                 if ($is_conf) $row_total += $amt;
+                                $kpi  = $is_conf ? (float) $c['snap_kpi_pct'] : 0;
+                                $rev  = $is_conf ? (float) $c['snap_revenue'] : 0;
+                                $tgt  = $is_conf ? (float) $c['snap_kpi_target'] : 0;
+                                $kcls = $kpi >= 80 ? 'good' : ($kpi >= 60 ? 'warn' : 'bad');
                                 $detail = '/my-com?user_id=' . $uid . '&year=' . $selected_year . '&quarter=' . $q;
                                 $tip = $is_conf
-                                    ? ('Đã xác nhận ' . ($c['confirmed_at'] ? date('d/m/Y H:i', strtotime($c['confirmed_at'])) : '') . " — Com1 " . cb_fmt_short($c['snap_com1']) . " · Com2 " . cb_fmt_short($c['snap_com2']) . " · AI " . cb_fmt_short($c['snap_ai']) . " · 1stPO " . cb_fmt_short($c['snap_so_com']) . ' · KPI ' . number_format((float)$c['snap_kpi_pct'], 1) . '%')
+                                    ? ('Đã xác nhận ' . ($c['confirmed_at'] ? date('d/m/Y H:i', strtotime($c['confirmed_at'])) : '') . " — Com1 " . cb_fmt_short($c['snap_com1']) . " · Com2 " . cb_fmt_short($c['snap_com2']) . " · AI " . cb_fmt_short($c['snap_ai']) . " · 1stPO " . cb_fmt_short($c['snap_so_com']) . " · License " . cb_fmt_short($c['snap_license']) . ' · KPI ' . number_format($kpi, 1) . '% (' . cb_fmt_short($rev) . ' / ' . cb_fmt_short($tgt) . ')')
                                     : 'Chưa xác nhận — click để xem chi tiết';
                             ?>
                             <td class="num">
                                 <a class="cb-cell <?= $is_conf ? 'confirmed' : 'draft' ?>" href="<?= $detail ?>" title="<?= htmlspecialchars($tip) ?>">
                                     <?php if ($is_conf): ?>
-                                        <span class="amt"><?= cb_fmt_short($amt) ?></span>
-                                        <svg class="cb-check" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path d="M20 6L9 17l-5-5"/></svg>
+                                        <div class="cb-amt-row">
+                                            <span class="amt"><?= cb_fmt_short($amt) ?></span>
+                                            <svg class="cb-check" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path d="M20 6L9 17l-5-5"/></svg>
+                                        </div>
+                                        <div class="cb-sub">
+                                            <span class="kpi-badge kpi-<?= $kcls ?>"><?= number_format($kpi, 0) ?>%</span>
+                                            <span class="cb-rev"><?= cb_fmt_short($rev) ?></span>
+                                        </div>
                                     <?php else: ?>
-                                        <span class="amt">—</span>
-                                        <svg class="cb-link" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><path d="M15 3h6v6"/><path d="M10 14L21 3"/></svg>
+                                        <div class="cb-amt-row">
+                                            <span class="amt">—</span>
+                                            <svg class="cb-link" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><path d="M15 3h6v6"/><path d="M10 14L21 3"/></svg>
+                                        </div>
                                     <?php endif; ?>
                                 </a>
                             </td>
@@ -256,7 +275,7 @@ foreach ($confirm as $uid => $qs) foreach ($qs as $c) if (($c['status'] ?? '') =
             </div>
 
             <div style="font-size:11px;color:#94a3b8;margin-top:8px;">
-                ✓ = đã xác nhận (số liệu chốt tại thời điểm xác nhận) · ô chưa xác nhận hiển thị "—", click để xem chi tiết trực tiếp. Click vào bất kỳ ô nào để mở trang chi tiết giống My Com.
+                Mỗi ô đã xác nhận: <strong>Com</strong> (trên) · <span class="kpi-badge kpi-good" style="font-size:9px;">KPI%</span> đạt được + <span style="color:#94a3b8;">doanh thu</span> (dưới). ✓ = đã xác nhận (số liệu chốt tại thời điểm xác nhận). Ô chưa xác nhận hiển thị "—". Click bất kỳ ô nào để mở trang chi tiết giống My Com. KPI màu: <span style="color:#16a34a;">≥80%</span> · <span style="color:#a16207;">60–80%</span> · <span style="color:#dc2626;">&lt;60%</span>.
             </div>
         </div>
     </main>
