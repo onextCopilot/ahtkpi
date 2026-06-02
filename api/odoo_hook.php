@@ -556,8 +556,9 @@ if ($payload && $event_type === 'invoice') {
         $ccy          = is_array($p['currency_id'])      ? ($p['currency_id']['name']       ?? 'VND') : 'VND';
         $co_ccy       = is_array($p['company_currency_id']) ? ($p['company_currency_id']['name'] ?? 'VND') : 'VND';
 
-        $amt_orig     = (float)($p['amount_total']        ?? 0);
-        $amt_vnd      = abs((float)($p['amount_total_signed'] ?? $amt_orig));
+        // Dùng amount gốc theo currency của invoice (USD, VND...), không quy đổi
+        $amt_orig     = (float)($p['amount_total'] ?? 0);
+        $amt_vnd      = abs((float)($p['amount_total_signed'] ?? $amt_orig)); // chỉ dùng để tham khảo
         $inv_date     = ($p['invoice_date'] && $p['invoice_date'] !== false) ? $p['invoice_date'] : null;
         $pay_state    = $p['payment_state'] ?? 'not_paid';
         $inv_origin   = $p['invoice_origin'] ?? '';
@@ -613,9 +614,9 @@ if ($payload && $event_type === 'invoice') {
                 client_name        = {$esc($client_name)},
                 vat_invoice        = {$esc($inv_name)},
                 invoice_date       = {$esc($inv_date)},
-                amount             = $amt_vnd,
+                amount             = $amt_orig,
                 original_amount    = $amt_orig,
-                currency           = {$esc($co_ccy)},
+                currency           = {$esc($ccy)},
                 original_currency  = {$esc($ccy)},
                 payment_status     = {$esc($payment_status)},
                 invoice_status_class = {$esc($inv_status_class)},
@@ -635,7 +636,7 @@ if ($payload && $event_type === 'invoice') {
                  payment_month,weekly_update,pl_class,am_notes,odoo_invoice_id,created_at)
                 VALUES ({$esc($company)},{$esc($am_name)},{$esc($am_email)},$stmid,
                  {$esc($client_name)},'',
-                 $amt_vnd,$amt_orig,{$esc($co_ccy)},{$esc($ccy)},
+                 $amt_orig,$amt_orig,{$esc($ccy)},{$esc($ccy)},
                  {$esc($inv_name)},{$esc($inv_date)},{$esc($payment_status)},{$esc($inv_status_class)},
                  {$esc($payment_month)},{$esc($weekly_update)},{$esc($pl_class)},{$esc($notes)},$inv_id,NOW())");
             $debug['debt_inserted'] = $conn->insert_id;
