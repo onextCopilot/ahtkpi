@@ -593,6 +593,7 @@ function formatDate($date)
                                                         data-write-date="<?php echo htmlspecialchars($paymentDate); ?>"
                                                         data-ref="<?php echo htmlspecialchars($inv['x_studio_project_code'] ?: ($inv['x_studio_project_code_0'] ?? '')); ?>"
                                                         data-invoice-date="<?php echo $inv['invoice_date'] ?: $inv['date']; ?>"
+                                                        data-invoice-date-due="<?php echo htmlspecialchars($inv['invoice_date_due'] ?? ''); ?>"
                                                         data-odoo-id="<?php echo $inv['id']; ?>"
                                                         style="background:none; border:none; cursor:pointer; color:#2563eb; padding: 4px; border-radius: 4px;"
                                                         onmouseover="this.style.backgroundColor='#eff6ff'"
@@ -808,6 +809,7 @@ function formatDate($date)
             const writeDate = btn.getAttribute('data-write-date');
             const ref = btn.getAttribute('data-ref');
             const invoiceDate = btn.getAttribute('data-invoice-date');
+            const invoiceDateDue = btn.getAttribute('data-invoice-date-due');
             const odooId = btn.getAttribute('data-odoo-id');
 
             const formData = new FormData();
@@ -819,6 +821,7 @@ function formatDate($date)
             formData.append('write_date', writeDate);
             formData.append('project_code', ref);
             formData.append('invoice_date', invoiceDate);
+            formData.append('invoice_date_due', invoiceDateDue || '');
             formData.append('odoo_invoice_id', odooId);
             formData.append('team_id', teamId);
             formData.append('status', 'Planning');

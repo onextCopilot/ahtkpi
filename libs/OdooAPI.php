@@ -449,6 +449,49 @@ class OdooAPI
         return null;
     }
 
+    /**
+     * Lấy email (login) của Odoo user theo ID.
+     * Kết quả được cache trong bảng DB `odoo_user_email_cache` để tránh gọi API lặp lại.
+     */
+    public function getOdooUserEmail(int $odoo_user_id): string
+    {
+        if ($odoo_user_id <= 0) return '';
+
+        global $conn;
+
+        // Ensure cache table exists
+        $conn->query("CREATE TABLE IF NOT EXISTS odoo_user_email_cache (
+            odoo_user_id INT UNSIGNED NOT NULL PRIMARY KEY,
+            email        VARCHAR(255) NOT NULL DEFAULT '',
+            cached_at    DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+
+        // Check DB cache first
+        $row = $conn->query("SELECT email FROM odoo_user_email_cache WHERE odoo_user_id = $odoo_user_id LIMIT 1");
+        if ($row && $r = $row->fetch_assoc()) {
+            return $r['email'];
+        }
+
+        // Not in cache — fetch from Odoo API
+        $email = '';
+        try {
+            $users = $this->searchRead('res.users', [['id', '=', $odoo_user_id]], ['login'], 1);
+            if (!empty($users[0]['login'])) {
+                $email = $users[0]['login'];
+            }
+        } catch (Exception $e) {
+            error_log("[OdooAPI] getOdooUserEmail($odoo_user_id) failed: " . $e->getMessage());
+        }
+
+        // Store in cache (even if empty, to avoid repeated API calls for unknown IDs)
+        $esc = $conn->real_escape_string($email);
+        $conn->query("INSERT INTO odoo_user_email_cache (odoo_user_id, email, cached_at)
+            VALUES ($odoo_user_id, '$esc', NOW())
+            ON DUPLICATE KEY UPDATE email = '$esc', cached_at = NOW()");
+
+        return $email;
+    }
+
     public function getUrl(): string
     {
         return $this->url;

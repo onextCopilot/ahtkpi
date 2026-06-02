@@ -545,6 +545,20 @@ if ($payload && $event_type === 'invoice') {
         $inv_id       = (int)($p['id'] ?? $p['record_id'] ?? 0);
         if (!$inv_id) return;
 
+        // Chỉ sync invoice thực sự (out_invoice), bỏ qua credit note và entries
+        $move_type = $p['move_type'] ?? '';
+        if ($move_type && !in_array($move_type, ['out_invoice', ''], true)) {
+            $debug['debt_skipped_move_type'] = $move_type;
+            return;
+        }
+
+        // Chỉ sync invoice đã posted, bỏ qua draft
+        $inv_state = $p['state'] ?? '';
+        if ($inv_state === 'draft') {
+            $debug['debt_skipped_draft'] = $inv_id;
+            return;
+        }
+
         $inv_name     = $p['name'] ?: ($p['highest_name'] ?: 'Draft Invoice');
         $partner_name = is_array($p['partner_id']) ? ($p['partner_id']['name'] ?? '') : '';
         $com_partner  = is_array($p['commercial_partner_id']) ? ($p['commercial_partner_id']['name'] ?? $partner_name) : $partner_name;
@@ -564,11 +578,17 @@ if ($payload && $event_type === 'invoice') {
         $pay_state    = $p['payment_state'] ?? 'not_paid';
         $inv_origin   = $p['invoice_origin'] ?? '';
 
-        // Lấy am_email từ DB theo tên hoặc Odoo user ID
+        // Lấy am_email từ Odoo user ID (chính xác, không phụ thuộc full_name có thể trùng)
         $am_email = '';
-        if ($am_name) {
-            $uRow = $conn->query("SELECT email FROM users WHERE full_name = '" . $conn->real_escape_string($am_name) . "' LIMIT 1");
-            if ($uRow && $u = $uRow->fetch_assoc()) $am_email = $u['email'] ?? '';
+        if ($am_odoo_id > 0) {
+            try {
+                if (!class_exists('OdooAPI')) require_once __DIR__ . '/../libs/OdooAPI.php';
+                static $odooInst = null;
+                if (!$odooInst) $odooInst = new OdooAPI();
+                $am_email = $odooInst->getOdooUserEmail($am_odoo_id);
+            } catch (Exception $e) {
+                error_log('[odoo_hook] getOdooUserEmail failed: ' . $e->getMessage());
+            }
         }
 
         // Lấy sale_team_id từ sale_teams theo tên
@@ -617,22 +637,25 @@ if ($payload && $event_type === 'invoice') {
 
         // Lookup: ưu tiên odoo_invoice_id, fallback tìm theo vat_invoice + client_name
         $existRow = null;
-        $q1 = $conn->query("SELECT id FROM debts WHERE odoo_invoice_id = $inv_id LIMIT 1");
+        $q1 = $conn->query("SELECT id, am_email FROM debts WHERE odoo_invoice_id = $inv_id LIMIT 1");
         if ($q1 && $q1->num_rows > 0) {
             $existRow = $q1->fetch_assoc();
         } else {
             // Fallback: tìm theo tên invoice (cho records cũ chưa có odoo_invoice_id)
-            $q2 = $conn->query("SELECT id FROM debts WHERE vat_invoice = '" . $conn->real_escape_string($inv_name) . "' AND odoo_invoice_id IS NULL LIMIT 1");
+            $q2 = $conn->query("SELECT id, am_email FROM debts WHERE vat_invoice = '" . $conn->real_escape_string($inv_name) . "' AND odoo_invoice_id IS NULL LIMIT 1");
             if ($q2 && $q2->num_rows > 0) {
                 $existRow = $q2->fetch_assoc();
             }
         }
 
         if ($existRow) {
+            // Giữ nguyên am_email hiện tại nếu hook không tìm được email mới
+            // (tránh ghi đè email hợp lệ bằng chuỗi rỗng)
+            $emailToUpdate = $am_email ?: ($existRow['am_email'] ?? '');
             $conn->query("UPDATE debts SET
                 odoo_invoice_id      = $inv_id,
                 am                   = {$esc($am_name)},
-                am_email             = {$esc($am_email)},
+                am_email             = {$esc($emailToUpdate)},
                 sale_team_id         = " . ($sale_team_id ?: 'NULL') . ",
                 client_name          = {$esc($client_name)},
                 vat_invoice          = {$esc($inv_name)},

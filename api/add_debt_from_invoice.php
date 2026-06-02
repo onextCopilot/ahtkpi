@@ -50,6 +50,7 @@ $paymentState = $_POST['payment_state'] ?? '';
 $writeDate = $_POST['write_date'] ?? '';
 $projectCode = $_POST['project_code'] ?? '';
 $invoiceDateVal = $_POST['invoice_date'] ?? null;
+$invoiceDateDue = !empty($_POST['invoice_date_due']) ? $_POST['invoice_date_due'] : null;
 $teamId = !empty($_POST['team_id']) ? intval($_POST['team_id']) : null;
 $odooInvoiceId = !empty($_POST['odoo_invoice_id']) ? intval($_POST['odoo_invoice_id']) : null;
 
@@ -138,8 +139,8 @@ if (!$amEmail && isset($_SESSION['user_id'])) {
 
 try {
     $stmt = $conn->prepare("INSERT INTO debts 
-              (company, am, am_email, sale_team_id, client_name, project_name, amount, original_amount, currency, original_currency, vat_invoice, invoice_date, payment_status, am_notes, pl_class, invoice_status_class, payment_month, weekly_update, odoo_invoice_id, created_at) 
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())");
+              (company, am, am_email, sale_team_id, client_name, project_name, amount, original_amount, currency, original_currency, vat_invoice, invoice_date, expected_payment_date, payment_status, am_notes, pl_class, invoice_status_class, payment_month, weekly_update, odoo_invoice_id, created_at) 
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())");
 
     if (!$stmt) {
         throw new Exception("Prepare failed: " . $conn->error);
@@ -147,15 +148,14 @@ try {
 
     $defaultCompany = 'AHT TECH';
     $paymentStatus = 'Not paid';
-
-    if ($paymentState === 'paid') {
+    if ($paymentState === 'paid' || $paymentState === 'in_payment') {
         $paymentStatus = 'Paid';
     }
 
     $notes = "Added from Invoice: " . $invoiceName . " (" . $currency . ")";
 
     $stmt->bind_param(
-        "sssissddssssssssssi",
+        "sssissddsssssssssssi",
         $defaultCompany,
         $amName,
         $amEmail,
@@ -168,6 +168,7 @@ try {
         $currency,
         $invoiceName,
         $invoiceDateVal,
+        $invoiceDateDue,
         $paymentStatus,
         $notes,
         $plClass,
