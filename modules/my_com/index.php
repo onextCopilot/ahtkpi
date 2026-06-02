@@ -2034,7 +2034,7 @@ body.mc-locked .pakd-btn { cursor:not-allowed; }
 const pakdList = <?= json_encode(array_values(array_map(function($p) {
     $ebt = $p['revenue'] > 0 ? round($p['gross_profit'] / $p['revenue'] * 100, 1) : 0;
     return ['id' => (int)$p['id'], 'name' => $p['name'], 'company' => $p['company_name'] ?? '', 'ebt' => $ebt];
-}, $pakd_list)), JSON_UNESCAPED_UNICODE) ?>;
+}, array_filter($pakd_list, fn($p) => strtolower(trim($p['status'] ?? '')) === 'approved'))), JSON_UNESCAPED_UNICODE) ?>;
 
 function showToast(msg, ok) {
     const t = document.getElementById('saveToast');
