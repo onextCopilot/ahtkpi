@@ -17,6 +17,9 @@ if (!isset($_SESSION['user_id'])) {
 $user_id = (int) $_SESSION['user_id'];
 $method = $_SERVER['REQUEST_METHOD'];
 
+// One-time migration: ai_addon was TINYINT, must be VARCHAR to store 'aihive'/'ai_solutions'
+$conn->query("ALTER TABLE invoice_pakd_map MODIFY COLUMN ai_addon VARCHAR(50) DEFAULT ''");
+
 if ($method === 'POST') {
     $raw = file_get_contents('php://input');
     $log("POST body=$raw");
