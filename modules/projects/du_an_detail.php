@@ -45,6 +45,30 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'updat
     exit;
 }
 
+// ── AJAX: Delete invoice record (admin only) ──────────────────────────────────
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'delete_invoice') {
+    header('Content-Type: application/json; charset=utf-8');
+    if (!$is_admin) { echo json_encode(['ok' => false, 'msg' => 'Không có quyền']); exit; }
+    $inv_id = (int)($_POST['inv_id'] ?? 0);
+    if (!$inv_id) { echo json_encode(['ok' => false, 'msg' => 'Invalid ID']); exit; }
+    // Lấy invoice_origin trước khi xóa để cập nhật SO
+    $invRow = $conn->query("SELECT invoice_origin FROM odoo_invoices WHERE odoo_id = $inv_id LIMIT 1");
+    if ($invRow && $invInfo = $invRow->fetch_assoc()) {
+        if (!empty($invInfo['invoice_origin'])) {
+            $soRow = $conn->query("SELECT odoo_id, invoice_ids FROM odoo_sale_orders WHERE name = '" . $conn->real_escape_string($invInfo['invoice_origin']) . "' LIMIT 1");
+            if ($soRow && $soData = $soRow->fetch_assoc()) {
+                $ids = !empty($soData['invoice_ids']) ? (json_decode($soData['invoice_ids'], true) ?: []) : [];
+                $ids = array_values(array_filter($ids, fn($i) => (int)$i !== $inv_id));
+                $newJson = $conn->real_escape_string(json_encode($ids));
+                $conn->query("UPDATE odoo_sale_orders SET invoice_ids = '$newJson', invoice_count = " . count($ids) . " WHERE odoo_id = " . (int)$soData['odoo_id']);
+            }
+        }
+    }
+    $ok = $conn->query("DELETE FROM odoo_invoices WHERE odoo_id = $inv_id");
+    echo json_encode(['ok' => (bool)$ok, 'err' => $conn->error ?: null]);
+    exit;
+}
+
 // ── AJAX: Upload file ─────────────────────────────────────────────────────────
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'upload_doc') {
     header('Content-Type: application/json; charset=utf-8');
@@ -1092,6 +1116,7 @@ $pst = $pakd['pasx_status'] ?? '';
                                             <th style="padding:9px 10px;text-align:right;font-size:10.5px;font-weight:700;color:var(--gray);white-space:nowrap;">Tổng</th>
                                             <th style="padding:9px 10px;text-align:right;font-size:10.5px;font-weight:700;color:#dc2626;white-space:nowrap;">Còn nợ</th>
                                             <th style="padding:9px 10px;text-align:left;font-size:10.5px;font-weight:700;color:var(--gray);min-width:100px;">Tiến độ</th>
+                                            <?php if ($is_admin): ?><th style="padding:9px 8px;width:32px;"></th><?php endif; ?>
                                         </tr>
                                     </thead>
                                     <tbody>
@@ -1140,6 +1165,16 @@ $pst = $pakd['pasx_status'] ?? '';
                                                 <span style="font-size:10px;font-weight:700;color:<?= $paidPct >= 100 ? '#16a34a' : '#dc2626' ?>;white-space:nowrap;"><?= $paidPct ?>%</span>
                                             </div>
                                         </td>
+                                        <?php if ($is_admin): ?>
+                                        <td style="padding:9px 8px;text-align:center;">
+                                            <button onclick="deleteInvoice(<?= $invId ?>)" title="Xóa"
+                                                style="border:none;background:none;cursor:pointer;color:#fca5a5;font-size:12px;padding:3px 5px;border-radius:4px;line-height:1;"
+                                                onmouseover="this.style.color='#dc2626';this.style.background='#fee2e2'"
+                                                onmouseout="this.style.color='#fca5a5';this.style.background='none'">
+                                                <i class="fas fa-trash"></i>
+                                            </button>
+                                        </td>
+                                        <?php endif; ?>
                                     </tr>
                                     <?php endforeach; ?>
                                     </tbody>
@@ -1756,6 +1791,26 @@ function closePreview(e) {
 document.addEventListener('keydown', e => { if (e.key === 'Escape') closePreview({ target: document.getElementById('preview-modal') }); });
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
+async function deleteInvoice(invId) {
+    if (!confirm('Xóa hoá đơn này khỏi danh sách?')) return;
+    const fd = new FormData();
+    fd.append('action', 'delete_invoice');
+    fd.append('inv_id', invId);
+    fd.append('pakd_id', '<?= $pakd_id ?>');
+    const res  = await fetch("/projects/du-an/detail?id=<?= $pakd_id ?>", { method: 'POST', body: fd });
+    const data = await res.json();
+    if (data.ok) {
+        // Xóa row khỏi table
+        const rows = document.querySelectorAll('[data-inv-id="' + invId + '"]');
+        rows.forEach(r => r.remove());
+        showToast('Đã xóa hoá đơn', 'success');
+        // Reload để cập nhật count & tổng
+        setTimeout(() => location.reload(), 800);
+    } else {
+        showToast('Lỗi: ' + (data.err || data.msg || 'Không rõ'), 'error');
+    }
+}
+
 function xlsShowSheet(btn, sheetId) {
     // Ẩn tất cả sheets
     btn.closest('div[style]').nextElementSibling.querySelectorAll('[id^="sheet-"]').forEach(el => el.style.display = 'none');
