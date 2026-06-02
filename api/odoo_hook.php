@@ -555,7 +555,8 @@ if ($payload && $event_type === 'invoice') {
         $inv_state = $p['state'] ?? '';
         $debug['inv_state_raw'] = $inv_state;
 
-        $inv_name     = $p['name'] ?: ($p['highest_name'] ?: 'Draft Invoice');
+        // Dùng name thật, fallback về 'Draft Invoice' (giống /invoice page, không dùng highest_name)
+        $inv_name     = ($p['name'] && $p['name'] !== false) ? $p['name'] : 'Draft Invoice';
 
         // Helper: lấy id từ many2one field (cả 2 format: object {id,name} và tuple [id,name])
         $m2o_id   = function($v) { return is_array($v) ? (int)(isset($v['id']) ? $v['id'] : ($v[0] ?? 0)) : 0; };
@@ -580,10 +581,22 @@ if ($payload && $event_type === 'invoice') {
         $amt_orig     = (float)($p['amount_total']        ?? 0);                    // số tiền gốc (USD)
         $amt_vnd      = abs((float)($p['amount_total_signed'] ?? $amt_orig));       // VND equivalent
         $debug['debt_calc'] = ['amt_orig'=>$amt_orig,'amt_vnd'=>$amt_vnd,'ccy'=>$ccy ?? '?','co_ccy'=>$co_ccy ?? '?','pay_state'=>($p['payment_state']??'?'),'inv_name'=>$inv_name];
-        $inv_date     = ($p['invoice_date']     && $p['invoice_date']     !== false) ? $p['invoice_date']     : null;
+        // invoice_date: dùng invoice_date, fallback sang date (giống /invoice: $inv['invoice_date'] ?: $inv['date'])
+        $inv_date     = ($p['invoice_date']     && $p['invoice_date']     !== false) ? $p['invoice_date']
+                      : (($p['date']            && $p['date']             !== false) ? $p['date']            : null);
         $inv_date_due = ($p['invoice_date_due'] && $p['invoice_date_due'] !== false) ? $p['invoice_date_due'] : null;
         $pay_state    = $p['payment_state'] ?? 'not_paid';
         $inv_origin   = $p['invoice_origin'] ?? '';
+
+        // write_date cho payment_month: ưu tiên ngày thanh toán thực từ invoice_payments_widget
+        $write_date_for_payment = $p['write_date'] ?? '';
+        if (!empty($p['invoice_payments_widget']) && is_array($p['invoice_payments_widget'])) {
+            $widget_content = $p['invoice_payments_widget']['content'] ?? [];
+            if (!empty($widget_content)) {
+                $dates = array_filter(array_column($widget_content, 'date'));
+                if ($dates) $write_date_for_payment = max($dates);
+            }
+        }
 
         // Lấy am_email từ Odoo user ID (chính xác, không phụ thuộc full_name có thể trùng)
         $am_email = '';
@@ -617,7 +630,7 @@ if ($payload && $event_type === 'invoice') {
         // invoice_status_class — dựa trên trạng thái thanh toán + số ngày
         $ref_date = $inv_date ?: $inv_date_due; // dùng invoice_date, fallback sang due_date
         if ($pay_state === 'paid' || $pay_state === 'in_payment') {
-            $write_ts = !empty($p['write_date']) ? strtotime($p['write_date']) : time();
+            $write_ts = !empty($write_date_for_payment) ? strtotime($write_date_for_payment) : time();
             $cur_month = date('Y-m');
             $paid_month = date('Y-m', $write_ts);
             $inv_status_class = ($paid_month === $cur_month) ? 'Tím' : 'Done';
@@ -631,8 +644,8 @@ if ($payload && $event_type === 'invoice') {
         // payment_month & weekly_update
         $payment_month = '';
         $weekly_update = '';
-        if (($pay_state === 'paid' || $pay_state === 'in_payment') && !empty($p['write_date'])) {
-            $ts = strtotime($p['write_date']);
+        if (($pay_state === 'paid' || $pay_state === 'in_payment') && !empty($write_date_for_payment)) {
+            $ts = strtotime($write_date_for_payment);
             $payment_month = date('m/Y', $ts);
             $weekly_update = 'Tuần ' . ceil(date('j', $ts) / 7);
         }
