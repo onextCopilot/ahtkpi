@@ -2305,10 +2305,17 @@ function syncAiAvailability(tr, ebtVal) {
     const aiComCell = tr.querySelector('.aicom-cell');
     if (aiComCell) aiComCell.dataset.ebt = (ebtVal === null || isNaN(ebtVal)) ? '' : ebtVal;
     recomputeAiCom();
-    // Yearly Bonus also keys off EBT — keep the Com1 cells' EBT in sync and refresh.
+    // Yearly Bonus also keys off EBT — keep the Com1 cells' EBT + baserate in sync and refresh.
     const ebtStr = (ebtVal === null || isNaN(ebtVal)) ? '' : ebtVal;
-    const c1 = tr.querySelector('.com1-cell'); if (c1) c1.dataset.ebt = ebtStr;
-    const c1r = tr.querySelector('.com1-cell-rec'); if (c1r) c1r.dataset.ebt = ebtStr;
+    const ebtKnownLow = ebtVal !== null && !isNaN(ebtVal) && ebtVal < 5;
+    [tr.querySelector('.com1-cell'), tr.querySelector('.com1-cell-rec')].forEach(cell => {
+        if (!cell) return;
+        cell.dataset.ebt = ebtStr;
+        if (cell.dataset.paidok === '1') {
+            cell.dataset.baserate = ebtKnownLow ? 0 : (cell.dataset.isnew === '1' ? 0.01 : 0.005);
+        }
+    });
+    recomputeCom1();
     recomputeYearlyBonus();
 }
 
