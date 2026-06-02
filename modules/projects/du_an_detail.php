@@ -511,20 +511,7 @@ $pst = $pakd['pasx_status'] ?? '';
             </div>
         </div>
 
-        <!-- Deal Won Banner -->
-        <div class="won-banner">
-            <div class="won-banner-icon">🏆</div>
-            <div class="won-banner-body">
-                <div class="won-banner-title">Chúc mừng! Opportunity này đã được Deal Won</div>
-                <div class="won-banner-sub">
-                    Stage Odoo: <strong><?= htmlspecialchars($pakd['odoo_stage_name'] ?? '—') ?></strong>
-                    <?php if (!empty($pakd['assignment_date'])): ?>
-                    &nbsp;·&nbsp; Assigned: <strong><?= date('d/m/Y', strtotime($pakd['assignment_date'])) ?></strong>
-                    <?php endif; ?>
-                </div>
-            </div>
-            <div class="won-badge"><i class="fas fa-trophy"></i> DEAL WON</div>
-        </div>
+
 
         <div class="page-content">
 
