@@ -17,6 +17,70 @@ if (!$pakd_id) {
     exit();
 }
 
+// ── Ensure docs table exists ──────────────────────────────────────────────────
+$conn->query("CREATE TABLE IF NOT EXISTS pakd_documents (
+    id               INT AUTO_INCREMENT PRIMARY KEY,
+    pakd_id          INT NOT NULL,
+    file_name        VARCHAR(255)  NOT NULL,
+    original_name    VARCHAR(500)  NOT NULL,
+    file_size        BIGINT        DEFAULT 0,
+    mime_type        VARCHAR(200)  DEFAULT NULL,
+    file_path        VARCHAR(1000) NOT NULL,
+    doc_label        VARCHAR(100)  DEFAULT NULL,
+    uploaded_by      INT           DEFAULT NULL,
+    uploaded_by_name VARCHAR(255)  DEFAULT NULL,
+    created_at       DATETIME      DEFAULT CURRENT_TIMESTAMP,
+    INDEX idx_pakd (pakd_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+
+// ── AJAX: Upload file ─────────────────────────────────────────────────────────
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'upload_doc') {
+    header('Content-Type: application/json; charset=utf-8');
+    $pid   = (int)($_POST['pakd_id'] ?? $pakd_id);
+    $label = trim($_POST['doc_label'] ?? '');
+    if (!$pid) { echo json_encode(['ok'=>false,'msg'=>'Invalid ID']); exit; }
+    if (empty($_FILES['file']) || $_FILES['file']['error'] !== UPLOAD_ERR_OK) {
+        echo json_encode(['ok'=>false,'msg'=>'Lỗi upload file (code: '.($_FILES['file']['error'] ?? -1).')']); exit;
+    }
+    $file = $_FILES['file'];
+    if ($file['size'] > 50 * 1024 * 1024) { echo json_encode(['ok'=>false,'msg'=>'File quá lớn (tối đa 50MB)']); exit; }
+    $allowed = ['pdf','doc','docx','xls','xlsx','ppt','pptx','png','jpg','jpeg','gif','webp','zip','txt','csv'];
+    $ext = strtolower(pathinfo($file['name'], PATHINFO_EXTENSION));
+    if (!in_array($ext, $allowed)) { echo json_encode(['ok'=>false,'msg'=>'Loại file không được phép: .'.$ext]); exit; }
+    $upload_dir = __DIR__ . '/../../uploads/pakd_docs/' . $pid . '/';
+    if (!is_dir($upload_dir)) mkdir($upload_dir, 0755, true);
+    $stored = uniqid('doc_') . '.' . $ext;
+    if (!move_uploaded_file($file['tmp_name'], $upload_dir . $stored)) {
+        echo json_encode(['ok'=>false,'msg'=>'Không thể lưu file']); exit;
+    }
+    $rel = '/uploads/pakd_docs/' . $pid . '/' . $stored;
+    $stmt = $conn->prepare("INSERT INTO pakd_documents (pakd_id,file_name,original_name,file_size,mime_type,file_path,doc_label,uploaded_by,uploaded_by_name) VALUES (?,?,?,?,?,?,?,?,?)");
+    $stmt->bind_param("issssssls", $pid, $stored, $file['name'], $file['size'], $file['type'], $rel, $label, $user_id, $my_full_name);
+    $stmt->execute();
+    echo json_encode(['ok'=>true,'id'=>$conn->insert_id,'name'=>$file['name'],'path'=>$rel,'size'=>$file['size'],'ext'=>$ext,'label'=>$label,'uploader'=>$my_full_name]);
+    $stmt->close();
+    exit;
+}
+
+// ── AJAX: Delete file ─────────────────────────────────────────────────────────
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'delete_doc') {
+    header('Content-Type: application/json; charset=utf-8');
+    $doc_id = (int)($_POST['doc_id'] ?? 0);
+    $pid    = (int)($_POST['pakd_id'] ?? $pakd_id);
+    $stmt   = $conn->prepare("SELECT file_path, uploaded_by FROM pakd_documents WHERE id=? AND pakd_id=?");
+    $stmt->bind_param("ii", $doc_id, $pid);
+    $stmt->execute();
+    $doc = $stmt->get_result()->fetch_assoc();
+    $stmt->close();
+    if (!$doc) { echo json_encode(['ok'=>false,'msg'=>'Không tìm thấy file']); exit; }
+    if (!$is_admin && (int)$doc['uploaded_by'] !== $user_id) { echo json_encode(['ok'=>false,'msg'=>'Không có quyền']); exit; }
+    $full = __DIR__ . '/../../' . ltrim($doc['file_path'], '/');
+    if (file_exists($full)) unlink($full);
+    $conn->prepare("DELETE FROM pakd_documents WHERE id=?")->bind_param("i",$doc_id)->execute();
+    echo json_encode(['ok'=>true]);
+    exit;
+}
+
 // Ensure columns exist
 foreach ([
     'assignment_date'  => 'DATETIME DEFAULT NULL',
@@ -206,6 +270,48 @@ try {
     while ($wRow = $wlRes->fetch_assoc()) $pasx_logs[] = $wRow;
     $wl->close();
 } catch (\Throwable $e) {}
+
+// Fetch documents
+$doc_list = [];
+$dRes = $conn->prepare("SELECT * FROM pakd_documents WHERE pakd_id=? ORDER BY created_at DESC");
+$dRes->bind_param("i", $pakd_id);
+$dRes->execute();
+$dRows = $dRes->get_result();
+while ($dRow = $dRows->fetch_assoc()) $doc_list[] = $dRow;
+$dRes->close();
+
+$site_host = (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off' ? 'https' : 'http') . '://' . ($_SERVER['HTTP_HOST'] ?? 'localhost');
+
+function formatFileSize($bytes) {
+    if ($bytes >= 1024*1024) return number_format($bytes/1024/1024, 1).' MB';
+    if ($bytes >= 1024)      return number_format($bytes/1024, 0).' KB';
+    return $bytes . ' B';
+}
+
+function fileIcon($ext) {
+    $map = [
+        'pdf'  => ['fas fa-file-pdf',       '#dc2626'],
+        'doc'  => ['fas fa-file-word',       '#2563eb'],
+        'docx' => ['fas fa-file-word',       '#2563eb'],
+        'xls'  => ['fas fa-file-excel',      '#16a34a'],
+        'xlsx' => ['fas fa-file-excel',      '#16a34a'],
+        'ppt'  => ['fas fa-file-powerpoint', '#ea580c'],
+        'pptx' => ['fas fa-file-powerpoint', '#ea580c'],
+        'png'  => ['fas fa-file-image',      '#7c3aed'],
+        'jpg'  => ['fas fa-file-image',      '#7c3aed'],
+        'jpeg' => ['fas fa-file-image',      '#7c3aed'],
+        'gif'  => ['fas fa-file-image',      '#7c3aed'],
+        'webp' => ['fas fa-file-image',      '#7c3aed'],
+        'zip'  => ['fas fa-file-zipper',     '#d97706'],
+        'txt'  => ['fas fa-file-lines',      '#64748b'],
+        'csv'  => ['fas fa-file-csv',        '#16a34a'],
+    ];
+    return $map[$ext] ?? ['fas fa-file', '#94a3b8'];
+}
+
+function canPreview($ext) {
+    return in_array($ext, ['pdf','png','jpg','jpeg','gif','webp','doc','docx','ppt','pptx','xls','xlsx']);
+}
 
 function formatVND3($num) {
     if ($num >= 1e9)  return number_format($num/1e9, 2, ',', '.').' tỷ';
@@ -462,6 +568,45 @@ $pst = $pakd['pasx_status'] ?? '';
         .empty-state { text-align: center; padding: 28px 20px; color: var(--gray); }
         .empty-state i { font-size: 24px; color: var(--lgray); margin-bottom: 8px; display: block; }
         .empty-state p { font-size: 12px; margin: 0; }
+
+        /* ── Documents ── */
+        .drop-zone {
+            border: 2px dashed var(--border); border-radius: 10px; padding: 28px 20px;
+            text-align: center; cursor: pointer; transition: all .2s; background: #fafafa;
+        }
+        .drop-zone:hover, .drop-zone.drag-over { border-color: var(--primary); background: rgba(99,102,241,.04); }
+        .drop-zone i { font-size: 28px; color: var(--lgray); margin-bottom: 8px; display: block; }
+        .drop-zone p { margin: 0; font-size: 13px; color: var(--gray); }
+        .drop-zone small { font-size: 11px; color: var(--lgray); }
+        .doc-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 10px; margin-top: 14px; }
+        .doc-card {
+            border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px;
+            background: #fff; display: flex; flex-direction: column; gap: 8px;
+            transition: box-shadow .15s; cursor: pointer; position: relative;
+        }
+        .doc-card:hover { box-shadow: 0 4px 12px rgba(0,0,0,.08); border-color: #cbd5e1; }
+        .doc-card-icon { font-size: 28px; }
+        .doc-card-name { font-size: 12.5px; font-weight: 600; color: var(--slate); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .doc-card-meta { font-size: 11px; color: var(--lgray); }
+        .doc-card-label { display: inline-block; font-size: 10px; font-weight: 700; padding: 1px 7px; border-radius: 4px; background: #eff6ff; color: #2563eb; margin-bottom: 2px; }
+        .doc-card-actions { display: flex; gap: 6px; margin-top: auto; }
+        .doc-btn { display: inline-flex; align-items: center; gap: 4px; padding: 4px 10px; border-radius: 6px; font-size: 11px; font-weight: 600; cursor: pointer; border: 1px solid var(--border); background: #f8fafc; color: var(--gray); text-decoration: none; transition: all .15s; }
+        .doc-btn:hover { background: #f1f5f9; border-color: #94a3b8; }
+        .doc-btn.danger { color: #dc2626; border-color: #fecaca; background: #fff; }
+        .doc-btn.danger:hover { background: #fee2e2; }
+        .doc-btn.primary { color: #2563eb; border-color: #bfdbfe; background: #eff6ff; }
+        .doc-btn.primary:hover { background: #dbeafe; }
+        /* Preview modal */
+        .preview-modal { display:none; position:fixed; inset:0; z-index:9000; background:rgba(15,23,42,.7); align-items:center; justify-content:center; }
+        .preview-modal.open { display:flex; }
+        .preview-box { background:#fff; border-radius:14px; width:90vw; max-width:1100px; height:88vh; display:flex; flex-direction:column; overflow:hidden; box-shadow:0 24px 64px rgba(0,0,0,.35); }
+        .preview-bar { display:flex; align-items:center; gap:12px; padding:12px 18px; border-bottom:1px solid var(--border); flex-shrink:0; }
+        .preview-bar-title { flex:1; font-size:13px; font-weight:600; color:var(--slate); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+        .preview-close { width:30px; height:30px; border-radius:50%; border:none; background:#f1f5f9; cursor:pointer; display:flex; align-items:center; justify-content:center; color:var(--gray); font-size:14px; }
+        .preview-close:hover { background:#e2e8f0; }
+        .preview-body { flex:1; overflow:hidden; }
+        .preview-body iframe, .preview-body img { width:100%; height:100%; border:none; object-fit:contain; }
+        .preview-body .no-preview { display:flex; flex-direction:column; align-items:center; justify-content:center; height:100%; gap:12px; color:var(--gray); }
 
         /* ── Responsive ── */
         @media (max-width: 1100px) {
@@ -1120,6 +1265,83 @@ $pst = $pakd['pasx_status'] ?? '';
                         </div>
                     </div>
 
+                    <!-- Documents -->
+                    <div class="card" id="docs-card">
+                        <div class="card-header" style="justify-content:space-between;">
+                            <div style="display:flex;align-items:center;gap:8px;">
+                                <div class="card-icon" style="background:rgba(99,102,241,.1);color:#6366f1;"><i class="fas fa-paperclip"></i></div>
+                                <h3>Tài liệu dự án
+                                    <span id="doc-count-badge" style="font-size:12px;font-weight:500;color:var(--gray);margin-left:4px;">(<?= count($doc_list) ?>)</span>
+                                </h3>
+                            </div>
+                            <button onclick="document.getElementById('doc-file-input').click()"
+                                style="display:inline-flex;align-items:center;gap:5px;padding:6px 13px;border-radius:7px;border:1px solid #c7d2fe;background:#eff6ff;color:#4f46e5;font-size:12px;font-weight:600;cursor:pointer;">
+                                <i class="fas fa-upload" style="font-size:10px;"></i> Upload
+                            </button>
+                        </div>
+                        <div class="card-body">
+                            <!-- Drop zone -->
+                            <div class="drop-zone" id="drop-zone" onclick="document.getElementById('doc-file-input').click()">
+                                <i class="fas fa-cloud-arrow-up"></i>
+                                <p>Kéo thả file vào đây hoặc <strong style="color:var(--primary);">click để chọn</strong></p>
+                                <small>PDF · DOCX · XLSX · PPTX · PNG · JPG · ZIP &nbsp;|&nbsp; Tối đa 50MB</small>
+                            </div>
+                            <input type="file" id="doc-file-input" style="display:none" multiple
+                                accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.png,.jpg,.jpeg,.gif,.webp,.zip,.txt,.csv">
+
+                            <!-- Upload progress -->
+                            <div id="upload-progress" style="display:none;margin-top:10px;">
+                                <div style="height:4px;background:#e2e8f0;border-radius:99px;overflow:hidden;">
+                                    <div id="progress-bar" style="height:100%;background:var(--primary);border-radius:99px;width:0%;transition:width .3s;"></div>
+                                </div>
+                                <div id="progress-text" style="font-size:11px;color:var(--gray);margin-top:4px;"></div>
+                            </div>
+
+                            <!-- File list -->
+                            <div class="doc-grid" id="doc-grid">
+                            <?php foreach ($doc_list as $doc):
+                                $dExt  = strtolower(pathinfo($doc['original_name'], PATHINFO_EXTENSION));
+                                [$dIcon, $dColor] = fileIcon($dExt);
+                                $dUrl  = $site_host . $doc['file_path'];
+                            ?>
+                            <div class="doc-card" id="doc-<?= $doc['id'] ?>">
+                                <?php if ($doc['doc_label']): ?>
+                                <span class="doc-card-label"><?= htmlspecialchars($doc['doc_label']) ?></span>
+                                <?php endif; ?>
+                                <div class="doc-card-icon" style="color:<?= $dColor ?>;"><i class="<?= $dIcon ?>"></i></div>
+                                <div class="doc-card-name" title="<?= htmlspecialchars($doc['original_name']) ?>"><?= htmlspecialchars($doc['original_name']) ?></div>
+                                <div class="doc-card-meta">
+                                    <?= formatFileSize($doc['file_size']) ?> &nbsp;·&nbsp;
+                                    <?= date('d/m/Y', strtotime($doc['created_at'])) ?>
+                                    <?php if ($doc['uploaded_by_name']): ?><br><?= htmlspecialchars($doc['uploaded_by_name']) ?><?php endif; ?>
+                                </div>
+                                <div class="doc-card-actions">
+                                    <?php if (canPreview($dExt)): ?>
+                                    <button class="doc-btn primary" onclick="previewDoc('<?= htmlspecialchars($dUrl, ENT_QUOTES) ?>','<?= htmlspecialchars($doc['original_name'], ENT_QUOTES) ?>','<?= $dExt ?>')">
+                                        <i class="fas fa-eye" style="font-size:10px;"></i> Xem
+                                    </button>
+                                    <?php endif; ?>
+                                    <a href="<?= htmlspecialchars($dUrl) ?>" download="<?= htmlspecialchars($doc['original_name']) ?>" class="doc-btn">
+                                        <i class="fas fa-download" style="font-size:10px;"></i>
+                                    </a>
+                                    <?php if ($is_admin || (int)$doc['uploaded_by'] === $user_id): ?>
+                                    <button class="doc-btn danger" onclick="deleteDoc(<?= $doc['id'] ?>, <?= $pakd_id ?>)">
+                                        <i class="fas fa-trash" style="font-size:10px;"></i>
+                                    </button>
+                                    <?php endif; ?>
+                                </div>
+                            </div>
+                            <?php endforeach; ?>
+                            <?php if (empty($doc_list)): ?>
+                            <div id="doc-empty" style="grid-column:1/-1;text-align:center;padding:20px;color:var(--lgray);font-size:13px;">
+                                <i class="fas fa-folder-open" style="font-size:22px;display:block;margin-bottom:6px;"></i>
+                                Chưa có tài liệu nào
+                            </div>
+                            <?php endif; ?>
+                            </div>
+                        </div>
+                    </div>
+
                 </div>
 
                 <!-- Right column -->
@@ -1285,5 +1507,186 @@ $pst = $pakd['pasx_status'] ?? '';
         </div><!-- /page-content -->
     </div>
 </div>
+
+<!-- ── Preview Modal ── -->
+<div class="preview-modal" id="preview-modal" onclick="closePreview(event)">
+    <div class="preview-box" onclick="event.stopPropagation()">
+        <div class="preview-bar">
+            <i class="fas fa-file" style="color:var(--lgray);font-size:14px;" id="preview-icon"></i>
+            <div class="preview-bar-title" id="preview-title">—</div>
+            <a id="preview-download" href="#" download class="doc-btn" style="flex-shrink:0;">
+                <i class="fas fa-download" style="font-size:11px;"></i> Tải về
+            </a>
+            <button class="preview-close" onclick="closePreview()"><i class="fas fa-times"></i></button>
+        </div>
+        <div class="preview-body" id="preview-body"></div>
+    </div>
+</div>
+
+<script>
+// ── File upload ──────────────────────────────────────────────────────────────
+const fileInput   = document.getElementById('doc-file-input');
+const dropZone    = document.getElementById('drop-zone');
+const pakdId      = <?= $pakd_id ?>;
+
+fileInput.addEventListener('change', () => uploadFiles(fileInput.files));
+
+['dragenter','dragover'].forEach(e => dropZone.addEventListener(e, ev => { ev.preventDefault(); dropZone.classList.add('drag-over'); }));
+['dragleave','drop'].forEach(e => dropZone.addEventListener(e, ev => { ev.preventDefault(); dropZone.classList.remove('drag-over'); }));
+dropZone.addEventListener('drop', ev => uploadFiles(ev.dataTransfer.files));
+
+async function uploadFiles(files) {
+    if (!files || files.length === 0) return;
+    const prog = document.getElementById('upload-progress');
+    const bar  = document.getElementById('progress-bar');
+    const txt  = document.getElementById('progress-text');
+    prog.style.display = 'block';
+
+    for (let i = 0; i < files.length; i++) {
+        const f   = files[i];
+        const pct = Math.round((i / files.length) * 100);
+        bar.style.width = pct + '%';
+        txt.textContent = `Đang upload: ${f.name} (${i+1}/${files.length})`;
+
+        const fd = new FormData();
+        fd.append('action',   'upload_doc');
+        fd.append('pakd_id',  pakdId);
+        fd.append('file',     f);
+
+        try {
+            const res  = await fetch(window.location.pathname + '?id=' + pakdId, { method: 'POST', body: fd });
+            const data = await res.json();
+            if (data.ok) {
+                appendDocCard(data);
+                document.getElementById('doc-empty')?.remove();
+                updateDocCount(1);
+            } else {
+                showToast(data.msg || 'Lỗi upload', 'error');
+            }
+        } catch(e) {
+            showToast('Lỗi kết nối', 'error');
+        }
+    }
+    bar.style.width = '100%';
+    txt.textContent = 'Hoàn thành!';
+    setTimeout(() => { prog.style.display = 'none'; bar.style.width = '0%'; }, 1500);
+    fileInput.value = '';
+}
+
+function appendDocCard(data) {
+    const grid   = document.getElementById('doc-grid');
+    const extMap = {
+        pdf:'fa-file-pdf', doc:'fa-file-word', docx:'fa-file-word',
+        xls:'fa-file-excel', xlsx:'fa-file-excel', ppt:'fa-file-powerpoint', pptx:'fa-file-powerpoint',
+        png:'fa-file-image', jpg:'fa-file-image', jpeg:'fa-file-image', gif:'fa-file-image', webp:'fa-file-image',
+        zip:'fa-file-zipper', txt:'fa-file-lines', csv:'fa-file-csv'
+    };
+    const colorMap = {
+        pdf:'#dc2626', doc:'#2563eb', docx:'#2563eb', xls:'#16a34a', xlsx:'#16a34a',
+        ppt:'#ea580c', pptx:'#ea580c', png:'#7c3aed', jpg:'#7c3aed', jpeg:'#7c3aed',
+        gif:'#7c3aed', webp:'#7c3aed', zip:'#d97706', txt:'#64748b', csv:'#16a34a'
+    };
+    const previewExts = ['pdf','png','jpg','jpeg','gif','webp','doc','docx','ppt','pptx','xls','xlsx'];
+    const icon  = extMap[data.ext]  || 'fa-file';
+    const color = colorMap[data.ext] || '#94a3b8';
+    const url   = '<?= $site_host ?>' + data.path;
+    const size  = data.size >= 1024*1024 ? (data.size/1024/1024).toFixed(1)+' MB' : Math.round(data.size/1024)+' KB';
+    const canPrev = previewExts.includes(data.ext);
+    const today = new Date().toLocaleDateString('vi-VN');
+
+    const card = document.createElement('div');
+    card.className = 'doc-card';
+    card.id = 'doc-' + data.id;
+    card.innerHTML = `
+        ${data.label ? `<span class="doc-card-label">${escHtml(data.label)}</span>` : ''}
+        <div class="doc-card-icon" style="color:${color};"><i class="fas ${icon}"></i></div>
+        <div class="doc-card-name" title="${escHtml(data.name)}">${escHtml(data.name)}</div>
+        <div class="doc-card-meta">${size} · ${today}<br>${escHtml(data.uploader || '')}</div>
+        <div class="doc-card-actions">
+            ${canPrev ? `<button class="doc-btn primary" onclick="previewDoc('${escHtml(url)}','${escHtml(data.name)}','${data.ext}')"><i class="fas fa-eye" style="font-size:10px;"></i> Xem</button>` : ''}
+            <a href="${escHtml(url)}" download="${escHtml(data.name)}" class="doc-btn"><i class="fas fa-download" style="font-size:10px;"></i></a>
+            <button class="doc-btn danger" onclick="deleteDoc(${data.id}, ${pakdId})"><i class="fas fa-trash" style="font-size:10px;"></i></button>
+        </div>`;
+    grid.prepend(card);
+}
+
+function updateDocCount(delta) {
+    const badge = document.getElementById('doc-count-badge');
+    const cur   = parseInt(badge.textContent.replace(/\D/g, '')) || 0;
+    badge.textContent = '(' + Math.max(0, cur + delta) + ')';
+}
+
+// ── Delete doc ───────────────────────────────────────────────────────────────
+async function deleteDoc(docId, pid) {
+    if (!confirm('Xóa file này?')) return;
+    const fd = new FormData();
+    fd.append('action',   'delete_doc');
+    fd.append('doc_id',   docId);
+    fd.append('pakd_id',  pid);
+    const res  = await fetch(window.location.pathname + '?id=' + pakdId, { method: 'POST', body: fd });
+    const data = await res.json();
+    if (data.ok) {
+        document.getElementById('doc-' + docId)?.remove();
+        updateDocCount(-1);
+        showToast('Đã xóa file', 'success');
+        if (document.getElementById('doc-grid').children.length === 0) {
+            document.getElementById('doc-grid').innerHTML = `<div id="doc-empty" style="grid-column:1/-1;text-align:center;padding:20px;color:var(--lgray);font-size:13px;"><i class="fas fa-folder-open" style="font-size:22px;display:block;margin-bottom:6px;"></i>Chưa có tài liệu nào</div>`;
+        }
+    } else {
+        showToast(data.msg || 'Lỗi xóa file', 'error');
+    }
+}
+
+// ── Preview ──────────────────────────────────────────────────────────────────
+function previewDoc(url, name, ext) {
+    const modal  = document.getElementById('preview-modal');
+    const body   = document.getElementById('preview-body');
+    const title  = document.getElementById('preview-title');
+    const dl     = document.getElementById('preview-download');
+    title.textContent = name;
+    dl.href = url; dl.download = name;
+    body.innerHTML = '';
+
+    const images = ['png','jpg','jpeg','gif','webp'];
+    if (images.includes(ext)) {
+        body.innerHTML = `<img src="${url}" style="width:100%;height:100%;object-fit:contain;">`;
+    } else if (ext === 'pdf') {
+        body.innerHTML = `<iframe src="${url}#toolbar=1&view=FitH" style="width:100%;height:100%;border:none;"></iframe>`;
+    } else {
+        // DOCX, PPTX, XLSX → Google Docs Viewer
+        const encoded = encodeURIComponent(url);
+        body.innerHTML = `<iframe src="https://docs.google.com/viewer?url=${encoded}&embedded=true" style="width:100%;height:100%;border:none;" allowfullscreen></iframe>`;
+    }
+    modal.classList.add('open');
+    document.body.style.overflow = 'hidden';
+}
+
+function closePreview(e) {
+    if (e && e.target !== document.getElementById('preview-modal')) return;
+    document.getElementById('preview-modal').classList.remove('open');
+    document.getElementById('preview-body').innerHTML = '';
+    document.body.style.overflow = '';
+}
+document.addEventListener('keydown', e => { if (e.key === 'Escape') closePreview({ target: document.getElementById('preview-modal') }); });
+
+// ── Helpers ──────────────────────────────────────────────────────────────────
+function escHtml(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+function showToast(msg, type='success') {
+    const t = document.createElement('div');
+    t.className = 'toast ' + type;
+    t.innerHTML = `<i class="fas fa-${type==='success'?'check-circle':'exclamation-circle'}"></i> ${msg}`;
+    document.body.appendChild(t);
+    setTimeout(() => t.remove(), 3000);
+}
+</script>
+
+<style>
+.toast { position:fixed; top:20px; right:20px; z-index:9999; padding:11px 18px; border-radius:9px; font-size:13px; font-weight:600; color:#fff; display:flex; align-items:center; gap:7px; box-shadow:0 6px 20px rgba(0,0,0,.18); animation:toastIn .25s ease; font-family:inherit; }
+.toast.success { background:#16a34a; }
+.toast.error   { background:#dc2626; }
+@keyframes toastIn { from{opacity:0;transform:translateY(-10px)} to{opacity:1;transform:translateY(0)} }
+</style>
+
 </body>
 </html>
