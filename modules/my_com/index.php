@@ -1189,7 +1189,12 @@ $month_names_vn = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','
             <div class="kpi-section">
                 <div class="kpi-header">
                     <span class="kpi-title">KPI Progress - Q<?= $selected_quarter ?>/<?= $selected_year ?></span>
-                    <span class="kpi-level"<?= $level_borrowed_from ? ' title="Quý này chưa set level — lấy theo quý gần nhất ' . htmlspecialchars($level_borrowed_from) . '"' : '' ?>><?= htmlspecialchars($user_level['level_name']) ?><?= $level_borrowed_from ? ' · theo ' . htmlspecialchars($level_borrowed_from) : '' ?></span>
+                    <div style="display:flex;align-items:center;gap:6px;">
+                        <?php if (!empty($position_type)): ?>
+                        <span style="background:#3b82f620;color:#3b82f6;border:1px solid #3b82f640;border-radius:5px;padding:2px 9px;font-size:11px;font-weight:700;letter-spacing:.03em;"><?= htmlspecialchars($position_type) ?></span>
+                        <?php endif; ?>
+                        <span class="kpi-level"<?= $level_borrowed_from ? ' title="Quý này chưa set level — lấy theo quý gần nhất ' . htmlspecialchars($level_borrowed_from) . '"' : '' ?>><?= htmlspecialchars($user_level['level_name']) ?><?= $level_borrowed_from ? ' · theo ' . htmlspecialchars($level_borrowed_from) : '' ?></span>
+                    </div>
                 </div>
                 <div class="kpi-main">
                     <span class="kpi-pct kpi-pct-<?= $pct_cls ?>"><?= mc_pct($kpi_pct) ?></span>
