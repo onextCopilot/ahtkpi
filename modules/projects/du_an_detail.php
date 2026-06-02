@@ -712,7 +712,14 @@ $pst = $pakd['pasx_status'] ?? '';
                     <div class="metric-val green"><?= $fin_rev_gross > 0 ? formatVND3($fin_rev_gross) : '—' ?></div>
                     <div class="metric-sub">VND</div>
                 </div>
-                <div class="metric-card <?= $fin_gross_profit > 0 ? ($fin_margin_pct >= 20 ? 'highlight' : 'highlight-warn') : '' ?>" id="gp-card" style="position:relative;">
+                <?php
+                $gpSet    = ($fin_gross_profit != 0);
+                $gpColor  = !$gpSet ? 'var(--lgray)' : ($fin_gross_profit < 0 ? '#dc2626' : ($fin_margin_pct >= 20 ? '#16a34a' : '#d97706'));
+                $gpClass  = !$gpSet ? '' : ($fin_gross_profit < 0 ? 'highlight-danger' : ($fin_margin_pct >= 20 ? 'highlight' : 'highlight-warn'));
+                $gpLabel  = !$gpSet ? 'Chưa cập nhật' : ('Margin: ' . number_format($fin_margin_pct, 1) . '%');
+                $gpText   = !$gpSet ? '—' : (($fin_gross_profit < 0 ? '-' : '') . formatVND3(abs($fin_gross_profit)));
+                ?>
+                <div class="metric-card <?= $gpClass ?>" id="gp-card" style="position:relative;">
                     <div style="display:flex;align-items:center;justify-content:space-between;">
                         <div class="metric-label"><i class="fas fa-coins" style="margin-right:4px;color:#7c3aed;"></i> Lợi nhuận gộp</div>
                         <button onclick="openFinModal()" title="Cập nhật"
@@ -721,10 +728,10 @@ $pst = $pakd['pasx_status'] ?? '';
                             <i class="fas fa-pen"></i>
                         </button>
                     </div>
-                    <div class="metric-val" id="gp-val" style="color:<?= $fin_gross_profit > 0 ? ($fin_margin_pct >= 20 ? '#16a34a' : '#d97706') : 'var(--lgray)' ?>">
-                        <?= $fin_gross_profit > 0 ? formatVND3($fin_gross_profit) : '—' ?>
+                    <div class="metric-val" id="gp-val" style="color:<?= $gpColor ?>">
+                        <?= $gpText ?>
                     </div>
-                    <div class="metric-sub" id="gp-margin"><?= $fin_margin_pct > 0 ? 'Margin: ' . number_format($fin_margin_pct, 1) . '%' : 'Chưa cập nhật' ?></div>
+                    <div class="metric-sub" id="gp-margin"><?= $gpLabel ?></div>
                 </div>
                 <?php
                 $prob = (int)($pakd['opp_probability'] ?? 0);
@@ -1563,10 +1570,11 @@ async function saveFinancials() {
             const gp     = data.gross_profit;
             const rev    = data.revenue;
             const margin = rev > 0 ? (gp / rev * 100) : 0;
-            const fmt    = n => n >= 1e9 ? (n/1e9).toFixed(2)+' tỷ' : n >= 1e6 ? (n/1e6).toFixed(1)+' triệu' : n >= 1e3 ? Math.round(n/1e3)+'K' : String(n);
-            document.getElementById('gp-val').textContent = gp > 0 ? fmt(gp) : '—';
-            document.getElementById('gp-val').style.color = gp > 0 ? (margin >= 20 ? '#16a34a' : '#d97706') : 'var(--lgray)';
-            document.getElementById('gp-margin').textContent = margin > 0 ? 'Margin: ' + margin.toFixed(1) + '%' : 'Chưa cập nhật';
+            const fmt    = n => { const a = Math.abs(n); return (n<0?'-':'') + (a>=1e9?(a/1e9).toFixed(2)+' tỷ':a>=1e6?(a/1e6).toFixed(1)+' triệu':a>=1e3?Math.round(a/1e3)+'K':String(a)); };
+            const gpSet  = gp !== 0;
+            document.getElementById('gp-val').textContent = gpSet ? fmt(gp) : '—';
+            document.getElementById('gp-val').style.color = !gpSet ? 'var(--lgray)' : (gp < 0 ? '#dc2626' : (margin >= 20 ? '#16a34a' : '#d97706'));
+            document.getElementById('gp-margin').textContent = gpSet ? 'Margin: ' + margin.toFixed(1) + '%' : 'Chưa cập nhật';
             closeFinModal();
             showToast('Đã lưu thành công', 'success');
         } else {
