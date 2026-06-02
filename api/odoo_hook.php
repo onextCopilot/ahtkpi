@@ -559,11 +559,12 @@ if ($payload && $event_type === 'invoice') {
         // Dùng amount gốc theo currency của invoice (USD, VND...), không quy đổi
         $amt_orig     = (float)($p['amount_total'] ?? 0);
         $amt_vnd      = abs((float)($p['amount_total_signed'] ?? $amt_orig)); // chỉ dùng để tham khảo
-        $inv_date     = ($p['invoice_date'] && $p['invoice_date'] !== false) ? $p['invoice_date'] : null;
+        $inv_date     = ($p['invoice_date']     && $p['invoice_date']     !== false) ? $p['invoice_date']     : null;
+        $inv_date_due = ($p['invoice_date_due'] && $p['invoice_date_due'] !== false) ? $p['invoice_date_due'] : null;
         $pay_state    = $p['payment_state'] ?? 'not_paid';
         $inv_origin   = $p['invoice_origin'] ?? '';
 
-        // Lấy am_email từ DB theo tên (best-effort)
+        // Lấy am_email từ DB theo tên hoặc Odoo user ID
         $am_email = '';
         if ($am_name) {
             $uRow = $conn->query("SELECT email FROM users WHERE full_name = '" . $conn->real_escape_string($am_name) . "' LIMIT 1");
@@ -578,15 +579,25 @@ if ($payload && $event_type === 'invoice') {
         }
 
         // payment_status
-        $payment_status = ($pay_state === 'paid' || $pay_state === 'in_payment') ? 'Paid' : 'Not paid';
+        $payment_status = match(true) {
+            $pay_state === 'paid'       => 'Paid',
+            $pay_state === 'in_payment' => 'Paid',
+            $pay_state === 'partial'    => 'Partial',
+            default                      => 'Not paid',
+        };
 
-        // invoice_status_class
-        $inv_status_class = '';
+        // invoice_status_class — dựa trên trạng thái thanh toán + số ngày
+        $ref_date = $inv_date ?: $inv_date_due; // dùng invoice_date, fallback sang due_date
         if ($pay_state === 'paid' || $pay_state === 'in_payment') {
-            $inv_status_class = 'Done';
-        } elseif ($inv_date) {
-            $days = floor((time() - strtotime($inv_date)) / 86400);
-            if ($days > 60) $inv_status_class = 'Đỏ';
+            $write_ts = !empty($p['write_date']) ? strtotime($p['write_date']) : time();
+            $cur_month = date('Y-m');
+            $paid_month = date('Y-m', $write_ts);
+            $inv_status_class = ($paid_month === $cur_month) ? 'Tím' : 'Done';
+        } elseif ($ref_date) {
+            $days = floor((time() - strtotime($ref_date)) / 86400);
+            $inv_status_class = $days > 60 ? 'Đỏ' : '';
+        } else {
+            $inv_status_class = '';
         }
 
         // payment_month & weekly_update
@@ -598,47 +609,62 @@ if ($payload && $event_type === 'invoice') {
             $weekly_update = 'Tuần ' . ceil(date('j', $ts) / 7);
         }
 
-        $notes      = "Auto from Invoice: $inv_name ($ccy)" . ($inv_origin ? " · SO: $inv_origin" : '');
-        $pl_class   = 'Xấu';
-        $company    = 'AHT TECH';
+        $notes    = "Auto from Invoice: $inv_name ($ccy)" . ($inv_origin ? " · SO: $inv_origin" : '');
+        $pl_class = 'Xấu';
+        $company  = 'AHT TECH';
+        $esc      = fn($v) => $v === null ? 'NULL' : "'" . $conn->real_escape_string((string)$v) . "'";
 
-        // Upsert: update nếu đã tồn tại, insert nếu chưa
-        $existing = $conn->query("SELECT id FROM debts WHERE odoo_invoice_id = $inv_id LIMIT 1");
-        if ($existing && $existing->num_rows > 0) {
-            $existRow = $existing->fetch_assoc();
-            $esc = fn($v) => $v === null ? 'NULL' : "'" . $conn->real_escape_string((string)$v) . "'";
+        // Lookup: ưu tiên odoo_invoice_id, fallback tìm theo vat_invoice + client_name
+        $existRow = null;
+        $q1 = $conn->query("SELECT id FROM debts WHERE odoo_invoice_id = $inv_id LIMIT 1");
+        if ($q1 && $q1->num_rows > 0) {
+            $existRow = $q1->fetch_assoc();
+        } else {
+            // Fallback: tìm theo tên invoice (cho records cũ chưa có odoo_invoice_id)
+            $q2 = $conn->query("SELECT id FROM debts WHERE vat_invoice = '" . $conn->real_escape_string($inv_name) . "' AND odoo_invoice_id IS NULL LIMIT 1");
+            if ($q2 && $q2->num_rows > 0) {
+                $existRow = $q2->fetch_assoc();
+            }
+        }
+
+        if ($existRow) {
             $conn->query("UPDATE debts SET
-                am                 = {$esc($am_name)},
-                am_email           = {$esc($am_email)},
-                sale_team_id       = " . ($sale_team_id ? $sale_team_id : 'NULL') . ",
-                client_name        = {$esc($client_name)},
-                vat_invoice        = {$esc($inv_name)},
-                invoice_date       = {$esc($inv_date)},
-                amount             = $amt_orig,
-                original_amount    = $amt_orig,
-                currency           = {$esc($ccy)},
-                original_currency  = {$esc($ccy)},
-                payment_status     = {$esc($payment_status)},
+                odoo_invoice_id      = $inv_id,
+                am                   = {$esc($am_name)},
+                am_email             = {$esc($am_email)},
+                sale_team_id         = " . ($sale_team_id ?: 'NULL') . ",
+                client_name          = {$esc($client_name)},
+                vat_invoice          = {$esc($inv_name)},
+                invoice_date         = {$esc($inv_date)},
+                expected_payment_date= {$esc($inv_date_due)},
+                amount               = $amt_orig,
+                original_amount      = $amt_orig,
+                currency             = {$esc($ccy)},
+                original_currency    = {$esc($ccy)},
+                payment_status       = {$esc($payment_status)},
                 invoice_status_class = {$esc($inv_status_class)},
-                payment_month      = {$esc($payment_month)},
-                weekly_update      = {$esc($weekly_update)},
-                am_notes           = {$esc($notes)},
-                updated_at         = NOW()
+                payment_month        = {$esc($payment_month)},
+                weekly_update        = {$esc($weekly_update)},
+                am_notes             = {$esc($notes)},
+                updated_at           = NOW()
             WHERE id = " . (int)$existRow['id']);
             $debug['debt_updated'] = $existRow['id'];
         } else {
-            $esc = fn($v) => $v === null ? 'NULL' : "'" . $conn->real_escape_string((string)$v) . "'";
-            $stmid = $sale_team_id ? $sale_team_id : 'NULL';
+            $stmid = $sale_team_id ?: 'NULL';
             $conn->query("INSERT INTO debts
                 (company,am,am_email,sale_team_id,client_name,project_name,
                  amount,original_amount,currency,original_currency,
-                 vat_invoice,invoice_date,payment_status,invoice_status_class,
+                 vat_invoice,invoice_date,expected_payment_date,
+                 payment_status,invoice_status_class,
                  payment_month,weekly_update,pl_class,am_notes,odoo_invoice_id,created_at)
-                VALUES ({$esc($company)},{$esc($am_name)},{$esc($am_email)},$stmid,
+                VALUES (
+                 {$esc($company)},{$esc($am_name)},{$esc($am_email)},$stmid,
                  {$esc($client_name)},'',
                  $amt_orig,$amt_orig,{$esc($ccy)},{$esc($ccy)},
-                 {$esc($inv_name)},{$esc($inv_date)},{$esc($payment_status)},{$esc($inv_status_class)},
-                 {$esc($payment_month)},{$esc($weekly_update)},{$esc($pl_class)},{$esc($notes)},$inv_id,NOW())");
+                 {$esc($inv_name)},{$esc($inv_date)},{$esc($inv_date_due)},
+                 {$esc($payment_status)},{$esc($inv_status_class)},
+                 {$esc($payment_month)},{$esc($weekly_update)},
+                 {$esc($pl_class)},{$esc($notes)},$inv_id,NOW())");
             $debug['debt_inserted'] = $conn->insert_id;
         }
     };
