@@ -1182,6 +1182,9 @@ $month_names_vn = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','
 
         /* PAKD dropdown */
         .pakd-wrap { position:relative; min-width:160px; }
+        /* Highlight PAKD fields not yet selected when trying to confirm */
+        .pakd-wrap.pakd-missing .pakd-btn { border-color:#dc2626; background:#fef2f2; color:#dc2626; box-shadow:0 0 0 2px #fecaca; animation:pakdPulse 1.2s ease-in-out infinite; }
+        @keyframes pakdPulse { 0%,100%{ box-shadow:0 0 0 2px #fecaca; } 50%{ box-shadow:0 0 0 3px #fca5a5; } }
         .pakd-btn { display:flex; align-items:center; gap:4px; padding:3px 6px; border:1px solid #e2e8f0; border-radius:5px; background:#fff; cursor:pointer; font-size:11px; color:#374151; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:200px; min-height:22px; }
         .pakd-btn:hover { border-color:#93c5fd; }
         .pakd-btn.has-val { border-color:#3b82f6; background:#eff6ff; color:#1d4ed8; font-weight:500; }
@@ -2167,6 +2170,7 @@ function selectPakd(li) {
         }
     }
     closePakdPortal();
+    if (pakdId !== 0) wrap.classList.remove('pakd-missing');
 
     // Sync Tier availability with the PAKD's EBT (Com2 requires EBT >= 20%)
     const p2 = pakdId === 0 ? null : pakdList.find(x => x.id === pakdId);
@@ -2207,6 +2211,7 @@ function savePakdLink(input) {
 
     wrap.dataset.pakdId = '0';
     wrap.dataset.link = link;
+    wrap.classList.remove('pakd-missing');
     dd.classList.remove('open');
 
     // Switch EBT to manual input
@@ -2836,8 +2841,29 @@ function mcIsLocked() {
     return document.body.classList.contains('mc-locked');
 }
 
+// A PAKD field counts as filled when it has a selected PAKD (id>0) or a pasted link.
+function mcCheckPakdFilled() {
+    document.querySelectorAll('.pakd-wrap.pakd-missing').forEach(w => w.classList.remove('pakd-missing'));
+    const missing = [];
+    document.querySelectorAll('.pakd-wrap').forEach(w => {
+        const pid  = parseInt(w.dataset.pakdId || '0');
+        const link = (w.dataset.link || '').trim();
+        if (!pid && !link) missing.push(w);
+    });
+    return missing;
+}
+
 function mcConfirm(action) {
     if (MC_VIEW_ONLY) return;
+    if (action === 'confirm') {
+        const missing = mcCheckPakdFilled();
+        if (missing.length) {
+            missing.forEach(w => w.classList.add('pakd-missing'));
+            showToast('Còn ' + missing.length + ' dòng chưa chọn PAKD — vui lòng chọn hết trước khi xác nhận', false);
+            missing[0].scrollIntoView({behavior: 'smooth', block: 'center'});
+            return;
+        }
+    }
     const label = action === 'confirm' ? 'xác nhận và khóa' : 'reset về draft';
     if (!confirm('Bạn có chắc muốn ' + label + ' Commission Q<?= $selected_quarter ?>/<?= $selected_year ?>?')) return;
     const payload = {year: <?= $selected_year ?>, quarter: <?= $selected_quarter ?>, action};
