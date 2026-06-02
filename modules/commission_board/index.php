@@ -118,7 +118,11 @@ foreach ($confirm as $uid => $qs) foreach ($qs as $c) if (($c['status'] ?? '') =
         .cb-table th { background:#f8fafc; color:#5f6368; font-weight:700; text-align:left; padding:10px 12px; border-bottom:2px solid #e2e8f0; white-space:nowrap; }
         .cb-table th.num, .cb-table td.num { text-align:right; }
         .cb-table td { padding:9px 12px; border-bottom:1px solid #f1f5f9; }
-        .cb-table tr:hover td { background:#fafcff; }
+        .cb-table tbody tr:nth-child(odd) td { background:#fbfcfe; }
+        .cb-table tbody tr:nth-child(even) td { background:#fff; }
+        .cb-table tbody tr:hover td { background:#eef4ff; }
+        .cb-table tbody tr td.cb-total-col { background:#eff3f9; }
+        .cb-table tbody tr:hover td.cb-total-col { background:#e2eaf5; }
         .cb-user { font-weight:600; color:#1e293b; }
         .cb-pos { display:inline-block; background:#3b82f615; color:#3b82f6; border:1px solid #3b82f630; border-radius:4px; padding:1px 7px; font-size:10px; font-weight:700; margin-top:2px; }
         .cb-cell { display:inline-flex; align-items:center; gap:5px; justify-content:flex-end; text-decoration:none; }
