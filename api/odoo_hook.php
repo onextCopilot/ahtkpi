@@ -354,54 +354,47 @@ if ($payload && $event_type === 'sale') {
         $so_state_payload = $payload['state'] ?? null;
 
         if ($so_state_payload === 'cancel') {
-            // SO bị cancel → xóa khỏi DB ngay, không cần gọi API
+            // SO bị cancel → xóa khỏi DB ngay
             $conn->query("DELETE FROM odoo_sale_orders WHERE odoo_id = $so_odoo_id");
             $debug['so_cancelled_deleted'] = $so_odoo_id;
         } else {
         try {
-            require_once __DIR__ . '/../libs/OdooAPI.php';
-            $odoo   = new OdooAPI();
-            $soData = $odoo->searchRead('sale.order', [['id', '=', $so_odoo_id]], [
-                'id','name','state','date_order','commitment_date','validity_date','effective_date',
-                'partner_id','user_id','team_id','amount_untaxed','amount_tax','amount_total',
-                'amount_invoiced','amount_to_invoice','currency_id','invoice_status','invoice_count',
-                'invoice_ids','order_line','client_order_ref','origin','opportunity_id',
-                'payment_term_id','note',
-            ], 1);
+            // Parse trực tiếp từ payload — không cần gọi Odoo API
+            // Payload webhook dùng object {id, name} thay vì array [id, name] của API
+            $p = $payload; // alias cho dễ đọc
 
-            if (!empty($soData[0])) {
-                $so = $soData[0];
+            $f = [];
+            $f['name']              = $p['name']              ?? null;
+            $f['state']             = $p['state']             ?? null;
+            $f['date_order']        = ($p['date_order']      && $p['date_order']      !== false) ? $p['date_order']      : null;
+            $f['commitment_date']   = ($p['commitment_date'] && $p['commitment_date'] !== false) ? $p['commitment_date'] : null;
+            $f['validity_date']     = ($p['validity_date']   && $p['validity_date']   !== false) ? $p['validity_date']   : null;
+            $f['effective_date']    = ($p['effective_date']  && $p['effective_date']  !== false) ? $p['effective_date']  : null;
+            $f['partner_id']        = is_array($p['partner_id'])        ? (int)($p['partner_id']['id']        ?? 0) : null;
+            $f['partner_name']      = is_array($p['partner_id'])        ? ($p['partner_id']['name']            ?? null) : null;
+            $f['user_id']           = is_array($p['user_id'])           ? (int)($p['user_id']['id']           ?? 0) : null;
+            $f['user_name']         = is_array($p['user_id'])           ? ($p['user_id']['name']               ?? null) : null;
+            $f['team_id']           = is_array($p['team_id'])           ? (int)($p['team_id']['id']           ?? 0) : null;
+            $f['team_name']         = is_array($p['team_id'])           ? ($p['team_id']['name']               ?? null) : null;
+            $f['currency_id']       = is_array($p['currency_id'])       ? (int)($p['currency_id']['id']       ?? 0) : null;
+            $f['currency_name']     = is_array($p['currency_id'])       ? ($p['currency_id']['name']           ?? null) : null;
+            $f['opportunity_id']    = is_array($p['opportunity_id'])    ? (int)($p['opportunity_id']['id']    ?? 0) : null;
+            $f['payment_term_id']   = is_array($p['payment_term_id'])   ? (int)($p['payment_term_id']['id']   ?? 0) : null;
+            $f['payment_term_name'] = is_array($p['payment_term_id'])   ? ($p['payment_term_id']['name']       ?? null) : null;
+            $f['invoice_status']    = $p['invoice_status']    ?? null;
+            $f['invoice_count']     = (int)($p['invoice_count']   ?? 0);
+            $f['invoice_ids']       = !empty($p['invoice_ids'])   ? json_encode($p['invoice_ids'])   : null;
+            $f['order_line_ids']    = !empty($p['order_line'])    ? json_encode($p['order_line'])    : null;
+            $f['client_order_ref']  = ($p['client_order_ref'] && $p['client_order_ref'] !== false) ? $p['client_order_ref'] : null;
+            $f['origin']            = ($p['origin']            && $p['origin']            !== false) ? $p['origin']            : null;
+            $f['note']              = ($p['note']              && $p['note']              !== false) ? $p['note']              : null;
+            $f['amount_untaxed']    = (float)($p['amount_untaxed']    ?? 0);
+            $f['amount_tax']        = (float)($p['amount_tax']        ?? 0);
+            $f['amount_total']      = (float)($p['amount_total']      ?? 0);
+            $f['amount_invoiced']   = (float)($p['amount_invoiced']   ?? 0);
+            $f['amount_to_invoice'] = (float)($p['amount_to_invoice'] ?? 0);
 
-                $f = []; // safe field extraction helper
-                $f['partner_id']        = is_array($so['partner_id'])       ? (int)($so['partner_id'][0] ?? 0)         : null;
-                $f['partner_name']      = is_array($so['partner_id'])       ? ($so['partner_id'][1] ?? null)            : null;
-                $f['user_id']           = is_array($so['user_id'])          ? (int)($so['user_id'][0] ?? 0)            : null;
-                $f['user_name']         = is_array($so['user_id'])          ? ($so['user_id'][1] ?? null)               : null;
-                $f['team_id']           = is_array($so['team_id'])          ? (int)($so['team_id'][0] ?? 0)            : null;
-                $f['team_name']         = is_array($so['team_id'])          ? ($so['team_id'][1] ?? null)               : null;
-                $f['currency_id']       = is_array($so['currency_id'])      ? (int)($so['currency_id'][0] ?? 0)        : null;
-                $f['currency_name']     = is_array($so['currency_id'])      ? ($so['currency_id'][1] ?? null)           : null;
-                $f['opportunity_id']    = is_array($so['opportunity_id'])   ? (int)($so['opportunity_id'][0] ?? 0)     : (is_numeric($so['opportunity_id'] ?? null) ? (int)$so['opportunity_id'] : null);
-                $f['payment_term_id']   = is_array($so['payment_term_id'])  ? (int)($so['payment_term_id'][0] ?? 0)    : null;
-                $f['payment_term_name'] = is_array($so['payment_term_id'])  ? ($so['payment_term_id'][1] ?? null)       : null;
-                $f['date_order']        = ($so['date_order']       && $so['date_order']       !== false) ? $so['date_order']       : null;
-                $f['commitment_date']   = ($so['commitment_date']  && $so['commitment_date']  !== false) ? $so['commitment_date']  : null;
-                $f['validity_date']     = ($so['validity_date']    && $so['validity_date']    !== false) ? $so['validity_date']    : null;
-                $f['effective_date']    = ($so['effective_date']   && $so['effective_date']   !== false) ? $so['effective_date']   : null;
-                $f['invoice_ids']       = !empty($so['invoice_ids'])  ? json_encode($so['invoice_ids'])  : null;
-                $f['order_line_ids']    = !empty($so['order_line'])   ? json_encode($so['order_line'])   : null;
-                $f['client_order_ref']  = $so['client_order_ref']  ?: null;
-                $f['origin']            = $so['origin']            ?: null;
-                $f['note']              = is_string($so['note'] ?? null) ? $so['note'] : null;
-                $f['name']              = $so['name']              ?? null;
-                $f['state']             = $so['state']             ?? null;
-                $f['invoice_status']    = $so['invoice_status']    ?? null;
-                $f['invoice_count']     = (int)($so['invoice_count'] ?? 0);
-                $f['amount_untaxed']    = (float)($so['amount_untaxed']    ?? 0);
-                $f['amount_tax']        = (float)($so['amount_tax']        ?? 0);
-                $f['amount_total']      = (float)($so['amount_total']      ?? 0);
-                $f['amount_invoiced']   = (float)($so['amount_invoiced']   ?? 0);
-                $f['amount_to_invoice'] = (float)($so['amount_to_invoice'] ?? 0);
+            if ($f['name']) { // chỉ upsert nếu có tên SO hợp lệ
 
                 $conn->query("INSERT INTO odoo_sale_orders
                     (odoo_id,name,state,date_order,commitment_date,validity_date,effective_date,
@@ -478,7 +471,7 @@ if ($payload && $event_type === 'sale') {
                 $oldRow = $conn->query("SELECT invoice_ids FROM odoo_sale_orders WHERE odoo_id = $so_odoo_id LIMIT 1");
                 if ($oldRow && $oldData = $oldRow->fetch_assoc()) {
                     $oldIds = !empty($oldData['invoice_ids']) ? (json_decode($oldData['invoice_ids'], true) ?: []) : [];
-                    $newIds = $so['invoice_ids'] ?? [];
+                    $newIds = $p['invoice_ids'] ?? []; // từ payload
                     $removedIds = array_values(array_diff(
                         array_map('intval', $oldIds),
                         array_map('intval', $newIds)
@@ -489,7 +482,7 @@ if ($payload && $event_type === 'sale') {
                         $debug['invoices_deleted'] = $removedIds;
                     }
                 }
-            }
+            } // end if ($f['name'])
         } catch (Exception $e) {
             $debug['so_error'] = $e->getMessage();
         }
