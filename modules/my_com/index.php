@@ -196,7 +196,7 @@ function mc_inv_to_vnd($inv, $inv_cur_rates) {
 
 // ── PAKD data for EBT ──
 $pakd_list = [];
-$pakd_stmt = $conn->prepare("SELECT id, name, company_name, revenue, gross_profit, currency, status, contract_no, sales_order_no FROM pakd WHERE am_user_id = ? OR am_email = ? ORDER BY name");
+$pakd_stmt = $conn->prepare("SELECT id, name, company_name, revenue, gross_profit, currency, status, contract_no, sales_order_no FROM pakd WHERE am_user_id = ? OR am_email = ? ORDER BY id DESC");
 if ($pakd_stmt) {
     $pakd_stmt->bind_param("is", $u_id, $user_email);
     $pakd_stmt->execute();
