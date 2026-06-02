@@ -531,8 +531,33 @@ if ($payload && $event_type === 'invoice') {
         INDEX idx_state (state)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
 
-    $inv_odoo_id = (int)($payload['id'] ?? $payload['record_id'] ?? 0);
-    if ($inv_odoo_id) {
+    $inv_odoo_id  = (int)($payload['id'] ?? $payload['record_id'] ?? 0);
+    $inv_event    = $payload['event'] ?? 'write';
+
+    // ── Xử lý delete invoice ─────────────────────────────────────────────────
+    if ($inv_odoo_id && $inv_event === 'delete') {
+        // Lấy invoice_origin từ payload (có sẵn trong delete payload)
+        $inv_origin_del = $payload['invoice_origin'] ?? null;
+
+        // Xóa khỏi odoo_invoices
+        $conn->query("DELETE FROM odoo_invoices WHERE odoo_id = $inv_odoo_id");
+        $debug['inv_deleted'] = $inv_odoo_id;
+
+        // Cập nhật invoice_ids của SO tương ứng
+        if ($inv_origin_del) {
+            $soLookup = $conn->query(
+                "SELECT odoo_id, invoice_ids FROM odoo_sale_orders
+                 WHERE name = '" . $conn->real_escape_string($inv_origin_del) . "' LIMIT 1"
+            );
+            if ($soLookup && $soRow = $soLookup->fetch_assoc()) {
+                $ids = !empty($soRow['invoice_ids']) ? (json_decode($soRow['invoice_ids'], true) ?: []) : [];
+                $ids = array_values(array_filter($ids, fn($i) => (int)$i !== $inv_odoo_id));
+                $newJson = $conn->real_escape_string(json_encode($ids));
+                $conn->query("UPDATE odoo_sale_orders SET invoice_ids = '$newJson', invoice_count = " . count($ids) . ", updated_at = NOW() WHERE odoo_id = " . (int)$soRow['odoo_id']);
+                $debug['so_invoice_ids_cleaned'] = $soRow['odoo_id'];
+            }
+        }
+    } elseif ($inv_odoo_id) {
         $g = []; // field extractor
         $g['name']              = $payload['name'] ?: null;
         $g['highest_name']      = $payload['highest_name'] ?: null;
@@ -631,7 +656,7 @@ if ($payload && $event_type === 'invoice') {
                 }
             }
         }
-    }
+    } // end elseif (not delete)
 }
 
 // ── Store debug notes back into the log row ───────────────────────────────────
