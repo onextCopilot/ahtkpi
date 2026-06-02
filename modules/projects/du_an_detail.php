@@ -153,42 +153,47 @@ try {
     $so_fetch_error = $e->getMessage();
 }
 
-// Fetch Invoices từ odoo_webhook_logs dựa vào invoice_origin = SO name
+// Fetch Invoices: SO.invoice_ids (Odoo IDs) → odoo_webhook_logs WHERE payload->id IN (...)
 $invoices        = [];
 $inv_fetch_error = null;
 try {
-    // Lấy danh sách SO names từ sale_orders đã fetch (e.g. ["S00436", "S00437"])
-    $so_names = array_values(array_filter(array_column($sale_orders, 'name')));
+    // Thu thập tất cả invoice_ids từ các SO đã fetch
+    $all_invoice_ids = [];
+    foreach ($sale_orders as $so) {
+        if (!empty($so['invoice_ids']) && is_array($so['invoice_ids'])) {
+            foreach ($so['invoice_ids'] as $iid) {
+                $iid = (int)$iid;
+                if ($iid > 0) $all_invoice_ids[$iid] = true;
+            }
+        }
+    }
+    $all_invoice_ids = array_keys($all_invoice_ids); // unique int list
 
-    if (!empty($so_names)) {
-        // Dùng prepared statement với dynamic IN (...)
-        $placeholders = implode(',', array_fill(0, count($so_names), '?'));
-        $types        = str_repeat('s', count($so_names));
-
-        $logStmt = $conn->prepare(
+    if (!empty($all_invoice_ids)) {
+        // IDs là int — safe to inline
+        $idList = implode(',', $all_invoice_ids);
+        $logRes = $conn->query(
             "SELECT payload, created_at
              FROM odoo_webhook_logs
              WHERE event_type = 'invoice'
-               AND JSON_UNQUOTE(JSON_EXTRACT(payload, '$.invoice_origin')) IN ($placeholders)
+               AND JSON_UNQUOTE(JSON_EXTRACT(payload, '$.id')) IN ($idList)
              ORDER BY id DESC"
         );
-        $logStmt->bind_param($types, ...$so_names);
-        $logStmt->execute();
-        $logRes = $logStmt->get_result();
 
         $seen = [];
-        while ($logRow = $logRes->fetch_assoc()) {
-            $p   = json_decode($logRow['payload'], true) ?? [];
-            $oid = (int)($p['id'] ?? $p['record_id'] ?? 0);
-            if ($oid && !isset($seen[$oid])) {
-                $seen[$oid]   = true;
-                $p['_log_at'] = $logRow['created_at'];
-                $invoices[]   = $p;
+        if ($logRes) {
+            while ($logRow = $logRes->fetch_assoc()) {
+                $p   = json_decode($logRow['payload'], true) ?? [];
+                $oid = (int)($p['id'] ?? $p['record_id'] ?? 0);
+                if ($oid && !isset($seen[$oid])) {
+                    $seen[$oid]   = true;
+                    $p['_log_at'] = $logRow['created_at'];
+                    $invoices[]   = $p;
+                }
             }
         }
-        $logStmt->close();
 
-        // Sort: posted trước, rồi theo invoice_date desc
+        // Sort: posted trước, rồi invoice_date desc
         usort($invoices, function ($a, $b) {
             $stateOrder = ['posted' => 0, 'draft' => 1, 'cancel' => 2];
             $sa = $stateOrder[$a['state'] ?? ''] ?? 9;
