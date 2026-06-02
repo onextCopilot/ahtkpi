@@ -364,6 +364,14 @@ if ($payload && $event_type === 'sale') {
             if (!empty($soData[0])) {
                 $so = $soData[0];
 
+                // SO bị cancel → xóa khỏi DB, không upsert
+                if (($so['state'] ?? '') === 'cancel') {
+                    $conn->query("DELETE FROM odoo_sale_orders WHERE odoo_id = $so_odoo_id");
+                    $debug['so_cancelled_deleted'] = $so_odoo_id;
+                    // Bỏ qua phần upsert bên dưới
+                    goto so_done;
+                }
+
                 $f = []; // safe field extraction helper
                 $f['partner_id']        = is_array($so['partner_id'])       ? (int)($so['partner_id'][0] ?? 0)         : null;
                 $f['partner_name']      = is_array($so['partner_id'])       ? ($so['partner_id'][1] ?? null)            : null;
@@ -485,6 +493,7 @@ if ($payload && $event_type === 'sale') {
         } catch (Exception $e) {
             $debug['so_error'] = $e->getMessage();
         }
+        so_done:
     }
 }
 

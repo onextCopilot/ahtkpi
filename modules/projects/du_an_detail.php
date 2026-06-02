@@ -96,7 +96,7 @@ try {
     $opp_id = (int)($pakd['odoo_opp_id'] ?? 0);
     if ($opp_id) {
         $soRes = $conn->prepare(
-            "SELECT * FROM odoo_sale_orders WHERE opportunity_id = ? ORDER BY date_order DESC"
+            "SELECT * FROM odoo_sale_orders WHERE opportunity_id = ? AND state != 'cancel' ORDER BY date_order DESC"
         );
         $soRes->bind_param('i', $opp_id);
         $soRes->execute();
