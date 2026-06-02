@@ -382,6 +382,31 @@ foreach ($so_list as $so) {
     if ($so_first_po_flags[$so['id']] ?? false) $total_so_com += $so['_amount_vnd'] * SO_COM_RATE;
 }
 
+// ── Confirmation status ──
+$conn->query("CREATE TABLE IF NOT EXISTS my_com_confirmation (
+    id           INT AUTO_INCREMENT PRIMARY KEY,
+    user_id      INT NOT NULL,
+    year         SMALLINT NOT NULL,
+    quarter      TINYINT NOT NULL,
+    status       ENUM('draft','confirmed') DEFAULT 'draft',
+    confirmed_at DATETIME DEFAULT NULL,
+    updated_at   DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    UNIQUE KEY uq_user_yq (user_id, year, quarter)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+$is_confirmed = false;
+$confirmed_at = null;
+$cf_stmt = $conn->prepare("SELECT status, confirmed_at FROM my_com_confirmation WHERE user_id=? AND year=? AND quarter=?");
+if ($cf_stmt) {
+    $cf_stmt->bind_param("iii", $u_id, $selected_year, $selected_quarter);
+    $cf_stmt->execute();
+    $cf_row = $cf_stmt->get_result()->fetch_assoc();
+    $cf_stmt->close();
+    if ($cf_row) {
+        $is_confirmed = ($cf_row['status'] === 'confirmed');
+        $confirmed_at = $cf_row['confirmed_at'];
+    }
+}
+
 // ── Market to Lead source ──
 // If the salesperson sourced the lead themselves ("My Lead"), Com1 gets +1%.
 $lead_options = [
@@ -1859,10 +1884,47 @@ $month_names_vn = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','
                 </div>
             </details>
 
+            <!-- ─── Confirmation Box ─── -->
+            <div id="confirmBox" style="margin-top:2rem;border-radius:12px;padding:1.25rem 1.5rem;display:flex;align-items:center;justify-content:space-between;gap:1rem;<?= $is_confirmed ? 'background:#f0fdf4;border:1.5px solid #86efac;' : 'background:#f8fafc;border:1.5px solid #e2e8f0;' ?>">
+                <div>
+                    <?php if ($is_confirmed): ?>
+                    <div style="font-weight:700;font-size:14px;color:#16a34a;display:flex;align-items:center;gap:6px;">
+                        <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path d="M20 6L9 17l-5-5"/></svg>
+                        Đã xác nhận Commission Q<?= $selected_quarter ?>/<?= $selected_year ?>
+                    </div>
+                    <div style="font-size:11px;color:#64748b;margin-top:3px;">Xác nhận lúc: <?= $confirmed_at ? date('d/m/Y H:i', strtotime($confirmed_at)) : '—' ?> · Tất cả dữ liệu đã được khóa</div>
+                    <?php else: ?>
+                    <div style="font-weight:700;font-size:14px;color:#374151;">Xác nhận Commission Q<?= $selected_quarter ?>/<?= $selected_year ?></div>
+                    <div style="font-size:11px;color:#64748b;margin-top:3px;">Sau khi xác nhận, toàn bộ dữ liệu sẽ bị khóa và không thể chỉnh sửa</div>
+                    <?php endif; ?>
+                </div>
+                <div style="display:flex;gap:8px;flex-shrink:0;">
+                    <?php if ($is_confirmed): ?>
+                    <button onclick="mcConfirm('reset')" style="padding:8px 18px;border-radius:7px;border:1.5px solid #f87171;background:#fff;color:#dc2626;font-size:12px;font-weight:600;cursor:pointer;">↩ Reset to Draft</button>
+                    <?php else: ?>
+                    <button onclick="mcConfirm('confirm')" style="padding:8px 22px;border-radius:7px;border:none;background:#16a34a;color:#fff;font-size:13px;font-weight:700;cursor:pointer;box-shadow:0 2px 6px #16a34a40;">✓ Xác nhận</button>
+                    <?php endif; ?>
+                </div>
+            </div>
+
         </div>
     </main>
 </div>
 <style>
+/* ── Confirmed lock ── */
+body.mc-locked select:not(#yearSel):not(.year-sel):not(.s-sel),
+body.mc-locked input.ebt-edit,
+body.mc-locked input.hv-input,
+body.mc-locked input.airev-input,
+body.mc-locked input.kpi-q-edit,
+body.mc-locked input.link-input,
+body.mc-locked .hv-cur,
+body.mc-locked .airev-cur,
+body.mc-locked button[onclick*="savePakd"],
+body.mc-locked button[onclick*="clearPakd"],
+body.mc-locked .pakd-btn { pointer-events:none; opacity:0.55; cursor:not-allowed; }
+body.mc-locked .pakd-btn { cursor:not-allowed; }
+
 .save-toast { position:fixed; top:20px; right:20px; z-index:9999; padding:8px 16px; border-radius:8px; font-size:13px; font-weight:500; display:none; align-items:center; gap:6px; box-shadow:0 4px 12px rgba(0,0,0,.15); animation:fadeIn .2s; }
 .save-toast.ok { background:#dcfce7; color:#16a34a; border:1px solid #bbf7d0; }
 .save-toast.err { background:#fce8e6; color:#c5221f; border:1px solid #fad2cf; }
@@ -2058,6 +2120,7 @@ function clearPakd(el) {
 }
 
 function saveManualEbt(input) {
+    if (mcIsLocked()) { showToast('Đã xác nhận — cần Reset to Draft để chỉnh sửa', false); return; }
     const val = input.value.trim();
     const ebtCell = input.closest('.ebt-cell');
     const invId = parseInt(ebtCell.dataset.inv);
@@ -2191,6 +2254,7 @@ function fmtShort(n) {
 
 // Market to Lead: persist the source and (if self-sourced) re-apply the +1% Com1 bonus live.
 function saveLead(select) {
+    if (mcIsLocked()) { showToast('Đã xác nhận — cần Reset to Draft để chỉnh sửa', false); return; }
     const invId = parseInt(select.dataset.inv);
     const val = select.value;
     recomputeCom1();
@@ -2531,6 +2595,7 @@ function syncAiAvailability(tr, ebtVal) {
 }
 
 function saveQuarterKpi(input) {
+    if (mcIsLocked()) { showToast('Đã xác nhận — cần Reset to Draft để chỉnh sửa', false); return; }
     const cell = input.closest('.kpi-q-cell');
     const year = parseInt(cell.dataset.year);
     const quarter = parseInt(cell.dataset.quarter);
@@ -2562,6 +2627,7 @@ const SO_COM_RATE = <?= SO_COM_RATE ?>;
 const SO_MIN_VND_JS = <?= SO_MIN_VND ?>;
 
 function saveFirstPo(select) {
+    if (mcIsLocked()) { showToast('Đã xác nhận — cần Reset to Draft để chỉnh sửa', false); return; }
     const soId    = parseInt(select.dataset.soid);
     const isFirst = select.value === '1';
     const row     = select.closest('tr.so-row');
@@ -2618,6 +2684,34 @@ function refreshGrandTotal() {
     const grandTotal = document.getElementById('ccGrandTotal');
     if (grandTotal) grandTotal.textContent = fmtShort(GRAND_COM1 + GRAND_COM2 + GRAND_AI + GRAND_SO_COM);
 }
+
+// ── Confirmation lock ──
+const MC_CONFIRMED = <?= json_encode($is_confirmed) ?>;
+if (MC_CONFIRMED) document.body.classList.add('mc-locked');
+
+function mcIsLocked() {
+    return document.body.classList.contains('mc-locked');
+}
+
+function mcConfirm(action) {
+    const label = action === 'confirm' ? 'xác nhận và khóa' : 'reset về draft';
+    if (!confirm('Bạn có chắc muốn ' + label + ' Commission Q<?= $selected_quarter ?>/<?= $selected_year ?>?')) return;
+    fetch('/api/my_com_confirm', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({year: <?= $selected_year ?>, quarter: <?= $selected_quarter ?>, action})
+    }).then(r => r.json()).then(d => {
+        if (d.ok) { showToast(action === 'confirm' ? '✓ Đã xác nhận & khóa' : '↩ Đã reset về Draft', true); setTimeout(() => location.reload(), 700); }
+        else showToast(d.error || 'Lỗi', false);
+    }).catch(() => showToast('Lỗi kết nối', false));
+}
+
+// Guard all save functions when locked
+const _savePakdApi = savePakdApi;
+savePakdApi = function(body) {
+    if (mcIsLocked()) { showToast('Đã xác nhận — cần Reset to Draft để chỉnh sửa', false); return Promise.resolve(); }
+    return _savePakdApi(body);
+};
 
 function esc(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
 
