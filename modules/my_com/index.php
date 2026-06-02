@@ -1863,6 +1863,12 @@ $month_names_vn = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','
                             <td class="amt license-bonus-cell" data-amount="<?= $d['amount_vnd'] ?>" data-paidok="<?= $d['paid_in_quarter'] ? 1 : 0 ?>" style="color:<?= $l_show ? '#b45309' : '#94a3b8' ?>;font-weight:600;" title="<?= !$d['paid_in_quarter'] ? 'Chưa thanh toán trong quý' : (!$license_kpi_ok ? 'License Bonus yêu cầu KPI quý ≥ 80%' : ($d['ebt_pct'] !== null ? '10% × EBT ' . mc_fmt($d['ebt_vnd']) : 'Chọn PAKD / nhập EBT')) ?>"><?= $l_show ? mc_fmt($d['bonus']) : '—' ?></td>
                         </tr>
                     <?php endforeach; ?>
+                        <?php $total_license_vnd = array_sum(array_column($license_details, 'amount_vnd')); ?>
+                        <tr class="mh">
+                            <td colspan="8" style="background:#f8fafc;color:#475569;text-align:right;font-weight:600;">Tổng Amount (VND)</td>
+                            <td class="amt" style="background:#f8fafc;color:#1d4ed8;font-weight:700;"><?= mc_fmt($total_license_vnd) ?></td>
+                            <td colspan="3" style="background:#f8fafc;"></td>
+                        </tr>
                         <tr class="mh">
                             <td colspan="11" style="background:#fffbeb;color:#b45309;border-color:#fde68a;text-align:right;font-weight:600;">Tổng License Bonus<?= $license_kpi_ok ? '' : ' (chưa đạt KPI ≥ 80%)' ?></td>
                             <td class="amt" id="licenseTotal" style="background:#fffbeb;color:#b45309;border-color:#fde68a;font-weight:700;"><?= $total_license_bonus > 0 ? mc_fmt($total_license_bonus) : '' ?></td>
@@ -1941,6 +1947,12 @@ $month_names_vn = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','
                             </td>
                         </tr>
                         <?php endforeach; ?>
+                        <?php $total_so_vnd = array_sum(array_column($so_list, '_amount_vnd')); ?>
+                        <tr style="background:#f8fafc;">
+                            <td colspan="5" style="padding:7px 10px;border:1px solid #e2e8f0;text-align:right;font-weight:600;color:#475569;">Tổng Amount (VND)</td>
+                            <td class="amt" style="padding:7px 10px;border:1px solid #e2e8f0;text-align:right;font-weight:700;color:#1d4ed8;"><?= mc_fmt($total_so_vnd) ?></td>
+                            <td colspan="2" style="padding:7px 10px;border:1px solid #e2e8f0;background:#f8fafc;"></td>
+                        </tr>
                         <tr style="background:#f5f3ff;">
                             <td colspan="7" style="padding:7px 10px;border:1px solid #e2e8f0;text-align:right;font-weight:600;color:#5b21b6;">Tổng First PO Commission</td>
                             <td class="amt" id="soComTotal" style="padding:7px 10px;border:1px solid #e2e8f0;text-align:right;font-weight:700;color:#7c3aed;"><?= $total_so_com > 0 ? mc_fmt($total_so_com) : '—' ?></td>
