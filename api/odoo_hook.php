@@ -555,13 +555,6 @@ if ($payload && $event_type === 'invoice') {
         $inv_state = $p['state'] ?? '';
         $debug['inv_state_raw'] = $inv_state;
 
-        // Chỉ sync invoice đã được xác nhận (posted) vào debts
-        // Draft invoice không tạo nợ — chỉ khi confirm mới tính
-        if ($inv_state !== 'posted') {
-            $debug['debt_skipped_state'] = $inv_state;
-            return;
-        }
-
         $inv_name     = $p['name'] ?: ($p['highest_name'] ?: 'Draft Invoice');
 
         // Helper: lấy id từ many2one field (cả 2 format: object {id,name} và tuple [id,name])
