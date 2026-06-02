@@ -195,13 +195,15 @@ $conn->query("CREATE TABLE IF NOT EXISTS invoice_pakd_map (
     com2_hv              DECIMAL(20,2) DEFAULT NULL,
     com2_hv_currency     VARCHAR(10) DEFAULT 'VND',
     lead_source          VARCHAR(100) DEFAULT NULL,
-    ai_addon             TINYINT(1) DEFAULT 0,
+    ai_addon             VARCHAR(50) DEFAULT '',
     ai_revenue           DECIMAL(20,2) DEFAULT NULL,
     ai_revenue_currency  VARCHAR(10) DEFAULT 'VND',
     created_at           DATETIME DEFAULT CURRENT_TIMESTAMP,
     updated_at           DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     UNIQUE KEY uq_user_invoice (user_id, invoice_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+// Migrate ai_addon column from TINYINT to VARCHAR if still old type
+$conn->query("ALTER TABLE invoice_pakd_map MODIFY COLUMN ai_addon VARCHAR(50) DEFAULT ''");
 
 // Load existing invoice->PAKD mappings (pakd_id, pakd_link, manual_ebt)
 $inv_pakd_map = [];
