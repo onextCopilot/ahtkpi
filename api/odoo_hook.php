@@ -687,8 +687,10 @@ if ($payload && $event_type === 'invoice') {
                 am_notes             = {$esc($notes)},
                 updated_at           = NOW()
             WHERE id = " . (int)$existRow['id']);
-            $debug['debt_updated']       = $existRow['id'];
-            $debug['debt_update_error']  = $conn->error ?: null;
+            $debug['debt_updated']        = $existRow['id'];
+            $debug['debt_affected_rows']  = $conn->affected_rows;
+            $debug['debt_update_error']   = $conn->error ?: null;
+            $debug['debt_amt_used']       = $amt_orig; // giá trị thực sự trong query
         } else {
             $stmid = $sale_team_id ?: 'NULL';
             $conn->query("INSERT INTO debts
