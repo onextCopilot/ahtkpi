@@ -69,7 +69,7 @@ if ($lres) while ($r = $lres->fetch_assoc()) $level_map[(int)$r['user_id']] = $r
 // ── Confirmations for the selected year ──
 $confirm = []; // [user_id][quarter] = row
 $cstmt = $conn->prepare("SELECT user_id, quarter, status, confirmed_at, snap_total, snap_com1, snap_com2,
-    snap_ai, snap_so_com, snap_license, snap_yb, snap_kpi_pct, snap_revenue, snap_position, snap_level
+    snap_ai, snap_so_com, snap_license, snap_yb, snap_kpi_pct, snap_revenue, snap_kpi_target, snap_position, snap_level
     FROM my_com_confirmation WHERE year = ?");
 $cstmt->bind_param("i", $selected_year);
 $cstmt->execute();
