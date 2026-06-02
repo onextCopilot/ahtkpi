@@ -33,17 +33,18 @@ $conn->query("CREATE TABLE IF NOT EXISTS pakd_documents (
     INDEX idx_pakd (pakd_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
 
-// ── AJAX: Update financials (revenue + gross_profit) ─────────────────────────
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'update_financials') {
+// ── AJAX: Update gross_profit ─────────────────────────────────────────────────
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'update_gp') {
     header('Content-Type: application/json; charset=utf-8');
-    $pid          = (int)($_POST['pakd_id']     ?? $pakd_id);
-    $revenue      = (float)str_replace([',','.',' '], ['','','.'], $_POST['revenue']      ?? 0);
-    $gross_profit = (float)str_replace([',','.',' '], ['','','.'], $_POST['gross_profit'] ?? 0);
-    $stmt = $conn->prepare("UPDATE pakd SET revenue=?, gross_profit=?, updated_at=NOW() WHERE id=?");
-    $stmt->bind_param("ddi", $revenue, $gross_profit, $pid);
+    $pid = (int)($_POST['pakd_id'] ?? $pakd_id);
+    $gp  = (float)preg_replace('/[^\d.]/', '', $_POST['gross_profit'] ?? '0');
+    $rev = (float)preg_replace('/[^\d.]/', '', $_POST['revenue']      ?? '0');
+    if (!$pid) { echo json_encode(['ok' => false, 'msg' => 'Invalid ID']); exit; }
+    $stmt = $conn->prepare("UPDATE pakd SET gross_profit = ?, revenue = ?, updated_at = NOW() WHERE id = ?");
+    $stmt->bind_param("ddi", $gp, $rev, $pid);
     $ok = $stmt->execute();
     $stmt->close();
-    echo json_encode(['ok' => $ok, 'revenue' => $revenue, 'gross_profit' => $gross_profit]);
+    echo json_encode(['ok' => $ok, 'gross_profit' => $gp, 'revenue' => $rev, 'err' => $conn->error ?: null]);
     exit;
 }
 
@@ -1546,26 +1547,36 @@ document.getElementById('fin-revenue')?.addEventListener('input', calcMarginLive
 document.getElementById('fin-gp')?.addEventListener('input', calcMarginLive);
 
 async function saveFinancials() {
-    const revenue     = parseFloat(document.getElementById('fin-revenue').value) || 0;
-    const grossProfit = parseFloat(document.getElementById('fin-gp').value) || 0;
+    const revenue     = parseFloat(document.getElementById('fin-revenue').value)  || 0;
+    const grossProfit = parseFloat(document.getElementById('fin-gp').value)       || 0;
+
     const fd = new FormData();
-    fd.append('action', 'update_financials');
-    fd.append('pakd_id', <?= $pakd_id ?>);
-    fd.append('revenue', revenue);
-    fd.append('gross_profit', grossProfit);
-    const res  = await fetch(window.location.pathname + '?id=<?= $pakd_id ?>', { method: 'POST', body: fd });
-    const data = await res.json();
-    if (data.ok) {
-        // Cập nhật metric card
-        const margin = revenue > 0 ? (grossProfit / revenue * 100) : 0;
-        const fmt = n => n >= 1e9 ? (n/1e9).toFixed(2)+' tỷ' : n >= 1e6 ? (n/1e6).toFixed(1)+' triệu' : n >= 1e3 ? Math.round(n/1e3)+'K' : n;
-        document.getElementById('gp-val').textContent  = grossProfit > 0 ? fmt(grossProfit) : '—';
-        document.getElementById('gp-val').style.color  = grossProfit > 0 ? (margin >= 20 ? '#16a34a' : '#d97706') : 'var(--lgray)';
-        document.getElementById('gp-margin').textContent = margin > 0 ? 'Margin: ' + margin.toFixed(1) + '%' : 'Chưa cập nhật';
-        closeFinModal();
-        showToast('Đã lưu thành công', 'success');
-    } else {
-        showToast('Lỗi lưu dữ liệu', 'error');
+    fd.append('action',       'update_gp');
+    fd.append('pakd_id',      '<?= $pakd_id ?>');
+    fd.append('revenue',      revenue.toString());
+    fd.append('gross_profit', grossProfit.toString());
+
+    try {
+        const res  = await fetch('<?= '/projects/du-an/detail?id=' . $pakd_id ?>', { method: 'POST', body: fd });
+        const text = await res.text();
+        let data;
+        try { data = JSON.parse(text); } catch(e) { console.error('Non-JSON response:', text); showToast('Lỗi server', 'error'); return; }
+
+        if (data.ok) {
+            const gp     = data.gross_profit;
+            const rev    = data.revenue;
+            const margin = rev > 0 ? (gp / rev * 100) : 0;
+            const fmt    = n => n >= 1e9 ? (n/1e9).toFixed(2)+' tỷ' : n >= 1e6 ? (n/1e6).toFixed(1)+' triệu' : n >= 1e3 ? Math.round(n/1e3)+'K' : String(n);
+            document.getElementById('gp-val').textContent = gp > 0 ? fmt(gp) : '—';
+            document.getElementById('gp-val').style.color = gp > 0 ? (margin >= 20 ? '#16a34a' : '#d97706') : 'var(--lgray)';
+            document.getElementById('gp-margin').textContent = margin > 0 ? 'Margin: ' + margin.toFixed(1) + '%' : 'Chưa cập nhật';
+            closeFinModal();
+            showToast('Đã lưu thành công', 'success');
+        } else {
+            showToast('Lỗi: ' + (data.msg || data.err || 'Không rõ'), 'error');
+        }
+    } catch(e) {
+        showToast('Lỗi kết nối: ' + e.message, 'error');
     }
 }
 </script>
