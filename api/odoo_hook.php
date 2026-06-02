@@ -349,13 +349,7 @@ if ($payload && $event_type === 'sale') {
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
 
     $so_odoo_id = (int)($payload['id'] ?? 0);
-    $so_event   = $payload['event'] ?? 'write';
-
-    // ── Xử lý xóa SO (unlink) ────────────────────────────────────────────────
-    if ($so_odoo_id && $so_event === 'unlink') {
-        $conn->query("DELETE FROM odoo_sale_orders WHERE odoo_id = $so_odoo_id");
-        $debug['so_deleted'] = $so_odoo_id;
-    } elseif ($so_odoo_id) {
+    if ($so_odoo_id) {
         try {
             require_once __DIR__ . '/../libs/OdooAPI.php';
             $odoo   = new OdooAPI();
@@ -471,11 +465,27 @@ if ($payload && $event_type === 'sale') {
                 ");
                 $debug['so_upserted'] = $so_odoo_id;
                 $debug['so_error']    = $conn->error ?: null;
+
+                // ── So sánh invoice_ids cũ vs mới → xóa invoice bị remove ──
+                $oldRow = $conn->query("SELECT invoice_ids FROM odoo_sale_orders WHERE odoo_id = $so_odoo_id LIMIT 1");
+                if ($oldRow && $oldData = $oldRow->fetch_assoc()) {
+                    $oldIds = !empty($oldData['invoice_ids']) ? (json_decode($oldData['invoice_ids'], true) ?: []) : [];
+                    $newIds = $so['invoice_ids'] ?? [];
+                    $removedIds = array_values(array_diff(
+                        array_map('intval', $oldIds),
+                        array_map('intval', $newIds)
+                    ));
+                    if (!empty($removedIds)) {
+                        $removeList = implode(',', $removedIds);
+                        $conn->query("DELETE FROM odoo_invoices WHERE odoo_id IN ($removeList)");
+                        $debug['invoices_deleted'] = $removedIds;
+                    }
+                }
             }
         } catch (Exception $e) {
             $debug['so_error'] = $e->getMessage();
         }
-    } // end elseif
+    }
 }
 
 // ── INVOICE: upsert vào odoo_invoices ────────────────────────────────────────
@@ -519,30 +529,8 @@ if ($payload && $event_type === 'invoice') {
         INDEX idx_state (state)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
 
-    $inv_odoo_id  = (int)($payload['id'] ?? $payload['record_id'] ?? 0);
-    $inv_event    = $payload['event'] ?? 'write';
-
-    // ── Xử lý xóa invoice (unlink) ───────────────────────────────────────────
-    if ($inv_odoo_id && $inv_event === 'unlink') {
-        // Lấy invoice_origin trước khi xóa để cập nhật SO
-        $invRow = $conn->query("SELECT invoice_origin FROM odoo_invoices WHERE odoo_id = $inv_odoo_id LIMIT 1");
-        if ($invRow && $invInfo = $invRow->fetch_assoc()) {
-            // Xóa invoice ID khỏi invoice_ids của SO
-            $soLookup = $conn->query(
-                "SELECT odoo_id, invoice_ids FROM odoo_sale_orders
-                 WHERE name = '" . $conn->real_escape_string($invInfo['invoice_origin']) . "' LIMIT 1"
-            );
-            if ($soLookup && $soRow = $soLookup->fetch_assoc()) {
-                $ids = !empty($soRow['invoice_ids']) ? (json_decode($soRow['invoice_ids'], true) ?: []) : [];
-                $ids = array_values(array_filter($ids, fn($i) => (int)$i !== $inv_odoo_id));
-                $newJson = $conn->real_escape_string(json_encode($ids));
-                $conn->query("UPDATE odoo_sale_orders SET invoice_ids = '$newJson', invoice_count = " . count($ids) . ", updated_at = NOW() WHERE odoo_id = " . (int)$soRow['odoo_id']);
-            }
-        }
-        // Xóa khỏi odoo_invoices
-        $conn->query("DELETE FROM odoo_invoices WHERE odoo_id = $inv_odoo_id");
-        $debug['inv_deleted'] = $inv_odoo_id;
-    } elseif ($inv_odoo_id) {
+    $inv_odoo_id = (int)($payload['id'] ?? $payload['record_id'] ?? 0);
+    if ($inv_odoo_id) {
         $g = []; // field extractor
         $g['name']              = $payload['name'] ?: null;
         $g['highest_name']      = $payload['highest_name'] ?: null;
