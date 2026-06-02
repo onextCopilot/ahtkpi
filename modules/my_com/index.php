@@ -273,8 +273,6 @@ function mc_ai_rev_to_vnd($row_map, $hv_rates) {
 }
 
 // ── Sale Orders — First PO Commission (1/1000) ──
-// Rule: Contract/PO đầu tiên > 1 tỷ VND → bonus = amount_vnd / 1000
-define('SO_MIN_VND', 1_000_000_000);
 define('SO_COM_RATE', 0.001);
 
 $conn->query("CREATE TABLE IF NOT EXISTS so_first_po_map (
@@ -293,18 +291,18 @@ try {
         $ou = $odoo->searchRead('res.users', [['login', '=', $user_email]], ['id'], 1);
         $odoo_user_id = !empty($ou[0]['id']) ? (int)$ou[0]['id'] : null;
         if ($odoo_user_id) {
+            // Show confirmed/done SOs created within the selected quarter
             $so_domain = [
                 ['user_id', '=', $odoo_user_id],
-                ['state', '!=', 'cancel'],
-                ['date_order', '>=', $selected_year . '-01-01'],
-                ['date_order', '<=', $selected_year . '-12-31'],
+                ['state', 'in', ['sale', 'done']],
+                ['date_order', '>=', $date_from],
+                ['date_order', '<=', $date_to],
             ];
             $so_fields = ['id', 'name', 'partner_id', 'date_order', 'amount_total', 'currency_id', 'state', 'client_order_ref'];
             $raw_sos = $odoo->searchRead('sale.order', $so_domain, $so_fields, 0, 0);
             foreach ((array)$raw_sos as $so) {
                 $cur        = is_array($so['currency_id']) ? ($so['currency_id'][1] ?? 'USD') : 'USD';
                 $amount_vnd = mc_to_vnd((float)$so['amount_total'], $cur, $hv_rates);
-                if ($amount_vnd < SO_MIN_VND) continue;
                 $so['_cur']          = $cur;
                 $so['_amount_vnd']   = $amount_vnd;
                 $so['_partner_name'] = is_array($so['partner_id']) ? ($so['partner_id'][1] ?? '') : '';
@@ -1707,8 +1705,8 @@ $month_names_vn = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','
             <!-- ─── Sale Orders — First PO Commission ─── -->
             <div style="margin-top:1.5rem;">
                 <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:0.5rem;">
-                    <h3 style="margin:0;font-size:15px;color:#7c3aed;font-weight:700;">Sale Orders &gt; 1 tỷ — First PO Commission</h3>
-                    <span style="font-size:11px;color:#64748b;">Năm <?= $selected_year ?> · Tỷ lệ 1/1000 khi là First PO</span>
+                    <h3 style="margin:0;font-size:15px;color:#7c3aed;font-weight:700;">Sale Orders — First PO Commission</h3>
+                    <span style="font-size:11px;color:#64748b;">Q<?= $selected_quarter ?>/<?= $selected_year ?> · Confirmed &amp; Done · Tỷ lệ 1/1000 khi là First PO</span>
                 </div>
                 <div style="overflow-x:auto;">
                 <table style="width:100%;border-collapse:collapse;font-size:12px;">
@@ -1728,7 +1726,7 @@ $month_names_vn = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','
                     <?php if (!empty($so_error)): ?>
                         <tr><td colspan="8" style="padding:12px;text-align:center;color:#dc2626;border:1px solid #e2e8f0;">Lỗi tải Sale Orders: <?= htmlspecialchars($so_error) ?></td></tr>
                     <?php elseif (empty($so_list)): ?>
-                        <tr><td colspan="8" style="padding:12px;text-align:center;color:#94a3b8;border:1px solid #e2e8f0;">Không có Sale Order nào &gt; 1 tỷ VND trong năm <?= $selected_year ?></td></tr>
+                        <tr><td colspan="8" style="padding:12px;text-align:center;color:#94a3b8;border:1px solid #e2e8f0;">Không có Sale Order (Confirmed/Done) trong Q<?= $selected_quarter ?>/<?= $selected_year ?></td></tr>
                     <?php else: ?>
                         <?php foreach ($so_list as $so):
                             $so_id       = (int)$so['id'];
