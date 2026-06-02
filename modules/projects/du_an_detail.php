@@ -255,7 +255,7 @@ try {
         $whereSQL = implode(' OR ', $whereParts);
         $invRes = $conn->query(
             "SELECT * FROM odoo_invoices
-             WHERE ($whereSQL) AND state = 'posted'
+             WHERE ($whereSQL) AND state != 'cancel'
              ORDER BY invoice_date DESC, odoo_id DESC"
         );
         $seen = [];
