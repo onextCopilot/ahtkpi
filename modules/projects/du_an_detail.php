@@ -55,7 +55,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'uploa
     }
     $rel = '/uploads/pakd_docs/' . $pid . '/' . $stored;
     $stmt = $conn->prepare("INSERT INTO pakd_documents (pakd_id,file_name,original_name,file_size,mime_type,file_path,doc_label,uploaded_by,uploaded_by_name) VALUES (?,?,?,?,?,?,?,?,?)");
-    $stmt->bind_param("issssssls", $pid, $stored, $file['name'], $file['size'], $file['type'], $rel, $label, $user_id, $my_full_name);
+    $stmt->bind_param("issssssis", $pid, $stored, $file['name'], $file['size'], $file['type'], $rel, $label, $user_id, $my_full_name);
     $stmt->execute();
     echo json_encode(['ok'=>true,'id'=>$conn->insert_id,'name'=>$file['name'],'path'=>$rel,'size'=>$file['size'],'ext'=>$ext,'label'=>$label,'uploader'=>$my_full_name]);
     $stmt->close();
