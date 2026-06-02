@@ -553,9 +553,14 @@ if ($payload && $event_type === 'invoice') {
         }
 
         $inv_state = $p['state'] ?? '';
-        // Không skip draft ở đây — webhook Odoo có thể gửi activity_state thay vì invoice state
-        // Thay vào đó log giá trị state thực tế để debug
         $debug['inv_state_raw'] = $inv_state;
+
+        // Chỉ sync invoice đã được xác nhận (posted) vào debts
+        // Draft invoice không tạo nợ — chỉ khi confirm mới tính
+        if ($inv_state !== 'posted') {
+            $debug['debt_skipped_state'] = $inv_state;
+            return;
+        }
 
         $inv_name     = $p['name'] ?: ($p['highest_name'] ?: 'Draft Invoice');
 
