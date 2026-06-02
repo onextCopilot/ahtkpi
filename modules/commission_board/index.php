@@ -47,9 +47,13 @@ foreach ([
     'snap_position' => "VARCHAR(50) DEFAULT ''", 'snap_level' => "VARCHAR(100) DEFAULT ''",
 ] as $col => $ddl) cb_ensure_col($conn, $col, $ddl);
 
-// ── AM/BD users ──
+// ── AM/BD users (with fallback level from users.sale_level_id) ──
 $users = [];
-$ures = $conn->query("SELECT id, full_name, email FROM users WHERE is_am_bd = 1 ORDER BY full_name");
+$ures = $conn->query("SELECT u.id, u.full_name, u.email, sl.position_type AS fb_position, sl.level_name AS fb_level
+    FROM users u
+    LEFT JOIN sale_levels sl ON u.sale_level_id = sl.id
+    WHERE u.is_am_bd = 1
+    ORDER BY u.full_name");
 if ($ures) while ($r = $ures->fetch_assoc()) $users[(int)$r['id']] = $r;
 
 // ── Latest sale level (position + level) per user ──
@@ -80,6 +84,22 @@ function cb_fmt_short($n) {
     if ($n == 0) return '0';
     return number_format($n, 0, '.', ',');
 }
+
+// Resolve each user's position/level (history → users.sale_level_id → confirmed snapshot).
+// Drop users flagged is_am_bd but with no real position assigned (e.g. Steve Le).
+foreach ($users as $uid => &$u) {
+    $pos = $level_map[$uid]['position_type'] ?? ($u['fb_position'] ?? '');
+    $lvl = $level_map[$uid]['level_name']    ?? ($u['fb_level'] ?? '');
+    if (!$pos) {
+        for ($q = 4; $q >= 1; $q--) {
+            if (!empty($confirm[$uid][$q]['snap_position'])) { $pos = $confirm[$uid][$q]['snap_position']; $lvl = $confirm[$uid][$q]['snap_level']; break; }
+        }
+    }
+    if (!$pos) { unset($users[$uid]); continue; }
+    $u['_pos'] = $pos;
+    $u['_lvl'] = $lvl;
+}
+unset($u);
 
 // Column totals (confirmed only)
 $col_totals = [1 => 0, 2 => 0, 3 => 0, 4 => 0];
@@ -185,13 +205,8 @@ foreach ($confirm as $uid => $qs) foreach ($qs as $c) if (($c['status'] ?? '') =
                         <?php if (empty($users)): ?>
                             <tr><td colspan="6" class="cb-empty">Không có nhân viên AM / BD nào (cần bật cờ <code>is_am_bd</code>)</td></tr>
                         <?php else: foreach ($users as $uid => $u):
-                            $lvl = $level_map[$uid] ?? null;
-                            // Fallback to any snapshot's stored position/level for the year.
-                            $pos = $lvl['position_type'] ?? '';
-                            $lvlname = $lvl['level_name'] ?? '';
-                            if (!$pos) {
-                                for ($q = 4; $q >= 1; $q--) { if (!empty($confirm[$uid][$q]['snap_position'])) { $pos = $confirm[$uid][$q]['snap_position']; $lvlname = $confirm[$uid][$q]['snap_level']; break; } }
-                            }
+                            $pos     = $u['_pos'] ?? '';
+                            $lvlname = $u['_lvl'] ?? '';
                             $row_total = 0;
                         ?>
                         <tr>
