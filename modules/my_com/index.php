@@ -274,6 +274,7 @@ function mc_ai_rev_to_vnd($row_map, $hv_rates) {
 
 // ── Sale Orders — First PO Commission (1/1000) ──
 define('SO_COM_RATE', 0.001);
+define('SO_MIN_VND',  1_000_000_000); // chỉ tính commission khi SO ≥ 1 tỷ VND
 
 $conn->query("CREATE TABLE IF NOT EXISTS so_first_po_map (
     id INT AUTO_INCREMENT PRIMARY KEY,
@@ -1729,15 +1730,16 @@ $month_names_vn = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','
                         <tr><td colspan="8" style="padding:12px;text-align:center;color:#94a3b8;border:1px solid #e2e8f0;">Không có Sale Order (Confirmed/Done) trong Q<?= $selected_quarter ?>/<?= $selected_year ?></td></tr>
                     <?php else: ?>
                         <?php foreach ($so_list as $so):
-                            $so_id       = (int)$so['id'];
-                            $is_first    = $so_first_po_flags[$so_id] ?? false;
-                            $amount_orig = (float)$so['amount_total'];
-                            $amount_vnd  = $so['_amount_vnd'];
-                            $so_com      = $is_first ? $amount_vnd * SO_COM_RATE : 0;
-                            $state_map   = ['draft' => ['Nháp', '#94a3b8'], 'sale' => ['Confirmed', '#16a34a'], 'done' => ['Done', '#2563eb']];
+                            $so_id        = (int)$so['id'];
+                            $amount_orig  = (float)$so['amount_total'];
+                            $amount_vnd   = $so['_amount_vnd'];
+                            $qualifies    = $amount_vnd >= SO_MIN_VND; // chỉ tính commission nếu ≥ 1 tỷ
+                            $is_first     = $qualifies && ($so_first_po_flags[$so_id] ?? false);
+                            $so_com       = $is_first ? $amount_vnd * SO_COM_RATE : 0;
+                            $state_map    = ['draft' => ['Nháp', '#94a3b8'], 'sale' => ['Confirmed', '#16a34a'], 'done' => ['Done', '#2563eb']];
                             [$state_label, $state_color] = $state_map[$so['state']] ?? [$so['state'], '#64748b'];
                         ?>
-                        <tr class="so-row" data-soid="<?= $so_id ?>" data-vnd="<?= (int)$amount_vnd ?>">
+                        <tr class="so-row" data-soid="<?= $so_id ?>" data-vnd="<?= (int)$amount_vnd ?>" data-qualifies="<?= $qualifies ? 1 : 0 ?>">
                             <td style="padding:7px 10px;border:1px solid #e2e8f0;font-weight:600;color:#5b21b6;white-space:nowrap;">
                                 <?= htmlspecialchars($so['name']) ?>
                                 <?php if (!empty($so['client_order_ref'])): ?>
@@ -1752,13 +1754,17 @@ $month_names_vn = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','
                             <td style="padding:7px 10px;border:1px solid #e2e8f0;text-align:right;color:#374151;">
                                 <?= $so['_cur'] !== 'VND' ? number_format($amount_orig, 0) . ' ' . htmlspecialchars($so['_cur']) : mc_fmt($amount_orig) ?>
                             </td>
-                            <td style="padding:7px 10px;border:1px solid #e2e8f0;text-align:right;font-weight:600;color:#1d4ed8;"><?= mc_fmt($amount_vnd) ?></td>
+                            <td style="padding:7px 10px;border:1px solid #e2e8f0;text-align:right;font-weight:600;color:<?= $qualifies ? '#1d4ed8' : '#94a3b8' ?>;"><?= mc_fmt($amount_vnd) ?></td>
                             <td style="padding:7px 10px;border:1px solid #e2e8f0;text-align:center;">
+                                <?php if ($qualifies): ?>
                                 <select class="so-first-po-sel" data-soid="<?= $so_id ?>" onchange="saveFirstPo(this)"
                                         style="padding:3px 6px;border:1px solid #e2e8f0;border-radius:5px;font-size:11px;background:#fff;cursor:pointer;">
                                     <option value="0"<?= !$is_first ? ' selected' : '' ?>>— Chọn —</option>
                                     <option value="1"<?= $is_first ? ' selected' : '' ?>>Yes — First PO</option>
                                 </select>
+                                <?php else: ?>
+                                <span style="font-size:10px;color:#94a3b8;" title="Chỉ áp dụng khi SO ≥ 1 tỷ VND">< 1 tỷ</span>
+                                <?php endif; ?>
                             </td>
                             <td class="so-com-cell" style="padding:7px 10px;border:1px solid #e2e8f0;text-align:right;font-weight:700;color:<?= $so_com > 0 ? '#7c3aed' : '#94a3b8' ?>;">
                                 <?= $so_com > 0 ? mc_fmt($so_com) : '—' ?>
@@ -2488,16 +2494,18 @@ function saveQuarterKpi(input) {
 // ── Sale Orders First PO Commission ──
 const SO_COM_RATE = <?= SO_COM_RATE ?>;
 
+const SO_MIN_VND_JS = <?= SO_MIN_VND ?>;
+
 function saveFirstPo(select) {
     const soId    = parseInt(select.dataset.soid);
     const isFirst = select.value === '1';
     const row     = select.closest('tr.so-row');
     const comCell = row ? row.querySelector('.so-com-cell') : null;
     const amtVnd  = row ? (parseFloat(row.dataset.vnd) || 0) : 0;
+    const qualifies = row && row.dataset.qualifies === '1';
 
-    // Update commission cell immediately
     if (comCell) {
-        const com = isFirst ? amtVnd * SO_COM_RATE : 0;
+        const com = (isFirst && qualifies) ? amtVnd * SO_COM_RATE : 0;
         comCell.textContent = com > 0 ? fmtFull(com) : '—';
         comCell.style.color = com > 0 ? '#7c3aed' : '#94a3b8';
     }
@@ -2515,6 +2523,7 @@ function saveFirstPo(select) {
 function recomputeSoCom() {
     let total = 0;
     document.querySelectorAll('tr.so-row').forEach(row => {
+        if (row.dataset.qualifies !== '1') return;
         const sel = row.querySelector('.so-first-po-sel');
         if (sel && sel.value === '1') {
             total += (parseFloat(row.dataset.vnd) || 0) * SO_COM_RATE;
