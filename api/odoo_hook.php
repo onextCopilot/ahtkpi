@@ -578,13 +578,14 @@ if ($payload && $event_type === 'invoice') {
             if ($tRow && $t = $tRow->fetch_assoc()) $sale_team_id = (int)$t['id'];
         }
 
-        // payment_status
-        $payment_status = match(true) {
-            $pay_state === 'paid'       => 'Paid',
-            $pay_state === 'in_payment' => 'Paid',
-            $pay_state === 'partial'    => 'Partial',
-            default                      => 'Not paid',
-        };
+        // payment_status (PHP 7.4 compatible)
+        if ($pay_state === 'paid' || $pay_state === 'in_payment') {
+            $payment_status = 'Paid';
+        } elseif ($pay_state === 'partial') {
+            $payment_status = 'Partial';
+        } else {
+            $payment_status = 'Not paid';
+        }
 
         // invoice_status_class — dựa trên trạng thái thanh toán + số ngày
         $ref_date = $inv_date ?: $inv_date_due; // dùng invoice_date, fallback sang due_date
