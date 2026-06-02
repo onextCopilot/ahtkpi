@@ -620,6 +620,7 @@ $pst = $pakd['pasx_status'] ?? '';
         }
     </style>
     <script src="https://cdn.jsdelivr.net/npm/mammoth@1.7.1/mammoth.browser.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
     <script>
     (function() {
         var _prev = localStorage.getItem('sidebar-collapsed');
@@ -1682,17 +1683,66 @@ function previewDoc(url, name, ext) {
                         </a>
                     </div>`;
             });
-    } else if (['xls','xlsx','ppt','pptx'].includes(ext)) {
-        const extLabel = { xls:'Excel', xlsx:'Excel', ppt:'PowerPoint', pptx:'PowerPoint' };
+    } else if (ext === 'xls' || ext === 'xlsx') {
+        // Render Excel client-side bằng SheetJS
+        body.innerHTML = `
+            <div style="display:flex;align-items:center;justify-content:center;height:100%;gap:10px;color:#64748b;font-size:13px;">
+                <i class="fas fa-spinner fa-spin"></i> Đang tải file Excel...
+            </div>`;
+        fetch(url)
+            .then(r => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.arrayBuffer(); })
+            .then(buf => {
+                const wb = XLSX.read(buf, { type: 'array', cellStyles: true });
+                // Tạo tab cho từng sheet
+                const sheets = wb.SheetNames;
+                let tabsHtml = sheets.length > 1
+                    ? `<div style="display:flex;gap:0;border-bottom:2px solid #e2e8f0;background:#f8fafc;padding:0 16px;flex-shrink:0;">
+                        ${sheets.map((s,i) => `<button onclick="xlsShowSheet(this,'sheet-${i}')" data-active="${i===0?'1':'0'}"
+                            style="padding:8px 16px;border:none;background:${i===0?'#fff':'transparent'};font-size:12px;font-weight:${i===0?'700':'500'};color:${i===0?'#16a34a':'#64748b'};cursor:pointer;border-bottom:${i===0?'2px solid #16a34a':'2px solid transparent'};margin-bottom:-2px;font-family:inherit;">${escHtml(s)}</button>`).join('')}
+                       </div>`
+                    : '';
+                let sheetsHtml = sheets.map((s, i) => {
+                    const ws  = wb.Sheets[s];
+                    const html = XLSX.utils.sheet_to_html(ws, { editable: false, header: '' });
+                    return `<div id="sheet-${i}" style="display:${i===0?'block':'none'};height:100%;overflow:auto;padding:12px 16px;">${html}</div>`;
+                }).join('');
+                body.innerHTML = `
+                    <div style="display:flex;flex-direction:column;height:100%;overflow:hidden;">
+                        ${tabsHtml}
+                        <div style="flex:1;overflow:hidden;position:relative;">
+                            ${sheetsHtml}
+                        </div>
+                    </div>`;
+                // Inject table styles
+                const style = document.createElement('style');
+                style.textContent = `
+                    .preview-body table { border-collapse: collapse; font-size: 12px; white-space: nowrap; }
+                    .preview-body table td, .preview-body table th { border: 1px solid #e2e8f0; padding: 4px 10px; min-width: 60px; }
+                    .preview-body table tr:first-child td, .preview-body table tr:first-child th { background: #f1f5f9; font-weight: 700; position: sticky; top: 0; z-index: 1; }
+                    .preview-body table tr:nth-child(even) td { background: #f8fafc; }
+                `;
+                document.head.appendChild(style);
+            })
+            .catch(err => {
+                body.innerHTML = `
+                    <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;gap:14px;">
+                        <i class="fas fa-exclamation-circle" style="font-size:40px;color:#dc2626;"></i>
+                        <div style="font-size:13px;color:#64748b;">Không thể đọc file (${err.message})</div>
+                        <a href="${url}" download="${escHtml(name)}" style="display:inline-flex;align-items:center;gap:7px;padding:9px 20px;background:#16a34a;color:#fff;border-radius:8px;font-size:13px;font-weight:600;text-decoration:none;">
+                            <i class="fas fa-download"></i> Tải về máy
+                        </a>
+                    </div>`;
+            });
+    } else if (['ppt','pptx'].includes(ext)) {
         body.innerHTML = `
             <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;gap:16px;background:#f8fafc;">
-                <i class="fas fa-file-${ext.includes('xls')?'excel':'powerpoint'}" style="font-size:56px;color:${ext.includes('xls')?'#16a34a':'#ea580c'};"></i>
+                <i class="fas fa-file-powerpoint" style="font-size:56px;color:#ea580c;"></i>
                 <div style="font-size:15px;font-weight:700;color:#1e293b;">${escHtml(name)}</div>
                 <div style="font-size:13px;color:#64748b;text-align:center;max-width:320px;">
-                    File ${extLabel[ext]||ext.toUpperCase()} chưa hỗ trợ xem trực tiếp.<br>Vui lòng tải về để mở bằng ứng dụng phù hợp.
+                    File PowerPoint chưa hỗ trợ xem trực tiếp.<br>Vui lòng tải về để mở bằng ứng dụng phù hợp.
                 </div>
                 <a href="${url}" download="${escHtml(name)}"
-                   style="display:inline-flex;align-items:center;gap:8px;padding:10px 24px;background:#${ext.includes('xls')?'16a34a':'ea580c'};color:#fff;border-radius:8px;font-size:14px;font-weight:600;text-decoration:none;">
+                   style="display:inline-flex;align-items:center;gap:8px;padding:10px 24px;background:#ea580c;color:#fff;border-radius:8px;font-size:14px;font-weight:600;text-decoration:none;">
                     <i class="fas fa-download"></i> Tải về máy
                 </a>
             </div>`;
@@ -1710,6 +1760,23 @@ function closePreview(e) {
 document.addEventListener('keydown', e => { if (e.key === 'Escape') closePreview({ target: document.getElementById('preview-modal') }); });
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
+function xlsShowSheet(btn, sheetId) {
+    // Ẩn tất cả sheets
+    btn.closest('div[style]').nextElementSibling.querySelectorAll('[id^="sheet-"]').forEach(el => el.style.display = 'none');
+    document.getElementById(sheetId).style.display = 'block';
+    // Update tab styles
+    btn.parentElement.querySelectorAll('button').forEach(b => {
+        b.style.background = 'transparent';
+        b.style.fontWeight = '500';
+        b.style.color = '#64748b';
+        b.style.borderBottom = '2px solid transparent';
+    });
+    btn.style.background = '#fff';
+    btn.style.fontWeight = '700';
+    btn.style.color = '#16a34a';
+    btn.style.borderBottom = '2px solid #16a34a';
+}
+
 function escHtml(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
 
 function showToast(msg, type='success') {
