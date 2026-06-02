@@ -323,7 +323,7 @@ try {
             // Show confirmed/done SOs created within the selected quarter
             $so_domain = [
                 ['user_id', '=', $odoo_user_id],
-                ['state', 'in', ['sale', 'done']],
+                ['state', 'in', ['sent', 'sale', 'done']],
                 ['date_order', '>=', $date_from],
                 ['date_order', '<=', $date_to],
             ];
@@ -1770,7 +1770,7 @@ $month_names_vn = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','
             <div style="margin-top:1.5rem;">
                 <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:0.5rem;">
                     <h3 style="margin:0;font-size:15px;color:#7c3aed;font-weight:700;">Sale Orders — First PO Commission</h3>
-                    <span style="font-size:11px;color:#64748b;">Q<?= $selected_quarter ?>/<?= $selected_year ?> · Confirmed &amp; Done · Tỷ lệ 1/1000 khi là First PO</span>
+                    <span style="font-size:11px;color:#64748b;">Q<?= $selected_quarter ?>/<?= $selected_year ?> · Sent / Confirmed / Done · Tỷ lệ 1/1000 khi là First PO</span>
                 </div>
                 <div style="overflow-x:auto;">
                 <table style="width:100%;border-collapse:collapse;font-size:12px;">
@@ -1790,7 +1790,7 @@ $month_names_vn = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','
                     <?php if (!empty($so_error)): ?>
                         <tr><td colspan="8" style="padding:12px;text-align:center;color:#dc2626;border:1px solid #e2e8f0;">Lỗi tải Sale Orders: <?= htmlspecialchars($so_error) ?></td></tr>
                     <?php elseif (empty($so_list)): ?>
-                        <tr><td colspan="8" style="padding:12px;text-align:center;color:#94a3b8;border:1px solid #e2e8f0;">Không có Sale Order (Confirmed/Done) trong Q<?= $selected_quarter ?>/<?= $selected_year ?></td></tr>
+                        <tr><td colspan="8" style="padding:12px;text-align:center;color:#94a3b8;border:1px solid #e2e8f0;">Không có Sale Order (Sent/Confirmed/Done) trong Q<?= $selected_quarter ?>/<?= $selected_year ?></td></tr>
                     <?php else: ?>
                         <?php foreach ($so_list as $so):
                             $so_id        = (int)$so['id'];
@@ -1799,7 +1799,7 @@ $month_names_vn = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','
                             $qualifies    = $amount_vnd >= SO_MIN_VND; // chỉ tính commission nếu ≥ 1 tỷ
                             $is_first     = $qualifies && ($so_first_po_flags[$so_id] ?? false);
                             $so_com       = $is_first ? $amount_vnd * SO_COM_RATE : 0;
-                            $state_map    = ['draft' => ['Nháp', '#94a3b8'], 'sale' => ['Confirmed', '#16a34a'], 'done' => ['Done', '#2563eb']];
+                            $state_map    = ['draft' => ['Nháp', '#94a3b8'], 'sent' => ['Sent', '#f59e0b'], 'sale' => ['Confirmed', '#16a34a'], 'done' => ['Done', '#2563eb']];
                             [$state_label, $state_color] = $state_map[$so['state']] ?? [$so['state'], '#64748b'];
                         ?>
                         <tr class="so-row" data-soid="<?= $so_id ?>" data-vnd="<?= (int)$amount_vnd ?>" data-qualifies="<?= $qualifies ? 1 : 0 ?>">
