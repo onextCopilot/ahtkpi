@@ -350,6 +350,14 @@ if ($payload && $event_type === 'sale') {
 
     $so_odoo_id = (int)($payload['id'] ?? 0);
     if ($so_odoo_id) {
+        // Check state từ payload trước — tránh gọi Odoo API không cần thiết
+        $so_state_payload = $payload['state'] ?? null;
+
+        if ($so_state_payload === 'cancel') {
+            // SO bị cancel → xóa khỏi DB ngay, không cần gọi API
+            $conn->query("DELETE FROM odoo_sale_orders WHERE odoo_id = $so_odoo_id");
+            $debug['so_cancelled_deleted'] = $so_odoo_id;
+        } else {
         try {
             require_once __DIR__ . '/../libs/OdooAPI.php';
             $odoo   = new OdooAPI();
@@ -363,14 +371,6 @@ if ($payload && $event_type === 'sale') {
 
             if (!empty($soData[0])) {
                 $so = $soData[0];
-
-                // SO bị cancel → xóa khỏi DB, không upsert
-                if (($so['state'] ?? '') === 'cancel') {
-                    $conn->query("DELETE FROM odoo_sale_orders WHERE odoo_id = $so_odoo_id");
-                    $debug['so_cancelled_deleted'] = $so_odoo_id;
-                    // Bỏ qua phần upsert bên dưới
-                    goto so_done;
-                }
 
                 $f = []; // safe field extraction helper
                 $f['partner_id']        = is_array($so['partner_id'])       ? (int)($so['partner_id'][0] ?? 0)         : null;
@@ -493,7 +493,7 @@ if ($payload && $event_type === 'sale') {
         } catch (Exception $e) {
             $debug['so_error'] = $e->getMessage();
         }
-        so_done:
+        } // end else (not cancel)
     }
 }
 
