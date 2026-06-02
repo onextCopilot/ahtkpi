@@ -805,49 +805,6 @@ $pst = $pakd['pasx_status'] ?? '';
                         </div>
                     </div>
 
-                    <!-- Contract Info -->
-                    <div class="card">
-                        <div class="card-header">
-                            <div class="card-icon amber"><i class="fas fa-file-contract"></i></div>
-                            <h3>Thông tin hợp đồng</h3>
-                        </div>
-                        <div class="card-body">
-                            <div class="info-grid">
-                                <div class="info-item">
-                                    <div class="info-label">Khách hàng</div>
-                                    <div class="info-value <?= empty($pakd['company_name']) ? 'empty' : '' ?>">
-                                        <i class="fas fa-building" style="font-size:11px;color:var(--lgray);"></i>
-                                        <?= htmlspecialchars($pakd['company_name'] ?: '—') ?>
-                                    </div>
-                                </div>
-                                <div class="info-item">
-                                    <div class="info-label">Số hợp đồng</div>
-                                    <div class="info-value <?= empty($pakd['contract_no']) ? 'empty' : '' ?>">
-                                        <?= htmlspecialchars($pakd['contract_no'] ?: '—') ?>
-                                    </div>
-                                </div>
-                                <div class="info-item">
-                                    <div class="info-label">Sales Order</div>
-                                    <div class="info-value <?= empty($pakd['sales_order_no']) ? 'empty' : '' ?>">
-                                        <?= htmlspecialchars($pakd['sales_order_no'] ?: '—') ?>
-                                    </div>
-                                </div>
-                                <div class="info-item">
-                                    <div class="info-label">Purchase Order</div>
-                                    <div class="info-value <?= empty($pakd['purchase_order_no']) ? 'empty' : '' ?>">
-                                        <?= htmlspecialchars($pakd['purchase_order_no'] ?: '—') ?>
-                                    </div>
-                                </div>
-                                <?php if (!empty($pakd['timeline'])): ?>
-                                <div class="info-item" style="grid-column: span 2;">
-                                    <div class="info-label">Thời gian triển khai</div>
-                                    <div class="info-value"><?= htmlspecialchars($pakd['timeline']) ?></div>
-                                </div>
-                                <?php endif; ?>
-                            </div>
-                        </div>
-                    </div>
-
                     <!-- Financial Summary -->
                     <?php if ($fin_rev_gross > 0): ?>
                     <div class="card">
