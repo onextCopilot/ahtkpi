@@ -575,6 +575,13 @@ if ($payload && $event_type === 'invoice') {
             return;
         }
 
+        // Bỏ qua hóa đơn nội bộ (Invoice Type = Internal) — không phải công nợ khách hàng
+        $inv_type = $p['x_studio_invoice_type_1'] ?? '';
+        if (is_string($inv_type) && strcasecmp(trim($inv_type), 'Internal') === 0) {
+            $debug['debt_skipped_internal'] = true;
+            return;
+        }
+
         $inv_state = $p['state'] ?? '';
         $debug['inv_state_raw'] = $inv_state;
 
