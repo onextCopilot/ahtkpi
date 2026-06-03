@@ -146,19 +146,23 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
 
             <div id="passkeySection" style="display:none; margin-top: 1rem;">
                 <div style="display:flex; align-items:center; gap:0.75rem; margin-bottom:1rem;">
-                    <div style="flex:1; height:1px; background:rgba(255,255,255,0.15);"></div>
-                    <span style="color:rgba(255,255,255,0.5); font-size:0.8rem; white-space:nowrap;">or</span>
-                    <div style="flex:1; height:1px; background:rgba(255,255,255,0.15);"></div>
+                    <div style="flex:1; height:1px; background:#e2e8f0;"></div>
+                    <span style="color:#94a3b8; font-size:0.8rem; white-space:nowrap;">or</span>
+                    <div style="flex:1; height:1px; background:#e2e8f0;"></div>
                 </div>
-                <button type="button" id="btnPasskey" class="btn-login" style="background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.2);">
-                    <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" width="20" height="20">
-                        <path d="M12 1C8.676 1 6 3.676 6 7v1H4a1 1 0 0 0-1 1v13a1 1 0 0 0 1 1h16a1 1 0 0 0 1-1V9a1 1 0 0 0-1-1h-2V7c0-3.324-2.676-6-6-6zm0 2c2.276 0 4 1.724 4 4v1H8V7c0-2.276 1.724-4 4-4zm0 9a2 2 0 0 1 1 3.723V17h-2v-1.277A2 2 0 0 1 12 12z" fill="currentColor"/>
+                <button type="button" id="btnPasskey" class="btn-login"
+                    style="background:#f8fafc; border:1.5px solid #e2e8f0; color:#1e293b; box-shadow:0 1px 3px rgba(0,0,0,0.06);">
+                    <svg viewBox="0 0 24 24" width="20" height="20" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <ellipse cx="9" cy="9.5" rx="5" ry="5.5" stroke="#6366f1" stroke-width="2"/>
+                        <path d="M4 9.5C4 6.74 6.24 4.5 9 4.5" stroke="#6366f1" stroke-width="2" stroke-linecap="round"/>
+                        <path d="M14 13l1.5 1.5L19 10" stroke="#10b981" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                        <path d="M9 14.5v5M7 19.5h4" stroke="#6366f1" stroke-width="2" stroke-linecap="round"/>
                     </svg>
                     <span id="btnPasskeyLabel">Sign in with Passkey / Biometric</span>
                 </button>
             </div>
 
-            <div id="passkeyError" style="display:none; margin-top:0.75rem; padding:0.75rem 1rem; background:rgba(239,68,68,0.15); border:1px solid rgba(239,68,68,0.3); border-radius:10px; color:#fca5a5; font-size:0.875rem;"></div>
+            <div id="passkeyError" style="display:none; margin-top:0.75rem; padding:0.75rem 1rem; background:rgba(239,68,68,0.08); border:1px solid rgba(239,68,68,0.25); border-radius:10px; color:#dc2626; font-size:0.875rem;"></div>
 
 
         </div>
