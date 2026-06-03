@@ -268,16 +268,18 @@ if ($map_stmt) {
 
 // Currency → VND conversion rates for HV — sourced entirely from Odoo.
 // The available currencies AND their symbols come from Odoo (res.currency).
-// VND is the base (rate 1). Each rate = how many VND for 1 unit of that currency:
-//   rate(cur→VND) = getRate('VND') / getRate(cur)   (both relative to Odoo company currency)
+// VND is the base (rate 1). Each rate = how many VND for 1 unit of that currency.
+// In the VN context VND is the base currency, so the factor is simply 1/getRate(cur).
+// NOTE: do NOT use getRate('VND')/getRate(cur) here — getRate() is not company-scoped
+// and may pull a cross-company VND rate (e.g. ≈6660 from a MYR-base company), which
+// blows the rate up to ~174M VND/USD (200 USD → "34.77 tỷ"). See SO logic below.
 $hv_currencies = ['VND'];   // ordered list shown in the dropdown
 $hv_symbols    = ['VND' => '₫'];
 $hv_rates      = ['VND' => 1.0];
 try {
     if (isset($odoo) && $odoo) {
-        $r_vnd = (float) $odoo->getRate('VND', date('Y-m-d'));
         $odoo_currencies = $odoo->getCurrencies();   // [name => ['symbol'=>..,'rate'=>..], ...]
-        if ($r_vnd > 0 && is_array($odoo_currencies)) {
+        if (is_array($odoo_currencies)) {
             // Preferred display order; any other Odoo currency is appended after.
             $preferred = ['USD', 'EUR', 'GBP', 'AUD', 'JPY', 'KRW', 'MYR'];
             $names = array_keys($odoo_currencies);
@@ -291,7 +293,7 @@ try {
                 if ($cur === 'VND') continue;   // already the base
                 $r_cur = (float) $odoo->getRate($cur, date('Y-m-d'));
                 if ($r_cur <= 0) continue;       // skip currencies Odoo has no rate for
-                $rate = $r_vnd / $r_cur;
+                $rate = 1.0 / $r_cur;            // VND is base → inverse factor (see note above)
                 if ($rate <= 0) continue;
                 $hv_currencies[] = $cur;
                 $hv_symbols[$cur] = $odoo_currencies[$cur]['symbol'] ?? $cur;
@@ -356,9 +358,10 @@ try {
             $raw_sos = $odoo->searchRead('sale.order', $so_domain, $so_fields, 0, 0);
 
             // Build per-currency rates for SO conversion.
-            // $hv_rates uses r_vnd/r_cur which picks up cross-company VND entries
-            // from non-VND-base companies (e.g. MYR-base → VND≈6622). For VN context
             // VND is base, so the correct factor is simply 1/r_cur (inverse factor).
+            // Avoid r_vnd/r_cur: getRate() isn't company-scoped and picks up cross-company
+            // VND entries from non-VND-base companies (e.g. MYR-base → VND≈6622). $hv_rates
+            // above now uses the same 1/r_cur factor for consistency.
             $so_currency_rates = ['VND' => 1.0];
             foreach ((array)$raw_sos as $so) {
                 $cur = is_array($so['currency_id']) ? ($so['currency_id'][1] ?? 'USD') : 'USD';
