@@ -850,9 +850,13 @@ if ($payload && $event_type === 'invoice') {
         $debug['inv_error']    = $conn->error ?: null;
 
         // ── Sync vào debts ────────────────────────────────────────────────────
-        if (($g['state'] ?? '') === 'cancel') {
-            // Invoice bị cancel → xóa khỏi debts
+        $_inv_type = $payload['x_studio_invoice_type_1'] ?? '';
+        $_is_internal = is_string($_inv_type) && strcasecmp(trim($_inv_type), 'Internal') === 0;
+        if (($g['state'] ?? '') === 'cancel' || $_is_internal) {
+            // Invoice bị cancel HOẶC đổi sang Internal → xóa khỏi debts
+            // (không còn là công nợ khách hàng)
             $removeDebtByInvId($inv_odoo_id);
+            if ($_is_internal) $debug['debt_removed_internal'] = $inv_odoo_id;
         } else {
             // Tự động sync invoice → debts (cùng convention với /invoice "add to debts").
             // Chỉ out_invoice + amount_total > 0 mới được tạo (lọc bên trong $upsertDebt).
