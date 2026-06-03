@@ -151,14 +151,32 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                     <div style="flex:1; height:1px; background:#e2e8f0;"></div>
                 </div>
                 <button type="button" id="btnPasskey" class="btn-login"
-                    style="background:#f8fafc; border:1.5px solid #e2e8f0; color:#1e293b; box-shadow:0 1px 3px rgba(0,0,0,0.06);">
-                    <svg viewBox="0 0 24 24" width="20" height="20" fill="none" xmlns="http://www.w3.org/2000/svg">
-                        <ellipse cx="9" cy="9.5" rx="5" ry="5.5" stroke="#6366f1" stroke-width="2"/>
-                        <path d="M4 9.5C4 6.74 6.24 4.5 9 4.5" stroke="#6366f1" stroke-width="2" stroke-linecap="round"/>
-                        <path d="M14 13l1.5 1.5L19 10" stroke="#10b981" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-                        <path d="M9 14.5v5M7 19.5h4" stroke="#6366f1" stroke-width="2" stroke-linecap="round"/>
-                    </svg>
-                    <span id="btnPasskeyLabel">Sign in with Passkey / Biometric</span>
+                    style="background:white; border:1.5px solid #e2e8f0; color:#0f172a;
+                           box-shadow:0 2px 8px rgba(99,102,241,0.10); gap:0.65rem;
+                           transition:box-shadow 0.2s, border-color 0.2s;"
+                    onmouseover="this.style.borderColor='#a5b4fc';this.style.boxShadow='0 4px 16px rgba(99,102,241,0.18)'"
+                    onmouseout="this.style.borderColor='#e2e8f0';this.style.boxShadow='0 2px 8px rgba(99,102,241,0.10)'">
+                    <!-- gradient badge with fingerprint icon -->
+                    <span style="width:30px;height:30px;border-radius:9px;flex-shrink:0;
+                                 background:linear-gradient(135deg,#6366f1 0%,#8b5cf6 100%);
+                                 display:flex;align-items:center;justify-content:center;">
+                        <svg viewBox="0 0 24 24" width="17" height="17" fill="none" xmlns="http://www.w3.org/2000/svg">
+                            <!-- fingerprint arcs — Phosphor style -->
+                            <path d="M6.34 4.93A8 8 0 0 1 20 12c0 3.5-.7 6.3-2.1 8.5"
+                                  stroke="white" stroke-width="1.7" stroke-linecap="round"/>
+                            <path d="M4 12a8 8 0 0 1 8-8"
+                                  stroke="white" stroke-width="1.7" stroke-linecap="round"/>
+                            <path d="M8 12a4 4 0 0 1 8 0c0 2.5-.5 4.7-1.4 6.3"
+                                  stroke="white" stroke-width="1.7" stroke-linecap="round"/>
+                            <path d="M6 12a6 6 0 0 1 6-6"
+                                  stroke="white" stroke-width="1.7" stroke-linecap="round"/>
+                            <path d="M10 12a2 2 0 0 1 4 0c0 1.8-.3 3.3-.9 4.5"
+                                  stroke="white" stroke-width="1.7" stroke-linecap="round"/>
+                            <path d="M6.5 15.5A9.9 9.9 0 0 1 6 12"
+                                  stroke="white" stroke-width="1.7" stroke-linecap="round"/>
+                        </svg>
+                    </span>
+                    <span id="btnPasskeyLabel" style="font-weight:600; font-size:0.93rem;">Sign in with Passkey</span>
                 </button>
             </div>
 
