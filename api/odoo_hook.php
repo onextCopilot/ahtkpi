@@ -534,6 +534,29 @@ if ($payload && $event_type === 'invoice') {
     $inv_odoo_id  = (int)($payload['id'] ?? $payload['record_id'] ?? 0);
     $inv_event    = $payload['event'] ?? 'write';
 
+    // ── Auto-migrate bảng debts: đảm bảo cột + UNIQUE key (an toàn, không xóa dữ liệu) ──
+    foreach ([
+        'odoo_invoice_id'   => 'INT DEFAULT NULL',
+        'original_amount'   => 'DECIMAL(15,2) DEFAULT NULL',
+        'original_currency' => 'VARCHAR(10) DEFAULT NULL',
+        'am_email'          => 'VARCHAR(255) DEFAULT NULL',
+    ] as $_col => $_def) {
+        $_r = $conn->query("SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='debts' AND COLUMN_NAME='$_col'");
+        if ($_r && $_r->num_rows === 0) $conn->query("ALTER TABLE debts ADD COLUMN `$_col` $_def");
+    }
+    // Thêm UNIQUE key chỉ khi CHƯA có index VÀ không tồn tại bản ghi trùng (không xóa gì cả).
+    // Nếu còn trùng (do bug cũ), bỏ qua — pattern SELECT-rồi-upsert vẫn chống trùng ở luồng thường.
+    $_hasUq = $conn->query("SELECT 1 FROM INFORMATION_SCHEMA.STATISTICS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='debts' AND INDEX_NAME='uq_debt_odoo_invoice'");
+    if ($_hasUq && $_hasUq->num_rows === 0) {
+        $_dupe = $conn->query("SELECT odoo_invoice_id FROM debts WHERE odoo_invoice_id IS NOT NULL GROUP BY odoo_invoice_id HAVING COUNT(*) > 1 LIMIT 1");
+        if ($_dupe && $_dupe->num_rows === 0) {
+            $conn->query("ALTER TABLE debts ADD UNIQUE KEY uq_debt_odoo_invoice (odoo_invoice_id)");
+            $debug['debt_unique_key_added'] = $conn->error ?: true;
+        } else {
+            $debug['debt_unique_key_skipped'] = 'duplicates_exist';
+        }
+    }
+
     // Helper: xóa debt liên quan đến invoice
     $removeDebtByInvId = function(int $odoo_inv_id) use ($conn, &$debug) {
         $conn->query("DELETE FROM debts WHERE odoo_invoice_id = $odoo_inv_id");
@@ -570,17 +593,22 @@ if ($payload && $event_type === 'invoice') {
         $am_odoo_id = $m2o_id($p['invoice_user_id']);
         $team_name  = $m2o_name($p['team_id']);
         $ccy        = $m2o_name($p['currency_id']) ?: 'VND';
-        $co_ccy     = $m2o_name($p['company_currency_id'] ?? null) ?: 'VND';
 
         $debug['am_name']    = $am_name;
         $debug['am_odoo_id'] = $am_odoo_id;
         $debug['move_type']  = $move_type ?: 'N/A';
 
-        // amount/currency = company currency (VND) để hiển thị trong debts
-        // original_amount/original_currency = invoice currency gốc (USD, VND...)
-        $amt_orig     = (float)($p['amount_total']        ?? 0);                    // số tiền gốc (USD)
-        $amt_vnd      = abs((float)($p['amount_total_signed'] ?? $amt_orig));       // VND equivalent
-        $debug['debt_calc'] = ['amt_orig'=>$amt_orig,'amt_vnd'=>$amt_vnd,'ccy'=>$ccy ?? '?','co_ccy'=>$co_ccy ?? '?','pay_state'=>($p['payment_state']??'?'),'inv_name'=>$inv_name];
+        // amount = amount_total ở currency GỐC (vd USD). KHÔNG quy đổi VND ở đây —
+        // My Debts tự nhân tỷ giá lúc hiển thị (giống /invoice add_debt: data-amount = amount_total).
+        $amt_orig = (float)($p['amount_total'] ?? 0);
+
+        // Bỏ qua invoice chưa có tiền (vd draft vừa tạo, chưa nhập giá) — tránh tạo debt 0đ vô nghĩa.
+        // Khi user nhập giá, Odoo bắn write lần nữa với amount_total > 0 → lúc đó mới insert.
+        if ($amt_orig <= 0) {
+            $debug['debt_skipped_zero_amount'] = true;
+            return;
+        }
+        $debug['debt_calc'] = ['amt_orig'=>$amt_orig,'ccy'=>$ccy,'pay_state'=>($p['payment_state']??'?'),'inv_name'=>$inv_name];
         // invoice_date: dùng invoice_date, fallback sang date (giống /invoice: $inv['invoice_date'] ?: $inv['date'])
         $inv_date     = ($p['invoice_date']     && $p['invoice_date']     !== false) ? $p['invoice_date']
                       : (($p['date']            && $p['date']             !== false) ? $p['date']            : null);
@@ -818,8 +846,9 @@ if ($payload && $event_type === 'invoice') {
             // Invoice bị cancel → xóa khỏi debts
             $removeDebtByInvId($inv_odoo_id);
         } else {
-            // Tạm thời vô hiệu hóa theo yêu cầu của user
-            // $upsertDebt($payload);
+            // Tự động sync invoice → debts (cùng convention với /invoice "add to debts").
+            // Chỉ out_invoice + amount_total > 0 mới được tạo (lọc bên trong $upsertDebt).
+            $upsertDebt($payload);
         }
 
         // ── Cập nhật ngược invoice_ids của SO tương ứng ──────────────────────
