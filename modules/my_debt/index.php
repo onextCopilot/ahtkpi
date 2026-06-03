@@ -245,6 +245,26 @@ $res = $conn->query("SELECT d.*, st.name as team_name FROM debts d LEFT JOIN sal
 // Trigger cache refresh if needed (OdooAPI::getInvoices handles the 1-hour check internally)
 $odoo->getInvoices(1, 0);
 $odoo_map = $odoo->getInvoiceMap();
+
+// File cache của getInvoiceMap() trễ tới 1 giờ, trong khi webhook giữ bảng odoo_invoices
+// luôn mới (real-time). Patch số tiền/tệ/trạng thái mới nhất từ odoo_invoices vào $odoo_map
+// để auto-sync bên dưới KHÔNG ghi đè debts bằng giá trị cũ (vd invoice vừa đổi 100k → 150k).
+$freshInv = $conn->query("SELECT odoo_id, amount_total, amount_total_signed, currency_name, payment_state, invoice_date, invoice_date_due FROM odoo_invoices");
+if ($freshInv) {
+    while ($fi = $freshInv->fetch_assoc()) {
+        $fid = (int) $fi['odoo_id'];
+        if (!isset($odoo_map[$fid])) continue; // chỉ vá entry đã có trong cache (case bị clobber)
+        $odoo_map[$fid]['amount_total']        = (float) $fi['amount_total'];
+        $odoo_map[$fid]['amount_total_signed'] = (float) $fi['amount_total_signed'];
+        if (!empty($fi['currency_name'])) {
+            $odoo_map[$fid]['currency_id'] = [0, $fi['currency_name']]; // giữ shape [id, name]
+        }
+        if (!empty($fi['payment_state']))    $odoo_map[$fid]['payment_state']    = $fi['payment_state'];
+        if (!empty($fi['invoice_date']))     $odoo_map[$fid]['invoice_date']     = $fi['invoice_date'];
+        if (!empty($fi['invoice_date_due'])) $odoo_map[$fid]['invoice_date_due'] = $fi['invoice_date_due'];
+    }
+}
+
 $odoo_name_map = [];
 foreach ($odoo_map as $inv) {
     if (!empty($inv['name'])) {
