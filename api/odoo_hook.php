@@ -703,7 +703,6 @@ if ($payload && $event_type === 'invoice') {
                 client_name          = {$esc($client_name)},
                 vat_invoice          = {$esc($inv_name)},
                 invoice_date         = {$esc($inv_date)},
-                expected_payment_date= {$esc($inv_date_due)},
                 amount               = $amt_orig,
                 original_amount      = $amt_orig,
                 currency             = {$esc($ccy)},
@@ -721,17 +720,19 @@ if ($payload && $event_type === 'invoice') {
             $debug['debt_amt_used']       = $amt_orig; // giá trị thực sự trong query
         } else {
             $stmid = $sale_team_id ?: 'NULL';
+            // Lưu ý: KHÔNG set expected_payment_date — cột "Ngày DK khách TT" do AM tự nhập
+            // (ngày dự kiến khách trả), không phải invoice_date_due của Odoo. Hook không đụng.
             $conn->query("INSERT INTO debts
                 (company,am,am_email,sale_team_id,client_name,project_name,
                  amount,original_amount,currency,original_currency,
-                 vat_invoice,invoice_date,expected_payment_date,
+                 vat_invoice,invoice_date,
                  payment_status,invoice_status_class,
                  payment_month,weekly_update,pl_class,am_notes,odoo_invoice_id,created_at)
                 VALUES (
                  {$esc($company)},{$esc($am_name)},{$esc($am_email)},$stmid,
                  {$esc($client_name)},'',
                  $amt_orig,$amt_orig,{$esc($ccy)},{$esc($ccy)},
-                 {$esc($inv_name)},{$esc($inv_date)},{$esc($inv_date_due)},
+                 {$esc($inv_name)},{$esc($inv_date)},
                  {$esc($payment_status)},{$esc($inv_status_class)},
                  {$esc($payment_month)},{$esc($weekly_update)},
                  {$esc($pl_class)},{$esc($notes)},$inv_id,NOW())");
