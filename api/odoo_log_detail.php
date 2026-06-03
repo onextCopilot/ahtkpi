@@ -6,7 +6,7 @@ require_once __DIR__ . '/../config/config.php';
 
 header('Content-Type: application/json');
 
-if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'admin') {
+if (!isset($_SESSION['user_id']) || ($_SESSION['role'] !== 'admin' && empty($_SESSION['can_view_odoo_logs']))) {
     http_response_code(403);
     echo json_encode(['error' => 'Forbidden']);
     exit;

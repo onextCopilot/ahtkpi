@@ -6,9 +6,15 @@ if (!isset($_SESSION['user_id'])) {
     exit();
 }
 
-if ($_SESSION['role'] !== 'admin') {
+if ($_SESSION['role'] !== 'admin' && empty($_SESSION['can_view_odoo_logs'])) {
     header("Location: /dashboard");
     exit();
+}
+
+// Auto-migrate: ensure can_view_odoo_logs column exists on users table
+$_chk = $conn->query("SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='users' AND COLUMN_NAME='can_view_odoo_logs'");
+if ($_chk && $_chk->num_rows === 0) {
+    $conn->query("ALTER TABLE users ADD COLUMN can_view_odoo_logs TINYINT(1) NOT NULL DEFAULT 0");
 }
 
 // Ensure table exists (in case hook hasn't been called yet)
@@ -183,6 +189,23 @@ $avatar    = $_SESSION['avatar'] ?? null;
         }
         .empty-state { text-align: center; padding: 60px 20px; color: #475569; }
         .empty-state .icon { font-size: 3rem; margin-bottom: 12px; }
+        .btn-clear-logs {
+            background: rgba(239,68,68,.15); color: #f87171; border: 1px solid rgba(239,68,68,.3);
+            border-radius: 8px; padding: 7px 14px; cursor: pointer; font-size: 0.82rem; font-weight: 600;
+        }
+        .btn-clear-logs:hover { background: rgba(239,68,68,.25); border-color: #f87171; }
+        /* Clear modal */
+        .clear-modal-box { background: #1e293b; border: 1px solid #334155; border-radius: 12px; width: 90%; max-width: 440px; }
+        .clear-modal-body { padding: 20px; }
+        .clear-modal-body label { display: block; font-size: 0.82rem; color: #94a3b8; margin-bottom: 5px; font-weight: 600; }
+        .clear-modal-body input[type=date] {
+            width: 100%; background: #0f172a; border: 1px solid #334155; color: #f1f5f9;
+            border-radius: 8px; padding: 8px 12px; font-size: 0.85rem; box-sizing: border-box;
+        }
+        .clear-modal-footer { padding: 14px 20px; border-top: 1px solid #334155; display: flex; justify-content: flex-end; gap: 10px; }
+        .btn-do-clear { background: #ef4444; color: #fff; border: none; border-radius: 8px; padding: 8px 18px; cursor: pointer; font-size: 0.85rem; font-weight: 600; }
+        .btn-do-clear:disabled { opacity: .5; cursor: not-allowed; }
+        #clearResult { margin-top: 12px; font-size: 0.82rem; padding: 8px 12px; border-radius: 6px; display: none; }
         .hook-url-box {
             background: rgba(99,102,241,.08); border: 1px dashed #6366f1;
             border-radius: 8px; padding: 12px 16px; margin-bottom: 20px;
@@ -208,7 +231,12 @@ if (file_exists($sidebar_file)) {
 
     <div class="logs-header">
         <div class="logs-title">Odoo Webhook Logs</div>
-        <a href="/odoo/logs?<?php echo http_build_query(array_filter(['type'=>$filter_type,'date'=>$filter_date,'q'=>$search])); ?>" style="font-size:0.82rem;color:#6366f1;text-decoration:none;" onclick="location.reload();return false;">&#8635; Refresh</a>
+        <div style="display:flex;gap:10px;align-items:center;">
+            <a href="/odoo/logs?<?php echo http_build_query(array_filter(['type'=>$filter_type,'date'=>$filter_date,'q'=>$search])); ?>" style="font-size:0.82rem;color:#6366f1;text-decoration:none;" onclick="location.reload();return false;">&#8635; Refresh</a>
+            <?php if ($_SESSION['role'] === 'admin'): ?>
+            <button class="btn-clear-logs" onclick="openClearModal()">&#128465; Clear Logs</button>
+            <?php endif; ?>
+        </div>
     </div>
 
     <!-- Webhook endpoint info -->
@@ -411,8 +439,99 @@ document.getElementById('detailModal').addEventListener('click', function(e) {
 });
 
 document.addEventListener('keydown', function(e) {
-    if (e.key === 'Escape') closeModal();
+    if (e.key === 'Escape') { closeModal(); closeClearModal(); }
 });
+</script>
+
+<!-- Clear Logs Modal -->
+<div class="modal-overlay" id="clearModal">
+    <div class="clear-modal-box">
+        <div class="modal-head">
+            <h3>Clear Logs theo khoảng ngày</h3>
+            <button class="modal-close" onclick="closeClearModal()">&times;</button>
+        </div>
+        <div class="clear-modal-body">
+            <p style="font-size:0.82rem;color:#94a3b8;margin:0 0 16px;">Xóa vĩnh viễn tất cả log trong khoảng ngày đã chọn. Thao tác này không thể hoàn tác.</p>
+            <div style="display:flex;gap:12px;">
+                <div style="flex:1;">
+                    <label>Từ ngày</label>
+                    <input type="date" id="clearFrom">
+                </div>
+                <div style="flex:1;">
+                    <label>Đến ngày</label>
+                    <input type="date" id="clearTo">
+                </div>
+            </div>
+            <div id="clearResult"></div>
+        </div>
+        <div class="clear-modal-footer">
+            <button class="btn-clear" onclick="closeClearModal()">Hủy</button>
+            <button class="btn-do-clear" id="btnDoDelete" onclick="doDeleteLogs()">Xóa logs</button>
+        </div>
+    </div>
+</div>
+
+<script>
+function openClearModal() {
+    // default: last 30 days
+    const today = new Date();
+    const from  = new Date(today); from.setDate(from.getDate() - 30);
+    document.getElementById('clearFrom').value = from.toISOString().slice(0,10);
+    document.getElementById('clearTo').value   = today.toISOString().slice(0,10);
+    document.getElementById('clearResult').style.display = 'none';
+    document.getElementById('btnDoDelete').disabled = false;
+    document.getElementById('clearModal').classList.add('open');
+}
+function closeClearModal() {
+    document.getElementById('clearModal').classList.remove('open');
+}
+document.getElementById('clearModal').addEventListener('click', function(e) {
+    if (e.target === this) closeClearModal();
+});
+
+function doDeleteLogs() {
+    const from = document.getElementById('clearFrom').value;
+    const to   = document.getElementById('clearTo').value;
+    const res  = document.getElementById('clearResult');
+
+    if (!from || !to) { showClearResult('error', 'Vui lòng chọn đủ ngày bắt đầu và kết thúc.'); return; }
+    if (from > to)    { showClearResult('error', 'Ngày bắt đầu phải nhỏ hơn hoặc bằng ngày kết thúc.'); return; }
+
+    if (!confirm(`Xóa toàn bộ logs từ ${from} đến ${to}?\nThao tác này không thể hoàn tác.`)) return;
+
+    const btn = document.getElementById('btnDoDelete');
+    btn.disabled = true;
+    btn.textContent = 'Đang xóa...';
+
+    fetch('/api/odoo_log_clear', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({date_from: from, date_to: to})
+    })
+    .then(r => r.json())
+    .then(data => {
+        btn.textContent = 'Xóa logs';
+        if (data.ok) {
+            showClearResult('success', `Đã xóa ${data.deleted.toLocaleString()} bản ghi (${data.date_from} → ${data.date_to}).`);
+            setTimeout(() => { closeClearModal(); location.reload(); }, 1800);
+        } else {
+            btn.disabled = false;
+            showClearResult('error', data.error || 'Có lỗi xảy ra.');
+        }
+    })
+    .catch(e => { btn.disabled = false; btn.textContent = 'Xóa logs'; showClearResult('error', 'Lỗi kết nối: ' + e); });
+}
+
+function showClearResult(type, msg) {
+    const el = document.getElementById('clearResult');
+    el.style.display = 'block';
+    if (type === 'success') {
+        el.style.background = 'rgba(16,185,129,.15)'; el.style.color = '#10b981'; el.style.border = '1px solid rgba(16,185,129,.3)';
+    } else {
+        el.style.background = 'rgba(239,68,68,.15)'; el.style.color = '#f87171'; el.style.border = '1px solid rgba(239,68,68,.3)';
+    }
+    el.textContent = msg;
+}
 </script>
 </body>
 </html>

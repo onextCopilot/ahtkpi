@@ -65,6 +65,7 @@ $routes = [
     '/odoo/hook'                   => 'api/odoo_hook.php',
     '/odoo/logs'                   => 'modules/odoo_logs/index.php',
     '/api/odoo_log_detail'         => 'api/odoo_log_detail.php',
+    '/api/odoo_log_clear'          => 'api/odoo_log_clear.php',
     '/api/pasx/callback'           => 'api/pasx_callback.php',
     '/api/pasx/message'            => 'api/pasx_message_receive.php',
     '/api/kpi_tab_order' => 'api/kpi_tab_order.php',

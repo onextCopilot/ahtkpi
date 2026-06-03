@@ -81,6 +81,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $is_am_bd = isset($_POST['is_am_bd']) ? 1 : 0;
         $can_view_invoice = isset($_POST['can_view_invoice']) ? 1 : 0;
         $can_view_all_debts = isset($_POST['can_view_all_debts']) ? 1 : 0;
+        $can_view_odoo_logs = isset($_POST['can_view_odoo_logs']) ? 1 : 0;
         $team_ids = isset($_POST['team_ids']) ? $_POST['team_ids'] : [];
         $sale_level_id = ($is_am_bd && !empty($_POST['sale_level_id'])) ? intval($_POST['sale_level_id']) : null;
         $apply_quarter = !empty($_POST['apply_quarter']) ? intval($_POST['apply_quarter']) : null;
@@ -105,9 +106,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $can_view_all_kpi = isset($_POST['can_view_all_kpi']) ? 1 : 0;
                     $viewable_dept_ids = isset($_POST['viewable_dept_ids']) ? (is_array($_POST['viewable_dept_ids']) ? implode(',', $_POST['viewable_dept_ids']) : $_POST['viewable_dept_ids']) : '';
 
-                    $sql = "UPDATE users SET username=?, email=?, full_name=?, employee_code=?, job_title=?, level=?, department_id=?, status=?, join_date=?, is_am_bd=?, can_view_invoice=?, can_view_all_debts=?, can_view_all_kpi=?, viewable_department_ids=?, role=?, sale_level_id=? WHERE id=?";
+                    $sql = "UPDATE users SET username=?, email=?, full_name=?, employee_code=?, job_title=?, level=?, department_id=?, status=?, join_date=?, is_am_bd=?, can_view_invoice=?, can_view_all_debts=?, can_view_all_kpi=?, viewable_department_ids=?, role=?, sale_level_id=?, can_view_odoo_logs=? WHERE id=?";
                     $stmt = $conn->prepare($sql);
-                    $stmt->bind_param("ssssssissiiiisssi", $username, $email, $name, $emp_code, $job, $level, $dept_id, $status, $join_date, $is_am_bd, $can_view_invoice, $can_view_all_debts, $can_view_all_kpi, $viewable_dept_ids, $role_val, $sale_level_id, $id);
+                    $stmt->bind_param("ssssssissiiiisssii", $username, $email, $name, $emp_code, $job, $level, $dept_id, $status, $join_date, $is_am_bd, $can_view_invoice, $can_view_all_debts, $can_view_all_kpi, $viewable_dept_ids, $role_val, $sale_level_id, $can_view_odoo_logs, $id);
                     $stmt->execute();
 
                     // Update session if editing self
@@ -773,6 +774,10 @@ while ($r = $sh_res_result->fetch_assoc()) {
                                     <div class="toggle-item">
                                         <label for="can_view_all_debts">Can View All Debts</label>
                                         <input type="checkbox" name="can_view_all_debts" id="can_view_all_debts" <?php echo $user['can_view_all_debts'] ? 'checked' : ''; ?>>
+                                    </div>
+                                    <div class="toggle-item">
+                                        <label for="can_view_odoo_logs">Can View Odoo Webhook Logs</label>
+                                        <input type="checkbox" name="can_view_odoo_logs" id="can_view_odoo_logs" <?php echo !empty($user['can_view_odoo_logs']) ? 'checked' : ''; ?>>
                                     </div>
                                 </div>
 
