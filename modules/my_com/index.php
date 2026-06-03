@@ -1472,7 +1472,7 @@ $month_names_vn = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','
                         foreach ($grouped as $mk => $month_items):
                             $ml = ($mk !== 'unknown') ? date('F Y', strtotime($mk . '-01')) : 'Unknown';
                             $m_com1 = array_sum(array_column($month_items, 'com1_amount'));
-                            $m_com2 = array_sum(array_column($month_items, 'com2_gross')) * $kpi_adj;
+                            $m_com2 = array_sum(array_column($month_items, 'com2_gross'));   // gross (KPI_adj áp ở 7 box, không theo dòng)
                             $m_aicom = $ai_kpi_ok ? array_sum(array_column($month_items, 'ai_com_pre')) : 0;
                             $m_vnd = array_sum(array_column($month_items, 'amount_vnd'));
                     ?>
@@ -1566,7 +1566,7 @@ $month_names_vn = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','
                                     elseif ($d['ebt_pct'] === null && empty($sel_pakd_id) && !$is_link_mode): ?><span style="color:#94a3b8;" title="Chưa chọn PAKD"><?= mc_rate_pct($d['com1_rate']) ?>%</span><?php
                                     else: ?><?= mc_rate_pct($d['com1_rate']) ?>%<?php if ($d['lead_source'] === 'self' && $d['client_type'] === 'New' && $d['com1_base_rate'] > 0): ?><span class="lead-bonus" title="+1% My Lead"> ★</span><?php endif; ?><?php endif; ?></td>
                                 <td class="amt com1-cell" data-section="main" data-month="<?= htmlspecialchars($mk) ?>" data-amount="<?= $d['amount_vnd'] ?>" data-baserate="<?= $d['com1_base_rate'] ?>" data-isnew="<?= $d['client_type'] === 'New' ? 1 : 0 ?>" data-paidok="<?= ($d['is_paid'] && $d['paid_in_quarter']) ? 1 : 0 ?>" data-ebt="<?= $d['ebt_pct'] !== null ? $d['ebt_pct'] : '' ?>" style="color:<?= $d['com1_rate'] == 0 ? ($d['is_paid'] && $d['paid_in_quarter'] ? '#dc2626' : '#94a3b8') : '#1d4ed8' ?>;font-weight:600;"><?= $d['com1_rate'] == 0 && (!$d['is_paid'] || !$d['paid_in_quarter']) ? '—' : mc_fmt($d['com1_amount']) ?></td>
-                                <?php $row_ebt_ok = !empty($d['com2_ebt_ok']); $row_elig = ($d['is_paid'] && $d['paid_in_quarter'] && $row_ebt_ok) ? 1 : 0; $row_com2 = ($d['com2_gross'] ?? 0) * $kpi_adj; $row_hv_vnd = $d['com2_hv_vnd'] ?? null; $row_tier = (float) ($d['com2_tier'] ?? 0); ?>
+                                <?php $row_ebt_ok = !empty($d['com2_ebt_ok']); $row_elig = ($d['is_paid'] && $d['paid_in_quarter'] && $row_ebt_ok) ? 1 : 0; $row_com2 = ($d['com2_gross'] ?? 0); $row_hv_vnd = $d['com2_hv_vnd'] ?? null;   // gross (KPI_adj áp ở 7 box) $row_tier = (float) ($d['com2_tier'] ?? 0); ?>
                                 <td class="hv-cell" data-inv="<?= $inv_id ?>">
                                     <div class="hv-wrap"<?= $row_ebt_ok ? '' : ' title="Com2 yêu cầu EBT ≥ 20%"' ?>>
                                         <input type="number" class="hv-input" value="<?= $sel_hv !== null ? $sel_hv : '' ?>" step="any" placeholder="HV" onchange="saveHv(this)" onblur="saveHv(this)"<?= $row_ebt_ok ? '' : ' disabled' ?>>
@@ -1579,7 +1579,7 @@ $month_names_vn = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','
                                     <?php if ($sel_hv !== null && $sel_hv_cur !== 'VND'): ?><div class="hv-vnd" title="Quy đổi VND"><?= mc_fmt_short($row_hv_vnd) ?></div><?php endif; ?>
                                     <?php if ($row_ebt_ok): ?><div class="hv-note" title="HV phải tương ứng phần đã xuất hóa đơn của hợp đồng, không phải toàn bộ HĐ.&#10;VD: HĐ 10.000 USD mới xuất 50% → chỉ nhập 50% phần HV.">⚠ Nhập theo % đã xuất HĐ</div><?php endif; ?>
                                 </td>
-                                <td class="amt com2-cell" data-section="main" data-month="<?= htmlspecialchars($mk) ?>" data-amount="<?= $d['amount_vnd'] ?>" data-base="<?= $row_hv_vnd !== null ? $row_hv_vnd : 0 ?>" data-adj="<?= $kpi_adj ?>" data-paidok="<?= ($d['is_paid'] && $d['paid_in_quarter']) ? 1 : 0 ?>" data-ebtok="<?= $row_ebt_ok ? 1 : 0 ?>" style="color:<?= $row_com2 > 0 ? '#7c3aed' : '#94a3b8' ?>;font-weight:600;" title="<?= !$row_ebt_ok ? 'Com2 yêu cầu EBT ≥ 20%' : ($row_tier > 0 && $row_hv_vnd !== null ? 'HV ' . mc_fmt($row_hv_vnd) . ' × Tier ' . mc_rate_pct($row_tier/100) . '% (auto) × KPI ' . ($kpi_adj * 100) . '%' : 'Nhập HV (Tier tự tính theo ratio Revenue/Base)') ?>"><?= (!$row_ebt_ok || $row_tier <= 0 || $row_hv_vnd === null || !$row_elig) ? '—' : mc_fmt($row_com2) . mc_com2_meta($row_tier, $d['amount_vnd'], $row_hv_vnd) ?></td>
+                                <td class="amt com2-cell" data-section="main" data-month="<?= htmlspecialchars($mk) ?>" data-amount="<?= $d['amount_vnd'] ?>" data-base="<?= $row_hv_vnd !== null ? $row_hv_vnd : 0 ?>" data-adj="<?= $kpi_adj ?>" data-paidok="<?= ($d['is_paid'] && $d['paid_in_quarter']) ? 1 : 0 ?>" data-ebtok="<?= $row_ebt_ok ? 1 : 0 ?>" style="color:<?= $row_com2 > 0 ? '#7c3aed' : '#94a3b8' ?>;font-weight:600;" title="<?= !$row_ebt_ok ? 'Com2 yêu cầu EBT ≥ 20%' : ($row_tier > 0 && $row_hv_vnd !== null ? 'HV ' . mc_fmt($row_hv_vnd) . ' × Tier ' . mc_rate_pct($row_tier/100) . '% (auto) = gross · KPI ' . ($kpi_adj * 100) . '% áp ở tổng' : 'Nhập HV (Tier tự tính theo ratio Revenue/Base)') ?>"><?= (!$row_ebt_ok || $row_tier <= 0 || $row_hv_vnd === null || !$row_elig) ? '—' : mc_fmt($row_com2) . mc_com2_meta($row_tier, $d['amount_vnd'], $row_hv_vnd) ?></td>
                                 <?php $ai_base_ok = ($ai_kpi_ok && $d['ai_paid_ok']); ?>
                                 <td class="ai-cell"><?= mc_ai_select($inv_id, $d['ai_addon'], $ai_options, $ai_base_ok, $d['ebt_pct']) ?></td>
                                 <?= mc_ai_rev_cell($inv_id, $d['ai_rev'], $d['ai_rev_cur'], $d['ai_rev_vnd'], $hv_currencies, $hv_symbols, $ai_base_ok, $d['ebt_pct']) ?>
@@ -1663,7 +1663,7 @@ $month_names_vn = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','
                             $ci_kpi_level = $ci_hk ? ($ci_hk['level_name'] ?? '') : '';
                             $ci_kpi_target = $ci_hk ? ($ci_hk['target'] ?? 0) : 0;
                             $ci_com1 = $cd['com1_net'] ?? ($ci_com1_gross * $ci_kpi_adj);
-                            $col_com1_total += $ci_com1;
+                            $col_com1_total += $ci_com1_gross;   // footer = gross (KPI_adj áp ở 7 box)
                             $ci_sel_pakd_name = $ci_sel_pakd_id && isset($pakd_map[$ci_sel_pakd_id]) ? htmlspecialchars($pakd_map[$ci_sel_pakd_id]['name']) : '';
                             $ci_sel_ebt = '';
                             if ($ci_sel_manual_ebt !== null) {
@@ -1716,7 +1716,7 @@ $month_names_vn = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','
                                 <td><span class="badge <?= $ci_cls ?>"><?= $ci_label ?></span></td>
                                 <td class="amt"><?php if ($ci_com1_rate == 0 && $ci_linked_ebt !== null): ?><span style="color:#dc2626;" title="EBT < 5% → không tính Com">0%</span><?php elseif ($ci_linked_ebt === null && !$ci_sel_pakd_id && !$ci_is_link): ?><span style="color:#94a3b8;"><?= mc_rate_pct($ci_com1_rate) ?>%</span><?php else: ?><?= mc_rate_pct($ci_com1_rate) ?>%<?php if ($ci_lead_source === 'self' && $ci_is_new && $ci_com1_base_rate > 0): ?><span class="lead-bonus" title="+1% My Lead"> ★</span><?php endif; ?><?php endif; ?></td>
                                 <td class="amt kpi-q-cell com1-cell-rec" data-year="<?= $cd['origin_year'] ?>" data-quarter="<?= $cd['origin_quarter'] ?>" data-amount="<?= $cd['amount_vnd'] ?>" data-baserate="<?= $ci_com1_base_rate ?>" data-isnew="<?= $ci_is_new ? 1 : 0 ?>" data-adj="<?= $ci_kpi_adj ?>" data-ebt="<?= $ci_linked_ebt !== null ? $ci_linked_ebt : '' ?>">
-                                    <div class="com1-rec-val" style="font-weight:600;color:<?= $ci_com1 == 0 ? '#94a3b8' : '#1d4ed8' ?>;"><?= mc_fmt($ci_com1) ?></div>
+                                    <div class="com1-rec-val" style="font-weight:600;color:<?= $ci_com1_gross == 0 ? '#94a3b8' : '#1d4ed8' ?>;"><?= mc_fmt($ci_com1_gross) ?></div>
                                     <?php if ($cd['origin_key'] !== ''):
                                         $kpi_color = $ci_kpi_adj == 0 ? '#dc2626' : ($ci_kpi_adj < 1 ? '#f59e0b' : '#16a34a');
                                     ?>
@@ -1741,8 +1741,8 @@ $month_names_vn = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','
                                     <?php if ($ci_sel_hv !== null && $ci_sel_hv_cur !== 'VND'): ?><div class="hv-vnd" title="Quy đổi VND"><?= mc_fmt_short($ci_hv_vnd) ?></div><?php endif; ?>
                                     <?php if ($ci_ebt_ok): ?><div class="hv-note" title="HV phải tương ứng phần đã xuất hóa đơn của hợp đồng, không phải toàn bộ HĐ.&#10;VD: HĐ 10.000 USD mới xuất 50% → chỉ nhập 50% phần HV.">⚠ Nhập theo % đã xuất HĐ</div><?php endif; ?>
                                 </td>
-                                <?php $ci_tier = mc_auto_tier($cd['amount_vnd'], $ci_hv_vnd); $ci_com2 = ($ci_tier > 0 && $ci_hv_vnd !== null && $ci_ebt_ok) ? $ci_hv_vnd * ($ci_tier / 100) * $ci_kpi_adj : 0; $col_com2_total += $ci_com2; ?>
-                                <td class="amt com2-cell" data-section="recovery" data-amount="<?= $cd['amount_vnd'] ?>" data-base="<?= $ci_hv_vnd !== null ? $ci_hv_vnd : 0 ?>" data-adj="<?= $ci_kpi_adj ?>" data-paidok="1" data-ebtok="<?= $ci_ebt_ok ? 1 : 0 ?>" style="color:<?= $ci_com2 > 0 ? '#7c3aed' : '#94a3b8' ?>;font-weight:600;" title="<?= !$ci_ebt_ok ? 'Com2 yêu cầu EBT ≥ 20%' : ($ci_tier > 0 && $ci_hv_vnd !== null ? 'HV ' . mc_fmt($ci_hv_vnd) . ' × Tier ' . mc_rate_pct($ci_tier/100) . '% (auto) × KPI Q' . $cd['origin_quarter'] . '/' . $cd['origin_year'] . ' (×' . $ci_kpi_adj . ')' : 'Nhập HV (Tier tự tính theo ratio Revenue/Base)') ?>"><?= (!$ci_ebt_ok || $ci_tier <= 0 || $ci_hv_vnd === null) ? '—' : mc_fmt($ci_com2) . mc_com2_meta($ci_tier, $cd['amount_vnd'], $ci_hv_vnd) ?></td>
+                                <?php $ci_tier = mc_auto_tier($cd['amount_vnd'], $ci_hv_vnd); $ci_com2_gross = ($ci_tier > 0 && $ci_hv_vnd !== null && $ci_ebt_ok) ? $ci_hv_vnd * ($ci_tier / 100) : 0; $ci_com2 = $ci_com2_gross * $ci_kpi_adj; $col_com2_total += $ci_com2_gross; /* footer = gross (KPI_adj áp ở 7 box) */ ?>
+                                <td class="amt com2-cell" data-section="recovery" data-amount="<?= $cd['amount_vnd'] ?>" data-base="<?= $ci_hv_vnd !== null ? $ci_hv_vnd : 0 ?>" data-adj="<?= $ci_kpi_adj ?>" data-paidok="1" data-ebtok="<?= $ci_ebt_ok ? 1 : 0 ?>" style="color:<?= $ci_com2_gross > 0 ? '#7c3aed' : '#94a3b8' ?>;font-weight:600;" title="<?= !$ci_ebt_ok ? 'Com2 yêu cầu EBT ≥ 20%' : ($ci_tier > 0 && $ci_hv_vnd !== null ? 'HV ' . mc_fmt($ci_hv_vnd) . ' × Tier ' . mc_rate_pct($ci_tier/100) . '% (auto) = gross · KPI Q' . $cd['origin_quarter'] . '/' . $cd['origin_year'] . ' (×' . $ci_kpi_adj . ') áp ở tổng' : 'Nhập HV (Tier tự tính theo ratio Revenue/Base)') ?>"><?= (!$ci_ebt_ok || $ci_tier <= 0 || $ci_hv_vnd === null) ? '—' : mc_fmt($ci_com2_gross) . mc_com2_meta($ci_tier, $cd['amount_vnd'], $ci_hv_vnd) ?></td>
                                 <?php $ci_ai_base_ok = $ci_ai_kpi_ok; // recovery rows are always paid (Collection = 1) ?>
                                 <td class="ai-cell"><?= mc_ai_select($ci_id, $ci_ai_addon, $ai_options, $ci_ai_base_ok, $ci_linked_ebt) ?></td>
                                 <?= mc_ai_rev_cell($ci_id, $ci_ai_rev, $ci_ai_rev_cur, $ci_ai_rev_vnd, $hv_currencies, $hv_symbols, $ci_ai_base_ok, $ci_linked_ebt) ?>
@@ -1752,7 +1752,7 @@ $month_names_vn = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','
                         <?php endforeach; ?>
                         <tr class="mh">
                             <td colspan="14" style="background:#dcfce7;color:#15803d;border-color:#bbf7d0;text-align:right;font-weight:600;">
-                                Tổng Com1 thu hồi (đã áp KPI từng quý gốc)
+                                Tổng thu hồi (gross — KPI từng quý gốc áp ở box "Thu hồi")
                             </td>
                             <td class="amt" id="recCom1Total" style="background:#dcfce7;color:#16a34a;border-color:#bbf7d0;font-weight:700;"><?= mc_fmt($col_com1_total) ?></td>
                             <td style="background:#dcfce7;border-color:#bbf7d0;"></td>
@@ -2434,8 +2434,8 @@ function recomputeCom1() {
     });
     NET_COM1 = grossMain * KPI_ADJ;
 
-    // Recovery rows (each with its own origin-quarter KPI adj)
-    let collected = 0;
+    // Recovery rows: cell + footer show GROSS; box "Thu hồi" uses NET (each row's origin-quarter KPI adj).
+    let collectedGross = 0, collectedNet = 0;
     document.querySelectorAll('.com1-cell-rec').forEach(cell => {
         const row = cell.closest('tr');
         const leadSel = row.querySelector('.lead-select');
@@ -2445,14 +2445,15 @@ function recomputeCom1() {
         const baseRate = parseFloat(cell.dataset.baserate) || 0;
         const adj = parseFloat(cell.dataset.adj) || 0;
         const effRate = baseRate > 0 ? baseRate + (self ? SELF_LEAD_BONUS : 0) : 0;
-        const net = amount * effRate * adj;
+        const gross = amount * effRate;
         const valDiv = cell.querySelector('.com1-rec-val');
-        if (valDiv) { valDiv.textContent = fmtFull(net); valDiv.style.color = net === 0 ? '#94a3b8' : '#1d4ed8'; }
-        collected += net;
+        if (valDiv) { valDiv.textContent = fmtFull(gross); valDiv.style.color = gross === 0 ? '#94a3b8' : '#1d4ed8'; }
+        collectedGross += gross;
+        collectedNet += gross * adj;
     });
     const recTot = document.getElementById('recCom1Total');
-    if (recTot) recTot.textContent = fmtFull(collected);
-    COLLECTED_COM1 = collected;
+    if (recTot) recTot.textContent = fmtFull(collectedGross);   // footer = gross
+    COLLECTED_COM1 = collectedNet;   // box = net
     GRAND_COM1 = NET_COM1 + COLLECTED_COM1;
 
     // Com1 cards
@@ -2496,37 +2497,39 @@ function tierRank(amount, hvVnd) {
 }
 
 function recomputeCom2() {
-    const monthSums = {};
-    let netCom2Main = 0, com2Recovery = 0;
+    const monthSums = {};            // gross per month (matches per-row gross display)
+    let netCom2Main = 0, com2Recovery = 0, recGross = 0;
     document.querySelectorAll('.com2-cell').forEach(cell => {
         const base = parseFloat(cell.dataset.base) || 0;   // HV in VND
         const amount = parseFloat(cell.dataset.amount) || 0;
         const tier = autoTier(amount, base);
         const adj = parseFloat(cell.dataset.adj) || 0;
         const eligible = cell.dataset.paidok === '1' && cell.dataset.ebtok === '1';
-        let val = 0;
-        if (tier > 0 && eligible) val = base * tier / 100 * adj;
+        let gross = 0;
+        if (tier > 0 && eligible) gross = base * tier / 100;   // gross = HV × Tier% (no KPI_adj)
         if (tier <= 0 || !eligible) { cell.textContent = '—'; cell.style.color = '#94a3b8'; }
         else {
-            cell.innerHTML = fmtFull(val) + '<div class="com2-meta" style="font-size:10px;color:#94a3b8;font-weight:500;line-height:1.2;">' + tier + '% · ' + tierRank(amount, base) + '</div>';
+            cell.innerHTML = fmtFull(gross) + '<div class="com2-meta" style="font-size:10px;color:#94a3b8;font-weight:500;line-height:1.2;">' + tier + '% · ' + tierRank(amount, base) + '</div>';
             cell.style.color = '#7c3aed';
         }
+        const net = gross * adj;   // KPI_adj applied only for the 7 summary boxes
         if (cell.dataset.section === 'recovery') {
-            com2Recovery += val;
+            com2Recovery += net;
+            recGross += gross;
         } else {
-            netCom2Main += val;
+            netCom2Main += net;
             const m = cell.dataset.month || '';
-            monthSums[m] = (monthSums[m] || 0) + val;
+            monthSums[m] = (monthSums[m] || 0) + gross;
         }
     });
-    // Month subtotals
+    // Month subtotals (gross)
     document.querySelectorAll('.m-com2-sub').forEach(c => {
         const v = monthSums[c.dataset.month || ''] || 0;
         c.textContent = v > 0 ? fmtShort(v) : '';
     });
-    // Recovery footer total
+    // Recovery footer total (gross)
     const recTot = document.getElementById('recCom2Total');
-    if (recTot) recTot.textContent = com2Recovery > 0 ? fmtFull(com2Recovery) : '';
+    if (recTot) recTot.textContent = recGross > 0 ? fmtFull(recGross) : '';
     // Commission summary card
     GRAND_COM2 = netCom2Main + com2Recovery;
     const grandCom2 = GRAND_COM2;
