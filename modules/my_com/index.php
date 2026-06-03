@@ -48,10 +48,21 @@ $view_only = $viewing_other;
 // Query-string suffix to preserve the viewed user across nav links.
 $mc_qs = $viewing_other ? ('&user_id=' . $u_id) : '';
 
+// Is the viewed user on the AM/BD team? → "Lương KPI quý" is measured against Sale Order
+// (signed-contract) revenue vs the level's so_kpi_quarter_usd (USD) target, instead of invoiced.
+$user_is_am_bd = 0;
+if ($ambd_stmt = $conn->prepare("SELECT is_am_bd FROM users WHERE id = ?")) {
+    $ambd_stmt->bind_param("i", $u_id);
+    $ambd_stmt->execute();
+    if ($ar = $ambd_stmt->get_result()->fetch_assoc()) $user_is_am_bd = (int) ($ar['is_am_bd'] ?? 0);
+    $ambd_stmt->close();
+}
+
 // ── User's Sale Level & KPI Target ──
 $user_level = null;
 $kpi_quarter_target = 0;
 $kpi_yearly_target = 0;
+$so_kpi_target_usd = 0;   // KPI Sale Order target in USD (for AM/BD salary KPI)
 $position_type = '';
 
 /**
@@ -107,6 +118,7 @@ $level_borrowed_from = '';
 if ($user_level) {
     $kpi_quarter_target = (float) $user_level['kpi_quarter_vnd'];
     $kpi_yearly_target = (float) $user_level['kpi_yearly_vnd'];
+    $so_kpi_target_usd = (float) ($user_level['so_kpi_quarter_usd'] ?? 0);
     $position_type = $user_level['position_type'] ?? '';
     // Note when the selected quarter's level was borrowed from another quarter (nearest-quarter rule)
     if (isset($user_level['h_year'], $user_level['h_quarter']) &&
@@ -752,11 +764,21 @@ foreach ($all_invoices as $inv) {
     $yearly_invoiced += $amount_vnd;
 }
 
-// KPI salary multiplier
+// KPI salary multiplier.
+// AM/BD users (is_am_bd): "Lương KPI quý" is measured against Sale Order (signed-contract)
+// revenue vs the level's so_kpi_quarter_usd target (USD). SO revenue is summed in VND, so we
+// convert it to USD via the VND→USD rate to compare against the USD target. Everyone else keeps
+// the commission KPI basis ($kpi_pct). Affects ONLY the salary label — Com adj / AI gate still use $kpi_pct.
+$salary_kpi_so_based = (bool) $user_is_am_bd;
+$usd_rate = (float) ($vnd_rates['USD'] ?? 0);   // VND per 1 USD
+$so_rev_usd = $usd_rate > 0 ? ($total_so_revenue / $usd_rate) : 0;
+$salary_kpi_pct = $salary_kpi_so_based
+    ? ($so_kpi_target_usd > 0 ? ($so_rev_usd / $so_kpi_target_usd * 100) : 0)
+    : $kpi_pct;
 $kpi_salary_label = '';
-if ($kpi_pct < 60) $kpi_salary_label = '0%';
-elseif ($kpi_pct < 80) $kpi_salary_label = '50%';
-elseif ($kpi_pct <= 150) $kpi_salary_label = '100%';
+if ($salary_kpi_pct < 60) $kpi_salary_label = '0%';
+elseif ($salary_kpi_pct < 80) $kpi_salary_label = '50%';
+elseif ($salary_kpi_pct <= 150) $kpi_salary_label = '100%';
 else $kpi_salary_label = '150%';
 
 // ── Collected invoices details (paid this quarter, created earlier) ──
@@ -1330,6 +1352,14 @@ $month_names_vn = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','
                 <div class="sal-card">
                     <div class="sl">Lương KPI quý</div>
                     <div class="sv"><?= $kpi_salary_label ?></div>
+                    <div style="font-size:10px;color:#94a3b8;margin-top:2px;">
+                        <?php if ($salary_kpi_so_based): ?>
+                            <span title="Lương KPI theo doanh thu Sale Order (hợp đồng ký mới), tính bằng USD">SO $<?= number_format($so_rev_usd, 0) ?> / <?= $so_kpi_target_usd > 0 ? '$' . number_format($so_kpi_target_usd, 0) : '—' ?> · <?= round($salary_kpi_pct) ?>%</span>
+                            <?php if ($so_kpi_target_usd <= 0): ?><span style="color:#dc2626;"> · chưa set KPI SO</span><?php endif; ?>
+                        <?php else: ?>
+                            <?= round($salary_kpi_pct) ?>% KPI
+                        <?php endif; ?>
+                    </div>
                 </div>
                 <div class="sal-card">
                     <div class="sl"><?= $is_bd_role ? 'Sale Orders (Quý)' : 'Invoiced (Quý)' ?></div>

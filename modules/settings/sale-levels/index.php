@@ -40,6 +40,7 @@ $needed_cols = [
     'kpi_quarter_vnd' => "BIGINT DEFAULT 0",
     'kpi_yearly_usd' => "DECIMAL(15,2) DEFAULT 0",
     'kpi_quarter_usd' => "DECIMAL(15,2) DEFAULT 0",
+    'so_kpi_quarter_usd' => "DECIMAL(15,2) DEFAULT 0",   // KPI Sale Order (hợp đồng ký mới, USD) — dùng cho Lương KPI của AMBD
     'notes' => "TEXT",
 ];
 foreach ($needed_cols as $col => $def) {
@@ -131,6 +132,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
         $total_salary_yearly = intval($_POST['total_salary_yearly'] ?? 0);
         $kpi_yearly_vnd = intval($_POST['kpi_yearly_vnd'] ?? 0);
         $kpi_quarter_vnd = intval($_POST['kpi_quarter_vnd'] ?? 0);
+        $so_kpi_quarter_usd = floatval($_POST['so_kpi_quarter_usd'] ?? 0);
         $kpi_yearly_usd = floatval($_POST['kpi_yearly_usd'] ?? 0);
         $kpi_quarter_usd = floatval($_POST['kpi_quarter_usd'] ?? 0);
         $notes = trim($_POST['notes'] ?? '');
@@ -138,13 +140,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
         $order_num = intval($_POST['order_num'] ?? 0);
 
         if ($act === 'add') {
-            $s = $conn->prepare("INSERT INTO sale_levels (position_type,level_name,fixed_monthly,total_salary_yearly,kpi_yearly_vnd,kpi_quarter_vnd,kpi_yearly_usd,kpi_quarter_usd,notes,color_badge,order_num) VALUES (?,?,?,?,?,?,?,?,?,?,?)");
-            $s->bind_param("ssiiiiiddsi", $position_type, $level_name, $fixed_monthly, $total_salary_yearly, $kpi_yearly_vnd, $kpi_quarter_vnd, $kpi_yearly_usd, $kpi_quarter_usd, $notes, $color_badge, $order_num);
+            $s = $conn->prepare("INSERT INTO sale_levels (position_type,level_name,fixed_monthly,total_salary_yearly,kpi_yearly_vnd,kpi_quarter_vnd,so_kpi_quarter_usd,kpi_yearly_usd,kpi_quarter_usd,notes,color_badge,order_num) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)");
+            $s->bind_param("ssiiiidddssi", $position_type, $level_name, $fixed_monthly, $total_salary_yearly, $kpi_yearly_vnd, $kpi_quarter_vnd, $so_kpi_quarter_usd, $kpi_yearly_usd, $kpi_quarter_usd, $notes, $color_badge, $order_num);
             $s->execute() ? $success_msg = 'Thêm level thành công!' : $error_msg = $conn->error;
         } else {
             $id = intval($_POST['id'] ?? 0);
-            $s = $conn->prepare("UPDATE sale_levels SET position_type=?,level_name=?,fixed_monthly=?,total_salary_yearly=?,kpi_yearly_vnd=?,kpi_quarter_vnd=?,kpi_yearly_usd=?,kpi_quarter_usd=?,notes=?,color_badge=?,order_num=? WHERE id=?");
-            $s->bind_param("ssiiiiiddsii", $position_type, $level_name, $fixed_monthly, $total_salary_yearly, $kpi_yearly_vnd, $kpi_quarter_vnd, $kpi_yearly_usd, $kpi_quarter_usd, $notes, $color_badge, $order_num, $id);
+            $s = $conn->prepare("UPDATE sale_levels SET position_type=?,level_name=?,fixed_monthly=?,total_salary_yearly=?,kpi_yearly_vnd=?,kpi_quarter_vnd=?,so_kpi_quarter_usd=?,kpi_yearly_usd=?,kpi_quarter_usd=?,notes=?,color_badge=?,order_num=? WHERE id=?");
+            $s->bind_param("ssiiiidddssii", $position_type, $level_name, $fixed_monthly, $total_salary_yearly, $kpi_yearly_vnd, $kpi_quarter_vnd, $so_kpi_quarter_usd, $kpi_yearly_usd, $kpi_quarter_usd, $notes, $color_badge, $order_num, $id);
             $s->execute() ? $success_msg = 'Cập nhật thành công!' : $error_msg = $conn->error;
         }
     } elseif ($act === 'delete') {
@@ -497,6 +499,7 @@ function fmtUSD($n)
                                 <th style="min-width:140px" class="num-cell">Total Salary (năm)</th>
                                 <th style="min-width:150px" class="num-cell">KPI Năm (VND)</th>
                                 <th style="min-width:150px" class="num-cell">KPI Quý (VND)</th>
+                                <th style="min-width:150px" class="num-cell" title="KPI doanh thu hợp đồng ký mới (Sale Order, USD) — dùng cho Lương KPI của AM/BD">KPI Quý SO (USD)</th>
                                 <th style="min-width:120px" class="num-cell">KPI Năm (USD)</th>
                                 <th style="min-width:120px" class="num-cell">KPI Quý (USD)</th>
                                 <th style="min-width:280px">Ghi chú</th>
@@ -519,7 +522,7 @@ function fmtUSD($n)
                             ?>
                             <!-- Group header -->
                             <tr>
-                                <td colspan="10" style="background:<?= $pc['bg'] ?>;padding:5px 12px;">
+                                <td colspan="11" style="background:<?= $pc['bg'] ?>;padding:5px 12px;">
                                     <span class="pos-badge" style="background:<?= $pc['badge'] ?>"><?= htmlspecialchars($pos) ?></span>
                                 </td>
                             </tr>
@@ -531,6 +534,7 @@ function fmtUSD($n)
                                 <td class="num-cell"><?= fmtVND($l['total_salary_yearly']) ?></td>
                                 <td class="num-cell" style="color:#1D4ED8;font-weight:600"><?= fmtVND($l['kpi_yearly_vnd']) ?></td>
                                 <td class="num-cell"><?= fmtVND($l['kpi_quarter_vnd']) ?></td>
+                                <td class="num-cell" style="color:#7C3AED;font-weight:600"><?= ($l['so_kpi_quarter_usd'] ?? 0) > 0 ? fmtUSD($l['so_kpi_quarter_usd']) : '—' ?></td>
                                 <td class="num-cell" style="color:#065F46;font-weight:600"><?= fmtUSD($l['kpi_yearly_usd']) ?></td>
                                 <td class="num-cell"><?= fmtUSD($l['kpi_quarter_usd']) ?></td>
                                 <?php if ($isFirst && $groupNote): ?>
@@ -618,6 +622,15 @@ function fmtUSD($n)
 
                 <div class="fgrow">
                     <div class="fg">
+                        <label>KPI Quý — Sale Order (USD)
+                            <span title="Doanh thu hợp đồng ký mới (Sale Order), tính bằng USD. Dùng để tính 'Lương KPI quý' cho user AM/BD (is_am_bd). Để 0 nếu không áp dụng." style="cursor:help;color:#94a3b8;">ⓘ</span>
+                        </label>
+                        <input type="number" step="0.01" name="so_kpi_quarter_usd" id="slSoKpiQtUSD" value="0" placeholder="25490">
+                    </div>
+                </div>
+
+                <div class="fgrow">
+                    <div class="fg">
                         <label>KPI Năm (USD)</label>
                         <input type="number" step="0.01" name="kpi_yearly_usd" id="slKpiYrUSD" value="0"
                             placeholder="101961">
@@ -675,6 +688,7 @@ function fmtUSD($n)
             document.getElementById('slTotalYearly').value = d.total_salary_yearly || 0;
             document.getElementById('slKpiYrVND').value = d.kpi_yearly_vnd || 0;
             document.getElementById('slKpiQtVND').value = d.kpi_quarter_vnd || 0;
+            document.getElementById('slSoKpiQtUSD').value = d.so_kpi_quarter_usd || 0;
             document.getElementById('slKpiYrUSD').value = d.kpi_yearly_usd || 0;
             document.getElementById('slKpiQtUSD').value = d.kpi_quarter_usd || 0;
             document.getElementById('slNotes').value = d.notes || '';
