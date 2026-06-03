@@ -609,9 +609,9 @@ if ($payload && $event_type === 'invoice') {
             return;
         }
         $debug['debt_calc'] = ['amt_orig'=>$amt_orig,'ccy'=>$ccy,'pay_state'=>($p['payment_state']??'?'),'inv_name'=>$inv_name];
-        // invoice_date: dùng invoice_date, fallback sang date (giống /invoice: $inv['invoice_date'] ?: $inv['date'])
-        $inv_date     = ($p['invoice_date']     && $p['invoice_date']     !== false) ? $p['invoice_date']
-                      : (($p['date']            && $p['date']             !== false) ? $p['date']            : null);
+        // invoice_date: CHỈ lấy đúng field invoice_date của Odoo. KHÔNG fallback sang `date`
+        // (ngày hạch toán) — draft chưa có ngày hóa đơn thì để trống, đúng như Odoo hiển thị.
+        $inv_date     = ($p['invoice_date']     && $p['invoice_date']     !== false) ? $p['invoice_date'] : null;
         $inv_date_due = ($p['invoice_date_due'] && $p['invoice_date_due'] !== false) ? $p['invoice_date_due'] : null;
         $pay_state    = $p['payment_state'] ?? 'not_paid';
         $inv_origin   = $p['invoice_origin'] ?? '';

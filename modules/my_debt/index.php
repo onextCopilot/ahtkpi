@@ -414,8 +414,9 @@ if ($res) {
                 $changed = true;
             }
 
-            // Sync Invoice Date if different
-            $newInvDateVal = $inv['invoice_date'] ?: $inv['date'];
+            // Sync Invoice Date if different — CHỈ lấy invoice_date thật của Odoo,
+            // KHÔNG fallback sang `date` (ngày hạch toán). Draft chưa có ngày hóa đơn → bỏ qua.
+            $newInvDateVal = $inv['invoice_date'] ?: null;
             if ($newInvDateVal && $newInvDateVal !== ($row['invoice_date'] ?? '')) {
                 $upSql[] = "invoice_date = ?";
                 $upParams[] = $newInvDateVal;
