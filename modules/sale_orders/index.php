@@ -417,7 +417,14 @@ $is_admin = ($_SESSION['role'] === 'admin');
                         ?>
                     </select>
 
-                    <select class="so-select" id="soMonth" onchange="loadOrders()">
+                    <select class="so-select" id="soQuarter" onchange="onQuarterChange()">
+                        <option value="">Tất cả quý</option>
+                        <?php for ($q = 1; $q <= 4; $q++): ?>
+                            <option value="<?= $q ?>">Quý <?= $q ?></option>
+                        <?php endfor; ?>
+                    </select>
+
+                    <select class="so-select" id="soMonth" onchange="onMonthChange()">
                         <option value="">Tất cả tháng</option>
                         <?php for ($m = 1; $m <= 12; $m++): ?>
                             <option value="<?= $m ?>">Tháng <?= $m ?></option>
@@ -516,16 +523,33 @@ $is_admin = ($_SESSION['role'] === 'admin');
             loadOrders();
         }
 
+        // Quý và Tháng loại trừ nhau để tránh xung đột bộ lọc
+        function onQuarterChange() {
+            if (document.getElementById('soQuarter').value) {
+                document.getElementById('soMonth').value = '';
+            }
+            loadOrders();
+        }
+
+        function onMonthChange() {
+            if (document.getElementById('soMonth').value) {
+                document.getElementById('soQuarter').value = '';
+            }
+            loadOrders();
+        }
+
         function loadOrders() {
             const search = document.getElementById('soSearch').value.trim();
             const status = document.getElementById('soStatus').value;
             const year = document.getElementById('soYear').value;
+            const quarter = document.getElementById('soQuarter').value;
             const month = document.getElementById('soMonth').value;
 
             const params = new URLSearchParams({
                 search,
                 status,
                 year,
+                quarter,
                 month,
                 my_only: myOnly || !IS_ADMIN ? '1' : '0'
             });

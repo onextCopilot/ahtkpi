@@ -16,6 +16,7 @@ $status = trim($_GET['status'] ?? '');
 $my_only = ($_GET['my_only'] ?? '1') === '1';
 $year = intval($_GET['year'] ?? 0);
 $month = intval($_GET['month'] ?? 0);
+$quarter = intval($_GET['quarter'] ?? 0);
 
 try {
     $odoo = new OdooAPI();
@@ -42,18 +43,25 @@ try {
         $domain[] = ['state', '=', 'done'];
     }
 
-    // Filter by year / month on date_order (server-side range)
+    // Filter by year / quarter / month on date_order (server-side range).
+    // Specificity: month > quarter > whole year.
     if ($year > 0) {
         if ($month >= 1 && $month <= 12) {
-            $startY = $year;
             $startM = $month;
-            $endY = $month === 12 ? $year + 1 : $year;
-            $endM = $month === 12 ? 1 : $month + 1;
+            $span = 1;
+        } elseif ($quarter >= 1 && $quarter <= 4) {
+            $startM = ($quarter - 1) * 3 + 1;
+            $span = 3;
         } else {
-            $startY = $year;
             $startM = 1;
-            $endY = $year + 1;
-            $endM = 1;
+            $span = 12;
+        }
+        $startY = $year;
+        $endM = $startM + $span;
+        $endY = $year;
+        if ($endM > 12) {
+            $endM -= 12;
+            $endY++;
         }
         $start = sprintf('%04d-%02d-01 00:00:00', $startY, $startM);
         $end = sprintf('%04d-%02d-01 00:00:00', $endY, $endM);
