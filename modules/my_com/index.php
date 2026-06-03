@@ -192,24 +192,35 @@ try {
 }
 $license_invoices = $license_invoices ?? [];
 
-// ── Per-currency VND rates for invoice conversion ──
-// Uses 1/r_cur (not r_vnd/r_cur) to avoid cross-company contamination
-// (r_vnd picks up MYR-base company entries giving nonsense values).
-// VND is always 1.0; for other currencies: VND_amount = amount_total / r_cur
-$inv_cur_rates = ['VND' => 1.0];
-try {
-    if (isset($odoo) && $odoo) {
-        $all_inv_curs = [];
-        foreach ($all_invoices as $_i) {
-            $c = is_array($_i['currency_id']) ? ($_i['currency_id'][1] ?? 'VND') : 'VND';
-            if ($c !== 'VND') $all_inv_curs[$c] = true;
+// ── Per-currency → VND rate map (shared by invoices, HV, Sale Orders) ──
+// IMPORTANT: do NOT use $odoo->getRate() here. getRate() reads res.currency.rate
+// entries that are NOT company-scoped, so it returns whichever company has the most
+// recent dated row — often the MYR-base company "A1 CONSULTING SDN. BHD." (USD≈0.2516,
+// VND≈6622) instead of the VND-base company (USD≈3.8e-5). That produced 1456 USD → 5787 VND
+// and 200 USD HV → 34.77 tỷ.
+// res.currency.rate (from getCurrencies()) is computed in the API user's company context
+// where VND is the base (VND rate = 1), so the cross-rate is consistent:
+//   rate(cur → VND) = rate(VND) / rate(cur)   (both from the same context → valid)
+function mc_build_vnd_rates($odoo) {
+    $rates = ['VND' => 1.0];
+    try {
+        if (isset($odoo) && $odoo) {
+            $curs = $odoo->getCurrencies();   // [name => ['rate'=>.., 'symbol'=>..], ...]
+            $r_vnd = (is_array($curs) && isset($curs['VND']['rate'])) ? (float)$curs['VND']['rate'] : 0.0;
+            if ($r_vnd > 0) {
+                foreach ($curs as $name => $info) {
+                    $r = isset($info['rate']) ? (float)$info['rate'] : 0.0;
+                    if ($r > 0) $rates[$name] = $r_vnd / $r;
+                }
+            }
         }
-        foreach (array_keys($all_inv_curs) as $c) {
-            $r = (float)$odoo->getRate($c, date('Y-m-d'));
-            $inv_cur_rates[$c] = $r > 0 ? 1.0 / $r : 1.0;
-        }
-    }
-} catch (Throwable $e) { /* keep 1.0 fallback */ }
+    } catch (Throwable $e) { /* VND-only fallback keeps the page working */ }
+    return $rates;
+}
+$vnd_rates = mc_build_vnd_rates($odoo);
+
+// Per-currency VND rates for invoice conversion (VND_amount = amount_total × rate)
+$inv_cur_rates = $vnd_rates;
 
 // Helper: convert invoice amount_total (in invoice currency) to VND
 function mc_inv_to_vnd($inv, $inv_cur_rates) {
@@ -268,11 +279,8 @@ if ($map_stmt) {
 
 // Currency → VND conversion rates for HV — sourced entirely from Odoo.
 // The available currencies AND their symbols come from Odoo (res.currency).
-// VND is the base (rate 1). Each rate = how many VND for 1 unit of that currency.
-// In the VN context VND is the base currency, so the factor is simply 1/getRate(cur).
-// NOTE: do NOT use getRate('VND')/getRate(cur) here — getRate() is not company-scoped
-// and may pull a cross-company VND rate (e.g. ≈6660 from a MYR-base company), which
-// blows the rate up to ~174M VND/USD (200 USD → "34.77 tỷ"). See SO logic below.
+// Rates come from $vnd_rates (built via getCurrencies(), VND-base context) — NOT getRate(),
+// which is company-contaminated. See mc_build_vnd_rates() note above.
 $hv_currencies = ['VND'];   // ordered list shown in the dropdown
 $hv_symbols    = ['VND' => '₫'];
 $hv_rates      = ['VND' => 1.0];
@@ -290,14 +298,11 @@ try {
                 return $ia === $ib ? strcmp($a, $b) : $ia - $ib;
             });
             foreach ($names as $cur) {
-                if ($cur === 'VND') continue;   // already the base
-                $r_cur = (float) $odoo->getRate($cur, date('Y-m-d'));
-                if ($r_cur <= 0) continue;       // skip currencies Odoo has no rate for
-                $rate = 1.0 / $r_cur;            // VND is base → inverse factor (see note above)
-                if ($rate <= 0) continue;
+                if ($cur === 'VND') continue;        // already the base
+                if (!isset($vnd_rates[$cur]) || $vnd_rates[$cur] <= 0) continue;  // skip currencies without a rate
                 $hv_currencies[] = $cur;
                 $hv_symbols[$cur] = $odoo_currencies[$cur]['symbol'] ?? $cur;
-                $hv_rates[$cur]   = $rate;
+                $hv_rates[$cur]   = $vnd_rates[$cur];
             }
         }
     }
@@ -357,23 +362,11 @@ try {
             $so_fields = ['id', 'name', 'partner_id', 'date_order', 'amount_total', 'currency_id', 'state', 'client_order_ref'];
             $raw_sos = $odoo->searchRead('sale.order', $so_domain, $so_fields, 0, 0);
 
-            // Build per-currency rates for SO conversion.
-            // VND is base, so the correct factor is simply 1/r_cur (inverse factor).
-            // Avoid r_vnd/r_cur: getRate() isn't company-scoped and picks up cross-company
-            // VND entries from non-VND-base companies (e.g. MYR-base → VND≈6622). $hv_rates
-            // above now uses the same 1/r_cur factor for consistency.
-            $so_currency_rates = ['VND' => 1.0];
-            foreach ((array)$raw_sos as $so) {
-                $cur = is_array($so['currency_id']) ? ($so['currency_id'][1] ?? 'USD') : 'USD';
-                if ($cur !== 'VND' && !isset($so_currency_rates[$cur])) {
-                    $r = (float)$odoo->getRate($cur, date('Y-m-d'));
-                    $so_currency_rates[$cur] = ($r > 0) ? (1.0 / $r) : 1.0;
-                }
-            }
-
+            // SO conversion uses the shared $vnd_rates map (getCurrencies()-based, VND-base).
+            // Do NOT use getRate() — it is company-contaminated (see mc_build_vnd_rates() note).
             foreach ((array)$raw_sos as $so) {
                 $cur        = is_array($so['currency_id']) ? ($so['currency_id'][1] ?? 'USD') : 'USD';
-                $rate       = $so_currency_rates[$cur] ?? 1.0;
+                $rate       = $vnd_rates[$cur] ?? 1.0;
                 $amount_vnd = (float)$so['amount_total'] * $rate;
                 $so['_cur']          = $cur;
                 $so['_amount_vnd']   = $amount_vnd;
@@ -795,8 +788,7 @@ foreach ($collected_invoices as $inv) {
 $hist_kpi = []; // key "Y-Q" => ['pct','adj','target','invoiced','computed','manual_pct','year','quarter']
 
 // Sum confirmed/sent/done Sale Orders (VND) for a given quarter — used for BD-role KPI basis.
-function mc_so_revenue_quarter($odoo, $odoo_user_id, $year, $q) {
-    static $rate_cache = ['VND' => 1.0];
+function mc_so_revenue_quarter($odoo, $odoo_user_id, $year, $q, $vnd_rates = ['VND' => 1.0]) {
     if (!$odoo || !$odoo_user_id) return null;
     $qm = [1 => [1, 3], 2 => [4, 6], 3 => [7, 9], 4 => [10, 12]];
     if (!isset($qm[$q])) return null;
@@ -813,11 +805,7 @@ function mc_so_revenue_quarter($odoo, $odoo_user_id, $year, $q) {
     $sum = 0.0;
     foreach ((array) $rows as $so) {
         $cur = is_array($so['currency_id']) ? ($so['currency_id'][1] ?? 'USD') : 'USD';
-        if (!isset($rate_cache[$cur])) {
-            $r = (float) $odoo->getRate($cur, date('Y-m-d'));
-            $rate_cache[$cur] = $r > 0 ? 1.0 / $r : 1.0;
-        }
-        $sum += (float) $so['amount_total'] * $rate_cache[$cur];
+        $sum += (float) $so['amount_total'] * ($vnd_rates[$cur] ?? 1.0);
     }
     return $sum;
 }
@@ -879,7 +867,7 @@ foreach ($needed_q as $qk => $qi) {
     $hinv = 0;
     if ($h_is_bd) {
         // BD: tổng Sale Orders của quý đó (confirmed/sent/done)
-        $hso = mc_so_revenue_quarter($odoo ?? null, $odoo_user_id, $hy, $hq);
+        $hso = mc_so_revenue_quarter($odoo ?? null, $odoo_user_id, $hy, $hq, $vnd_rates);
         $hinv = ($hso !== null) ? $hso : 0;
     } else {
         // AM/CSM...: tổng Invoiced của quý đó (by invoice_date), excluding the same excluded types
@@ -1231,6 +1219,8 @@ $month_names_vn = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','
         .hv-cur { padding:2px 2px; border:1px solid #e2e8f0; border-radius:4px; font-size:11px; background:#fff; cursor:pointer; outline:none; }
         .hv-cur:disabled { background:#f1f5f9; color:#cbd5e1; cursor:not-allowed; }
         .hv-vnd { font-size:10px; color:#94a3b8; text-align:right; margin-top:1px; }
+        .hv-note { font-size:9px; color:#f59e0b; text-align:right; margin-top:1px; line-height:1.25; cursor:help; }
+        .hv-info { display:inline-block; min-width:14px; height:14px; line-height:14px; text-align:center; font-size:10px; font-weight:700; color:#7c3aed; background:#f3e8ff; border-radius:50%; cursor:help; font-style:normal; margin-left:3px; }
         /* Per-quarter KPI cell (Thu hồi công nợ) */
         .kpi-q-cell { white-space:nowrap; }
         .kpi-q-badge { display:inline-block; font-size:10px; font-weight:600; cursor:pointer; }
@@ -1468,7 +1458,7 @@ $month_names_vn = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','
                         <th>Payment</th>
                         <th style="text-align:right;">Com1 Rate</th>
                         <th style="text-align:right;">Com1</th>
-                        <th style="text-align:right;">High Value</th>
+                        <th style="text-align:right;">High Value<span class="hv-info" title="HV = giá chênh lệch (Revenue − Revenue Base) tính TRÊN CHÍNH hóa đơn này, KHÔNG phải của cả hợp đồng.&#10;&#10;➤ Nhập HV theo đúng % đã xuất hóa đơn.&#10;VD: hợp đồng 10.000 USD nhưng hóa đơn này mới xuất 50% → chỉ nhập phần HV tương ứng 50%.">i</span></th>
                         <th style="text-align:right;">Com2</th>
                         <th>AI Add-on</th>
                         <th style="text-align:right;">AI Revenue</th>
@@ -1587,6 +1577,7 @@ $month_names_vn = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','
                                         </select>
                                     </div>
                                     <?php if ($sel_hv !== null && $sel_hv_cur !== 'VND'): ?><div class="hv-vnd" title="Quy đổi VND"><?= mc_fmt_short($row_hv_vnd) ?></div><?php endif; ?>
+                                    <?php if ($row_ebt_ok): ?><div class="hv-note" title="HV phải tương ứng phần đã xuất hóa đơn của hợp đồng, không phải toàn bộ HĐ.&#10;VD: HĐ 10.000 USD mới xuất 50% → chỉ nhập 50% phần HV.">⚠ Nhập theo % đã xuất HĐ</div><?php endif; ?>
                                 </td>
                                 <td class="amt com2-cell" data-section="main" data-month="<?= htmlspecialchars($mk) ?>" data-amount="<?= $d['amount_vnd'] ?>" data-base="<?= $row_hv_vnd !== null ? $row_hv_vnd : 0 ?>" data-adj="<?= $kpi_adj ?>" data-paidok="<?= ($d['is_paid'] && $d['paid_in_quarter']) ? 1 : 0 ?>" data-ebtok="<?= $row_ebt_ok ? 1 : 0 ?>" style="color:<?= $row_com2 > 0 ? '#7c3aed' : '#94a3b8' ?>;font-weight:600;" title="<?= !$row_ebt_ok ? 'Com2 yêu cầu EBT ≥ 20%' : ($row_tier > 0 && $row_hv_vnd !== null ? 'HV ' . mc_fmt($row_hv_vnd) . ' × Tier ' . mc_rate_pct($row_tier/100) . '% (auto) × KPI ' . ($kpi_adj * 100) . '%' : 'Nhập HV (Tier tự tính theo ratio Revenue/Base)') ?>"><?= (!$row_ebt_ok || $row_tier <= 0 || $row_hv_vnd === null || !$row_elig) ? '—' : mc_fmt($row_com2) . mc_com2_meta($row_tier, $d['amount_vnd'], $row_hv_vnd) ?></td>
                                 <?php $ai_base_ok = ($ai_kpi_ok && $d['ai_paid_ok']); ?>
@@ -1748,6 +1739,7 @@ $month_names_vn = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','
                                         </select>
                                     </div>
                                     <?php if ($ci_sel_hv !== null && $ci_sel_hv_cur !== 'VND'): ?><div class="hv-vnd" title="Quy đổi VND"><?= mc_fmt_short($ci_hv_vnd) ?></div><?php endif; ?>
+                                    <?php if ($ci_ebt_ok): ?><div class="hv-note" title="HV phải tương ứng phần đã xuất hóa đơn của hợp đồng, không phải toàn bộ HĐ.&#10;VD: HĐ 10.000 USD mới xuất 50% → chỉ nhập 50% phần HV.">⚠ Nhập theo % đã xuất HĐ</div><?php endif; ?>
                                 </td>
                                 <?php $ci_tier = mc_auto_tier($cd['amount_vnd'], $ci_hv_vnd); $ci_com2 = ($ci_tier > 0 && $ci_hv_vnd !== null && $ci_ebt_ok) ? $ci_hv_vnd * ($ci_tier / 100) * $ci_kpi_adj : 0; $col_com2_total += $ci_com2; ?>
                                 <td class="amt com2-cell" data-section="recovery" data-amount="<?= $cd['amount_vnd'] ?>" data-base="<?= $ci_hv_vnd !== null ? $ci_hv_vnd : 0 ?>" data-adj="<?= $ci_kpi_adj ?>" data-paidok="1" data-ebtok="<?= $ci_ebt_ok ? 1 : 0 ?>" style="color:<?= $ci_com2 > 0 ? '#7c3aed' : '#94a3b8' ?>;font-weight:600;" title="<?= !$ci_ebt_ok ? 'Com2 yêu cầu EBT ≥ 20%' : ($ci_tier > 0 && $ci_hv_vnd !== null ? 'HV ' . mc_fmt($ci_hv_vnd) . ' × Tier ' . mc_rate_pct($ci_tier/100) . '% (auto) × KPI Q' . $cd['origin_quarter'] . '/' . $cd['origin_year'] . ' (×' . $ci_kpi_adj . ')' : 'Nhập HV (Tier tự tính theo ratio Revenue/Base)') ?>"><?= (!$ci_ebt_ok || $ci_tier <= 0 || $ci_hv_vnd === null) ? '—' : mc_fmt($ci_com2) . mc_com2_meta($ci_tier, $cd['amount_vnd'], $ci_hv_vnd) ?></td>
@@ -1975,7 +1967,7 @@ $month_names_vn = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','
                 <summary style="cursor:pointer;font-weight:600;padding:0.5rem 0;">Quy tắc tính Commission (tham khảo)</summary>
                 <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:1rem;margin-top:0.5rem;line-height:1.8;">
                     <strong>Com1 (Revenue):</strong> New Client = 1% · Old Client = 0.5% · <span style="color:#f59e0b;">Market to Lead = "My Lead" → +1% Com1 ★ (chỉ khách New)</span> · <span style="color:#dc2626;">EBT &lt; 5% → 0 com (chỉ tính KPI)</span><br>
-                    <strong>Com2 (High Value):</strong> Chỉ khi EBT ≥ 20%. HV = Giá chênh = Revenue − Revenue Base (nhập tay, ₫ hoặc $ → quy đổi VND). Tier <strong>tự tính</strong> theo ratio = Revenue / Base (Base = Revenue − HV): &gt;1.5 → 5% · (&gt;1.3–1.5] → 3% · (&gt;1–1.3] → 2% · ≤1 → không có Com2. Com2 = HV(VND) × Tier%. VD: Revenue 2 tỷ, HV 500tr → Base 1.5 tỷ, ratio 1.33 → rank (&gt;1.3–1.5) → Tier 3% → Com2 = 500tr × 3% = 15tr<br>
+                    <strong>Com2 (High Value):</strong> Chỉ khi EBT ≥ 20%. HV = Giá chênh = Revenue − Revenue Base (nhập tay, ₫ hoặc $ → quy đổi VND). Tier <strong>tự tính</strong> theo ratio = Revenue / Base (Base = Revenue − HV): &gt;1.5 → 5% · (&gt;1.3–1.5] → 3% · (&gt;1–1.3] → 2% · ≤1 → không có Com2. Com2 = HV(VND) × Tier%. VD: Revenue 2 tỷ, HV 500tr → Base 1.5 tỷ, ratio 1.33 → rank (&gt;1.3–1.5) → Tier 3% → Com2 = 500tr × 3% = 15tr. <span style="color:#f59e0b;">⚠ Lưu ý: HV nhập theo đúng % đã xuất hóa đơn của hợp đồng — VD HĐ 10.000 USD mới xuất 50% thì chỉ nhập 50% phần HV tương ứng, không nhập chênh lệch của cả hợp đồng.</span><br>
                     <strong>KPI Adj:</strong> < 60%: 0 com · 60-80%: 70% com · ≥ 80%: 100% com<br>
                     <strong>Yearly Bonus:</strong> 2% × S_EBT (nếu %A_EBT ≥ 12.5%) hoặc 4% × S_EBT (nếu ≥ 20%)<br>
                     <strong>AI Add-on:</strong> <span style="color:#0891b2;">AI Com = AI Revenue(VND, ₫/$ → quy đổi) × rate.</span> AIHive Solutions: 5% (EBT≥20%) / 2% (EBT≥10%) · AI Solutions: 2% (EBT≥15%) · Bắt buộc KPI ≥ 60% & Collection = 1 (đã thanh toán)<br>
