@@ -250,6 +250,66 @@ $is_admin = ($_SESSION['role'] === 'admin');
             text-decoration: underline;
         }
 
+        /* ---------- Group header ---------- */
+        tr.group-row td {
+            padding: 0 !important;
+            background: #F1F5F9;
+            border-bottom: 1px solid #E2E8F0;
+            position: sticky;
+            left: 0;
+        }
+
+        .group-header {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 8px 14px;
+            cursor: pointer;
+            user-select: none;
+            font-size: 13px;
+            color: #1E293B;
+        }
+
+        .group-header:hover {
+            background: #E2E8F0;
+        }
+
+        .group-caret {
+            display: inline-block;
+            transition: transform .15s;
+            color: #64748B;
+            font-size: 11px;
+        }
+
+        .group-row.collapsed .group-caret {
+            transform: rotate(-90deg);
+        }
+
+        .group-title {
+            font-weight: 700;
+        }
+
+        .group-count {
+            font-size: 11px;
+            color: #64748B;
+            background: #fff;
+            border: 1px solid #E2E8F0;
+            border-radius: 20px;
+            padding: 1px 9px;
+        }
+
+        .group-total {
+            margin-left: auto;
+            font-weight: 600;
+            color: #0F172A;
+            font-size: 12px;
+        }
+
+        .group-total span {
+            color: #64748B;
+            font-weight: 500;
+        }
+
         /* ---------- Pagination ---------- */
         .pag-bar {
             display: flex;
@@ -346,7 +406,25 @@ $is_admin = ($_SESSION['role'] === 'admin');
                             oninput="debounceLoad()">
                     </div>
 
-                    <select class="so-select" id="soStatus" onchange="loadOrders(1)">
+                    <select class="so-select" id="soYear" onchange="loadOrders()">
+                        <option value="">Tất cả năm</option>
+                        <?php
+                        $cur_year = (int) date('Y');
+                        for ($y = $cur_year; $y >= $cur_year - 6; $y--) {
+                            $sel = $y === $cur_year ? ' selected' : '';
+                            echo "<option value=\"$y\"$sel>Năm $y</option>";
+                        }
+                        ?>
+                    </select>
+
+                    <select class="so-select" id="soMonth" onchange="loadOrders()">
+                        <option value="">Tất cả tháng</option>
+                        <?php for ($m = 1; $m <= 12; $m++): ?>
+                            <option value="<?= $m ?>">Tháng <?= $m ?></option>
+                        <?php endfor; ?>
+                    </select>
+
+                    <select class="so-select" id="soStatus" onchange="loadOrders()">
                         <option value="">Tất cả trạng thái</option>
                         <option value="draft">Nháp (Quotation)</option>
                         <option value="sale">Đã xác nhận</option>
@@ -359,7 +437,7 @@ $is_admin = ($_SESSION['role'] === 'admin');
                         </button>
                     <?php endif; ?>
 
-                    <button class="ctrl-btn" onclick="loadOrders(1)" title="Làm mới">
+                    <button class="ctrl-btn" onclick="loadOrders()" title="Làm mới">
                         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
                             stroke-width="2">
                             <path d="M23 4v6h-6" />
@@ -402,21 +480,6 @@ $is_admin = ($_SESSION['role'] === 'admin');
                             </tr>
                         </tbody>
                     </table>
-
-                    <!-- Pagination inside wrapper -->
-                    <div class="pag-bar" id="pagBar">
-                        <span class="pag-info">Hiển thị <b id="pagFrom">0</b>–<b id="pagTo">0</b> trong <b
-                                id="pagTotal">0</b></span>
-                        <div class="pag-spacer"></div>
-                        <button class="pag-btn" id="pagFirst" onclick="loadOrders(1)" title="Trang đầu">«</button>
-                        <button class="pag-btn" id="pagPrev" onclick="loadOrders(currentPage-1)"
-                            title="Trang trước">‹</button>
-                        <span class="pag-num">Trang <b id="pagCurrent">1</b> / <b id="pagLast">1</b></span>
-                        <button class="pag-btn" id="pagNext" onclick="loadOrders(currentPage+1)"
-                            title="Trang sau">›</button>
-                        <button class="pag-btn" id="pagLastBtn" onclick="loadOrders(totalPages)"
-                            title="Trang cuối">»</button>
-                    </div>
                 </div>
             </div>
         </main>
@@ -424,10 +487,9 @@ $is_admin = ($_SESSION['role'] === 'admin');
 
     <script>
         const IS_ADMIN = <?= $is_admin ? 'true' : 'false' ?>;
-        let currentPage = 1;
-        let totalPages = 1;
         let myOnly = <?= $is_admin ? 'true' : 'false' ?>; // admins start with "my only", non-admins always see own
         let searchTimer = null;
+        const collapsed = {}; // group key -> true if collapsed
 
         const ODOO_URL = 'https://erp18.merket.io';
 
@@ -439,11 +501,11 @@ $is_admin = ($_SESSION['role'] === 'admin');
             cancel: { label: 'Đã huỷ', cls: 'so-cancel' },
         };
 
-        document.addEventListener('DOMContentLoaded', () => loadOrders(1));
+        document.addEventListener('DOMContentLoaded', () => loadOrders());
 
         function debounceLoad() {
             clearTimeout(searchTimer);
-            searchTimer = setTimeout(() => loadOrders(1), 400);
+            searchTimer = setTimeout(() => loadOrders(), 400);
         }
 
         function toggleMyOnly() {
@@ -451,19 +513,20 @@ $is_admin = ($_SESSION['role'] === 'admin');
             const btn = document.getElementById('myOnlyBtn');
             btn.classList.toggle('active', myOnly);
             btn.textContent = myOnly ? '👤 Của tôi' : '🌐 Tất cả';
-            loadOrders(1);
+            loadOrders();
         }
 
-        function loadOrders(page) {
-            currentPage = Math.max(1, page);
+        function loadOrders() {
             const search = document.getElementById('soSearch').value.trim();
             const status = document.getElementById('soStatus').value;
+            const year = document.getElementById('soYear').value;
+            const month = document.getElementById('soMonth').value;
 
             const params = new URLSearchParams({
-                page: currentPage,
-                limit: 25,
                 search,
                 status,
+                year,
+                month,
                 my_only: myOnly || !IS_ADMIN ? '1' : '0'
             });
 
@@ -477,31 +540,23 @@ $is_admin = ($_SESSION['role'] === 'admin');
             fetch(`/api/sale_orders?${params}`)
                 .then(r => r.json())
                 .then(data => {
-                    if (data.success) renderOrders(data.data, data.pagination);
+                    if (data.success) renderOrders(data.data, data.total);
                     else showError(data.error);
                 })
                 .catch(e => showError(e.message));
         }
 
-        function renderOrders(orders, pag) {
-            const tbody = document.getElementById('soBody');
-            const start = (pag.page - 1) * pag.limit;
+        function groupLabel(key) {
+            if (!key || key === '—') return 'Không rõ ngày';
+            const [y, m] = key.split('-');
+            return `Tháng ${parseInt(m, 10)}/${y}`;
+        }
 
-            totalPages = pag.totalPages || 1;
+        function renderOrders(orders, total) {
+            const tbody = document.getElementById('soBody');
 
             document.getElementById('showCount').textContent = orders.length;
-            document.getElementById('totalCount').textContent = pag.total;
-            document.getElementById('pagFrom').textContent = pag.total ? start + 1 : 0;
-            document.getElementById('pagTo').textContent = Math.min(start + pag.limit, pag.total);
-            document.getElementById('pagTotal').textContent = pag.total;
-            document.getElementById('pagCurrent').textContent = pag.page;
-            document.getElementById('pagLast').textContent = totalPages;
-
-            // Pagination buttons
-            document.getElementById('pagFirst').disabled = pag.page <= 1;
-            document.getElementById('pagPrev').disabled = pag.page <= 1;
-            document.getElementById('pagNext').disabled = pag.page >= totalPages;
-            document.getElementById('pagLastBtn').disabled = pag.page >= totalPages;
+            document.getElementById('totalCount').textContent = total;
 
             if (!orders.length) {
                 tbody.innerHTML = `
@@ -518,31 +573,86 @@ $is_admin = ($_SESSION['role'] === 'admin');
                 return;
             }
 
-            tbody.innerHTML = orders.map((o, idx) => {
-                const st = STATUS_MAP[o.state] ?? { label: o.state, cls: 'so-draft' };
-                const partner = Array.isArray(o.partner_id) ? o.partner_id[1] : '—';
-                const currency = Array.isArray(o.currency_id) ? o.currency_id[1] : (o.currency_id || '');
-                const team = Array.isArray(o.team_id) ? o.team_id[1] : (o.team_id || '—');
-                const salesperson = Array.isArray(o.user_id) ? o.user_id[1] : (o.user_id || '—');
-                const dateStr = o.date_order ? o.date_order.slice(0, 10) : '—';
-                const amount = typeof o.amount_total === 'number'
-                    ? new Intl.NumberFormat('vi-VN').format(o.amount_total)
-                    : '—';
-                const ref = esc(o.client_order_ref || '—');
+            // Group by YYYY-MM, preserving the (date DESC) order
+            const groups = [];
+            const idxMap = {};
+            orders.forEach(o => {
+                const key = (o.date_order || '').slice(0, 7) || '—';
+                if (idxMap[key] === undefined) {
+                    idxMap[key] = groups.length;
+                    groups.push({ key, items: [] });
+                }
+                groups[idxMap[key]].items.push(o);
+            });
 
-                return `<tr>
-                <td class="col-stt">${start + idx + 1}</td>
-                <td><a class="so-link" href="${ODOO_URL}/odoo/sales/${o.id}" target="_blank">${esc(o.name)}</a></td>
-                <td title="${esc(partner)}">${esc(partner)}</td>
-                <td>${dateStr}</td>
-                <td title="${esc(salesperson)}">${esc(salesperson)}</td>
-                <td title="${esc(team)}">${esc(team)}</td>
-                <td style="text-align:right;font-weight:600">${amount}</td>
-                <td>${esc(currency)}</td>
-                <td><span class="so-status ${st.cls}">${st.label}</span></td>
-                <td title="${ref}">${ref}</td>
-            </tr>`;
-            }).join('');
+            let html = '';
+            let counter = 0;
+
+            groups.forEach(g => {
+                const isCollapsed = !!collapsed[g.key];
+
+                // Subtotal per currency (avoid mixing different currencies)
+                const totals = {};
+                g.items.forEach(o => {
+                    const cur = Array.isArray(o.currency_id) ? o.currency_id[1] : (o.currency_id || '');
+                    const amt = typeof o.amount_total === 'number' ? o.amount_total : 0;
+                    totals[cur] = (totals[cur] || 0) + amt;
+                });
+                const totalStr = Object.entries(totals)
+                    .map(([cur, v]) => `${new Intl.NumberFormat('vi-VN').format(v)} ${esc(cur)}`)
+                    .join(' · ') || '—';
+
+                html += `<tr class="group-row${isCollapsed ? ' collapsed' : ''}" data-key="${esc(g.key)}">
+                    <td colspan="11">
+                        <div class="group-header" onclick="toggleGroup('${esc(g.key)}')">
+                            <span class="group-caret">▼</span>
+                            <span class="group-title">${groupLabel(g.key)}</span>
+                            <span class="group-count">${g.items.length} SO</span>
+                            <span class="group-total"><span>Tổng:</span> ${totalStr}</span>
+                        </div>
+                    </td>
+                </tr>`;
+
+                g.items.forEach(o => {
+                    counter++;
+                    const st = STATUS_MAP[o.state] ?? { label: o.state, cls: 'so-draft' };
+                    const partner = Array.isArray(o.partner_id) ? o.partner_id[1] : '—';
+                    const currency = Array.isArray(o.currency_id) ? o.currency_id[1] : (o.currency_id || '');
+                    const team = Array.isArray(o.team_id) ? o.team_id[1] : (o.team_id || '—');
+                    const salesperson = Array.isArray(o.user_id) ? o.user_id[1] : (o.user_id || '—');
+                    const dateStr = o.date_order ? o.date_order.slice(0, 10) : '—';
+                    const amount = typeof o.amount_total === 'number'
+                        ? new Intl.NumberFormat('vi-VN').format(o.amount_total)
+                        : '—';
+                    const ref = esc(o.client_order_ref || '—');
+                    const hidden = isCollapsed ? ' style="display:none"' : '';
+
+                    html += `<tr data-group="${esc(g.key)}"${hidden}>
+                    <td class="col-stt">${counter}</td>
+                    <td><a class="so-link" href="${ODOO_URL}/odoo/sales/${o.id}" target="_blank">${esc(o.name)}</a></td>
+                    <td title="${esc(partner)}">${esc(partner)}</td>
+                    <td>${dateStr}</td>
+                    <td title="${esc(salesperson)}">${esc(salesperson)}</td>
+                    <td title="${esc(team)}">${esc(team)}</td>
+                    <td></td>
+                    <td style="text-align:right;font-weight:600">${amount}</td>
+                    <td>${esc(currency)}</td>
+                    <td><span class="so-status ${st.cls}">${st.label}</span></td>
+                    <td title="${ref}">${ref}</td>
+                </tr>`;
+                });
+            });
+
+            tbody.innerHTML = html;
+        }
+
+        function toggleGroup(key) {
+            collapsed[key] = !collapsed[key];
+            const groupRow = document.querySelector(`tr.group-row[data-key="${key}"]`);
+            if (groupRow) groupRow.classList.toggle('collapsed', collapsed[key]);
+            document.querySelectorAll(`tr[data-group="${key}"]`).forEach(r => {
+                r.style.display = collapsed[key] ? 'none' : '';
+            });
         }
 
         function showError(msg) {

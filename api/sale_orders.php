@@ -11,11 +11,11 @@ header('Content-Type: application/json');
 require_once __DIR__ . '/../config/config.php';
 require_once __DIR__ . '/../libs/OdooAPI.php';
 
-$page = max(1, intval($_GET['page'] ?? 1));
-$limit = min(100, max(1, intval($_GET['limit'] ?? 25)));
 $search = trim($_GET['search'] ?? '');
 $status = trim($_GET['status'] ?? '');
 $my_only = ($_GET['my_only'] ?? '1') === '1';
+$year = intval($_GET['year'] ?? 0);
+$month = intval($_GET['month'] ?? 0);
 
 try {
     $odoo = new OdooAPI();
@@ -40,6 +40,25 @@ try {
         $domain[] = ['state', '=', 'sale'];
     } elseif ($status === 'done') {
         $domain[] = ['state', '=', 'done'];
+    }
+
+    // Filter by year / month on date_order (server-side range)
+    if ($year > 0) {
+        if ($month >= 1 && $month <= 12) {
+            $startY = $year;
+            $startM = $month;
+            $endY = $month === 12 ? $year + 1 : $year;
+            $endM = $month === 12 ? 1 : $month + 1;
+        } else {
+            $startY = $year;
+            $startM = 1;
+            $endY = $year + 1;
+            $endM = 1;
+        }
+        $start = sprintf('%04d-%02d-01 00:00:00', $startY, $startM);
+        $end = sprintf('%04d-%02d-01 00:00:00', $endY, $endM);
+        $domain[] = ['date_order', '>=', $start];
+        $domain[] = ['date_order', '<', $end];
     }
 
     // Filter by current Odoo user (salesperson)
@@ -86,19 +105,10 @@ try {
     // Sort by date DESC in memory
     usort($orders, fn($a, $b) => strcmp($b['date_order'] ?? '', $a['date_order'] ?? ''));
 
-    $total = count($orders);
-    $offset = ($page - 1) * $limit;
-    $paged_orders = array_slice($orders, $offset, $limit);
-
     echo json_encode([
         'success' => true,
-        'data' => $paged_orders,
-        'pagination' => [
-            'page' => $page,
-            'limit' => $limit,
-            'total' => $total,
-            'totalPages' => (int) ceil($total / $limit),
-        ]
+        'data' => $orders,
+        'total' => count($orders),
     ]);
 
 } catch (Exception $e) {
