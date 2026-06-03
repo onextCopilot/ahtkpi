@@ -1910,7 +1910,7 @@ $month_names_vn = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','
             <!-- ─── Sale Orders — First PO Commission ─── -->
             <div style="margin-top:1.5rem;">
                 <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:0.5rem;">
-                    <h3 style="margin:0;font-size:15px;color:#7c3aed;font-weight:700;">Sale Orders — First PO Commission</h3>
+                    <h3 style="margin:0;font-size:15px;color:#7c3aed;font-weight:700;">Sale Orders - First PO Commission</h3>
                     <span style="font-size:11px;color:#64748b;">Q<?= $selected_quarter ?>/<?= $selected_year ?> · Sent / Confirmed / Done · Tỷ lệ 1/1000 khi là First PO</span>
                 </div>
                 <div style="overflow-x:auto;">
@@ -1975,10 +1975,19 @@ $month_names_vn = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','
                             </td>
                         </tr>
                         <?php endforeach; ?>
-                        <?php $total_so_vnd = array_sum(array_column($so_list, '_amount_vnd')); ?>
+                        <?php
+                            $total_so_vnd = array_sum(array_column($so_list, '_amount_vnd'));
+                            $so_usd_rate  = (float) ($vnd_rates['USD'] ?? 0);   // VND per 1 USD
+                            $total_so_usd = $so_usd_rate > 0 ? ($total_so_vnd / $so_usd_rate) : 0;
+                        ?>
                         <tr style="background:#f8fafc;">
                             <td colspan="5" style="padding:7px 10px;border:1px solid #e2e8f0;text-align:right;font-weight:600;color:#475569;">Tổng Amount (VND)</td>
                             <td class="amt" style="padding:7px 10px;border:1px solid #e2e8f0;text-align:right;font-weight:700;color:#1d4ed8;"><?= mc_fmt($total_so_vnd) ?></td>
+                            <td colspan="2" style="padding:7px 10px;border:1px solid #e2e8f0;background:#f8fafc;"></td>
+                        </tr>
+                        <tr style="background:#f8fafc;">
+                            <td colspan="5" style="padding:7px 10px;border:1px solid #e2e8f0;text-align:right;font-weight:600;color:#475569;">Tổng Amount (USD)</td>
+                            <td class="amt" style="padding:7px 10px;border:1px solid #e2e8f0;text-align:right;font-weight:700;color:#0f766e;">$<?= number_format($total_so_usd, 0) ?></td>
                             <td colspan="2" style="padding:7px 10px;border:1px solid #e2e8f0;background:#f8fafc;"></td>
                         </tr>
                         <tr style="background:#f5f3ff;">
