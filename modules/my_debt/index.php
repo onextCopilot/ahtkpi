@@ -259,7 +259,16 @@ if ($freshInv) {
         if (!empty($fi['currency_name'])) {
             $odoo_map[$fid]['currency_id'] = [0, $fi['currency_name']]; // giữ shape [id, name]
         }
-        if (!empty($fi['payment_state']))    $odoo_map[$fid]['payment_state']    = $fi['payment_state'];
+        // Chỉ override payment_state nếu giá trị mới là paid/in_payment,
+        // HOẶC cache chưa ở trạng thái đã thanh toán.
+        // Tránh trường hợp webhook cũ (not_paid) ghi đè file cache mới (paid).
+        if (!empty($fi['payment_state'])) {
+            $paidStates = ['paid', 'in_payment'];
+            $cacheState = $odoo_map[$fid]['payment_state'] ?? '';
+            if (in_array($fi['payment_state'], $paidStates) || !in_array($cacheState, $paidStates)) {
+                $odoo_map[$fid]['payment_state'] = $fi['payment_state'];
+            }
+        }
         if (!empty($fi['invoice_date']))     $odoo_map[$fid]['invoice_date']     = $fi['invoice_date'];
         if (!empty($fi['invoice_date_due'])) $odoo_map[$fid]['invoice_date_due'] = $fi['invoice_date_due'];
     }
