@@ -76,6 +76,7 @@ addColumnIfNotExists($conn, 'users', 'status', "ENUM('active', 'inactive', 'resi
 addColumnIfNotExists($conn, 'users', 'phone', "VARCHAR(20) DEFAULT NULL");
 addColumnIfNotExists($conn, 'users', 'can_view_invoice', "TINYINT(1) DEFAULT 0");
 addColumnIfNotExists($conn, 'users', 'can_view_all_debts', "TINYINT(1) DEFAULT 0");
+addColumnIfNotExists($conn, 'users', 'can_view_odoo_logs', "TINYINT(1) DEFAULT 0");
 addColumnIfNotExists($conn, 'users', 'is_am_bd', "TINYINT(1) DEFAULT 0");
 addColumnIfNotExists($conn, 'users', 'can_view_all_kpi', "TINYINT(1) DEFAULT 0");
 addColumnIfNotExists($conn, 'users', 'viewable_department_ids', "TEXT DEFAULT NULL");
@@ -131,6 +132,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $can_view_invoice = isset($_POST['can_view_invoice']) ? 1 : 0;
             $can_view_all_debts = isset($_POST['can_view_all_debts']) ? 1 : 0;
             $can_view_all_kpi = isset($_POST['can_view_all_kpi']) ? 1 : 0;
+            $can_view_odoo_logs = isset($_POST['can_view_odoo_logs']) ? 1 : 0;
             $viewable_dept_ids = isset($_POST['viewable_dept_ids']) ? implode(',', $_POST['viewable_dept_ids']) : '';
             $is_am_bd = isset($_POST['is_am_bd']) ? 1 : 0;
             $team_ids = isset($_POST['team_ids']) ? $_POST['team_ids'] : [];
@@ -150,9 +152,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
             if (!empty($email) && !empty($name) && !empty($username)) {
                 try {
-                    $stmt = $conn->prepare("INSERT INTO users (username, email, full_name, password, employee_code, job_title, level, department_id, status, join_date, can_view_invoice, can_view_all_debts, can_view_all_kpi, viewable_department_ids, is_am_bd, role, sale_level_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+                    $stmt = $conn->prepare("INSERT INTO users (username, email, full_name, password, employee_code, job_title, level, department_id, status, join_date, can_view_invoice, can_view_all_debts, can_view_all_kpi, can_view_odoo_logs, viewable_department_ids, is_am_bd, role, sale_level_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
                     $stmt->bind_param(
-                        "sssssssissiiisisi",
+                        "sssssssissiiiisisii",
                         $username,
                         $email,
                         $name,
@@ -166,6 +168,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         $can_view_invoice,
                         $can_view_all_debts,
                         $can_view_all_kpi,
+                        $can_view_odoo_logs,
                         $viewable_dept_ids,
                         $is_am_bd,
                         $role_val,
@@ -217,6 +220,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $can_view_invoice = isset($_POST['can_view_invoice']) ? 1 : 0;
             $can_view_all_debts = isset($_POST['can_view_all_debts']) ? 1 : 0;
             $can_view_all_kpi = isset($_POST['can_view_all_kpi']) ? 1 : 0;
+            $can_view_odoo_logs = isset($_POST['can_view_odoo_logs']) ? 1 : 0;
             $viewable_dept_ids = isset($_POST['viewable_dept_ids']) ? implode(',', $_POST['viewable_dept_ids']) : '';
             $is_am_bd = isset($_POST['is_am_bd']) ? 1 : 0;
             $team_ids = isset($_POST['team_ids']) ? $_POST['team_ids'] : [];
@@ -233,9 +237,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
             if ($id > 0 && !empty($email)) {
                 try {
-                    $sql = "UPDATE users SET username=?, email=?, full_name=?, employee_code=?, job_title=?, level=?, department_id=?, status=?, join_date=?, can_view_invoice=?, can_view_all_debts=?, can_view_all_kpi=?, viewable_department_ids=?, is_am_bd=?, role=?, sale_level_id=? WHERE id=?";
+                    $sql = "UPDATE users SET username=?, email=?, full_name=?, employee_code=?, job_title=?, level=?, department_id=?, status=?, join_date=?, can_view_invoice=?, can_view_all_debts=?, can_view_all_kpi=?, can_view_odoo_logs=?, viewable_department_ids=?, is_am_bd=?, role=?, sale_level_id=? WHERE id=?";
                     $stmt = $conn->prepare($sql);
-                    $stmt->bind_param("ssssssissiiisisii", $username, $email, $name, $emp_code, $job, $level, $dept_id, $status, $join_date, $can_view_invoice, $can_view_all_debts, $can_view_all_kpi, $viewable_dept_ids, $is_am_bd, $role_val, $sale_level_id, $id);
+                    $stmt->bind_param("ssssssissiiiisisii", $username, $email, $name, $emp_code, $job, $level, $dept_id, $status, $join_date, $can_view_invoice, $can_view_all_debts, $can_view_all_kpi, $can_view_odoo_logs, $viewable_dept_ids, $is_am_bd, $role_val, $sale_level_id, $id);
                     ;
                     $stmt->execute();
 
@@ -1064,6 +1068,10 @@ if ($sl_tbl && $sl_tbl->num_rows > 0) {
                                 KPIs (Full access)</label>
                             <input type="checkbox" name="can_view_all_kpi" id="can_view_all_kpi">
                         </div>
+                        <div class="toggle-item">
+                            <label for="can_view_odoo_logs" style="font-size: 13px; color: #3c4043;">Can View Odoo Webhook Logs</label>
+                            <input type="checkbox" name="can_view_odoo_logs" id="can_view_odoo_logs">
+                        </div>
 
                         <div id="viewable_depts_row" class="team-select-container" style="border-top:none; margin-top:5px; padding-top:0;">
                             <label style="display:block; margin-bottom: 8px; color: #3c4043; font-size: 13px; font-weight: 500;">Can View Specific Teams</label>
@@ -1278,6 +1286,7 @@ if ($sl_tbl && $sl_tbl->num_rows > 0) {
             canViewInvoice.checked = user.can_view_invoice == 1;
             canViewAllDebts.checked = user.can_view_all_debts == 1;
             document.getElementById('can_view_all_kpi').checked = user.can_view_all_kpi == 1;
+            document.getElementById('can_view_odoo_logs').checked = user.can_view_odoo_logs == 1;
             
             // Set viewable depts
             if(tsViewableDepts) {
