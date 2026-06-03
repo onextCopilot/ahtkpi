@@ -19,6 +19,11 @@ if (!isset($_SESSION['user_id'])) {
     echo json_encode(['success' => false, 'error' => 'Unauthorized']);
     exit();
 }
+if (empty($_SESSION['is_am_bd']) && ($_SESSION['role'] ?? '') !== 'admin') {
+    http_response_code(403);
+    echo json_encode(['success' => false, 'error' => 'Forbidden']);
+    exit();
+}
 
 // ── Ensure settings table ─────────────────────────────────────────────────────
 $conn->query("CREATE TABLE IF NOT EXISTS pakd_settings (

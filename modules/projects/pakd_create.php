@@ -10,6 +10,11 @@ $user_id = $_SESSION['user_id'];
 $role = $_SESSION['role'] ?? 'user';
 $full_name = $_SESSION['full_name'] ?? '';
 
+if (empty($_SESSION['is_am_bd']) && $role !== 'admin') {
+    header('Location: /dashboard');
+    exit();
+}
+
 // Fetch users for AM dropdown
 $users_list = [];
 $res = $conn->query("SELECT id, full_name FROM users ORDER BY full_name ASC");

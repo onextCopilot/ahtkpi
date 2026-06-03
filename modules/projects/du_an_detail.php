@@ -10,6 +10,11 @@ $user_id      = $_SESSION['user_id'];
 $role         = $_SESSION['role'] ?? 'user';
 $my_full_name = $_SESSION['full_name'] ?? '';
 $is_admin     = ($role === 'admin');
+
+if (empty($_SESSION['is_am_bd']) && !$is_admin) {
+    header('Location: /dashboard');
+    exit();
+}
 $pakd_id      = isset($_GET['id']) ? (int)$_GET['id'] : 0;
 
 if (!$pakd_id) {

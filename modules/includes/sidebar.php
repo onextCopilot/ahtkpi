@@ -242,7 +242,8 @@ function isMenuItemActive($path, $current_uri)
             <span>OKR Management</span>
         </a>
 
-        <!-- 8. Projects Dropdown -->
+        <!-- 8. Projects Dropdown (AM/BD + Admin only) -->
+        <?php if (!empty($_SESSION['is_am_bd']) || ($_SESSION['role'] ?? '') === 'admin'): ?>
         <div class="nav-item nav-item-parent <?php
         $is_projects_open = strpos($current_uri, '/projects/phuong-an-kinh-doanh') !== false ||
             strpos($current_uri, '/projects/du-an') !== false ||
@@ -281,6 +282,7 @@ function isMenuItemActive($path, $current_uri)
             </a>
             <?php endif; ?>
         </div>
+        <?php endif; ?>
 
         <!-- 8. HRM -->
         <a href="/hrm" class="nav-item <?php echo isMenuItemActive('/hrm', $current_uri); ?>">

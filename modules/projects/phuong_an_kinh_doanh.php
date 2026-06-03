@@ -9,6 +9,11 @@ if (!isset($_SESSION['user_id'])) {
 $user_id = $_SESSION['user_id'];
 $role    = $_SESSION['role'] ?? 'user';
 
+if (empty($_SESSION['is_am_bd']) && $role !== 'admin') {
+    header('Location: /dashboard');
+    exit();
+}
+
 // ── Auto-create table if missing ──────────────────────────────────────────────
 $conn->query("CREATE TABLE IF NOT EXISTS pakd (
     id              INT AUTO_INCREMENT PRIMARY KEY,
