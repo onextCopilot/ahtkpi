@@ -397,15 +397,32 @@ class OdooAPI
                 $recentInvoices = [];
             }
 
-            // Merge into existing cache
+            // Reconcile thay vì merge thuần: invoice nằm TRONG cửa sổ fetch (write_date >= dateLimit)
+            // nhưng KHÔNG còn trong kết quả fetch mới = đã bị XÓA trên Odoo → loại khỏi cache.
+            // (Trước đây chỉ merge add/update nên invoice đã xóa tồn tại trong cache mãi mãi.)
+            $freshIds = [];
             foreach ($recentInvoices as $inv) {
-                if (isset($inv['id'])) {
-                    $existingInvoices[$inv['id']] = $inv; // Adds new, updates existing
+                if (isset($inv['id'])) $freshIds[$inv['id']] = true;
+            }
+            // Chỉ áp dụng loại-bỏ khi fetch mới trả về hợp lệ (>0) để tránh xóa sạch khi API lỗi/rỗng.
+            $applyDeletion = count($recentInvoices) > 0;
+
+            $merged = [];
+            foreach ($existingInvoices as $eid => $einv) {
+                $wd = $einv['write_date'] ?? '';
+                $inWindow = ($wd !== '' && $wd >= $dateLimit);
+                if ($applyDeletion && $inWindow && !isset($freshIds[$eid])) {
+                    continue; // invoice đã bị xóa trên Odoo → bỏ khỏi cache
                 }
+                $merged[$eid] = $einv; // giữ invoice cũ ngoài cửa sổ, hoặc còn tồn tại
+            }
+            // Thêm mới / cập nhật từ fetch mới
+            foreach ($recentInvoices as $inv) {
+                if (isset($inv['id'])) $merged[$inv['id']] = $inv;
             }
 
             // Convert back to sequential array
-            $allInvoices = array_values($existingInvoices);
+            $allInvoices = array_values($merged);
 
             // Save to cache
             if (!is_dir(dirname($this->invoiceCacheFile))) {
