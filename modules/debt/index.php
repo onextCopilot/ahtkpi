@@ -146,6 +146,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     // DELETE
     if (isset($_POST['action']) && $_POST['action'] === 'delete') {
+        if ($role !== 'admin') {
+            http_response_code(403);
+            die('Forbidden: Only admins can delete debt records.');
+        }
         $id = intval($_POST['id']);
         $conn->query("DELETE FROM debts WHERE id=$id");
         header("Location: /debt");
@@ -2784,8 +2788,8 @@ if ($res_am && $res_am->num_rows > 0) {
                                                     <?php echo htmlspecialchars($d['production_status'] ?? ''); ?>
                                                 </td>
                                                 <td style="text-align: center;">
-                                                    <?php if ($d['am'] === $full_name || $role === 'admin'): ?>
-                                                        <button onclick="event.stopPropagation(); deleteRow(<?php echo $d['id']; ?>);" class="btn-delete-row" title="Delete record" style="display: none;">
+                                                    <?php if ($role === 'admin'): ?>
+                                                        <button onclick="event.stopPropagation(); deleteRow(<?php echo $d['id']; ?>);" class="btn-delete-row" title="Xóa bản ghi">
                                                             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>
                                                         </button>
                                                     <?php endif; ?>
@@ -2998,9 +3002,8 @@ if ($res_am && $res_am->num_rows > 0) {
                 document.getElementById('modalTitle').innerText = "Edit Record";
                 document.getElementById('formAction').value = "edit";
                 document.getElementById('editId').value = data.id;
-                const isOwner = (data.am === "<?php echo addslashes($full_name); ?>");
                 const isAdmin = ("<?php echo $role; ?>" === "admin");
-                document.getElementById('btnDelete').style.display = (isOwner || isAdmin) ? "block" : "none";
+                document.getElementById('btnDelete').style.display = isAdmin ? "block" : "none";
 
                 document.getElementById('company').value = data.company || 'AHT TECH';
                 document.getElementById('am').value = data.am;
