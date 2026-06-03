@@ -144,11 +144,125 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                 </button>
             </form>
 
+            <div id="passkeySection" style="display:none; margin-top: 1rem;">
+                <div style="display:flex; align-items:center; gap:0.75rem; margin-bottom:1rem;">
+                    <div style="flex:1; height:1px; background:rgba(255,255,255,0.15);"></div>
+                    <span style="color:rgba(255,255,255,0.5); font-size:0.8rem; white-space:nowrap;">or</span>
+                    <div style="flex:1; height:1px; background:rgba(255,255,255,0.15);"></div>
+                </div>
+                <button type="button" id="btnPasskey" class="btn-login" style="background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.2);">
+                    <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" width="20" height="20">
+                        <path d="M12 1C8.676 1 6 3.676 6 7v1H4a1 1 0 0 0-1 1v13a1 1 0 0 0 1 1h16a1 1 0 0 0 1-1V9a1 1 0 0 0-1-1h-2V7c0-3.324-2.676-6-6-6zm0 2c2.276 0 4 1.724 4 4v1H8V7c0-2.276 1.724-4 4-4zm0 9a2 2 0 0 1 1 3.723V17h-2v-1.277A2 2 0 0 1 12 12z" fill="currentColor"/>
+                    </svg>
+                    <span id="btnPasskeyLabel">Sign in with Passkey / Biometric</span>
+                </button>
+            </div>
+
+            <div id="passkeyError" style="display:none; margin-top:0.75rem; padding:0.75rem 1rem; background:rgba(239,68,68,0.15); border:1px solid rgba(239,68,68,0.3); border-radius:10px; color:#fca5a5; font-size:0.875rem;"></div>
+
 
         </div>
     </div>
 
     <script src="../../assets/js/script.js"></script>
+    <script>
+    (function () {
+        const usernameInput  = document.getElementById('username');
+        const passkeySection = document.getElementById('passkeySection');
+        const btnPasskey     = document.getElementById('btnPasskey');
+        const passkeyError   = document.getElementById('passkeyError');
+
+        if (window.PublicKeyCredential) {
+            passkeySection.style.display = 'block';
+        }
+
+        function b64urlToBuffer(b64url) {
+            const b64 = b64url.replace(/-/g, '+').replace(/_/g, '/');
+            const pad = (4 - b64.length % 4) % 4;
+            const binary = atob(b64 + '='.repeat(pad));
+            const buf = new Uint8Array(binary.length);
+            for (let i = 0; i < binary.length; i++) buf[i] = binary.charCodeAt(i);
+            return buf.buffer;
+        }
+
+        function bufferToB64url(buf) {
+            const bytes = new Uint8Array(buf);
+            let bin = '';
+            bytes.forEach(b => bin += String.fromCharCode(b));
+            return btoa(bin).replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
+        }
+
+        function showError(msg) {
+            passkeyError.textContent = msg;
+            passkeyError.style.display = 'block';
+        }
+
+        btnPasskey.addEventListener('click', async () => {
+            passkeyError.style.display = 'none';
+            const username = usernameInput.value.trim();
+            if (!username) {
+                showError('Please enter your username first.');
+                usernameInput.focus();
+                return;
+            }
+
+            btnPasskey.disabled = true;
+            document.getElementById('btnPasskeyLabel').textContent = 'Waiting for biometric...';
+
+            try {
+                const optRes = await fetch('/auth/webauthn/login-options', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ username }),
+                });
+                const optData = await optRes.json();
+                if (!optRes.ok) { showError(optData.error || 'Failed to start passkey login.'); return; }
+
+                const opts = optData.options;
+                opts.challenge = b64urlToBuffer(opts.challenge);
+                opts.allowCredentials = (opts.allowCredentials || []).map(c => ({
+                    ...c, id: b64urlToBuffer(c.id)
+                }));
+
+                const assertion = await navigator.credentials.get({ publicKey: opts });
+
+                const payload = {
+                    id:   assertion.id,
+                    type: assertion.type,
+                    response: {
+                        clientDataJSON:    bufferToB64url(assertion.response.clientDataJSON),
+                        authenticatorData: bufferToB64url(assertion.response.authenticatorData),
+                        signature:         bufferToB64url(assertion.response.signature),
+                        userHandle: assertion.response.userHandle
+                            ? bufferToB64url(assertion.response.userHandle) : null,
+                    },
+                };
+
+                const loginRes  = await fetch('/auth/webauthn/login', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload),
+                });
+                const loginData = await loginRes.json();
+
+                if (loginData.success) {
+                    window.location.href = loginData.redirect || '/dashboard';
+                } else {
+                    showError(loginData.error || 'Authentication failed.');
+                }
+            } catch (err) {
+                if (err.name === 'NotAllowedError') {
+                    showError('Biometric authentication was cancelled or timed out.');
+                } else {
+                    showError('Error: ' + err.message);
+                }
+            } finally {
+                btnPasskey.disabled = false;
+                document.getElementById('btnPasskeyLabel').textContent = 'Sign in with Passkey / Biometric';
+            }
+        });
+    })();
+    </script>
 </body>
 
 </html>
