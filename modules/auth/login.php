@@ -176,7 +176,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                                   stroke="white" stroke-width="1.7" stroke-linecap="round"/>
                         </svg>
                     </span>
-                    <span id="btnPasskeyLabel" style="font-weight:600; font-size:0.93rem;">Sign in with Passkey</span>
+                    <span id="btnPasskeyLabel" style="font-weight:600; font-size:0.93rem;">Sign in with Face ID / Fingerprint</span>
                 </button>
             </div>
 
