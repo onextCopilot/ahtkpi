@@ -625,6 +625,30 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['change_password'])) {
                             </form>
                         </div>
 
+                        <!-- Passkeys / Biometric Login -->
+                        <div class="form-section" id="passkeySection">
+                            <div class="section-header">
+                                <h2>
+                                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                        stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+                                        style="color:var(--primary-color);">
+                                        <path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/>
+                                    </svg>
+                                    Passkeys &amp; Biometric Login
+                                </h2>
+                                <p>Register your fingerprint, Face ID, or Windows Hello to sign in without a password.</p>
+                            </div>
+
+                            <div id="passkeyList" style="display:flex; flex-direction:column; gap:0.75rem; margin-bottom:1rem;">
+                                <p style="color:var(--text-secondary); font-size:0.9rem;">Loading...</p>
+                            </div>
+
+                            <button type="button" id="btnRegisterPasskey" class="btn-primary" style="max-width:220px;">
+                                + Register New Passkey
+                            </button>
+                            <div id="passkeyMsg" style="display:none; margin-top:0.75rem; padding:0.75rem 1rem; border-radius:10px; font-size:0.875rem;"></div>
+                        </div>
+
                         <!-- Change Password -->
                         <div class="form-section">
                             <div class="section-header">
@@ -720,6 +744,150 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['change_password'])) {
 
     <script src="/assets/js/dashboard.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.5.13/cropper.min.js"></script>
+    <script>
+    // ── Passkey management ────────────────────────────────────────────────
+    (function () {
+        const listEl   = document.getElementById('passkeyList');
+        const btnReg   = document.getElementById('btnRegisterPasskey');
+        const msgEl    = document.getElementById('passkeyMsg');
+
+        if (!window.PublicKeyCredential) {
+            listEl.innerHTML = '<p style="color:var(--text-secondary);">Your browser does not support passkeys.</p>';
+            btnReg.style.display = 'none';
+            return;
+        }
+
+        function b64urlToBuffer(b64url) {
+            const b64 = b64url.replace(/-/g, '+').replace(/_/g, '/');
+            const pad = (4 - b64.length % 4) % 4;
+            const binary = atob(b64 + '='.repeat(pad));
+            const buf = new Uint8Array(binary.length);
+            for (let i = 0; i < binary.length; i++) buf[i] = binary.charCodeAt(i);
+            return buf.buffer;
+        }
+
+        function bufferToB64url(buf) {
+            const bytes = new Uint8Array(buf);
+            let bin = '';
+            bytes.forEach(b => bin += String.fromCharCode(b));
+            return btoa(bin).replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
+        }
+
+        function showMsg(text, ok) {
+            msgEl.textContent = text;
+            msgEl.style.display = 'block';
+            msgEl.style.background = ok ? 'rgba(16,185,129,0.1)' : 'rgba(239,68,68,0.1)';
+            msgEl.style.border     = ok ? '1px solid rgba(16,185,129,0.3)' : '1px solid rgba(239,68,68,0.3)';
+            msgEl.style.color      = ok ? '#10b981' : '#ef4444';
+            setTimeout(() => { msgEl.style.display = 'none'; }, 4000);
+        }
+
+        function formatDate(str) {
+            if (!str) return 'Never';
+            const d = new Date(str);
+            return d.toLocaleDateString('vi-VN') + ' ' + d.toLocaleTimeString('vi-VN', {hour:'2-digit', minute:'2-digit'});
+        }
+
+        async function loadPasskeys() {
+            const res  = await fetch('/auth/webauthn/list');
+            const data = await res.json();
+            const pks  = data.passkeys || [];
+
+            if (!pks.length) {
+                listEl.innerHTML = '<p style="color:var(--text-secondary); font-size:0.9rem;">No passkeys registered yet.</p>';
+                return;
+            }
+
+            listEl.innerHTML = pks.map(pk => `
+                <div style="display:flex; align-items:center; justify-content:space-between; padding:0.75rem 1rem;
+                     border:1px solid var(--border-color); border-radius:10px; background:var(--bg-secondary);">
+                    <div>
+                        <div style="font-weight:600; font-size:0.9rem;">${escHtml(pk.device_name)}</div>
+                        <div style="font-size:0.8rem; color:var(--text-secondary);">
+                            Registered: ${formatDate(pk.created_at)} &nbsp;·&nbsp;
+                            Last used: ${formatDate(pk.last_used_at)}
+                        </div>
+                    </div>
+                    <button onclick="deletePasskey(${pk.id})"
+                        style="background:none; border:1px solid rgba(239,68,68,0.4); color:#ef4444;
+                               padding:0.4rem 0.9rem; border-radius:8px; cursor:pointer; font-size:0.8rem;
+                               transition:all 0.2s;"
+                        onmouseover="this.style.background='rgba(239,68,68,0.1)'"
+                        onmouseout="this.style.background='none'">
+                        Remove
+                    </button>
+                </div>`).join('');
+        }
+
+        function escHtml(s) {
+            return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+        }
+
+        window.deletePasskey = async function (id) {
+            if (!confirm('Remove this passkey?')) return;
+            const res  = await fetch('/auth/webauthn/delete', {
+                method: 'POST', headers: {'Content-Type':'application/json'},
+                body: JSON.stringify({id}),
+            });
+            const data = await res.json();
+            if (data.success) { showMsg('Passkey removed.', true); loadPasskeys(); }
+            else showMsg(data.error || 'Failed to remove passkey.', false);
+        };
+
+        btnReg.addEventListener('click', async () => {
+            msgEl.style.display = 'none';
+            btnReg.disabled = true;
+            btnReg.textContent = 'Waiting for biometric...';
+
+            try {
+                const optRes  = await fetch('/auth/webauthn/register-options', {
+                    method: 'POST', headers: {'Content-Type':'application/json'},
+                });
+                const optData = await optRes.json();
+                if (!optRes.ok) { showMsg(optData.error || 'Error', false); return; }
+
+                const opts = optData.options;
+                opts.challenge      = b64urlToBuffer(opts.challenge);
+                opts.user.id        = b64urlToBuffer(opts.user.id);
+                opts.excludeCredentials = (opts.excludeCredentials || []).map(c => ({
+                    ...c, id: b64urlToBuffer(c.id)
+                }));
+
+                const cred = await navigator.credentials.create({ publicKey: opts });
+
+                const payload = {
+                    id:   cred.id,
+                    type: cred.type,
+                    response: {
+                        clientDataJSON:    bufferToB64url(cred.response.clientDataJSON),
+                        attestationObject: bufferToB64url(cred.response.attestationObject),
+                    },
+                };
+
+                const regRes  = await fetch('/auth/webauthn/register', {
+                    method: 'POST', headers: {'Content-Type':'application/json'},
+                    body: JSON.stringify(payload),
+                });
+                const regData = await regRes.json();
+
+                if (regData.success) {
+                    showMsg('Passkey registered: ' + regData.deviceName, true);
+                    loadPasskeys();
+                } else {
+                    showMsg(regData.error || 'Registration failed.', false);
+                }
+            } catch (err) {
+                if (err.name === 'NotAllowedError') showMsg('Registration cancelled or timed out.', false);
+                else showMsg('Error: ' + err.message, false);
+            } finally {
+                btnReg.disabled = false;
+                btnReg.textContent = '+ Register New Passkey';
+            }
+        });
+
+        loadPasskeys();
+    })();
+    </script>
 
     <script>
         // ... (Keep existing JS logic for Cropper) ...
