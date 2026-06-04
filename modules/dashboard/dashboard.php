@@ -17,7 +17,7 @@ $avatar = $_SESSION['avatar'] ?? null;
 // Role-based dashboard: render the persona-specific view.
 // The 'ceo' persona falls through to the shared company-wide dashboard below.
 require_once __DIR__ . '/lib/persona.php';
-$persona = resolveDashboardPersona();
+$persona = resolveDashboardPersona($conn);
 
 // Admin / owner can preview any persona via ?view= (e.g. an AM/BD admin who
 // wants the company-wide CEO overview). Non-admins always get their own view.

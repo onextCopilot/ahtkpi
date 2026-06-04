@@ -133,6 +133,8 @@ function dm_pct_color(?float $pct): string
             ?>
             <div class="content-wrapper">
 
+                <?php $dash_view = 'member'; include __DIR__ . '/_view_switch.php'; ?>
+
                 <div class="dm-panel" style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:12px;">
                     <div>
                         <h3 style="margin:0;">KPI cá nhân của bạn</h3>

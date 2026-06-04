@@ -149,6 +149,8 @@ uasort($members, fn($a, $b) => $b['debt_vnd'] <=> $a['debt_vnd']);
             ?>
             <div class="content-wrapper">
 
+                <?php $dash_view = 'manager'; include __DIR__ . '/_view_switch.php'; ?>
+
                 <div class="mg-panel" style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:12px;">
                     <div>
                         <h3 style="margin:0;">Tổng quan phòng ban</h3>

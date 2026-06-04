@@ -355,6 +355,8 @@ $badge_color = $kpi['color_badge'] ?? '#2563eb';
             ?>
             <div class="content-wrapper">
 
+                <?php $dash_view = 'am_bd'; include __DIR__ . '/_view_switch.php'; ?>
+
                 <!-- Header + quarter selector -->
                 <div class="ambd-panel ambd-toolbar">
                     <div>
