@@ -39,11 +39,30 @@ function ambd_build_vnd_rates($odoo): array
     return $rates;
 }
 
-// Convert an Odoo invoice / SO amount_total (in its own currency) to VND.
+// Convert an Odoo invoice / SO amount_total (in its own currency) to VND
+// using the live getCurrencies() rate map. Used for Sale Orders and debts.
 function ambd_to_vnd($amount_total, $currency_id, array $rates): float
 {
     $cur = is_array($currency_id) ? ($currency_id[1] ?? 'VND') : ($currency_id ?: 'VND');
     return (float) $amount_total * ($rates[$cur] ?? 1.0);
+}
+
+// Convert an INVOICE to VND the same way the Sale Reports page does, so the
+// dashboard's quarter revenue matches that report exactly: respect the rate
+// the accountant booked on the invoice (amount_total_signed is the company-base
+// total — already VND for VND-base companies). Fall back to the getCurrencies
+// map only for non-VND-base companies (rare). Never uses getRate().
+function ambd_invoice_vnd(array $inv, array $rates): float
+{
+    $cur    = is_array($inv['currency_id'] ?? null) ? ($inv['currency_id'][1] ?? 'VND') : 'VND';
+    $total  = (float) ($inv['amount_total'] ?? 0);
+    $signed = abs((float) ($inv['amount_total_signed'] ?? 0));
+    if ($cur === 'VND') return $total;
+    if ($total > 0 && $signed > 0) {
+        $ratio = $signed / $total;
+        if ($ratio > 100) return $signed;   // VND-base company: signed is already VND
+    }
+    return $total * ($rates[$cur] ?? 1.0);   // intermediate-base fallback
 }
 
 // Sum signed Sale Order revenue (VND) for a quarter — basis of the salary KPI.
@@ -153,7 +172,7 @@ foreach ($invoices as $inv) {
     $inv_date = $inv['invoice_date'] ?: ($inv['date'] ?? '');
     if (!$inv_date) continue;
 
-    $vnd = ambd_to_vnd($inv['amount_total'] ?? 0, $inv['currency_id'] ?? null, $vnd_rates);
+    $vnd = ambd_invoice_vnd($inv, $vnd_rates);
 
     if ($inv_date >= $q_start_date && $inv_date <= $q_end_date) {
         $rev_q += $vnd;
