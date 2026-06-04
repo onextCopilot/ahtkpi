@@ -208,15 +208,17 @@ function sortTh2($label, $col, $currentSort, $currentDir, $extraGetParams = []) 
         .btn-outline { background: white; color: var(--gray); border: 1px solid var(--border); }
         .btn-outline:hover { border-color: var(--primary); color: var(--primary); background: rgba(99,102,241,.04); }
 
-        .stats-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 14px; margin-bottom: 22px; }
-        .stat-card { background: var(--card); border-radius: var(--r-lg); padding: 16px 18px; border: 1px solid var(--border); box-shadow: var(--sh-sm); display: flex; align-items: center; gap: 13px; position: relative; overflow: hidden; transition: transform .18s ease, box-shadow .18s ease, border-color .18s ease; }
+        .stats-row { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 10px; margin-bottom: 18px; }
+        @media (max-width: 1100px) { .stats-row { grid-template-columns: repeat(3, 1fr); } }
+        @media (max-width: 640px)  { .stats-row { grid-template-columns: repeat(2, 1fr); } }
+        .stat-card { background: var(--card); border-radius: var(--r-md); padding: 10px 12px; border: 1px solid var(--border); box-shadow: var(--sh-sm); display: flex; align-items: center; gap: 10px; position: relative; overflow: hidden; transition: transform .18s ease, box-shadow .18s ease, border-color .18s ease; }
         .stat-card:hover { transform: translateY(-2px); box-shadow: var(--sh-hover); border-color: #d7dde6; }
         .stat-card[onclick] { cursor: pointer; }
-        .stat-icon { width: 42px; height: 42px; border-radius: var(--r-md); display: flex; align-items: center; justify-content: center; font-size: 17px; flex-shrink: 0; }
+        .stat-icon { width: 34px; height: 34px; border-radius: 9px; display: flex; align-items: center; justify-content: center; font-size: 14px; flex-shrink: 0; }
         .stat-icon.green { background: rgba(22,163,74,.1);  color: var(--success); }
         .stat-icon.blue  { background: rgba(37,99,235,.1);  color: #2563eb; }
-        .stat-val { font-size: 23px; font-weight: 800; color: var(--slate); line-height: 1.05; letter-spacing: -.01em; }
-        .stat-lbl { font-size: 11.5px; color: var(--gray); margin-top: 4px; font-weight: 500; }
+        .stat-val { font-size: 18px; font-weight: 800; color: var(--slate); line-height: 1.05; letter-spacing: -.01em; white-space: nowrap; }
+        .stat-lbl { font-size: 11px; color: var(--gray); margin-top: 2px; font-weight: 500; white-space: nowrap; }
 
         .toolbar { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; flex-wrap: wrap; gap: 10px; }
         .search-wrap { position: relative; }
