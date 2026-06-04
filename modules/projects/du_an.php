@@ -208,17 +208,18 @@ function sortTh2($label, $col, $currentSort, $currentDir, $extraGetParams = []) 
         .btn-outline { background: white; color: var(--gray); border: 1px solid var(--border); }
         .btn-outline:hover { border-color: var(--primary); color: var(--primary); background: rgba(99,102,241,.04); }
 
-        .stats-row { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 10px; margin-bottom: 18px; }
-        @media (max-width: 1100px) { .stats-row { grid-template-columns: repeat(3, 1fr); } }
-        @media (max-width: 640px)  { .stats-row { grid-template-columns: repeat(2, 1fr); } }
-        .stat-card { background: var(--card); border-radius: var(--r-md); padding: 10px 12px; border: 1px solid var(--border); box-shadow: var(--sh-sm); display: flex; align-items: center; gap: 10px; position: relative; overflow: hidden; transition: transform .18s ease, box-shadow .18s ease, border-color .18s ease; }
-        .stat-card:hover { transform: translateY(-2px); box-shadow: var(--sh-hover); border-color: #d7dde6; }
-        .stat-card[onclick] { cursor: pointer; }
-        .stat-icon { width: 34px; height: 34px; border-radius: 9px; display: flex; align-items: center; justify-content: center; font-size: 14px; flex-shrink: 0; }
-        .stat-icon.green { background: rgba(22,163,74,.1);  color: var(--success); }
-        .stat-icon.blue  { background: rgba(37,99,235,.1);  color: #2563eb; }
-        .stat-val { font-size: 18px; font-weight: 800; color: var(--slate); line-height: 1.05; letter-spacing: -.01em; white-space: nowrap; }
-        .stat-lbl { font-size: 11px; color: var(--gray); margin-top: 2px; font-weight: 500; white-space: nowrap; }
+        .stats-strip { display: flex; flex-wrap: wrap; align-items: center; margin-bottom: 18px; padding: 2px 0; border-bottom: 1px solid var(--border); }
+        .stat-item { display: flex; align-items: center; gap: 9px; padding: 8px 22px; border-left: 1px solid var(--border); }
+        .stat-item:first-child { padding-left: 2px; border-left: none; }
+        .stat-item[onclick] { cursor: pointer; border-radius: 8px; transition: background .15s; }
+        .stat-item[onclick]:hover { background: #f4f6f9; }
+        .stat-dot { width: 32px; height: 32px; border-radius: 9px; display: flex; align-items: center; justify-content: center; font-size: 14px; flex-shrink: 0; }
+        .stat-dot.green { background: rgba(22,163,74,.1); color: var(--success); }
+        .stat-dot.blue  { background: rgba(37,99,235,.1); color: #2563eb; }
+        .stat-item .meta { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+        .stat-item .sv { font-size: 18px; font-weight: 800; color: var(--slate); line-height: 1.1; letter-spacing: -.01em; white-space: nowrap; }
+        .stat-item .sl { font-size: 11px; color: var(--gray); font-weight: 500; white-space: nowrap; }
+        @media (max-width: 760px) { .stat-item { padding: 8px 14px; } }
 
         .toolbar { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; flex-wrap: wrap; gap: 10px; }
         .search-wrap { position: relative; }
@@ -310,36 +311,30 @@ function sortTh2($label, $col, $currentSort, $currentDir, $extraGetParams = []) 
             </div>
         </div>
 
-        <div class="stats-row">
-            <div class="stat-card">
-                <div class="stat-icon green"><i class="fas fa-trophy"></i></div>
-                <div>
-                    <div class="stat-val"><?= $totalWon ?></div>
-                    <div class="stat-lbl">Tổng dự án won</div>
-                </div>
+        <div class="stats-strip">
+            <div class="stat-item">
+                <div class="stat-dot green"><i class="fas fa-trophy"></i></div>
+                <div class="meta"><span class="sv"><?= $totalWon ?></span><span class="sl">Tổng dự án won</span></div>
             </div>
-            <div class="stat-card">
-                <div class="stat-icon blue"><i class="fas fa-coins"></i></div>
-                <div>
-                    <div class="stat-val"><?= formatVND2($totalValue) ?> VND</div>
-                    <div class="stat-lbl">Tổng giá trị</div>
-                </div>
+            <div class="stat-item">
+                <div class="stat-dot blue"><i class="fas fa-coins"></i></div>
+                <div class="meta"><span class="sv"><?= formatVND2($totalValue) ?> VND</span><span class="sl">Tổng giá trị</span></div>
             </div>
-            <div class="stat-card" style="cursor:pointer;" onclick="filterByStatus('draft')">
-                <div class="stat-icon" style="background:#f1f5f9;color:#64748b;"><i class="fas fa-file"></i></div>
-                <div><div class="stat-val" style="color:#64748b;"><?= $statusCounts['draft'] ?></div><div class="stat-lbl">Nháp</div></div>
+            <div class="stat-item" onclick="filterByStatus('draft')">
+                <div class="stat-dot" style="background:#f1f5f9;color:#64748b;"><i class="fas fa-file"></i></div>
+                <div class="meta"><span class="sv" style="color:#64748b;"><?= $statusCounts['draft'] ?></span><span class="sl">Nháp</span></div>
             </div>
-            <div class="stat-card" style="cursor:pointer;" onclick="filterByStatus('pending')">
-                <div class="stat-icon" style="background:#fef9c3;color:#d97706;"><i class="fas fa-clock"></i></div>
-                <div><div class="stat-val" style="color:#d97706;"><?= $statusCounts['pending'] ?></div><div class="stat-lbl">Chờ duyệt</div></div>
+            <div class="stat-item" onclick="filterByStatus('pending')">
+                <div class="stat-dot" style="background:#fef9c3;color:#d97706;"><i class="fas fa-clock"></i></div>
+                <div class="meta"><span class="sv" style="color:#d97706;"><?= $statusCounts['pending'] ?></span><span class="sl">Chờ duyệt</span></div>
             </div>
-            <div class="stat-card" style="cursor:pointer;" onclick="filterByStatus('approved')">
-                <div class="stat-icon" style="background:#dcfce7;color:#16a34a;"><i class="fas fa-check-circle"></i></div>
-                <div><div class="stat-val" style="color:#16a34a;"><?= $statusCounts['approved'] ?></div><div class="stat-lbl">Đã duyệt</div></div>
+            <div class="stat-item" onclick="filterByStatus('approved')">
+                <div class="stat-dot" style="background:#dcfce7;color:#16a34a;"><i class="fas fa-check-circle"></i></div>
+                <div class="meta"><span class="sv" style="color:#16a34a;"><?= $statusCounts['approved'] ?></span><span class="sl">Đã duyệt</span></div>
             </div>
-            <div class="stat-card" style="cursor:pointer;" onclick="filterByStatus('rejected')">
-                <div class="stat-icon" style="background:#fee2e2;color:#dc2626;"><i class="fas fa-times-circle"></i></div>
-                <div><div class="stat-val" style="color:#dc2626;"><?= $statusCounts['rejected'] ?></div><div class="stat-lbl">Từ chối</div></div>
+            <div class="stat-item" onclick="filterByStatus('rejected')">
+                <div class="stat-dot" style="background:#fee2e2;color:#dc2626;"><i class="fas fa-times-circle"></i></div>
+                <div class="meta"><span class="sv" style="color:#dc2626;"><?= $statusCounts['rejected'] ?></span><span class="sl">Từ chối</span></div>
             </div>
         </div>
 
