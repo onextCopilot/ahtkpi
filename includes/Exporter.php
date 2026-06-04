@@ -98,6 +98,35 @@ class Exporter
         return $h;
     }
 
+    /** Concatenate several titled tables into one HTML string (for multi-table files). */
+    public static function blocksHtml(array $blocks): string
+    {
+        $h = '';
+        foreach ($blocks as $b) {
+            if (!empty($b['title'])) {
+                $h .= '<h3 style="font-family:Calibri,Arial,sans-serif;color:#1e3a5f;margin:16px 0 6px;">' . htmlspecialchars($b['title']) . '</h3>';
+            }
+            $h .= self::tableHtml($b['headers'] ?? [], $b['rows'] ?? '') . '<br/>';
+        }
+        return $h;
+    }
+
+    /** Stream an .xls download containing multiple titled tables stacked vertically. */
+    public static function streamXlsMulti(string $filename, string $docTitle, array $blocks): void
+    {
+        if (!preg_match('/\.xls$/i', $filename)) $filename .= '.xls';
+        header('Content-Type: application/vnd.ms-excel; charset=UTF-8');
+        header('Content-Disposition: attachment; filename="' . $filename . '"');
+        header('Pragma: no-cache');
+        header('Expires: 0');
+        echo "\xEF\xBB\xBF";
+        echo '<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel"><head><meta charset="UTF-8"><style>td,th{border:1px solid #cfd8e3;padding:5px 9px;font-family:Calibri,Arial,sans-serif;font-size:11pt;vertical-align:middle;}</style></head><body>';
+        if ($docTitle !== '') echo '<h2 style="font-family:Calibri,Arial,sans-serif;">' . htmlspecialchars($docTitle) . '</h2>';
+        echo self::blocksHtml($blocks);
+        echo '</body></html>';
+        exit;
+    }
+
     /** Stream a UTF-8 CSV download. */
     public static function streamCsv(string $filename, array $headers, array $rows): void
     {

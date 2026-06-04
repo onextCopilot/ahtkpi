@@ -1094,66 +1094,99 @@ $month_names_vn = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','
 $mc_export = $_GET['export'] ?? '';
 if ($mc_export === 'excel' || $mc_export === 'pdf') {
     require_once __DIR__ . '/../../includes/Exporter.php';
+    $blocks = [];
+    $cust_of = fn($inv) => is_array($inv['partner_id'] ?? null) ? ($inv['partner_id'][1] ?? '') : '';
 
-    $headers = ['STT', 'Hóa đơn', 'Khách hàng', 'Ngày HĐ', 'Ngày TT', 'Doanh thu (VND)', 'Com1 %', 'Com1 (VND)', 'Com2 (VND)', 'AI Com (VND)'];
-    $rows = [];
+    // ── Block 1: summary (final figures) ─────────────────────────────────────
+    $sumRows = [
+        ['KPI quý', round($kpi_pct) . '%'],
+        ['Lương KPI', ($kpi_salary_label ?? '') . ' (' . round($salary_kpi_pct ?? 0) . '%)'],
+        ['Com1 (sau KPI)', ['v' => (float) ($grand_com1 ?? 0), 'num' => true]],
+        ['Com2 (sau KPI)', ['v' => (float) ($grand_com2 ?? 0), 'num' => true]],
+        ['AI Add-on', ['v' => (float) ($grand_ai_com ?? 0), 'num' => true]],
+        ['First PO Com', ['v' => (float) ($total_so_com ?? 0), 'num' => true]],
+        ['License Bonus', ['v' => (float) ($total_license_bonus ?? 0), 'num' => true]],
+        ['type' => 'total', 'cells' => ['TỔNG HOA HỒNG', ['v' => (float) ($grand_total_com ?? 0), 'num' => true]]],
+    ];
+    $blocks[] = ['title' => 'Tóm tắt', 'headers' => ['Chỉ tiêu', 'Giá trị'], 'rows' => $sumRows];
 
-    // Summary header (final figures from the cards)
-    $rows[] = ['type' => 'section', 'level' => 1, 'label' => '■ TÓM TẮT — ' . $viewed_name . ' · Quý ' . $selected_quarter . '/' . $selected_year];
-    $rows[] = ['type' => 'section', 'level' => 2, 'label' => 'KPI quý: ' . round($kpi_pct) . '%  ·  Lương KPI: ' . ($kpi_salary_label ?? '') . ' (' . round($salary_kpi_pct ?? 0) . '%)'];
-    $mc_sum = function ($label, $val) {
-        $c = array_fill(0, 10, '');
-        $c[1] = $label; $c[7] = ['v' => (float) $val, 'num' => true];
-        return ['type' => 'total', 'cells' => $c];
-    };
-    $rows[] = $mc_sum('Com1 (sau KPI)', $grand_com1 ?? 0);
-    $rows[] = $mc_sum('Com2 (sau KPI)', $grand_com2 ?? 0);
-    $rows[] = $mc_sum('AI Add-on', $grand_ai_com ?? 0);
-    $rows[] = $mc_sum('First PO Com', $total_so_com ?? 0);
-    $rows[] = $mc_sum('License Bonus', $total_license_bonus ?? 0);
-    $rows[] = $mc_sum('TỔNG HOA HỒNG', $grand_total_com ?? 0);
-
-    // Invoice detail grouped by month (gross per-invoice values, as in the table)
-    $rows[] = ['type' => 'section', 'level' => 1, 'label' => '■ CHI TIẾT HÓA ĐƠN TÍNH HOA HỒNG'];
-    $g_vnd = $g_c1 = $g_c2 = $g_ai = 0.0; $stt = 0;
+    // ── Block 2: commission invoice detail (grouped by month) ────────────────
+    $h2 = ['STT', 'Hóa đơn', 'Khách hàng', 'Ngày HĐ', 'Ngày TT', 'Doanh thu (VND)', 'Com1 %', 'Com1 (VND)', 'Com2 (VND)', 'AI Com (VND)'];
+    $r2 = []; $g_vnd = $g_c1 = $g_c2 = $g_ai = 0.0; $stt = 0;
     foreach ($grouped as $mk => $items) {
-        $rows[] = ['type' => 'section', 'level' => 3, 'label' => ($mk === 'unknown' ? 'Không rõ tháng' : 'Tháng ' . $mk)];
+        $r2[] = ['type' => 'section', 'level' => 3, 'label' => ($mk === 'unknown' ? 'Không rõ tháng' : 'Tháng ' . $mk)];
         $m_vnd = $m_c1 = $m_c2 = $m_ai = 0.0;
         foreach ($items as $d) {
             $inv = $d['inv'] ?? [];
-            $cust = is_array($inv['partner_id'] ?? null) ? ($inv['partner_id'][1] ?? '') : '';
-            $vnd = (float) ($d['amount_vnd'] ?? 0);
-            $c1  = (float) ($d['com1_amount'] ?? 0);
-            $c2  = (float) ($d['com2_gross'] ?? 0);
-            $ai  = (float) ($d['ai_com_pre'] ?? 0);
-            $rows[] = [
-                ++$stt, $inv['name'] ?? '', $cust,
-                $inv['invoice_date'] ?? '', $d['payment_date'] ?? '',
-                ['v' => $vnd, 'num' => true],
-                ($d['com1_rate'] ?? '') !== '' ? ($d['com1_rate'] . '%') : '',
-                ['v' => $c1, 'num' => true], ['v' => $c2, 'num' => true], ['v' => $ai, 'num' => true],
-            ];
+            $vnd = (float) ($d['amount_vnd'] ?? 0); $c1 = (float) ($d['com1_amount'] ?? 0);
+            $c2 = (float) ($d['com2_gross'] ?? 0);  $ai = (float) ($d['ai_com_pre'] ?? 0);
+            $r2[] = [++$stt, $inv['name'] ?? '', $cust_of($inv), $inv['invoice_date'] ?? '', $d['payment_date'] ?? '',
+                ['v' => $vnd, 'num' => true], (($d['com1_rate'] ?? '') !== '' ? ($d['com1_rate'] . '%') : ''),
+                ['v' => $c1, 'num' => true], ['v' => $c2, 'num' => true], ['v' => $ai, 'num' => true]];
             $m_vnd += $vnd; $m_c1 += $c1; $m_c2 += $c2; $m_ai += $ai;
         }
-        $sc = array_fill(0, 10, '');
-        $sc[1] = 'Tổng ' . ($mk === 'unknown' ? 'không rõ tháng' : $mk);
-        $sc[5] = ['v' => $m_vnd, 'num' => true]; $sc[7] = ['v' => $m_c1, 'num' => true];
-        $sc[8] = ['v' => $m_c2, 'num' => true]; $sc[9] = ['v' => $m_ai, 'num' => true];
-        $rows[] = ['type' => 'subtotal', 'cells' => $sc];
+        $sc = array_fill(0, 10, ''); $sc[1] = 'Tổng ' . ($mk === 'unknown' ? 'không rõ tháng' : $mk);
+        $sc[5] = ['v' => $m_vnd, 'num' => true]; $sc[7] = ['v' => $m_c1, 'num' => true]; $sc[8] = ['v' => $m_c2, 'num' => true]; $sc[9] = ['v' => $m_ai, 'num' => true];
+        $r2[] = ['type' => 'subtotal', 'cells' => $sc];
         $g_vnd += $m_vnd; $g_c1 += $m_c1; $g_c2 += $m_c2; $g_ai += $m_ai;
     }
-    $gc = array_fill(0, 10, '');
-    $gc[1] = 'TỔNG CỘNG';
-    $gc[5] = ['v' => $g_vnd, 'num' => true]; $gc[7] = ['v' => $g_c1, 'num' => true];
-    $gc[8] = ['v' => $g_c2, 'num' => true]; $gc[9] = ['v' => $g_ai, 'num' => true];
-    $rows[] = ['type' => 'total', 'cells' => $gc];
+    $gc = array_fill(0, 10, ''); $gc[1] = 'TỔNG CỘNG';
+    $gc[5] = ['v' => $g_vnd, 'num' => true]; $gc[7] = ['v' => $g_c1, 'num' => true]; $gc[8] = ['v' => $g_c2, 'num' => true]; $gc[9] = ['v' => $g_ai, 'num' => true];
+    $r2[] = ['type' => 'total', 'cells' => $gc];
+    $blocks[] = ['title' => 'Chi tiết hóa đơn tính hoa hồng', 'headers' => $h2, 'rows' => $r2];
+
+    // ── Block 3: License Bonus ───────────────────────────────────────────────
+    if (!empty($license_details)) {
+        $h3 = ['STT', 'Hóa đơn', 'Khách hàng', 'Ngày HĐ', 'Ngày TT', 'Doanh thu (VND)', 'EBT %', 'EBT (VND)', 'License Bonus'];
+        $r3 = []; $i = 0; $lic_vnd = 0.0;
+        foreach ($license_details as $d) {
+            $inv = $d['inv'] ?? [];
+            $vnd = (float) ($d['amount_vnd'] ?? 0); $lic_vnd += $vnd;
+            $r3[] = [++$i, $inv['name'] ?? '', $cust_of($inv), $inv['invoice_date'] ?? '', $d['payment_date'] ?? '',
+                ['v' => $vnd, 'num' => true],
+                ($d['ebt_pct'] !== null ? ($d['ebt_pct'] . '%') : ''),
+                ($d['ebt_vnd'] !== null ? ['v' => (float) $d['ebt_vnd'], 'num' => true] : ''),
+                ((float) ($d['bonus'] ?? 0) > 0 ? ['v' => (float) $d['bonus'], 'num' => true] : '—')];
+        }
+        $lc = array_fill(0, 9, ''); $lc[1] = 'TỔNG'; $lc[5] = ['v' => $lic_vnd, 'num' => true]; $lc[8] = ['v' => (float) ($total_license_bonus ?? 0), 'num' => true];
+        $r3[] = ['type' => 'total', 'cells' => $lc];
+        $blocks[] = ['title' => 'License Bonus (10% × EBT, KPI quý ≥ 80%)', 'headers' => $h3, 'rows' => $r3];
+    }
+
+    // ── Block 4: Sale Orders — First PO Commission ───────────────────────────
+    if (!empty($so_list)) {
+        $state_map = ['draft' => 'Nháp', 'sent' => 'Sent', 'sale' => 'Confirmed', 'done' => 'Done'];
+        $h4 = ['SO #', 'Khách hàng', 'Ngày', 'Trạng thái', 'Amount', 'Tiền tệ', 'VND', 'First PO?', 'Commission (1/1000)'];
+        $r4 = []; $so_vnd = 0.0;
+        foreach ($so_list as $so) {
+            $vnd = (float) ($so['_amount_vnd'] ?? 0); $so_vnd += $vnd;
+            $qualifies = $vnd >= SO_MIN_VND;
+            $is_first = $qualifies && ($so_first_po_flags[(int) $so['id']] ?? false);
+            $com = $is_first ? $vnd * SO_COM_RATE : 0;
+            $r4[] = [$so['name'] ?? '', $so['_partner_name'] ?? '', substr($so['date_order'] ?? '', 0, 10),
+                $state_map[$so['state']] ?? ($so['state'] ?? ''),
+                ['v' => (float) ($so['amount_total'] ?? 0), 'num' => true], $so['_cur'] ?? 'VND',
+                ['v' => $vnd, 'num' => true],
+                ($qualifies ? ($is_first ? 'Yes' : 'No') : '< 1 tỷ'),
+                ($com > 0 ? ['v' => $com, 'num' => true] : '—')];
+        }
+        $usd_rate = (float) ($vnd_rates['USD'] ?? 0);
+        $so_usd = $usd_rate > 0 ? ($so_vnd / $usd_rate) : 0;
+        $sc1 = array_fill(0, 9, ''); $sc1[3] = 'Tổng (VND)'; $sc1[6] = ['v' => $so_vnd, 'num' => true];
+        $r4[] = ['type' => 'subtotal', 'cells' => $sc1];
+        $sc2 = array_fill(0, 9, ''); $sc2[3] = 'Tổng (USD)'; $sc2[6] = ['v' => $so_usd, 'num' => true];
+        $r4[] = ['type' => 'subtotal', 'cells' => $sc2];
+        $sc3 = array_fill(0, 9, ''); $sc3[3] = 'Tổng First PO Com'; $sc3[8] = ['v' => (float) ($total_so_com ?? 0), 'num' => true];
+        $r4[] = ['type' => 'total', 'cells' => $sc3];
+        $blocks[] = ['title' => 'Sale Orders — First PO Commission (1/1000 khi là First PO ≥ 1 tỷ)', 'headers' => $h4, 'rows' => $r4];
+    }
 
     $slug = preg_replace('/[^A-Za-z0-9]+/', '-', $viewed_name ?: 'user');
     $title = 'Lương & Hoa hồng — ' . $viewed_name . ' · Quý ' . $selected_quarter . '/' . $selected_year;
     if ($mc_export === 'excel') {
-        Exporter::streamXls("hoa-hong_{$slug}_Q{$selected_quarter}-{$selected_year}", $title, $headers, $rows);
+        Exporter::streamXlsMulti("hoa-hong_{$slug}_Q{$selected_quarter}-{$selected_year}", $title, $blocks);
     } else {
-        $body = '<h1>' . htmlspecialchars($title) . '</h1><div class="sub">Xuất ngày ' . date('d/m/Y H:i') . '</div>' . Exporter::tableHtml($headers, $rows);
+        $body = '<h1>' . htmlspecialchars($title) . '</h1><div class="sub">Xuất ngày ' . date('d/m/Y H:i') . '</div>' . Exporter::blocksHtml($blocks);
         Exporter::renderPrintable($title, $body);
     }
 }
