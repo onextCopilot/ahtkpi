@@ -53,38 +53,99 @@ $res = $conn->query($sql);
 
 $headers = ['Công ty', 'AM', 'Khách hàng', 'Dự án', 'Mốc thanh toán', 'Số tiền', 'Tiền tệ',
             'Ngày hóa đơn', 'Hạn thanh toán', 'Trạng thái TT', 'Trạng thái HĐ', 'Sale Team'];
-$rows = [];
-$count = 0;
-$by_currency = [];   // currency => summed amount
 $fmtDate = fn($d) => ($d && $d > '1000-01-01') ? date('d/m/Y', strtotime($d)) : '';
+
+// ── Build nested tree: Team → Year → Quarter → Month → records ────────────────
+$tree = [];   // team => year => quarter => month => [ ['cells'=>, 'amt'=>, 'cur'=>], ... ]
+$count = 0;
 if ($res) {
     while ($r = $res->fetch_assoc()) {
+        $count++;
         $amt = (float) $r['amount'];
         $cur = $r['currency'] ?: 'VND';
-        $count++;
-        $by_currency[$cur] = ($by_currency[$cur] ?? 0) + $amt;
-        $rows[] = [
-            $r['company'], $r['am'], $r['client_name'], $r['project_name'], $r['payment_milestone'],
-            ['v' => $amt, 'num' => true], $cur,
-            $fmtDate($r['invoice_date']), $fmtDate($r['expected_payment_date']),
-            $r['payment_status'], $r['invoice_status'], $r['team_name'],
+        $team = trim($r['team_name'] ?? '') ?: 'Chưa gán team';
+        $d = $r['invoice_date'];
+        if ($d && $d > '1000-01-01') {
+            $ts = strtotime($d); $y = (int) date('Y', $ts); $mo = (int) date('n', $ts);
+            $q = (int) ceil($mo / 3);
+        } else { $y = 0; $q = 0; $mo = 0; }
+        $tree[$team][$y][$q][$mo][] = [
+            'amt' => $amt, 'cur' => $cur,
+            'cells' => [
+                $r['company'], $r['am'], $r['client_name'], $r['project_name'], $r['payment_milestone'],
+                ['v' => $amt, 'num' => true], $cur,
+                $fmtDate($r['invoice_date']), $fmtDate($r['expected_payment_date']),
+                $r['payment_status'], $r['invoice_status'], $team,
+            ],
         ];
     }
 }
 
-// Subtotal per currency + grand total (record count). 12 columns; amount at idx 5.
-ksort($by_currency);
-foreach ($by_currency as $cur => $sum) {
-    $cells = array_fill(0, 12, '');
-    $cells[4] = 'Tổng ' . $cur;
-    $cells[5] = ['v' => $sum, 'num' => true];
-    $cells[6] = $cur;
-    $rows[] = ['type' => 'subtotal', 'cells' => $cells];
+// Sort keys: teams A→Z; years newest first; quarters/months ascending; "0" (no date) last.
+$sortKeys = function (array $keys, bool $desc = false) {
+    $hasZero = in_array(0, $keys, true) || in_array('0', $keys, true);
+    $keys = array_values(array_filter($keys, fn($k) => (string) $k !== '0'));
+    sort($keys);
+    if ($desc) $keys = array_reverse($keys);
+    if ($hasZero) $keys[] = 0;
+    return $keys;
+};
+
+// Build per-currency subtotal rows for an accumulator. Amount@idx5, cur@idx6, label@idx0.
+$subtotalRows = function (array $acc, string $label, string $type) {
+    ksort($acc);
+    $out = [];
+    foreach ($acc as $cur => $sum) {
+        $cells = array_fill(0, 12, '');
+        $cells[0] = $label;
+        $cells[5] = ['v' => $sum, 'num' => true];
+        $cells[6] = $cur;
+        $out[] = ['type' => $type, 'cells' => $cells];
+    }
+    return $out;
+};
+$addSum = function (array &$acc, string $cur, float $amt) { $acc[$cur] = ($acc[$cur] ?? 0) + $amt; };
+
+$qLabel = fn($q) => $q ? "Quý $q" : 'Không rõ quý';
+$yLabel = fn($y) => $y ? "Năm $y" : 'Không có ngày';
+$mLabel = fn($m, $y) => $m ? sprintf('Tháng %02d/%d', $m, $y) : 'Không có tháng';
+
+$rows = [];
+$grand = [];
+$teamNames = $sortKeys(array_keys($tree));
+foreach ($teamNames as $team) {
+    $rows[] = ['type' => 'section', 'level' => 1, 'label' => '▦ TEAM: ' . $team];
+    $teamSum = [];
+    foreach ($sortKeys(array_keys($tree[$team]), true) as $y) {
+        $rows[] = ['type' => 'section', 'level' => 2, 'label' => $yLabel($y)];
+        $yearSum = [];
+        foreach ($sortKeys(array_keys($tree[$team][$y])) as $q) {
+            $rows[] = ['type' => 'section', 'level' => 3, 'label' => $qLabel($q)];
+            $qSum = [];
+            foreach ($sortKeys(array_keys($tree[$team][$y][$q])) as $m) {
+                $rows[] = ['type' => 'section', 'level' => 4, 'label' => $mLabel($m, $y)];
+                $mSum = [];
+                foreach ($tree[$team][$y][$q][$m] as $rec) {
+                    $rows[] = $rec['cells'];
+                    $addSum($mSum, $rec['cur'], $rec['amt']);
+                    $addSum($qSum, $rec['cur'], $rec['amt']);
+                    $addSum($yearSum, $rec['cur'], $rec['amt']);
+                    $addSum($teamSum, $rec['cur'], $rec['amt']);
+                    $addSum($grand, $rec['cur'], $rec['amt']);
+                }
+                $rows = array_merge($rows, $subtotalRows($mSum, '↳ Tổng ' . $mLabel($m, $y), 'subtotal'));
+            }
+            $rows = array_merge($rows, $subtotalRows($qSum, '↳ Tổng ' . $qLabel($q), 'subtotal'));
+        }
+        $rows = array_merge($rows, $subtotalRows($yearSum, '↳ Tổng ' . $yLabel($y), 'subtotal'));
+    }
+    $rows = array_merge($rows, $subtotalRows($teamSum, '■ TỔNG TEAM: ' . $team, 'total'));
 }
-$total_cells = array_fill(0, 12, '');
-$total_cells[0] = 'TỔNG CỘNG';
-$total_cells[4] = $count . ' bản ghi';
-$rows[] = ['type' => 'total', 'cells' => $total_cells];
+// Grand total per currency
+$rows = array_merge($rows, $subtotalRows($grand, '■ TỔNG CỘNG TOÀN BỘ', 'total'));
+$cnt_cells = array_fill(0, 12, '');
+$cnt_cells[0] = 'Tổng số bản ghi'; $cnt_cells[4] = $count;
+$rows[] = ['type' => 'total', 'cells' => $cnt_cells];
 
 $stamp = date('Ymd_His');
 $title = 'Báo cáo công nợ' . ($year ? " - Năm $year" : '') . ($month ? " - Tháng $month" : '');

@@ -63,7 +63,11 @@ class Exporter
             if (is_array($row) && isset($row['type'])) {
                 if ($row['type'] === 'section') {
                     $label = $row['label'] ?? '';
-                    echo '<tr><td colspan="' . $ncol . '" style="background:#dbe6f3;color:#1e3a5f;font-weight:bold;">' . htmlspecialchars($label) . '</td></tr>';
+                    $lvl = (int) ($row['level'] ?? 1);
+                    $bgByLevel = [1 => '#bcd0ea', 2 => '#d2e0f2', 3 => '#e3ecf8', 4 => '#f0f5fb'];
+                    $bg = $bgByLevel[$lvl] ?? '#dbe6f3';
+                    $indent = str_repeat('&nbsp;&nbsp;&nbsp;', max(0, $lvl - 1));
+                    echo '<tr><td colspan="' . $ncol . '" style="background:' . $bg . ';color:#1e3a5f;font-weight:bold;">' . $indent . htmlspecialchars($label) . '</td></tr>';
                     continue;
                 }
                 $bg = $row['type'] === 'total' ? '#fde68a' : '#eef2f7'; // total: amber, subtotal: grey
