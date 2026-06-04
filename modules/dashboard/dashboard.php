@@ -14,6 +14,15 @@ $full_name = $_SESSION['full_name'];
 $role = $_SESSION['role'];
 $avatar = $_SESSION['avatar'] ?? null;
 
+// Role-based dashboard: render the persona-specific view when one exists.
+// Other personas (ceo / manager / member) fall through to the shared dashboard below.
+require_once __DIR__ . '/lib/persona.php';
+$persona = resolveDashboardPersona();
+if ($persona === 'am_bd') {
+    require __DIR__ . '/personas/am_bd.php';
+    exit();
+}
+
 // Get total users count (Admin only)
 $total_users = 0;
 if ($role === 'admin') {
