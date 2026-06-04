@@ -378,6 +378,17 @@ $top_team_rev = array_slice($top_team_rev, 0, 8, true);
     <title>Dashboard - Management System</title>
     <link rel="stylesheet" href="../../assets/css/dashboard.css">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        /* Compact stat cards — scoped to the dashboard page only */
+        .stats-grid { grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 12px; margin-bottom: 1.25rem; }
+        .stat-card { padding: 14px 16px; gap: 12px; border-radius: 12px; align-items: center; }
+        .stat-card:hover { transform: none; box-shadow: 0 4px 10px rgba(0,0,0,0.06); }
+        .stat-icon { width: 40px; height: 40px; border-radius: 9px; }
+        .stat-card:hover .stat-icon { transform: none; }
+        .stat-icon svg { width: 19px; height: 19px; }
+        .stat-content h3 { font-size: 10.5px; text-transform: uppercase; letter-spacing: .3px; margin: 0 0 2px; }
+        .stat-content .stat-number { font-size: 1.4rem !important; margin: 0; }
+    </style>
 </head>
 
 <body>
