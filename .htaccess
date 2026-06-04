@@ -26,6 +26,7 @@ RewriteRule ^ - [L]
 RewriteRule ^login/?$ modules/auth/login.php [L]
 RewriteRule ^logout/?$ modules/auth/logout.php [L]
 RewriteRule ^dashboard/?$ modules/dashboard/dashboard.php [L]
+RewriteRule ^notifications/?$ modules/notifications/index.php [L]
 RewriteRule ^profile/?$ modules/profile/index.php [L]
 
 # Settings Pages

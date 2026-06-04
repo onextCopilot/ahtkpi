@@ -190,7 +190,26 @@ try {
     $pn->close();
 } catch (\Throwable $e) {}
 $pasx_notif_count = count($pasx_notifs);
-$total_notif_count = $notif_count + $pasx_notif_count;
+
+// ── KPI / commission of the current quarter not yet confirmed (AM/BD) ──
+$kpi_alert = null;
+if (isset($_SESSION['is_am_bd']) && $_SESSION['is_am_bd'] == 1) {
+    try {
+        $q_now = (int) ceil((int) date('n') / 3);
+        $y_now = (int) date('Y');
+        $tab_now = "Q{$q_now}_{$y_now}";
+        $confirmed_now = false;
+        $cr = $conn->query("SELECT type FROM sale_report_confirmations WHERE user_id = $current_user_id AND quarter = '$tab_now' ORDER BY confirmed_at DESC LIMIT 1");
+        if ($cr && ($crow = $cr->fetch_assoc())) {
+            $confirmed_now = in_array($crow['type'], ['confirmed', 'commission_confirmed'], true);
+        }
+        if (!$confirmed_now) {
+            $kpi_alert = ['q' => $q_now, 'y' => $y_now, 'tab' => $tab_now];
+        }
+    } catch (\Throwable $e) { /* ignore */ }
+}
+
+$total_notif_count = $notif_count + $pasx_notif_count + ($kpi_alert ? 1 : 0);
 ?>
 <header class="top-bar">
     <div class="page-title">
@@ -398,7 +417,20 @@ $total_notif_count = $notif_count + $pasx_notif_count;
                         </div>
                         <?php endif; ?>
                     <?php endif; ?>
+
+                    <?php if ($kpi_alert): ?>
+                    <div class="notif-item" style="padding:12px 16px;border-bottom:1px solid #f1f5f9;background:#eff6ff;border-left:3px solid #bfdbfe;">
+                        <div style="font-size:.82rem;font-weight:700;color:#2563eb;margin-bottom:3px;">
+                            KPI/Hoa hồng Quý <?= $kpi_alert['q'] ?> chưa xác nhận
+                        </div>
+                        <div style="font-size:.78rem;color:#475569;margin-bottom:8px;">Hãy rà soát và xác nhận báo cáo bán hàng Quý <?= $kpi_alert['q'] ?>/<?= $kpi_alert['y'] ?>.</div>
+                        <a href="/sale-reports?quarter=<?= $kpi_alert['tab'] ?>" style="font-size:.75rem;color:#2563eb;text-decoration:none;border:1px solid #2563eb;padding:3px 10px;border-radius:5px;font-weight:600;">Xác nhận</a>
+                    </div>
+                    <?php endif; ?>
                 </div>
+                <a href="/notifications" style="display:block;text-align:center;padding:11px;font-size:.85rem;font-weight:600;color:#3b82f6;text-decoration:none;border-top:1px solid #f1f5f9;background:#f8fafc;">
+                    Xem tất cả thông báo →
+                </a>
             </div>
         </div>
 
