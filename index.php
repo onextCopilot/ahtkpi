@@ -84,6 +84,7 @@ $routes = [
     '/auth/webauthn/list'             => 'modules/auth/webauthn/list.php',
     '/auth/webauthn/delete'           => 'modules/auth/webauthn/delete.php',
     '/dashboard' => 'modules/dashboard/dashboard.php',
+    '/notifications' => 'modules/notifications/index.php',
     '/profile' => 'modules/profile/index.php',
     '/settings' => 'modules/settings/index.php',
     '/settings/users' => 'modules/settings/users/index.php',
