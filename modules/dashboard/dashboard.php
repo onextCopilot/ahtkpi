@@ -14,12 +14,25 @@ $full_name = $_SESSION['full_name'];
 $role = $_SESSION['role'];
 $avatar = $_SESSION['avatar'] ?? null;
 
-// Role-based dashboard: render the persona-specific view when one exists.
-// Other personas (ceo / manager / member) fall through to the shared dashboard below.
+// Role-based dashboard: render the persona-specific view.
+// The 'ceo' persona falls through to the shared company-wide dashboard below.
 require_once __DIR__ . '/lib/persona.php';
 $persona = resolveDashboardPersona();
-if ($persona === 'am_bd') {
-    require __DIR__ . '/personas/am_bd.php';
+
+// Admin / owner can preview any persona via ?view= (e.g. an AM/BD admin who
+// wants the company-wide CEO overview). Non-admins always get their own view.
+$is_owner_admin = ($role === 'admin' || $full_name === 'Hyun Cao');
+if ($is_owner_admin && !empty($_GET['view']) && in_array($_GET['view'], ['ceo', 'am_bd', 'manager', 'member'], true)) {
+    $persona = $_GET['view'];
+}
+
+$persona_files = [
+    'am_bd'   => __DIR__ . '/personas/am_bd.php',
+    'member'  => __DIR__ . '/personas/member.php',
+    'manager' => __DIR__ . '/personas/manager.php',
+];
+if (isset($persona_files[$persona])) {
+    require $persona_files[$persona];
     exit();
 }
 
@@ -320,6 +333,41 @@ for ($q = 1; $q <= 4; $q++) {
 $bev_cum_r=0; $bev_cum_e=0; $bep_quarter=null;
 for($q=0;$q<4;$q++) { $bev_cum_r+=$bev_revenue[$q]; $bev_cum_e+=$bev_expense[$q]; if($bep_quarter===null && $bev_cum_r>=$bev_cum_e && $bev_cum_e>0) $bep_quarter=$q+1; }
 
+// ── CEO: Top AM & Top Sale Teams by billed revenue (debts) ────────────────────
+// Uses getCurrencies() (company-safe VND rates) and sums debts.amount per AM/team
+// for the selected year. Currencies vary per row, so we aggregate in PHP.
+$ceo_vnd_rates = ['VND' => 1.0];
+try {
+    $ceo_curs = $odoo->getCurrencies();
+    $ceo_rvnd = (is_array($ceo_curs) && isset($ceo_curs['VND']['rate'])) ? (float) $ceo_curs['VND']['rate'] : 0.0;
+    if ($ceo_rvnd > 0) {
+        foreach ($ceo_curs as $cname => $cinfo) {
+            $cr = isset($cinfo['rate']) ? (float) $cinfo['rate'] : 0.0;
+            if ($cr > 0) $ceo_vnd_rates[$cname] = $ceo_rvnd / $cr;
+        }
+    }
+} catch (Throwable $e) { /* VND-only fallback */ }
+
+$ceo_year = $filter_year > 0 ? $filter_year : (int) date('Y');
+$top_am = [];
+$top_team_rev = [];
+$res_ta = $conn->query("SELECT d.am, d.amount, d.currency, st.name AS team_name
+                        FROM debts d LEFT JOIN sale_teams st ON d.sale_team_id = st.id
+                        WHERE d.invoice_date IS NOT NULL AND YEAR(d.invoice_date) = $ceo_year");
+if ($res_ta) {
+    while ($r = $res_ta->fetch_assoc()) {
+        $vnd = (float) $r['amount'] * ($ceo_vnd_rates[$r['currency'] ?: 'VND'] ?? 1.0);
+        $am = trim($r['am'] ?? '') ?: 'Chưa gán';
+        $tm = $r['team_name'] ?: 'Chưa gán';
+        $top_am[$am] = ($top_am[$am] ?? 0) + $vnd;
+        $top_team_rev[$tm] = ($top_team_rev[$tm] ?? 0) + $vnd;
+    }
+}
+arsort($top_am);
+arsort($top_team_rev);
+$top_am = array_slice($top_am, 0, 8, true);
+$top_team_rev = array_slice($top_team_rev, 0, 8, true);
+
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -348,6 +396,21 @@ for($q=0;$q<4;$q++) { $bev_cum_r+=$bev_revenue[$q]; $bev_cum_e+=$bev_expense[$q]
 
             <div class="content-wrapper">
                 <script src="https://cdn.jsdelivr.net/npm/apexcharts"></script>
+
+                <?php if ($is_owner_admin): ?>
+                <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin-bottom:16px;">
+                    <span style="font-size:12px; font-weight:600; color:#64748b;">Xem dưới vai trò:</span>
+                    <?php
+                    $views = ['ceo' => '🏢 CEO', 'am_bd' => '💼 AM/BD', 'manager' => '👥 Trưởng phòng', 'member' => '🙋 Nhân viên'];
+                    $active_view = (!empty($_GET['view']) && isset($views[$_GET['view']])) ? $_GET['view'] : 'ceo';
+                    foreach ($views as $vk => $vlabel):
+                        $is_active = ($vk === $active_view);
+                        $href = $vk === 'ceo' ? '/dashboard' : '/dashboard?view=' . $vk;
+                    ?>
+                        <a href="<?php echo $href; ?>" style="padding:6px 14px; border-radius:99px; font-size:13px; font-weight:600; text-decoration:none; border:1px solid <?php echo $is_active ? '#0f172a' : '#cbd5e1'; ?>; background:<?php echo $is_active ? '#0f172a' : '#fff'; ?>; color:<?php echo $is_active ? '#fff' : '#475569'; ?>;"><?php echo $vlabel; ?></a>
+                    <?php endforeach; ?>
+                </div>
+                <?php endif; ?>
 
                 <!-- Filter Form -->
                 <div
@@ -552,6 +615,33 @@ for($q=0;$q<4;$q++) { $bev_cum_r+=$bev_revenue[$q]; $bev_cum_e+=$bev_expense[$q]
                     <div style="text-align:right; margin-top:8px;">
                         <a href="/plan-budgeting/report" style="font-size:12px; color:#3b82f6; text-decoration:none;">→ Xem báo cáo chi tiết</a>
                     </div>
+                </div>
+
+                <!-- Top AM & Top Teams by billed revenue -->
+                <?php
+                $ceo_fmt = fn($v) => number_format($v, 0, ',', '.') . ' ₫';
+                $ceo_rank = function ($data, $title, $bar) use ($ceo_fmt) {
+                    $max = $data ? max($data) : 0;
+                    echo '<div style="background:white; padding:20px; border-radius:12px; border:1px solid #e2e8f0; box-shadow:0 4px 6px -1px rgba(0,0,0,0.05);">';
+                    echo '<h3 style="margin-top:0; color:#0f172a; font-size:1.05rem; border-bottom:1px solid #e2e8f0; padding-bottom:10px;">' . $title . ' (' . $GLOBALS['ceo_year'] . ')</h3>';
+                    if (!$data) { echo '<p style="color:#94a3b8; font-size:13px; margin:8px 0 0;">Chưa có dữ liệu.</p>'; }
+                    else {
+                        $i = 0;
+                        foreach ($data as $name => $val) {
+                            $i++;
+                            $w = $max > 0 ? round($val / $max * 100) : 0;
+                            echo '<div style="margin:10px 0;">';
+                            echo '<div style="display:flex; justify-content:space-between; gap:10px; font-size:13px; margin-bottom:4px;"><span style="color:#0f172a; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">' . $i . '. ' . htmlspecialchars($name) . '</span><span style="color:#059669; font-weight:700; white-space:nowrap;">' . $ceo_fmt($val) . '</span></div>';
+                            echo '<div style="height:7px; background:#e2e8f0; border-radius:99px; overflow:hidden;"><div style="height:100%; width:' . $w . '%; background:' . $bar . '; border-radius:99px;"></div></div>';
+                            echo '</div>';
+                        }
+                    }
+                    echo '</div>';
+                };
+                ?>
+                <div style="display:grid; grid-template-columns:1fr 1fr; gap:24px; margin-bottom:24px;">
+                    <?php $ceo_rank($top_am, '🏆 Top AM theo doanh thu', '#3b82f6'); ?>
+                    <?php $ceo_rank($top_team_rev, '👥 Top Sale Team theo doanh thu', '#10b981'); ?>
                 </div>
 
                 <!-- New Customers Section -->

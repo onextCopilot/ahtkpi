@@ -264,6 +264,46 @@ if ($user_email) {
     }
 }
 
+// ── Action items: deals to collect (overdue / due soon) + top deals ──────────
+$today = date('Y-m-d');
+$due_soon_cutoff = date('Y-m-d', strtotime('+30 days'));
+$collect_list = []; // unpaid deals with an expected payment date, soonest first
+$top_deals = [];    // biggest deals invoiced this quarter
+if ($user_email) {
+    $email_esc = $conn->real_escape_string($user_email);
+
+    $res_col = $conn->query("SELECT client_name, project_name, amount, currency, expected_payment_date, payment_status
+                             FROM debts
+                             WHERE am_email = '$email_esc'
+                               AND expected_payment_date IS NOT NULL
+                               AND expected_payment_date >= '1000-01-01'
+                               AND expected_payment_date <= '$due_soon_cutoff'
+                             ORDER BY expected_payment_date ASC");
+    if ($res_col) {
+        while ($d = $res_col->fetch_assoc()) {
+            if (strcasecmp(trim($d['payment_status'] ?? ''), 'Paid') === 0) continue;
+            $d['_vnd'] = ambd_to_vnd((float) $d['amount'], $d['currency'] ?: 'USD', $vnd_rates);
+            $d['_overdue'] = ($d['expected_payment_date'] < $today);
+            $collect_list[] = $d;
+            if (count($collect_list) >= 8) break;
+        }
+    }
+
+    $qs = $conn->real_escape_string($q_start_date);
+    $qe = $conn->real_escape_string($q_end_date);
+    $res_top = $conn->query("SELECT client_name, project_name, amount, currency, payment_status
+                             FROM debts
+                             WHERE am_email = '$email_esc'
+                               AND invoice_date >= '$qs' AND invoice_date <= '$qe'
+                             ORDER BY amount DESC LIMIT 5");
+    if ($res_top) {
+        while ($d = $res_top->fetch_assoc()) {
+            $d['_vnd'] = ambd_to_vnd((float) $d['amount'], $d['currency'] ?: 'USD', $vnd_rates);
+            $top_deals[] = $d;
+        }
+    }
+}
+
 // ── Formatters ────────────────────────────────────────────────────────────────
 $fmtVnd = fn($v) => number_format($v, 0, ',', '.') . ' ₫';
 $badge_color = $kpi['color_badge'] ?? '#2563eb';
@@ -399,6 +439,49 @@ $badge_color = $kpi['color_badge'] ?? '#2563eb';
                         <p style="margin:4px 0 14px; font-size:13px; color:#64748b;">Trạng thái chốt KPI / hoa hồng quý này.</p>
                         <span class="ambd-badge" style="background:<?php echo $conf_bg; ?>; color:<?php echo $conf_fg; ?>;"><?php echo $conf_label; ?></span>
                         <?php if ($conf_detail): ?><div class="ambd-sub" style="margin-top:10px;">Lần cuối: <?php echo $conf_detail; ?></div><?php endif; ?>
+                    </div>
+                </div>
+
+                <!-- Action items: collect & top deals -->
+                <div class="ambd-row">
+                    <div class="ambd-panel" style="margin-bottom:0;">
+                        <h3 style="margin-bottom:12px;">⏰ Cần thu (quá hạn &amp; sắp tới 30 ngày)</h3>
+                        <?php if (empty($collect_list)): ?>
+                            <p style="font-size:13px; color:#94a3b8; margin:0;">Không có khoản nào quá hạn hoặc đến hạn trong 30 ngày tới. 🎉</p>
+                        <?php else: ?>
+                            <div style="display:flex; flex-direction:column; gap:8px;">
+                                <?php foreach ($collect_list as $d): ?>
+                                    <div style="display:flex; align-items:center; justify-content:space-between; gap:10px; padding:8px 12px; border:1px solid #e2e8f0; border-left:3px solid <?php echo $d['_overdue'] ? '#dc2626' : '#f59e0b'; ?>; border-radius:8px;">
+                                        <div style="min-width:0;">
+                                            <div style="font-weight:600; color:#0f172a; font-size:13px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;"><?php echo htmlspecialchars($d['client_name'] ?: ($d['project_name'] ?: '—')); ?></div>
+                                            <div style="font-size:11px; color:<?php echo $d['_overdue'] ? '#dc2626' : '#64748b'; ?>;">
+                                                <?php echo $d['_overdue'] ? '⚠ Quá hạn ' : 'Hạn '; ?><?php echo date('d/m/Y', strtotime($d['expected_payment_date'])); ?>
+                                            </div>
+                                        </div>
+                                        <div style="font-weight:700; color:#e11d48; font-size:13px; white-space:nowrap;"><?php echo $fmtVnd($d['_vnd']); ?></div>
+                                    </div>
+                                <?php endforeach; ?>
+                            </div>
+                            <div style="text-align:right; margin-top:10px;"><a href="/my-debt" style="font-size:12px; color:#3b82f6; text-decoration:none;">→ Xem tất cả công nợ</a></div>
+                        <?php endif; ?>
+                    </div>
+                    <div class="ambd-panel" style="margin-bottom:0;">
+                        <h3 style="margin-bottom:12px;">🏆 Top deal Quý <?php echo $sel_q; ?></h3>
+                        <?php if (empty($top_deals)): ?>
+                            <p style="font-size:13px; color:#94a3b8; margin:0;">Chưa có deal nào trong quý.</p>
+                        <?php else: ?>
+                            <div style="display:flex; flex-direction:column; gap:8px;">
+                                <?php foreach ($top_deals as $i => $d): ?>
+                                    <div style="display:flex; align-items:center; justify-content:space-between; gap:10px;">
+                                        <div style="min-width:0; display:flex; align-items:center; gap:8px;">
+                                            <span style="flex-shrink:0; width:20px; height:20px; border-radius:99px; background:#eef2ff; color:#4338ca; font-size:11px; font-weight:700; display:inline-flex; align-items:center; justify-content:center;"><?php echo $i + 1; ?></span>
+                                            <span style="font-size:13px; color:#0f172a; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;"><?php echo htmlspecialchars($d['client_name'] ?: ($d['project_name'] ?: '—')); ?></span>
+                                        </div>
+                                        <span style="font-weight:700; color:#059669; font-size:13px; white-space:nowrap;"><?php echo $fmtVnd($d['_vnd']); ?></span>
+                                    </div>
+                                <?php endforeach; ?>
+                            </div>
+                        <?php endif; ?>
                     </div>
                 </div>
 
