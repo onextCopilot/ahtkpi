@@ -1088,6 +1088,75 @@ krsort($grouped);
 $paid_count = count(array_filter($invoices, fn($i) => ($i['payment_state'] ?? '') === 'paid'));
 $unpaid_count = count($invoices) - $paid_count;
 $month_names_vn = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+
+// ── EXPORT (Excel / PDF) — reuses the figures already computed above so the ──
+// file always matches what the page shows. Triggered by ?export=excel|pdf.
+$mc_export = $_GET['export'] ?? '';
+if ($mc_export === 'excel' || $mc_export === 'pdf') {
+    require_once __DIR__ . '/../../includes/Exporter.php';
+
+    $headers = ['STT', 'Hóa đơn', 'Khách hàng', 'Ngày HĐ', 'Ngày TT', 'Doanh thu (VND)', 'Com1 %', 'Com1 (VND)', 'Com2 (VND)', 'AI Com (VND)'];
+    $rows = [];
+
+    // Summary header (final figures from the cards)
+    $rows[] = ['type' => 'section', 'level' => 1, 'label' => '■ TÓM TẮT — ' . $viewed_name . ' · Quý ' . $selected_quarter . '/' . $selected_year];
+    $rows[] = ['type' => 'section', 'level' => 2, 'label' => 'KPI quý: ' . round($kpi_pct) . '%  ·  Lương KPI: ' . ($kpi_salary_label ?? '') . ' (' . round($salary_kpi_pct ?? 0) . '%)'];
+    $mc_sum = function ($label, $val) {
+        $c = array_fill(0, 10, '');
+        $c[1] = $label; $c[7] = ['v' => (float) $val, 'num' => true];
+        return ['type' => 'total', 'cells' => $c];
+    };
+    $rows[] = $mc_sum('Com1 (sau KPI)', $grand_com1 ?? 0);
+    $rows[] = $mc_sum('Com2 (sau KPI)', $grand_com2 ?? 0);
+    $rows[] = $mc_sum('AI Add-on', $grand_ai_com ?? 0);
+    $rows[] = $mc_sum('First PO Com', $total_so_com ?? 0);
+    $rows[] = $mc_sum('License Bonus', $total_license_bonus ?? 0);
+    $rows[] = $mc_sum('TỔNG HOA HỒNG', $grand_total_com ?? 0);
+
+    // Invoice detail grouped by month (gross per-invoice values, as in the table)
+    $rows[] = ['type' => 'section', 'level' => 1, 'label' => '■ CHI TIẾT HÓA ĐƠN TÍNH HOA HỒNG'];
+    $g_vnd = $g_c1 = $g_c2 = $g_ai = 0.0; $stt = 0;
+    foreach ($grouped as $mk => $items) {
+        $rows[] = ['type' => 'section', 'level' => 3, 'label' => ($mk === 'unknown' ? 'Không rõ tháng' : 'Tháng ' . $mk)];
+        $m_vnd = $m_c1 = $m_c2 = $m_ai = 0.0;
+        foreach ($items as $d) {
+            $inv = $d['inv'] ?? [];
+            $cust = is_array($inv['partner_id'] ?? null) ? ($inv['partner_id'][1] ?? '') : '';
+            $vnd = (float) ($d['amount_vnd'] ?? 0);
+            $c1  = (float) ($d['com1_amount'] ?? 0);
+            $c2  = (float) ($d['com2_gross'] ?? 0);
+            $ai  = (float) ($d['ai_com_pre'] ?? 0);
+            $rows[] = [
+                ++$stt, $inv['name'] ?? '', $cust,
+                $inv['invoice_date'] ?? '', $d['payment_date'] ?? '',
+                ['v' => $vnd, 'num' => true],
+                ($d['com1_rate'] ?? '') !== '' ? ($d['com1_rate'] . '%') : '',
+                ['v' => $c1, 'num' => true], ['v' => $c2, 'num' => true], ['v' => $ai, 'num' => true],
+            ];
+            $m_vnd += $vnd; $m_c1 += $c1; $m_c2 += $c2; $m_ai += $ai;
+        }
+        $sc = array_fill(0, 10, '');
+        $sc[1] = 'Tổng ' . ($mk === 'unknown' ? 'không rõ tháng' : $mk);
+        $sc[5] = ['v' => $m_vnd, 'num' => true]; $sc[7] = ['v' => $m_c1, 'num' => true];
+        $sc[8] = ['v' => $m_c2, 'num' => true]; $sc[9] = ['v' => $m_ai, 'num' => true];
+        $rows[] = ['type' => 'subtotal', 'cells' => $sc];
+        $g_vnd += $m_vnd; $g_c1 += $m_c1; $g_c2 += $m_c2; $g_ai += $m_ai;
+    }
+    $gc = array_fill(0, 10, '');
+    $gc[1] = 'TỔNG CỘNG';
+    $gc[5] = ['v' => $g_vnd, 'num' => true]; $gc[7] = ['v' => $g_c1, 'num' => true];
+    $gc[8] = ['v' => $g_c2, 'num' => true]; $gc[9] = ['v' => $g_ai, 'num' => true];
+    $rows[] = ['type' => 'total', 'cells' => $gc];
+
+    $slug = preg_replace('/[^A-Za-z0-9]+/', '-', $viewed_name ?: 'user');
+    $title = 'Lương & Hoa hồng — ' . $viewed_name . ' · Quý ' . $selected_quarter . '/' . $selected_year;
+    if ($mc_export === 'excel') {
+        Exporter::streamXls("hoa-hong_{$slug}_Q{$selected_quarter}-{$selected_year}", $title, $headers, $rows);
+    } else {
+        $body = '<h1>' . htmlspecialchars($title) . '</h1><div class="sub">Xuất ngày ' . date('d/m/Y H:i') . '</div>' . Exporter::tableHtml($headers, $rows);
+        Exporter::renderPrintable($title, $body);
+    }
+}
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -1303,6 +1372,9 @@ $month_names_vn = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','
                     <?php if (!$viewing_other): ?>
                     <a href="/my-com/yearly-bonus?year=<?= $selected_year ?>" class="qt qt-yb" title="Yearly Bonus cả năm <?= $selected_year ?>">★ Yearly Bonus</a>
                     <?php endif; ?>
+                    <?php $mc_exp = "year={$selected_year}&quarter={$selected_quarter}{$mc_qs}"; ?>
+                    <a href="/my-com?export=excel&<?= $mc_exp ?>" class="qt" style="background:#16a34a;color:#fff;" title="Xuất Excel">⬇ Excel</a>
+                    <a href="/my-com?export=pdf&<?= $mc_exp ?>" target="_blank" class="qt" style="background:#dc2626;color:#fff;" title="Xuất PDF">⬇ PDF</a>
                 </div>
                 <span class="q-label">
                     <?= $month_names_vn[$q_start_month-1] ?> – <?= $month_names_vn[$q_end_month-1] ?> <?= $selected_year ?>
