@@ -271,12 +271,6 @@ if ($team_ids) {
 
 // ── Formatters ────────────────────────────────────────────────────────────────
 $fmtVnd = fn($v) => number_format($v, 0, ',', '.') . ' ₫';
-$fmtShort = function ($v) {
-    $a = abs($v);
-    if ($a >= 1e9) return number_format($v / 1e9, 2, ',', '.') . ' tỷ';
-    if ($a >= 1e6) return number_format($v / 1e6, 0, ',', '.') . ' tr';
-    return number_format($v, 0, ',', '.');
-};
 $badge_color = $kpi['color_badge'] ?? '#2563eb';
 ?>
 <!DOCTYPE html>
@@ -296,7 +290,7 @@ $badge_color = $kpi['color_badge'] ?? '#2563eb';
         .ambd-card.amber::before { background: #f59e0b; } .ambd-card.rose::before { background: #f43f5e; }
         .ambd-card.violet::before { background: #7c3aed; }
         .ambd-label { font-size: 11px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: .5px; margin-bottom: 8px; }
-        .ambd-value { font-size: 23px; font-weight: 800; color: #0f172a; line-height: 1.15; }
+        .ambd-value { font-size: 20px; font-weight: 800; color: #0f172a; line-height: 1.2; word-break: break-word; }
         .ambd-sub { font-size: 12px; color: #94a3b8; margin-top: 6px; }
         .ambd-badge { display: inline-flex; align-items: center; gap: 6px; padding: 5px 14px; border-radius: 99px; font-size: 13px; font-weight: 700; }
         .ambd-chip { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; font-weight: 700; padding: 2px 8px; border-radius: 99px; }
@@ -355,7 +349,7 @@ $badge_color = $kpi['color_badge'] ?? '#2563eb';
                 <div class="ambd-grid">
                     <div class="ambd-card green">
                         <div class="ambd-label">Doanh thu Quý <?php echo $sel_q; ?></div>
-                        <div class="ambd-value" style="color:#059669;" title="<?php echo $fmtVnd($rev_q); ?>"><?php echo $fmtShort($rev_q); ?> ₫</div>
+                        <div class="ambd-value" style="color:#059669;"><?php echo $fmtVnd($rev_q); ?></div>
                         <div class="ambd-sub">
                             <?php echo $invoice_count_q; ?> hóa đơn
                             <?php if ($growth_pct !== null): ?>
@@ -366,7 +360,7 @@ $badge_color = $kpi['color_badge'] ?? '#2563eb';
 
                     <div class="ambd-card blue">
                         <div class="ambd-label">Mục tiêu Quý<?php echo $target_q_src === 'usd' ? ' (từ USD)' : ''; ?></div>
-                        <div class="ambd-value" style="color:#2563eb;" title="<?php echo $target_q_vnd > 0 ? $fmtVnd($target_q_vnd) : ''; ?>"><?php echo $target_q_vnd > 0 ? $fmtShort($target_q_vnd) . ' ₫' : '—'; ?></div>
+                        <div class="ambd-value" style="color:#2563eb;"><?php echo $target_q_vnd > 0 ? $fmtVnd($target_q_vnd) : '—'; ?></div>
                         <?php if ($target_q_vnd > 0): ?>
                         <div class="pbar"><div class="pfill" style="width:<?php echo min(100, max(0, $pct_q)); ?>%; background:<?php echo $status_fg; ?>;"></div></div>
                         <div class="ambd-sub"><strong style="color:<?php echo $status_fg; ?>;"><?php echo $pct_q; ?>%</strong> · kỳ vọng ~<?php echo $quarter_progress; ?>%</div>
@@ -394,7 +388,7 @@ $badge_color = $kpi['color_badge'] ?? '#2563eb';
 
                     <div class="ambd-card rose">
                         <div class="ambd-label">Công nợ cần thu</div>
-                        <div class="ambd-value" style="color:#e11d48;" title="<?php echo $fmtVnd($my_pending_vnd); ?>"><?php echo $fmtShort($my_pending_vnd); ?> ₫</div>
+                        <div class="ambd-value" style="color:#e11d48;"><?php echo $fmtVnd($my_pending_vnd); ?></div>
                         <div class="ambd-sub"><?php echo $my_pending_cnt; ?> hóa đơn chưa thanh toán (team của bạn)</div>
                     </div>
                 </div>
