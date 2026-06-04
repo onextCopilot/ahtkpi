@@ -190,11 +190,12 @@ function sortTh2($label, $col, $currentSort, $currentDir, $extraGetParams = []) 
             --success: #16a34a; --warning: #d97706; --danger: #dc2626;
             --bg: #f8fafc; --card: #ffffff; --slate: #1e293b;
             --gray: #64748b; --lgray: #94a3b8; --border: #e2e8f0;
-            --r-xl: 18px; --r-lg: 12px; --r-md: 8px;
-            --sh-sm: 0 1px 3px rgba(0,0,0,.06); --sh-md: 0 4px 16px rgba(0,0,0,.08);
+            --r-xl: 18px; --r-lg: 14px; --r-md: 10px;
+            --sh-sm: 0 1px 2px rgba(16,24,40,.05), 0 1px 3px rgba(16,24,40,.04);
+            --sh-md: 0 8px 24px -6px rgba(16,24,40,.12); --sh-hover: 0 12px 28px -8px rgba(16,24,40,.18);
         }
         * { box-sizing: border-box; }
-        body { background: var(--bg); font-family: 'Inter', sans-serif; color: var(--slate); margin: 0; }
+        body { background: var(--bg); font-family: 'Inter', sans-serif; color: var(--slate); margin: 0; -webkit-font-smoothing: antialiased; }
         .main-content { flex: 1; padding: 28px; min-height: 100vh; }
 
         .page-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 24px; flex-wrap: wrap; gap: 12px; }
@@ -207,13 +208,15 @@ function sortTh2($label, $col, $currentSort, $currentDir, $extraGetParams = []) 
         .btn-outline { background: white; color: var(--gray); border: 1px solid var(--border); }
         .btn-outline:hover { border-color: var(--primary); color: var(--primary); background: rgba(99,102,241,.04); }
 
-        .stats-row { display: flex; gap: 16px; margin-bottom: 20px; }
-        .stat-card { background: var(--card); border-radius: var(--r-lg); padding: 16px 20px; border: 1px solid var(--border); box-shadow: var(--sh-sm); display: flex; align-items: center; gap: 14px; }
-        .stat-icon { width: 40px; height: 40px; border-radius: var(--r-md); display: flex; align-items: center; justify-content: center; font-size: 16px; flex-shrink: 0; }
+        .stats-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 14px; margin-bottom: 22px; }
+        .stat-card { background: var(--card); border-radius: var(--r-lg); padding: 16px 18px; border: 1px solid var(--border); box-shadow: var(--sh-sm); display: flex; align-items: center; gap: 13px; position: relative; overflow: hidden; transition: transform .18s ease, box-shadow .18s ease, border-color .18s ease; }
+        .stat-card:hover { transform: translateY(-2px); box-shadow: var(--sh-hover); border-color: #d7dde6; }
+        .stat-card[onclick] { cursor: pointer; }
+        .stat-icon { width: 42px; height: 42px; border-radius: var(--r-md); display: flex; align-items: center; justify-content: center; font-size: 17px; flex-shrink: 0; }
         .stat-icon.green { background: rgba(22,163,74,.1);  color: var(--success); }
         .stat-icon.blue  { background: rgba(37,99,235,.1);  color: #2563eb; }
-        .stat-val { font-size: 22px; font-weight: 700; color: var(--slate); line-height: 1; }
-        .stat-lbl { font-size: 12px; color: var(--gray); margin-top: 3px; }
+        .stat-val { font-size: 23px; font-weight: 800; color: var(--slate); line-height: 1.05; letter-spacing: -.01em; }
+        .stat-lbl { font-size: 11.5px; color: var(--gray); margin-top: 4px; font-weight: 500; }
 
         .toolbar { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; flex-wrap: wrap; gap: 10px; }
         .search-wrap { position: relative; }
@@ -221,23 +224,21 @@ function sortTh2($label, $col, $currentSort, $currentDir, $extraGetParams = []) 
         .search-wrap input { padding: 9px 14px 9px 34px; border: 1px solid var(--border); border-radius: var(--r-md); font-size: 13px; font-family: inherit; color: var(--slate); background: white; outline: none; width: 260px; transition: all .2s; }
         .search-wrap input:focus { border-color: #818cf8; box-shadow: 0 0 0 3px rgba(99,102,241,.08); }
 
-        .table-card { background: var(--card); border-radius: var(--r-md); border: 1px solid var(--border); box-shadow: var(--sh-sm); overflow: hidden; display: flex; flex-direction: column; }
+        .table-card { background: var(--card); border-radius: var(--r-lg); border: 1px solid var(--border); box-shadow: var(--sh-md); overflow: hidden; display: flex; flex-direction: column; }
         .table-wrap { overflow-x: auto; overflow-y: auto; max-height: calc(100vh - 280px); }
-        .table-wrap thead th { position: sticky; top: 0; z-index: 10; box-shadow: 0 1px 0 var(--border); }
+        .table-wrap thead th { position: sticky; top: 0; z-index: 10; box-shadow: inset 0 -1px 0 var(--border); }
         table { width: 100%; border-collapse: separate; border-spacing: 0; }
-        thead th { padding: 11px 16px; text-align: left; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: var(--lgray); background: #f8fafc; white-space: nowrap; }
-        thead th.sortable { cursor: pointer; user-select: none; }
+        thead th { padding: 13px 16px; text-align: left; font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .07em; color: var(--lgray); background: #fbfcfe; white-space: nowrap; }
+        thead th.sortable { cursor: pointer; user-select: none; transition: color .15s, background .15s; }
         thead th.sortable:hover { color: var(--success); background: #f0fdf4; }
         thead th.sort-asc, thead th.sort-desc { color: var(--success); }
         .sort-icon { margin-left: 4px; font-size: 10px; opacity: .5; }
         thead th.sort-asc .sort-icon, thead th.sort-desc .sort-icon { opacity: 1; }
 
-        tbody tr { border-bottom: 1px solid var(--border); transition: background .12s; cursor: pointer; }
+        tbody tr { border-bottom: 1px solid #f1f4f8; transition: background .12s, box-shadow .12s; cursor: pointer; }
         tbody tr:last-child { border-bottom: none; }
-        tbody tr:nth-child(odd)  { background: #ffffff; }
-        tbody tr:nth-child(even) { background: #eef2f7; }
-        tbody tr:hover { background: rgba(22,163,74,.06) !important; }
-        tbody td { padding: 12px 16px; font-size: 13px; color: var(--slate); vertical-align: middle; }
+        tbody tr:hover { background: #f6faf7 !important; box-shadow: inset 3px 0 0 var(--success); }
+        tbody td { padding: 13px 16px; font-size: 13px; color: var(--slate); vertical-align: middle; }
 
         .month-group-row td { background: #f0fdf4; padding: 6px 16px; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .07em; color: var(--success); border-bottom: 1px solid #bbf7d0; cursor: default; }
         .month-group-row:hover { background: #f0fdf4 !important; }
@@ -267,11 +268,11 @@ function sortTh2($label, $col, $currentSort, $currentDir, $extraGetParams = []) 
         .page-btn.active { background: var(--success); color: white; border-color: var(--success); }
         .page-btn.disabled { opacity: .5; cursor: not-allowed; background: #f1f5f9; }
 
-        .status-badge { display: inline-flex; align-items: center; gap: 5px; padding: 3px 10px; border-radius: 6px; font-size: 11px; font-weight: 700; }
-        .status-badge.draft    { background: #f1f5f9; color: #64748b; }
-        .status-badge.pending  { background: #fef9c3; color: #d97706; }
-        .status-badge.approved { background: #dcfce7; color: #16a34a; }
-        .status-badge.rejected { background: #fee2e2; color: #dc2626; }
+        .status-badge { display: inline-flex; align-items: center; gap: 5px; padding: 3px 11px; border-radius: 999px; font-size: 11px; font-weight: 700; border: 1px solid transparent; }
+        .status-badge.draft    { background: #f1f5f9; color: #64748b; border-color: #e2e8f0; }
+        .status-badge.pending  { background: #fffbeb; color: #b45309; border-color: #fde68a; }
+        .status-badge.approved { background: #f0fdf4; color: #15803d; border-color: #bbf7d0; }
+        .status-badge.rejected { background: #fef2f2; color: #b91c1c; border-color: #fecaca; }
         .filter-select { padding: 8px 12px; border: 1px solid var(--border); border-radius: var(--r-md); font-size: 13px; font-family: inherit; color: var(--slate); background: white; outline: none; cursor: pointer; }
 
         .toast { position: fixed; top: 20px; right: 20px; z-index: 9999; padding: 12px 20px; border-radius: 10px; font-size: 13px; font-weight: 600; color: white; display: flex; align-items: center; gap: 8px; box-shadow: 0 8px 24px rgba(0,0,0,.18); animation: toastIn .3s ease; font-family: Inter, sans-serif; }
