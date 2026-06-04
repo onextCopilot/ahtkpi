@@ -54,17 +54,37 @@ $res = $conn->query($sql);
 $headers = ['Công ty', 'AM', 'Khách hàng', 'Dự án', 'Mốc thanh toán', 'Số tiền', 'Tiền tệ',
             'Ngày hóa đơn', 'Hạn thanh toán', 'Trạng thái TT', 'Trạng thái HĐ', 'Sale Team'];
 $rows = [];
+$count = 0;
+$by_currency = [];   // currency => summed amount
 $fmtDate = fn($d) => ($d && $d > '1000-01-01') ? date('d/m/Y', strtotime($d)) : '';
 if ($res) {
     while ($r = $res->fetch_assoc()) {
+        $amt = (float) $r['amount'];
+        $cur = $r['currency'] ?: 'VND';
+        $count++;
+        $by_currency[$cur] = ($by_currency[$cur] ?? 0) + $amt;
         $rows[] = [
             $r['company'], $r['am'], $r['client_name'], $r['project_name'], $r['payment_milestone'],
-            ['v' => (float) $r['amount'], 'num' => true], $r['currency'],
+            ['v' => $amt, 'num' => true], $cur,
             $fmtDate($r['invoice_date']), $fmtDate($r['expected_payment_date']),
             $r['payment_status'], $r['invoice_status'], $r['team_name'],
         ];
     }
 }
+
+// Subtotal per currency + grand total (record count). 12 columns; amount at idx 5.
+ksort($by_currency);
+foreach ($by_currency as $cur => $sum) {
+    $cells = array_fill(0, 12, '');
+    $cells[4] = 'Tổng ' . $cur;
+    $cells[5] = ['v' => $sum, 'num' => true];
+    $cells[6] = $cur;
+    $rows[] = ['type' => 'subtotal', 'cells' => $cells];
+}
+$total_cells = array_fill(0, 12, '');
+$total_cells[0] = 'TỔNG CỘNG';
+$total_cells[4] = $count . ' bản ghi';
+$rows[] = ['type' => 'total', 'cells' => $total_cells];
 
 $stamp = date('Ymd_His');
 $title = 'Báo cáo công nợ' . ($year ? " - Năm $year" : '') . ($month ? " - Tháng $month" : '');

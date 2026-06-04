@@ -9,25 +9,31 @@
  *   - renderPrintable(): a clean printable HTML page that auto-opens the
  *     browser print dialog (→ "Save as PDF").
  *
- * Rows are arrays of cells. A cell may be a scalar, or an array
- * ['v' => value, 'num' => true] to hint Excel to treat it as a number.
+ * Rows are arrays of cells. A cell may be a scalar, or an array:
+ *   ['v' => value, 'num' => bool, 'align' => left|right|center, 'bold' => bool]
+ *
+ * A row itself may be a plain list of cells (normal data row) or a styled row:
+ *   ['type' => 'total'|'section'|'subtotal', 'cells' => [...]]
+ *   ['type' => 'section', 'label' => 'Group title']   // spans all columns
  */
 class Exporter
 {
-    private static function cell($cell): string
+    private static function cellHtml($cell, string $rowStyle = ''): string
     {
+        $num = false; $align = 'left'; $bold = false; $v = $cell;
         if (is_array($cell)) {
             $v = $cell['v'] ?? '';
-            if (!empty($cell['num'])) {
-                return '<td style="mso-number-format:\'\#\,\#\#0\';">' . htmlspecialchars((string) $v) . '</td>';
-            }
-            return '<td>' . nl2br(htmlspecialchars((string) $v)) . '</td>';
+            $num = !empty($cell['num']);
+            $align = $cell['align'] ?? ($num ? 'right' : 'left');
+            $bold = !empty($cell['bold']);
         }
-        // Force text for things that look like long IDs / leading zeros
-        return '<td style="mso-number-format:\'\@\';">' . nl2br(htmlspecialchars((string) $cell)) . '</td>';
+        $fmt = $num ? "mso-number-format:'\\#\\,\\#\\#0';" : "mso-number-format:'\\@';";
+        $style = $fmt . 'text-align:' . $align . ';' . ($bold ? 'font-weight:bold;' : '') . $rowStyle;
+        $text = $num ? number_format((float) $v, 0, ',', '.') : nl2br(htmlspecialchars((string) $v));
+        return '<td style="' . $style . '">' . $text . '</td>';
     }
 
-    /** Stream an .xls download built from an HTML table. */
+    /** Stream an .xls download built from a styled HTML table. */
     public static function streamXls(string $filename, string $title, array $headers, array $rows): void
     {
         if (!preg_match('/\.xls$/i', $filename)) $filename .= '.xls';
@@ -36,19 +42,45 @@ class Exporter
         header('Pragma: no-cache');
         header('Expires: 0');
 
+        $ncol = max(1, count($headers));
         echo "\xEF\xBB\xBF"; // UTF-8 BOM
-        echo '<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel"><head><meta charset="UTF-8"></head><body>';
-        echo '<table border="1" cellspacing="0" cellpadding="4">';
+        echo '<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel"><head><meta charset="UTF-8"><style>td,th{border:1px solid #cfd8e3;padding:5px 9px;font-family:Calibri,Arial,sans-serif;font-size:11pt;vertical-align:middle;}</style></head><body>';
+        echo '<table border="1" cellspacing="0" cellpadding="5">';
+
         if ($title !== '') {
-            $span = max(1, count($headers));
-            echo '<tr><td colspan="' . $span . '" style="font-weight:bold;font-size:14px;">' . htmlspecialchars($title) . '</td></tr>';
+            echo '<tr><td colspan="' . $ncol . '" style="background:#1e3a5f;color:#fff;font-weight:bold;font-size:15pt;text-align:center;height:34px;">' . htmlspecialchars($title) . '</td></tr>';
         }
+        // Header row
         echo '<tr>';
-        foreach ($headers as $h) echo '<th style="background:#0f172a;color:#fff;font-weight:bold;">' . htmlspecialchars((string) $h) . '</th>';
+        foreach ($headers as $h) {
+            echo '<th style="background:#0f172a;color:#ffffff;font-weight:bold;text-align:center;height:28px;">' . htmlspecialchars((string) $h) . '</th>';
+        }
         echo '</tr>';
+
+        $zebra = 0;
         foreach ($rows as $row) {
+            // Styled rows
+            if (is_array($row) && isset($row['type'])) {
+                if ($row['type'] === 'section') {
+                    $label = $row['label'] ?? '';
+                    echo '<tr><td colspan="' . $ncol . '" style="background:#dbe6f3;color:#1e3a5f;font-weight:bold;">' . htmlspecialchars($label) . '</td></tr>';
+                    continue;
+                }
+                $bg = $row['type'] === 'total' ? '#fde68a' : '#eef2f7'; // total: amber, subtotal: grey
+                $rowStyle = 'background:' . $bg . ';font-weight:bold;';
+                echo '<tr>';
+                foreach (($row['cells'] ?? []) as $cell) {
+                    $c = is_array($cell) ? $cell : ['v' => $cell];
+                    $c['bold'] = true;
+                    echo self::cellHtml($c, $rowStyle);
+                }
+                echo '</tr>';
+                continue;
+            }
+            // Normal data row (zebra striping)
+            $bg = ($zebra++ % 2 === 1) ? 'background:#f6f9fc;' : '';
             echo '<tr>';
-            foreach ($row as $cell) echo self::cell($cell);
+            foreach ($row as $cell) echo self::cellHtml($cell, $bg);
             echo '</tr>';
         }
         echo '</table></body></html>';
