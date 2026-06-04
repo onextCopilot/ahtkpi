@@ -1714,6 +1714,11 @@ if ($res_am && $res_am->num_rows > 0) {
                             <span>Xuất Excel</span>
                         </a>
 
+                        <a class="btn-filter-toggle" href="/api/export/debts_pdf.php<?php echo $exp_qs ? ('?' . htmlspecialchars($exp_qs)) : ''; ?>" target="_blank" title="Xuất PDF" style="text-decoration:none;">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline></svg>
+                            <span>Xuất PDF</span>
+                        </a>
+
                         <button class="btn-add" onclick="openModal()" style="display: none;">
                             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>Thêm mới
                         </button>

@@ -42,24 +42,32 @@ class Exporter
         header('Pragma: no-cache');
         header('Expires: 0');
 
-        $ncol = max(1, count($headers));
         echo "\xEF\xBB\xBF"; // UTF-8 BOM
         echo '<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel"><head><meta charset="UTF-8"><style>td,th{border:1px solid #cfd8e3;padding:5px 9px;font-family:Calibri,Arial,sans-serif;font-size:11pt;vertical-align:middle;}</style></head><body>';
-        echo '<table border="1" cellspacing="0" cellpadding="5">';
+        echo self::tableHtml($headers, $rows, $title);
+        echo '</body></html>';
+        exit;
+    }
 
+    /**
+     * Build the styled <table> HTML (title bar + header + section/subtotal/
+     * total/data rows). Reused by streamXls and the printable PDF view.
+     */
+    public static function tableHtml(array $headers, array $rows, string $title = ''): string
+    {
+        $ncol = max(1, count($headers));
+        $h = '<table border="1" cellspacing="0" cellpadding="5" class="exp-table" style="border-collapse:collapse;width:100%;">';
         if ($title !== '') {
-            echo '<tr><td colspan="' . $ncol . '" style="background:#1e3a5f;color:#fff;font-weight:bold;font-size:15pt;text-align:center;height:34px;">' . htmlspecialchars($title) . '</td></tr>';
+            $h .= '<tr><td colspan="' . $ncol . '" style="background:#1e3a5f;color:#fff;font-weight:bold;font-size:15pt;text-align:center;height:34px;">' . htmlspecialchars($title) . '</td></tr>';
         }
-        // Header row
-        echo '<tr>';
-        foreach ($headers as $h) {
-            echo '<th style="background:#0f172a;color:#ffffff;font-weight:bold;text-align:center;height:28px;">' . htmlspecialchars((string) $h) . '</th>';
+        $h .= '<tr>';
+        foreach ($headers as $col) {
+            $h .= '<th style="background:#0f172a;color:#ffffff;font-weight:bold;text-align:center;height:28px;">' . htmlspecialchars((string) $col) . '</th>';
         }
-        echo '</tr>';
+        $h .= '</tr>';
 
         $zebra = 0;
         foreach ($rows as $row) {
-            // Styled rows
             if (is_array($row) && isset($row['type'])) {
                 if ($row['type'] === 'section') {
                     $label = $row['label'] ?? '';
@@ -67,28 +75,27 @@ class Exporter
                     $bgByLevel = [1 => '#bcd0ea', 2 => '#d2e0f2', 3 => '#e3ecf8', 4 => '#f0f5fb'];
                     $bg = $bgByLevel[$lvl] ?? '#dbe6f3';
                     $indent = str_repeat('&nbsp;&nbsp;&nbsp;', max(0, $lvl - 1));
-                    echo '<tr><td colspan="' . $ncol . '" style="background:' . $bg . ';color:#1e3a5f;font-weight:bold;">' . $indent . htmlspecialchars($label) . '</td></tr>';
+                    $h .= '<tr><td colspan="' . $ncol . '" style="background:' . $bg . ';color:#1e3a5f;font-weight:bold;">' . $indent . htmlspecialchars($label) . '</td></tr>';
                     continue;
                 }
-                $bg = $row['type'] === 'total' ? '#fde68a' : '#eef2f7'; // total: amber, subtotal: grey
+                $bg = $row['type'] === 'total' ? '#fde68a' : '#eef2f7';
                 $rowStyle = 'background:' . $bg . ';font-weight:bold;';
-                echo '<tr>';
+                $h .= '<tr>';
                 foreach (($row['cells'] ?? []) as $cell) {
                     $c = is_array($cell) ? $cell : ['v' => $cell];
                     $c['bold'] = true;
-                    echo self::cellHtml($c, $rowStyle);
+                    $h .= self::cellHtml($c, $rowStyle);
                 }
-                echo '</tr>';
+                $h .= '</tr>';
                 continue;
             }
-            // Normal data row (zebra striping)
             $bg = ($zebra++ % 2 === 1) ? 'background:#f6f9fc;' : '';
-            echo '<tr>';
-            foreach ($row as $cell) echo self::cellHtml($cell, $bg);
-            echo '</tr>';
+            $h .= '<tr>';
+            foreach ($row as $cell) $h .= self::cellHtml($cell, $bg);
+            $h .= '</tr>';
         }
-        echo '</table></body></html>';
-        exit;
+        $h .= '</table>';
+        return $h;
     }
 
     /** Stream a UTF-8 CSV download. */
