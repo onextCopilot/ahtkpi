@@ -397,20 +397,7 @@ $top_team_rev = array_slice($top_team_rev, 0, 8, true);
             <div class="content-wrapper">
                 <script src="https://cdn.jsdelivr.net/npm/apexcharts"></script>
 
-                <?php if ($is_owner_admin): ?>
-                <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin-bottom:16px;">
-                    <span style="font-size:12px; font-weight:600; color:#64748b;">Xem dưới vai trò:</span>
-                    <?php
-                    $views = ['ceo' => '🏢 CEO', 'am_bd' => '💼 AM/BD', 'manager' => '👥 Trưởng phòng', 'member' => '🙋 Nhân viên'];
-                    $active_view = (!empty($_GET['view']) && isset($views[$_GET['view']])) ? $_GET['view'] : 'ceo';
-                    foreach ($views as $vk => $vlabel):
-                        $is_active = ($vk === $active_view);
-                        $href = $vk === 'ceo' ? '/dashboard' : '/dashboard?view=' . $vk;
-                    ?>
-                        <a href="<?php echo $href; ?>" style="padding:6px 14px; border-radius:99px; font-size:13px; font-weight:600; text-decoration:none; border:1px solid <?php echo $is_active ? '#0f172a' : '#cbd5e1'; ?>; background:<?php echo $is_active ? '#0f172a' : '#fff'; ?>; color:<?php echo $is_active ? '#fff' : '#475569'; ?>;"><?php echo $vlabel; ?></a>
-                    <?php endforeach; ?>
-                </div>
-                <?php endif; ?>
+                <?php $dash_view = 'ceo'; include __DIR__ . '/personas/_view_switch.php'; ?>
 
                 <!-- Filter Form -->
                 <div
