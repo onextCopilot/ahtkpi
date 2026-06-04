@@ -47,24 +47,6 @@ function ambd_to_vnd($amount_total, $currency_id, array $rates): float
     return (float) $amount_total * ($rates[$cur] ?? 1.0);
 }
 
-// Convert an INVOICE to VND the same way the Sale Reports page does, so the
-// dashboard's quarter revenue matches that report exactly: respect the rate
-// the accountant booked on the invoice (amount_total_signed is the company-base
-// total — already VND for VND-base companies). Fall back to the getCurrencies
-// map only for non-VND-base companies (rare). Never uses getRate().
-function ambd_invoice_vnd(array $inv, array $rates): float
-{
-    $cur    = is_array($inv['currency_id'] ?? null) ? ($inv['currency_id'][1] ?? 'VND') : 'VND';
-    $total  = (float) ($inv['amount_total'] ?? 0);
-    $signed = abs((float) ($inv['amount_total_signed'] ?? 0));
-    if ($cur === 'VND') return $total;
-    if ($total > 0 && $signed > 0) {
-        $ratio = $signed / $total;
-        if ($ratio > 100) return $signed;   // VND-base company: signed is already VND
-    }
-    return $total * ($rates[$cur] ?? 1.0);   // intermediate-base fallback
-}
-
 // Sum signed Sale Order revenue (VND) for a quarter — basis of the salary KPI.
 function ambd_so_revenue_quarter($odoo, $odoo_user_id, int $year, int $q, array $rates): ?float
 {
@@ -146,42 +128,42 @@ if ($user_email) {
     } catch (Throwable $e) { $odoo_user_id = null; }
 }
 
-// ── Revenue (selected quarter + previous quarter + YTD) from cached invoices ──
+// ── Revenue from the user's deals in the `debts` table ────────────────────────
+// Source = same identity rule as the My Debt page (debts.am_email = my email).
+// "Doanh thu Quý" = sum of every deal (amount → VND) whose invoice_date falls in
+// the quarter, regardless of payment status. Also compute previous quarter
+// (for growth) and YTD using the same basis.
 $rev_q = 0.0; $rev_prev = 0.0; $rev_ytd = 0.0; $invoice_count_q = 0;
 $monthly_rev = [$q_start_month => 0.0, $q_start_month + 1 => 0.0, $q_start_month + 2 => 0.0];
 
-$excluded = [];
-$res_excl = $conn->query("SELECT odoo_invoice_id FROM sale_reports WHERE is_excluded = 1");
-if ($res_excl) {
-    while ($r = $res_excl->fetch_assoc()) $excluded[(int) $r['odoo_invoice_id']] = true;
-}
+// Lower bound covers both the previous quarter and the YTD start.
+$scan_from = min($pq_start, $ytd_start);
 
-$invoices = [];
 if ($user_email) {
-    try {
-        $result = $odoo->getInvoices(5000, 0, ['owner_email' => $user_email]);
-        $invoices = $result['invoices'] ?? [];
-    } catch (Exception $e) { $invoices = []; }
-}
+    $email_esc = $conn->real_escape_string($user_email);
+    $from_esc  = $conn->real_escape_string($scan_from);
+    $to_esc    = $conn->real_escape_string($q_end_date);
+    $res_rev = $conn->query("SELECT amount, currency, invoice_date
+                             FROM debts
+                             WHERE am_email = '$email_esc'
+                               AND invoice_date IS NOT NULL
+                               AND invoice_date >= '$from_esc'
+                               AND invoice_date <= '$to_esc'");
+    if ($res_rev) {
+        while ($d = $res_rev->fetch_assoc()) {
+            $dt  = $d['invoice_date'];
+            $vnd = ambd_to_vnd((float) $d['amount'], $d['currency'] ?: 'USD', $vnd_rates);
 
-foreach ($invoices as $inv) {
-    if (($inv['state'] ?? '') !== 'posted') continue;
-    if (($inv['x_studio_invoice_type_1'] ?? '') === 'Internal') continue;
-    if (!empty($excluded[(int) ($inv['id'] ?? 0)])) continue;
-
-    $inv_date = $inv['invoice_date'] ?: ($inv['date'] ?? '');
-    if (!$inv_date) continue;
-
-    $vnd = ambd_invoice_vnd($inv, $vnd_rates);
-
-    if ($inv_date >= $q_start_date && $inv_date <= $q_end_date) {
-        $rev_q += $vnd;
-        $invoice_count_q++;
-        $m = (int) date('n', strtotime($inv_date));
-        if (isset($monthly_rev[$m])) $monthly_rev[$m] += $vnd;
+            if ($dt >= $q_start_date && $dt <= $q_end_date) {
+                $rev_q += $vnd;
+                $invoice_count_q++;
+                $m = (int) date('n', strtotime($dt));
+                if (isset($monthly_rev[$m])) $monthly_rev[$m] += $vnd;
+            }
+            if ($dt >= $pq_start && $dt <= $pq_end) $rev_prev += $vnd;
+            if ($dt >= $ytd_start && $dt <= $q_end_date) $rev_ytd += $vnd;
+        }
     }
-    if ($inv_date >= $pq_start && $inv_date <= $pq_end) $rev_prev += $vnd;
-    if ($inv_date >= $ytd_start && $inv_date <= $q_end_date) $rev_ytd += $vnd;
 }
 
 $growth_pct = $rev_prev > 0 ? round(($rev_q - $rev_prev) / $rev_prev * 100) : null;
@@ -268,17 +250,11 @@ if ($res_c && ($c = $res_c->fetch_assoc())) {
     elseif ($c['type'] === 'reset')                 { $conf_label = 'Đã mở lại (nháp)'; $conf_bg = '#fef3c7'; $conf_fg = '#92400e'; $conf_detail = $when; }
 }
 
-// ── Debt to collect (this user's sale teams, pending) ─────────────────────────
+// ── Debt to collect (my deals, unpaid) — same am_email identity as My Debt ────
 $my_pending_vnd = 0.0; $my_pending_cnt = 0;
-$team_ids = [];
-$st = $conn->prepare("SELECT team_id FROM user_sale_teams WHERE user_id = ?");
-$st->bind_param("i", $user_id);
-$st->execute();
-$tr = $st->get_result();
-while ($r = $tr->fetch_assoc()) $team_ids[] = (int) $r['team_id'];
-if ($team_ids) {
-    $in = implode(',', array_map('intval', $team_ids));
-    $res_d = $conn->query("SELECT amount, currency, payment_status FROM debts WHERE sale_team_id IN ($in)");
+if ($user_email) {
+    $email_esc = $conn->real_escape_string($user_email);
+    $res_d = $conn->query("SELECT amount, currency, payment_status FROM debts WHERE am_email = '$email_esc'");
     if ($res_d) {
         while ($d = $res_d->fetch_assoc()) {
             if (strcasecmp(trim($d['payment_status'] ?? ''), 'Paid') === 0) continue;
@@ -343,7 +319,7 @@ $badge_color = $kpi['color_badge'] ?? '#2563eb';
                 <div class="ambd-panel ambd-toolbar">
                     <div>
                         <h3 style="margin:0;">Hiệu suất kinh doanh của bạn</h3>
-                        <p style="margin:4px 0 0; font-size:13px; color:#64748b;">Doanh thu hóa đơn (posted) so với mục tiêu cấp bậc · Quý <?php echo $sel_q . '/' . $sel_y; ?>.</p>
+                        <p style="margin:4px 0 0; font-size:13px; color:#64748b;">Doanh thu các deal bạn phụ trách (My Debt) so với mục tiêu cấp bậc · Quý <?php echo $sel_q . '/' . $sel_y; ?>.</p>
                     </div>
                     <div style="display:flex; align-items:center; gap:12px;">
                         <?php if ($kpi): ?>
@@ -370,7 +346,7 @@ $badge_color = $kpi['color_badge'] ?? '#2563eb';
                         <div class="ambd-label">Doanh thu Quý <?php echo $sel_q; ?></div>
                         <div class="ambd-value" style="color:#059669;"><?php echo $fmtVnd($rev_q); ?></div>
                         <div class="ambd-sub">
-                            <?php echo $invoice_count_q; ?> hóa đơn
+                            <?php echo $invoice_count_q; ?> deal
                             <?php if ($growth_pct !== null): ?>
                                 · <span class="ambd-chip" style="background:<?php echo $growth_pct >= 0 ? '#d1fae5' : '#fee2e2'; ?>; color:<?php echo $growth_pct >= 0 ? '#065f46' : '#991b1b'; ?>;"><?php echo $growth_pct >= 0 ? '▲' : '▼'; ?> <?php echo abs($growth_pct); ?>% so Q trước</span>
                             <?php endif; ?>
@@ -408,7 +384,7 @@ $badge_color = $kpi['color_badge'] ?? '#2563eb';
                     <div class="ambd-card rose">
                         <div class="ambd-label">Công nợ cần thu</div>
                         <div class="ambd-value" style="color:#e11d48;"><?php echo $fmtVnd($my_pending_vnd); ?></div>
-                        <div class="ambd-sub"><?php echo $my_pending_cnt; ?> hóa đơn chưa thanh toán (team của bạn)</div>
+                        <div class="ambd-sub"><?php echo $my_pending_cnt; ?> deal chưa thu (bạn phụ trách)</div>
                     </div>
                 </div>
 
