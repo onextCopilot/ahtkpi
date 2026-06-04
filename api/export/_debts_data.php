@@ -10,6 +10,21 @@
  */
 function build_debts_export(mysqli $conn, array $session, array $get): array
 {
+    // VND rate map (company-safe getCurrencies) for the converted totals.
+    $vnd_rates = ['VND' => 1.0];
+    try {
+        require_once __DIR__ . '/../../libs/OdooAPI.php';
+        $odoo = new OdooAPI();
+        $curs = $odoo->getCurrencies();
+        $r_vnd = (is_array($curs) && isset($curs['VND']['rate'])) ? (float) $curs['VND']['rate'] : 0.0;
+        if ($r_vnd > 0) {
+            foreach ($curs as $cname => $cinfo) {
+                $cr = isset($cinfo['rate']) ? (float) $cinfo['rate'] : 0.0;
+                if ($cr > 0) $vnd_rates[$cname] = $r_vnd / $cr;
+            }
+        }
+    } catch (\Throwable $e) { /* VND-only fallback */ }
+
     $user_id = (int) ($session['user_id'] ?? 0);
     $role = $session['role'] ?? 'user';
     $can_view_all = ($role === 'admin') || !empty($session['can_view_all_debts']);
@@ -80,14 +95,25 @@ function build_debts_export(mysqli $conn, array $session, array $get): array
         if ($hasZero) $keys[] = 0;
         return $keys;
     };
-    $subtotalRows = function (array $acc, string $label, string $type) {
+    // Per-currency subtotal rows + one "quy đổi VND" row summing everything.
+    $subtotalRows = function (array $acc, string $label, string $type) use ($vnd_rates) {
         ksort($acc);
         $out = [];
+        $vndTotal = 0.0;
         foreach ($acc as $cur => $sum) {
             $cells = array_fill(0, 12, '');
             $cells[0] = $label;
             $cells[5] = ['v' => $sum, 'num' => true];
             $cells[6] = $cur;
+            $out[] = ['type' => $type, 'cells' => $cells];
+            $vndTotal += $sum * ($vnd_rates[$cur] ?? 0);
+        }
+        // Add the converted-VND line unless the group is VND-only (would duplicate).
+        if (!(count($acc) === 1 && isset($acc['VND']))) {
+            $cells = array_fill(0, 12, '');
+            $cells[0] = $label . ' (quy đổi VND)';
+            $cells[5] = ['v' => $vndTotal, 'num' => true];
+            $cells[6] = 'VND';
             $out[] = ['type' => $type, 'cells' => $cells];
         }
         return $out;
