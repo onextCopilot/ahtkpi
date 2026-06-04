@@ -81,6 +81,58 @@ if ($res_n) {
 $res_nc = $conn->query("SELECT COUNT(*) AS c FROM pasx_notifications WHERE user_id = $user_id AND is_read = 0");
 if ($res_nc && ($r = $res_nc->fetch_assoc())) $notif_count = (int) $r['c'];
 
+// ── KPI monthly trend (personal avg achievement_pct across the cycle year) ────
+$trend_year = $cycle ? (int) $cycle['year'] : (int) date('Y');
+$trend = array_fill(1, 12, null);
+$trend_has_data = false;
+if ($cycle) {
+    $cid = (int) $cycle['id'];
+    $res_t = $conn->query("SELECT r.month, AVG(r.achievement_pct) AS avg_pct
+                           FROM core_kpi_results r
+                           JOIN core_kpi_assignments a ON r.assignment_id = a.id
+                           WHERE a.user_id = $user_id AND a.cycle_id = $cid AND r.year = $trend_year
+                             AND r.achievement_pct IS NOT NULL
+                           GROUP BY r.month ORDER BY r.month");
+    if ($res_t) {
+        while ($t = $res_t->fetch_assoc()) {
+            $mo = (int) $t['month'];
+            if ($mo >= 1 && $mo <= 12) { $trend[$mo] = round((float) $t['avg_pct'], 1); $trend_has_data = true; }
+        }
+    }
+}
+
+// ── My OKR (objectives / key activities / results owned by me) ────────────────
+$my_okr = [];
+$okr_tbl = $conn->query("SHOW TABLES LIKE 'okr_key_activities'");
+if ($okr_tbl && $okr_tbl->num_rows > 0) {
+    $has_owner = $conn->query("SHOW COLUMNS FROM okr_key_activities LIKE 'owner_id'");
+    if ($has_owner && $has_owner->num_rows > 0) {
+        $res_ka = $conn->query("SELECT ka.activity_name AS name, ka.progress AS pct, o.title AS obj
+                                FROM okr_key_activities ka
+                                LEFT JOIN okr_objectives o ON ka.objective_id = o.id
+                                WHERE ka.owner_id = $user_id ORDER BY ka.id DESC LIMIT 10");
+        if ($res_ka) {
+            while ($k = $res_ka->fetch_assoc()) {
+                $my_okr[] = ['name' => $k['name'], 'obj' => $k['obj'], 'pct' => $k['pct'] !== null ? (float) $k['pct'] : null];
+            }
+        }
+    }
+    // Results owned by me (current/target → %)
+    $has_owner_r = $conn->query("SHOW COLUMNS FROM okr_results LIKE 'owner_id'");
+    if ($has_owner_r && $has_owner_r->num_rows > 0) {
+        $res_kr = $conn->query("SELECT r.metric_name AS name, r.current_value, r.target_value, o.title AS obj
+                                FROM okr_results r
+                                LEFT JOIN okr_objectives o ON r.objective_id = o.id
+                                WHERE r.owner_id = $user_id ORDER BY r.id DESC LIMIT 10");
+        if ($res_kr) {
+            while ($k = $res_kr->fetch_assoc()) {
+                $tv = (float) $k['target_value']; $cv = (float) $k['current_value'];
+                $my_okr[] = ['name' => $k['name'], 'obj' => $k['obj'], 'pct' => $tv > 0 ? min(100, round($cv / $tv * 100, 1)) : null];
+            }
+        }
+    }
+}
+
 function dm_pct_color(?float $pct): string
 {
     if ($pct === null) return '#94a3b8';
@@ -217,18 +269,75 @@ function dm_pct_color(?float $pct): string
                     </div>
                 </div>
 
+                <!-- KPI trend + My OKR -->
+                <div class="dm-row">
+                    <div class="dm-panel" style="margin-bottom:0;">
+                        <h3 style="margin-bottom:4px;">Xu hướng KPI <?php echo $trend_year; ?></h3>
+                        <?php if ($trend_has_data): ?>
+                            <div id="dm-trend"></div>
+                        <?php else: ?>
+                            <p style="font-size:13px; color:#94a3b8; margin:8px 0 0;">Chưa đủ dữ liệu theo tháng để vẽ xu hướng.</p>
+                        <?php endif; ?>
+                    </div>
+                    <div class="dm-panel" style="margin-bottom:0;">
+                        <h3 style="margin-bottom:8px;">OKR của tôi</h3>
+                        <?php if (empty($my_okr)): ?>
+                            <p style="font-size:13px; color:#94a3b8; margin:8px 0 0;">Bạn chưa được gán OKR nào.</p>
+                        <?php else: ?>
+                            <?php foreach ($my_okr as $o):
+                                $c = dm_pct_color($o['pct']); ?>
+                                <div class="dm-kpi">
+                                    <div class="dm-kpi-top">
+                                        <span style="font-weight:600; color:#0f172a; font-size:13px;"><?php echo htmlspecialchars($o['name'] ?: '—'); ?>
+                                            <?php if ($o['obj']): ?><span style="font-size:11px; color:#94a3b8; font-weight:500;"> · <?php echo htmlspecialchars($o['obj']); ?></span><?php endif; ?>
+                                        </span>
+                                        <span style="font-weight:700; color:<?php echo $c; ?>; font-size:13px; white-space:nowrap;"><?php echo $o['pct'] !== null ? round($o['pct']) . '%' : '—'; ?></span>
+                                    </div>
+                                    <div class="dm-bar"><div class="dm-fill" style="width:<?php echo $o['pct'] !== null ? min(100, max(0, (int) round($o['pct']))) : 0; ?>%; background:<?php echo $c; ?>;"></div></div>
+                                </div>
+                            <?php endforeach; ?>
+                            <div style="text-align:right; margin-top:10px;"><a href="/modules/okr" style="font-size:12px; color:#3b82f6; text-decoration:none;">→ Xem OKR đầy đủ</a></div>
+                        <?php endif; ?>
+                    </div>
+                </div>
+
                 <div class="dm-panel">
-                    <h3 style="margin-bottom:14px;">Đi tới chi tiết</h3>
+                    <h3 style="margin-bottom:14px;">Tài liệu &amp; lối tắt</h3>
                     <div class="dm-links">
                         <a class="dm-link" href="/kpi">📈 KPI phòng ban</a>
-                        <a class="dm-link alt" href="/my-com">💰 Lương &amp; KPI của tôi</a>
-                        <a class="dm-link alt" href="/profile">👤 Hồ sơ</a>
+                        <a class="dm-link alt" href="/modules/okr">🎯 OKR</a>
+                        <a class="dm-link alt" href="/tai-lieu-quy-trinh">📚 Tài liệu &amp; quy trình</a>
+                        <a class="dm-link alt" href="/guides">📖 Hướng dẫn</a>
+                        <a class="dm-link alt" href="/my-com">💰 Lương &amp; KPI</a>
+                        <a class="dm-link alt" href="/profile">👤 Hồ sơ &amp; mật khẩu</a>
                     </div>
                 </div>
 
             </div>
         </main>
     </div>
+    <?php if ($trend_has_data): ?>
+    <script src="https://cdn.jsdelivr.net/npm/apexcharts"></script>
+    <script>
+        (function () {
+            const data = <?php echo json_encode(array_map(fn($v) => $v === null ? null : (float) $v, array_values($trend))); ?>;
+            const cats = <?php echo json_encode(array_map(fn($m) => 'T' . $m, array_keys($trend))); ?>;
+            new ApexCharts(document.querySelector('#dm-trend'), {
+                series: [{ name: 'KPI %', data: data }],
+                chart: { type: 'line', height: 300, toolbar: { show: false }, zoom: { enabled: false } },
+                stroke: { curve: 'smooth', width: 3 },
+                colors: ['#2563eb'],
+                markers: { size: 4, hover: { size: 6 } },
+                dataLabels: { enabled: false },
+                xaxis: { categories: cats },
+                yaxis: { labels: { formatter: v => Math.round(v) + '%' } },
+                annotations: { yaxis: [{ y: 100, borderColor: '#10b981', strokeDashArray: 4, label: { text: 'Mục tiêu 100%', style: { color: '#fff', background: '#10b981' } } }] },
+                grid: { borderColor: '#f1f5f9' },
+                tooltip: { y: { formatter: v => v === null ? 'chưa có' : v + '%' } }
+            }).render();
+        })();
+    </script>
+    <?php endif; ?>
     <script src="/assets/js/dashboard.js"></script>
 </body>
 
