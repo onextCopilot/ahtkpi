@@ -8,7 +8,7 @@
  */
 $__is_owner_admin = ((($role ?? '') === 'admin') || (($full_name ?? '') === 'Hyun Cao'));
 if ($__is_owner_admin):
-    $__views = ['ceo' => '🏢 General', 'am_bd' => '💼 AM/BD', 'manager' => '👥 Trưởng phòng', 'member' => '🙋 Nhân viên'];
+    $__views = ['ceo' => '🏢 General', 'am_bd' => '💼 AM/BD', 'manager' => '👥 Phòng ban', 'member' => '🙋 Cá nhân'];
     $__active = (!empty($_GET['view']) && isset($__views[$_GET['view']])) ? $_GET['view'] : ($dash_view ?? 'ceo');
 ?>
 <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin-bottom:16px;">
