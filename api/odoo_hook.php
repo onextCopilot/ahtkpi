@@ -130,6 +130,33 @@ if ($payload && str_contains($event_type, 'crm')) {
     $debug['won_status']  = $won_status;
     $debug['lost_reason'] = $lost_reason;
 
+    // Extract customer / company name — partner_name (free text) takes priority,
+    // else the partner_id label (object {id,name} or tuple [id,name]).
+    $partner_name_field = $payload['partner_name']
+        ?? $payload['record']['partner_name']
+        ?? ($payload['data'][0]['partner_name'] ?? null);
+    $partner_raw = $payload['partner_id']
+        ?? $payload['record']['partner_id']
+        ?? ($payload['data'][0]['partner_id'] ?? null);
+
+    $company_name = null;
+    if (is_string($partner_name_field) && $partner_name_field !== '') {
+        $company_name = $partner_name_field;
+    } elseif (is_array($partner_raw)) {
+        $label = $partner_raw['name'] ?? ($partner_raw[1] ?? null);
+        if (is_string($label) && $label !== '') {
+            $company_name = trim(explode(',', $label)[0]);
+        }
+    }
+    if ($company_name === '') $company_name = null;
+
+    // Opportunity name/title (refresh if the webhook carries it)
+    $opp_name = $payload['name'] ?? $payload['record']['name'] ?? ($payload['data'][0]['name'] ?? null);
+    $opp_name = (is_string($opp_name) && trim($opp_name) !== '') ? trim($opp_name) : null;
+
+    $debug['company_name'] = $company_name;
+    $debug['opp_name']     = $opp_name;
+
     if ($opp_id) {
         // Ensure pakd_settings table exists before querying
         $conn->query("CREATE TABLE IF NOT EXISTS pakd_settings (
@@ -172,10 +199,12 @@ if ($payload && str_contains($event_type, 'crm')) {
                      odoo_stage_name = COALESCE(?, odoo_stage_name),
                      won_status       = COALESCE(?, won_status),
                      lost_reason      = ?,
+                     name             = COALESCE(?, name),
+                     company_name     = COALESCE(?, company_name),
                      updated_at       = NOW()
                  WHERE odoo_opp_id = ?"
             );
-            $upd->bind_param('isssi', $stage_id, $stage_name, $won_status, $lost_reason, $opp_id);
+            $upd->bind_param('isssssi', $stage_id, $stage_name, $won_status, $lost_reason, $opp_name, $company_name, $opp_id);
             $upd->execute();
             $pakd_updated = $upd->affected_rows > 0;
             $upd->close();
