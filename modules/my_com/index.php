@@ -2398,8 +2398,9 @@ if ($mc_export === 'excel' || $mc_export === 'pdf') {
                     <strong style="color:#b45309;">License Bonus:</strong> HĐ type License (bảng riêng). Bonus = 10% × EBT(License) khi <strong>KPI quý ≥ 80%</strong> & đã thanh toán. Doanh thu License <strong>không</strong> tính vào KPI.
                 </div>
             </details>
+            <?php endif; /* end: License/Sale Orders/Rules hidden for marketer-only view */ ?>
 
-            <!-- ─── Confirmation Box ─── -->
+            <!-- ─── Confirmation Box (shown for everyone, incl. marketers) ─── -->
             <div id="confirmBox" style="margin-top:2rem;border-radius:12px;padding:1.25rem 1.5rem;display:flex;align-items:center;justify-content:space-between;gap:1rem;<?= $is_confirmed ? 'background:#f0fdf4;border:1.5px solid #86efac;' : 'background:#f8fafc;border:1.5px solid #e2e8f0;' ?>">
                 <div>
                     <?php if ($is_confirmed): ?>
@@ -2424,7 +2425,6 @@ if ($mc_export === 'excel' || $mc_export === 'pdf') {
                 </div>
             </div>
 
-            <?php endif; /* end: License/Sale Orders/Rules/Confirmation hidden for marketer-only view */ ?>
         </div>
     </main>
 </div>

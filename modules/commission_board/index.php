@@ -47,12 +47,18 @@ foreach ([
     'snap_position' => "VARCHAR(50) DEFAULT ''", 'snap_level' => "VARCHAR(100) DEFAULT ''",
 ] as $col => $ddl) cb_ensure_col($conn, $col, $ddl);
 
-// ── AM/BD users (with fallback level from users.sale_level_id) ──
+// Ensure is_marketer exists on older live DBs (idempotent) so the query below never fatals.
+try {
+    $mc_col = $conn->query("SHOW COLUMNS FROM users LIKE 'is_marketer'");
+    if ($mc_col && $mc_col->num_rows === 0) $conn->query("ALTER TABLE users ADD COLUMN is_marketer TINYINT(1) DEFAULT 0");
+} catch (Throwable $e) { /* ignore */ }
+
+// ── AM/BD + Marketer users (with fallback level from users.sale_level_id) ──
 $users = [];
-$ures = $conn->query("SELECT u.id, u.full_name, u.email, sl.position_type AS fb_position, sl.level_name AS fb_level
+$ures = $conn->query("SELECT u.id, u.full_name, u.email, u.is_am_bd, u.is_marketer, sl.position_type AS fb_position, sl.level_name AS fb_level
     FROM users u
     LEFT JOIN sale_levels sl ON u.sale_level_id = sl.id
-    WHERE u.is_am_bd = 1
+    WHERE u.is_am_bd = 1 OR u.is_marketer = 1
     ORDER BY u.full_name");
 if ($ures) while ($r = $ures->fetch_assoc()) $users[(int)$r['id']] = $r;
 
@@ -95,6 +101,8 @@ foreach ($users as $uid => &$u) {
             if (!empty($confirm[$uid][$q]['snap_position'])) { $pos = $confirm[$uid][$q]['snap_position']; $lvl = $confirm[$uid][$q]['snap_level']; break; }
         }
     }
+    // Marketers have no sale-level position; keep them under a "Marketing" label.
+    if (!$pos && !empty($u['is_marketer'])) { $pos = 'Marketing'; }
     if (!$pos) { unset($users[$uid]); continue; }
     $u['_pos'] = $pos;
     $u['_lvl'] = $lvl;
@@ -219,7 +227,7 @@ foreach ($users as $uid => $u) {
                     </thead>
                     <tbody>
                         <?php if (empty($users)): ?>
-                            <tr><td colspan="9" class="cb-empty">Không có nhân viên AM / BD nào (cần bật cờ <code>is_am_bd</code>)</td></tr>
+                            <tr><td colspan="9" class="cb-empty">Không có nhân viên AM / BD / Marketer nào (cần bật cờ <code>is_am_bd</code> hoặc <code>is_marketer</code>)</td></tr>
                         <?php else: foreach ($users as $uid => $u):
                             $pos     = $u['_pos'] ?? '';
                             $lvlname = $u['_lvl'] ?? '';
