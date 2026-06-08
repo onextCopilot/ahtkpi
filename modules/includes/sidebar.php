@@ -4,12 +4,15 @@ $current_uri = $_SERVER['REQUEST_URI'];
 // Backfill is_marketer into the session for users who logged in before this flag existed
 // (permissions are session-based; this avoids forcing a re-login after the flag is granted).
 if (isset($_SESSION['user_id']) && isset($conn) && !isset($_SESSION['is_marketer'])) {
-    if ($mkStmt = $conn->prepare("SELECT is_marketer FROM users WHERE id = ?")) {
-        $mkStmt->bind_param("i", $_SESSION['user_id']);
-        $mkStmt->execute();
-        if ($mkRow = $mkStmt->get_result()->fetch_assoc()) $_SESSION['is_marketer'] = (int) ($mkRow['is_marketer'] ?? 0);
-        $mkStmt->close();
-    }
+    $_SESSION['is_marketer'] = 0; // safe default if the column/query is unavailable
+    try {
+        if ($mkStmt = $conn->prepare("SELECT is_marketer FROM users WHERE id = ?")) {
+            $mkStmt->bind_param("i", $_SESSION['user_id']);
+            $mkStmt->execute();
+            if ($mkRow = $mkStmt->get_result()->fetch_assoc()) $_SESSION['is_marketer'] = (int) ($mkRow['is_marketer'] ?? 0);
+            $mkStmt->close();
+        }
+    } catch (Throwable $e) { /* column may not exist yet on older DBs */ }
 }
 
 // Marketer-only user (no other debt privilege): under Debts Management they may see ONLY My Com.

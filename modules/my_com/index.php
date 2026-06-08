@@ -52,6 +52,13 @@ $mc_qs = $viewing_other ? ('&user_id=' . $u_id) : '';
 // (signed-contract) revenue vs the level's so_kpi_quarter_usd (USD) target, instead of invoiced.
 $user_is_am_bd = 0;
 $user_is_marketer = 0;
+// Ensure is_marketer exists on older live DBs (idempotent) so the SELECT below never fatals.
+try {
+    $mc_col = $conn->query("SHOW COLUMNS FROM users LIKE 'is_marketer'");
+    if ($mc_col && $mc_col->num_rows === 0) {
+        $conn->query("ALTER TABLE users ADD COLUMN is_marketer TINYINT(1) DEFAULT 0");
+    }
+} catch (Throwable $e) { /* ignore */ }
 if ($ambd_stmt = $conn->prepare("SELECT is_am_bd, is_marketer FROM users WHERE id = ?")) {
     $ambd_stmt->bind_param("i", $u_id);
     $ambd_stmt->execute();

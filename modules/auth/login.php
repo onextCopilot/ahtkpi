@@ -17,6 +17,15 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     if (empty($username) || empty($password)) {
         $error = 'Please enter all required information';
     } else {
+        // Ensure the is_marketer column exists (added in a later release; avoids a fatal on
+        // live DBs that haven't run the User Management page migration yet).
+        try {
+            $mc_col = $conn->query("SHOW COLUMNS FROM users LIKE 'is_marketer'");
+            if ($mc_col && $mc_col->num_rows === 0) {
+                $conn->query("ALTER TABLE users ADD COLUMN is_marketer TINYINT(1) DEFAULT 0");
+            }
+        } catch (Throwable $e) { /* ignore — fall back below */ }
+
         $stmt = $conn->prepare("SELECT id, username, password, full_name, role, department_id, can_view_invoice, can_view_all_debts, is_am_bd, is_marketer, can_view_odoo_logs FROM users WHERE username = ?");
         if (!$stmt) {
             $error = "Lỗi Database: " . $conn->error;
