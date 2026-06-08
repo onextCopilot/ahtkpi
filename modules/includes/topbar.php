@@ -266,8 +266,16 @@ $total_notif_count = $notif_count + $pasx_notif_count + ($kpi_alert ? 1 : 0);
                         $isCeoReq      = ($ev === 'ceo_approve_request');
                         $isCeoApproved = ($ev === 'ceo_approved');
                         $isCeoRejected = ($ev === 'ceo_rejected');
+                        $isMilestone   = (strpos($ev, 'milestone_') === 0);
 
-                        if ($isCeoReq) {
+                        if ($isMilestone) {
+                            $nb_bg    = '#f0fdfa'; $nb_color = '#0d9488';
+                            $nb_icon  = 'fa-flag-checkered'; $nb_bdr = '#99f6e4';
+                            $nb_title = ($ev === 'milestone_deleted') ? 'Milestone bị xoá'
+                                      : (($ev === 'milestone_created') ? 'Milestone mới' : 'Milestone cập nhật');
+                            $nb_link_label = 'Xem dự án';
+                            $nb_link_url   = '/projects/du-an/detail?id=' . $pn['pakd_id'];
+                        } elseif ($isCeoReq) {
                             $nb_bg    = '#fffbeb'; $nb_color = '#d97706';
                             $nb_icon  = 'fa-user-tie'; $nb_bdr = '#fde68a';
                             $nb_title = 'Yêu cầu phê duyệt PASX';

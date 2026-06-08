@@ -1025,6 +1025,9 @@ $pst = $pakd['pasx_status'] ?? '';
                                     <?= msStatusBadge($m['status']) ?>
                                     <?= msOnTimeBadge($m['on_time']) ?>
                                     <?= msPaymentBadge($m['payment_status']) ?>
+                                    <?php if (!empty($m['synced_at']) && strtotime($m['synced_at']) >= time() - 86400): ?>
+                                    <span style="display:inline-flex;align-items:center;gap:4px;padding:2px 9px;border-radius:5px;font-size:11px;font-weight:700;background:#fef9c3;color:#b45309;white-space:nowrap;"><i class="fas fa-bolt" style="font-size:9px;"></i> Mới cập nhật</span>
+                                    <?php endif; ?>
                                 </div>
                                 <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap;font-size:11px;color:var(--lgray);">
                                     <?php if (!empty($m['start_date'])): ?>
