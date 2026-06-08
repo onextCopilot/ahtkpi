@@ -958,7 +958,7 @@ $pst = $pakd['pasx_status'] ?? '';
                     <?php endif; ?>
 
                     <!-- Milestones (đồng bộ từ hệ thống sản xuất) -->
-                    <?php if (!empty($milestones)):
+                    <?php
                         $ms_total = count($milestones);
                         $ms_done  = 0;
                         $ms_progress = 0.0; // theo budget_percent của các mốc đã hoàn thành
@@ -980,7 +980,9 @@ $pst = $pakd['pasx_status'] ?? '';
                             <div style="display:flex;align-items:center;gap:8px;">
                                 <div class="card-icon" style="background:rgba(13,148,136,.1);color:#0d9488;"><i class="fas fa-flag-checkered"></i></div>
                                 <h3>Milestone dự án
+                                    <?php if ($ms_total > 0): ?>
                                     <span style="font-size:12px;font-weight:500;color:var(--gray);margin-left:4px;"><?= $ms_done ?>/<?= $ms_total ?></span>
+                                    <?php endif; ?>
                                 </h3>
                             </div>
                             <?php if ($ms_last_sync): ?>
@@ -990,6 +992,12 @@ $pst = $pakd['pasx_status'] ?? '';
                             <?php endif; ?>
                         </div>
                         <div class="card-body" style="padding:0;">
+                            <?php if (empty($milestones)): ?>
+                            <div class="empty-state" style="padding:28px;">
+                                <i class="fas fa-flag-checkered"></i>
+                                <p>Chưa có milestone nào được đồng bộ từ hệ thống sản xuất</p>
+                            </div>
+                            <?php else: ?>
                             <!-- Progress tổng -->
                             <div style="padding:14px 18px 10px;">
                                 <div style="display:flex;align-items:center;justify-content:space-between;font-size:11px;color:var(--lgray);margin-bottom:6px;">
@@ -1047,9 +1055,9 @@ $pst = $pakd['pasx_status'] ?? '';
                                 <?php endif; ?>
                             </div>
                             <?php endforeach; ?>
+                            <?php endif; ?>
                         </div>
                     </div>
-                    <?php endif; ?>
 
                     <!-- Sale Orders -->
                     <?php
