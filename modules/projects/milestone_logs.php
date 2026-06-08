@@ -146,6 +146,9 @@ function ev_badge_color($ev) {
         .btn-do-clear { background:#b91c1c; color:#fff; border:none; border-radius:8px; padding:8px 18px; cursor:pointer; font-size:.85rem; font-weight:600; }
         .btn-do-clear:disabled { opacity:.5; cursor:not-allowed; }
         #clearResult { margin-top:12px; font-size:.82rem; padding:8px 12px; border-radius:6px; display:none; }
+        .btn-copy { background:#eef2ff; color:#4338ca; border:1px solid #dfe3f5; border-radius:7px; padding:5px 12px; cursor:pointer; font-size:.78rem; font-weight:600; display:inline-flex; align-items:center; gap:5px; }
+        .btn-copy:hover { background:#e0e7ff; }
+        .btn-copy.copied { background:#ecfdf5; color:#047857; border-color:#cde9da; }
     </style>
 </head>
 <body>
@@ -260,7 +263,10 @@ if (file_exists($sidebar_file)) include $sidebar_file;
     <div class="modal-box">
         <div class="modal-head">
             <h3 id="modalTitle">Payload</h3>
-            <button class="modal-close" onclick="closeModal()">&times;</button>
+            <div style="display:flex;align-items:center;gap:10px;">
+                <button class="btn-copy" id="btnCopyJson" onclick="copyJson()"><i class="fas fa-copy"></i> Copy JSON</button>
+                <button class="modal-close" onclick="closeModal()">&times;</button>
+            </div>
         </div>
         <div class="modal-body"><pre id="modalContent"></pre></div>
     </div>
@@ -276,6 +282,25 @@ function showDetail(id) {
     document.getElementById('detailModal').classList.add('open');
 }
 function closeModal() { document.getElementById('detailModal').classList.remove('open'); }
+function copyJson() {
+    const text = document.getElementById('modalContent').textContent || '';
+    const btn  = document.getElementById('btnCopyJson');
+    const done = () => {
+        btn.classList.add('copied');
+        btn.innerHTML = '<i class="fas fa-check"></i> Đã copy';
+        setTimeout(() => { btn.classList.remove('copied'); btn.innerHTML = '<i class="fas fa-copy"></i> Copy JSON'; }, 1600);
+    };
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).then(done).catch(fallbackCopy);
+    } else { fallbackCopy(); }
+    function fallbackCopy() {
+        const ta = document.createElement('textarea');
+        ta.value = text; ta.style.position = 'fixed'; ta.style.opacity = '0';
+        document.body.appendChild(ta); ta.select();
+        try { document.execCommand('copy'); done(); } catch (e) {}
+        document.body.removeChild(ta);
+    }
+}
 document.getElementById('detailModal').addEventListener('click', function(e) { if (e.target === this) closeModal(); });
 document.addEventListener('keydown', e => { if (e.key === 'Escape') { closeModal(); if (typeof closeClearModal === 'function') closeClearModal(); } });
 </script>
