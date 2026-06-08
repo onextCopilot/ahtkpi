@@ -304,7 +304,7 @@ try {
                     WHERE odoo_opp_id = ?
                 ");
                 $upd->bind_param(
-                    "sssissddisssssssi",
+                    "sssissddissssssssi",
                     $name, $amName, $amEmail, $localUserId,
                     $department, $companyName, $oppValue, $probability,
                     $stageId, $stageName, $currency, $odooUrl,
