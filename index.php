@@ -163,6 +163,7 @@ $routes = [
     '/api/request_production_plan.php' => 'api/request_production_plan.php',
     '/api/pasx/callback'           => 'api/pasx_callback.php',
     '/api/pasx/callback.php'       => 'api/pasx_callback.php',
+    '/integrations/hrm/milestones/sync' => 'api/milestones_sync.php',
     '/odoo/hook'                   => 'api/odoo_hook.php',
     '/odoo/hook.php'               => 'api/odoo_hook.php',
     '/odoo/logs'                   => 'modules/odoo_logs/index.php',

@@ -321,6 +321,17 @@ $dRows = $dRes->get_result();
 while ($dRow = $dRows->fetch_assoc()) $doc_list[] = $dRow;
 $dRes->close();
 
+// Fetch milestones (đồng bộ từ hệ thống sản xuất qua webhook /integrations/hrm/milestones/sync)
+$milestones = [];
+try {
+    $mRes = $conn->prepare("SELECT * FROM pakd_milestones WHERE pakd_id=? ORDER BY sort_order ASC, delivery_date ASC, id ASC");
+    $mRes->bind_param("i", $pakd_id);
+    $mRes->execute();
+    $mRows = $mRes->get_result();
+    while ($mRow = $mRows->fetch_assoc()) $milestones[] = $mRow;
+    $mRes->close();
+} catch (\Throwable $e) {} // bảng có thể chưa tồn tại nếu chưa nhận webhook nào
+
 $site_host = (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off' ? 'https' : 'http') . '://' . ($_SERVER['HTTP_HOST'] ?? 'localhost');
 
 function formatFileSize($bytes) {
@@ -419,6 +430,45 @@ function invoiceStatusBadge($status) {
     $s = $map[$status] ?? ['label' => $status, 'bg' => '#f1f5f9', 'fg' => '#64748b'];
     return '<span style="display:inline-flex;align-items:center;gap:4px;padding:2px 9px;border-radius:5px;font-size:11px;font-weight:600;background:' . $s['bg'] . ';color:' . $s['fg'] . ';">'
          . htmlspecialchars($s['label']) . '</span>';
+}
+
+function msBadge($label, $bg, $fg) {
+    return '<span style="display:inline-flex;align-items:center;gap:4px;padding:2px 9px;border-radius:5px;font-size:11px;font-weight:700;background:' . $bg . ';color:' . $fg . ';white-space:nowrap;">'
+         . htmlspecialchars($label) . '</span>';
+}
+function msStatusBadge($status) {
+    $map = [
+        'NOT_STARTED' => ['Chưa bắt đầu', '#f1f5f9', '#64748b'],
+        'PENDING'     => ['Chờ',          '#f1f5f9', '#64748b'],
+        'IN_PROGRESS' => ['Đang làm',     '#eff6ff', '#2563eb'],
+        'IN_REVIEW'   => ['Đang review',  '#fef9c3', '#d97706'],
+        'DONE'        => ['Hoàn thành',   '#dcfce7', '#16a34a'],
+        'COMPLETED'   => ['Hoàn thành',   '#dcfce7', '#16a34a'],
+        'CANCELLED'   => ['Đã hủy',       '#fee2e2', '#dc2626'],
+    ];
+    $s = $map[strtoupper((string)$status)] ?? [ucfirst(strtolower((string)$status)), '#f1f5f9', '#64748b'];
+    return msBadge($s[0], $s[1], $s[2]);
+}
+function msOnTimeBadge($onTime) {
+    $map = [
+        'ON_TIME' => ['Đúng hạn', '#dcfce7', '#16a34a'],
+        'LATE'    => ['Trễ hạn',  '#fee2e2', '#dc2626'],
+        'PENDING' => ['Chưa tới', '#f1f5f9', '#94a3b8'],
+    ];
+    $k = strtoupper((string)$onTime);
+    if (!isset($map[$k])) return '';
+    return msBadge($map[$k][0], $map[$k][1], $map[$k][2]);
+}
+function msPaymentBadge($pay) {
+    $map = [
+        'NOT_YET'  => ['Chưa TT',     '#f1f5f9', '#64748b'],
+        'PENDING'  => ['Chờ TT',      '#fef9c3', '#d97706'],
+        'INVOICED' => ['Đã xuất HĐ',  '#eff6ff', '#2563eb'],
+        'PAID'     => ['Đã thanh toán','#dcfce7', '#16a34a'],
+    ];
+    $k = strtoupper((string)$pay);
+    if (!isset($map[$k])) return '';
+    return msBadge($map[$k][0], $map[$k][1], $map[$k][2]);
 }
 
 function avatarColor3($name) {
@@ -903,6 +953,100 @@ $pst = $pakd['pasx_status'] ?? '';
                                 <div class="fin-row-pct" style="color:<?= $gpRowColor ?>;"><?= $gpRowPct ?></div>
                                 <div class="fin-row-val" style="color:<?= $gpRowColor ?>;"><?= $gpRowVal ?></div>
                             </div>
+                        </div>
+                    </div>
+                    <?php endif; ?>
+
+                    <!-- Milestones (đồng bộ từ hệ thống sản xuất) -->
+                    <?php if (!empty($milestones)):
+                        $ms_total = count($milestones);
+                        $ms_done  = 0;
+                        $ms_progress = 0.0; // theo budget_percent của các mốc đã hoàn thành
+                        foreach ($milestones as $m) {
+                            $isDone = in_array(strtoupper((string)$m['status']), ['DONE','COMPLETED'], true);
+                            if ($isDone) {
+                                $ms_done++;
+                                $ms_progress += (float)($m['budget_percent'] ?? 0);
+                            }
+                        }
+                        $ms_progress_pct = max(0, min(100, round($ms_progress * 100)));
+                        $ms_last_sync = null;
+                        foreach ($milestones as $m) {
+                            if (!empty($m['synced_at']) && (!$ms_last_sync || $m['synced_at'] > $ms_last_sync)) $ms_last_sync = $m['synced_at'];
+                        }
+                    ?>
+                    <div class="card">
+                        <div class="card-header" style="justify-content:space-between;">
+                            <div style="display:flex;align-items:center;gap:8px;">
+                                <div class="card-icon" style="background:rgba(13,148,136,.1);color:#0d9488;"><i class="fas fa-flag-checkered"></i></div>
+                                <h3>Milestone dự án
+                                    <span style="font-size:12px;font-weight:500;color:var(--gray);margin-left:4px;"><?= $ms_done ?>/<?= $ms_total ?></span>
+                                </h3>
+                            </div>
+                            <?php if ($ms_last_sync): ?>
+                            <span style="font-size:11px;color:var(--lgray);" title="Đồng bộ từ hệ thống sản xuất">
+                                <i class="fas fa-sync-alt" style="font-size:9px;"></i> <?= date('d/m/Y H:i', strtotime($ms_last_sync)) ?>
+                            </span>
+                            <?php endif; ?>
+                        </div>
+                        <div class="card-body" style="padding:0;">
+                            <!-- Progress tổng -->
+                            <div style="padding:14px 18px 10px;">
+                                <div style="display:flex;align-items:center;justify-content:space-between;font-size:11px;color:var(--lgray);margin-bottom:6px;">
+                                    <span>Tiến độ (theo % ngân sách hoàn thành)</span>
+                                    <span style="font-weight:700;color:#0d9488;"><?= $ms_progress_pct ?>%</span>
+                                </div>
+                                <div style="height:8px;background:#f1f5f9;border-radius:999px;overflow:hidden;">
+                                    <div style="height:100%;width:<?= $ms_progress_pct ?>%;background:linear-gradient(90deg,#14b8a6,#0d9488);border-radius:999px;"></div>
+                                </div>
+                            </div>
+                            <?php foreach ($milestones as $mIdx => $m):
+                                $mName    = $m['name'] ?: ('Milestone #' . ($m['sort_order'] ?: ($mIdx + 1)));
+                                $bordered = $mIdx >= 0 ? 'border-top:1px solid var(--border);' : '';
+                                $bPct     = $m['budget_percent']   !== null ? round((float)$m['budget_percent']   * 100, 1) : null;
+                                $blPct    = $m['billable_percent'] !== null ? round((float)$m['billable_percent'] * 100, 1) : null;
+                                $blHours  = $m['billable_hours']   !== null ? (float)$m['billable_hours'] : null;
+                            ?>
+                            <div style="<?= $bordered ?>padding:12px 18px;">
+                                <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:6px;">
+                                    <span style="display:inline-flex;align-items:center;justify-content:center;min-width:20px;height:20px;border-radius:5px;background:#f1f5f9;color:#64748b;font-size:11px;font-weight:700;"><?= (int)($m['sort_order'] ?: ($mIdx + 1)) ?></span>
+                                    <span style="font-size:13px;font-weight:700;color:#1e293b;"><?= htmlspecialchars($mName) ?></span>
+                                    <?php if (!empty($m['type'])): ?>
+                                    <span style="font-size:10px;font-weight:600;color:var(--lgray);border:1px solid var(--border);padding:1px 6px;border-radius:4px;"><?= htmlspecialchars($m['type']) ?></span>
+                                    <?php endif; ?>
+                                    <?= msStatusBadge($m['status']) ?>
+                                    <?= msOnTimeBadge($m['on_time']) ?>
+                                    <?= msPaymentBadge($m['payment_status']) ?>
+                                </div>
+                                <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap;font-size:11px;color:var(--lgray);">
+                                    <?php if (!empty($m['start_date'])): ?>
+                                    <span><i class="fas fa-play" style="font-size:9px;"></i> <?= date('d/m/Y', strtotime($m['start_date'])) ?></span>
+                                    <?php endif; ?>
+                                    <?php if (!empty($m['delivery_date'])): ?>
+                                    <span><i class="fas fa-flag" style="font-size:9px;"></i> Giao: <?= date('d/m/Y', strtotime($m['delivery_date'])) ?></span>
+                                    <?php endif; ?>
+                                    <?php if ($bPct !== null): ?>
+                                    <span><i class="fas fa-coins" style="font-size:9px;"></i> NS: <?= rtrim(rtrim(number_format($bPct,1),'0'),'.') ?>%</span>
+                                    <?php endif; ?>
+                                    <?php if ($blPct !== null): ?>
+                                    <span>Billable: <?= rtrim(rtrim(number_format($blPct,1),'0'),'.') ?>%</span>
+                                    <?php endif; ?>
+                                    <?php if ($blHours !== null): ?>
+                                    <span><i class="fas fa-clock" style="font-size:9px;"></i> <?= rtrim(rtrim(number_format($blHours,1),'0'),'.') ?>h</span>
+                                    <?php endif; ?>
+                                </div>
+                                <?php if (!empty($m['deliverables']) || !empty($m['acceptance_criteria'])): ?>
+                                <div style="margin-top:6px;font-size:11px;color:#475569;line-height:1.5;">
+                                    <?php if (!empty($m['deliverables'])): ?>
+                                    <div><span style="color:var(--lgray);">Deliverables:</span> <?= htmlspecialchars($m['deliverables']) ?></div>
+                                    <?php endif; ?>
+                                    <?php if (!empty($m['acceptance_criteria'])): ?>
+                                    <div><span style="color:var(--lgray);">Acceptance:</span> <?= htmlspecialchars($m['acceptance_criteria']) ?></div>
+                                    <?php endif; ?>
+                                </div>
+                                <?php endif; ?>
+                            </div>
+                            <?php endforeach; ?>
                         </div>
                     </div>
                     <?php endif; ?>
