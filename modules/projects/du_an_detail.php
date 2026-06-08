@@ -986,11 +986,18 @@ $pst = $pakd['pasx_status'] ?? '';
                                     <?php endif; ?>
                                 </h3>
                             </div>
-                            <?php if ($ms_last_sync): ?>
-                            <span style="font-size:11px;color:var(--lgray);" title="Đồng bộ từ hệ thống sản xuất">
-                                <i class="fas fa-sync-alt" style="font-size:9px;"></i> <?= date('d/m/Y H:i', strtotime($ms_last_sync)) ?>
-                            </span>
-                            <?php endif; ?>
+                            <div style="display:flex;align-items:center;gap:10px;">
+                                <?php if ($ms_last_sync): ?>
+                                <span style="font-size:11px;color:var(--lgray);" title="Đồng bộ từ hệ thống sản xuất">
+                                    <i class="fas fa-sync-alt" style="font-size:9px;"></i> <?= date('d/m/Y H:i', strtotime($ms_last_sync)) ?>
+                                </span>
+                                <?php endif; ?>
+                                <?php if ($is_admin): ?>
+                                <a href="/projects/milestones/logs?pakd=<?= (int)$pakd_id ?>" title="Xem log đồng bộ" style="font-size:11px;color:var(--primary);text-decoration:none;white-space:nowrap;">
+                                    <i class="fas fa-list" style="font-size:9px;"></i> Log
+                                </a>
+                                <?php endif; ?>
+                            </div>
                         </div>
                         <div class="card-body" style="padding:0;">
                             <?php if (empty($milestones)): ?>
