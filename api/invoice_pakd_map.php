@@ -19,6 +19,13 @@ $method = $_SERVER['REQUEST_METHOD'];
 
 // One-time migration: ai_addon was TINYINT, must be VARCHAR to store 'aihive'/'ai_solutions'
 $conn->query("ALTER TABLE invoice_pakd_map MODIFY COLUMN ai_addon VARCHAR(50) DEFAULT ''");
+// Lead to Oppty: column stores a user attribution ('me' / user id) — ensure it's VARCHAR.
+$oppty_col = $conn->query("SHOW COLUMNS FROM invoice_pakd_map LIKE 'lead_oppty'");
+if ($oppty_col && $oppty_col->num_rows === 0) {
+    $conn->query("ALTER TABLE invoice_pakd_map ADD COLUMN lead_oppty VARCHAR(100) DEFAULT NULL");
+} else {
+    $conn->query("ALTER TABLE invoice_pakd_map MODIFY COLUMN lead_oppty VARCHAR(100) DEFAULT NULL");
+}
 
 if ($method === 'POST') {
     $raw = file_get_contents('php://input');
@@ -36,9 +43,12 @@ if ($method === 'POST') {
     // Accept any ISO-style 3-letter currency code (the currency list is driven by Odoo).
     $com2_hv_currency = isset($data['com2_hv_currency']) && preg_match('/^[A-Z]{3}$/', $data['com2_hv_currency'])
         ? $data['com2_hv_currency'] : 'VND';
-    // Market to Lead source: '', 'self', 'mkt', 'refer'
-    $lead_source = isset($data['lead_source']) && in_array($data['lead_source'], ['self', 'mkt', 'refer'], true)
-        ? $data['lead_source'] : null;
+    // Market to Lead attribution: '' (clear) · 'self' (My Lead) · 'other' (ngoài công ty) · numeric user id
+    $lv = isset($data['lead_source']) ? trim((string) $data['lead_source']) : '';
+    $lead_source = ($lv === 'self' || $lv === 'other') ? $lv : (ctype_digit($lv) ? $lv : null);
+    // Lead to Oppty attribution: '' (clear) · 'me' (Converted By Me) · 'other' (ngoài công ty) · numeric user id
+    $ov = isset($data['lead_oppty']) ? trim((string) $data['lead_oppty']) : '';
+    $lead_oppty = ($ov === 'me' || $ov === 'other') ? $ov : (ctype_digit($ov) ? $ov : null);
     // AI Add-on: '', 'ai_solutions', 'aihive'
     $ai_addon = isset($data['ai_addon']) && in_array($data['ai_addon'], ['ai_solutions', 'aihive'], true)
         ? $data['ai_addon'] : null;
@@ -85,6 +95,17 @@ if ($method === 'POST') {
         $ok = $stmt->execute();
         $log("LEAD_UPDATED inv=$invoice_id lead=" . var_export($lead_source, true) . " ok=" . ($ok ? 'Y' : 'N') . " err=" . $stmt->error);
         echo json_encode(['ok' => $ok, 'action' => 'lead_updated', 'error' => $stmt->error ?: null]);
+        exit;
+    }
+
+    // Update Lead-to-Oppty attribution only
+    if (isset($data['update_oppty'])) {
+        $zero = 0;
+        $stmt = $conn->prepare("INSERT INTO invoice_pakd_map (invoice_id, user_id, pakd_id, lead_oppty) VALUES (?, ?, ?, ?) ON DUPLICATE KEY UPDATE lead_oppty = VALUES(lead_oppty)");
+        $stmt->bind_param("iiis", $invoice_id, $user_id, $zero, $lead_oppty);
+        $ok = $stmt->execute();
+        $log("OPPTY_UPDATED inv=$invoice_id oppty=" . var_export($lead_oppty, true) . " ok=" . ($ok ? 'Y' : 'N') . " err=" . $stmt->error);
+        echo json_encode(['ok' => $ok, 'action' => 'oppty_updated', 'error' => $stmt->error ?: null]);
         exit;
     }
 
@@ -144,7 +165,7 @@ if ($method === 'POST') {
 }
 
 if ($method === 'GET') {
-    $stmt = $conn->prepare("SELECT invoice_id, pakd_id, pakd_link, manual_ebt, com2_tier, com2_hv, com2_hv_currency, lead_source, ai_addon, ai_revenue, ai_revenue_currency FROM invoice_pakd_map WHERE user_id = ?");
+    $stmt = $conn->prepare("SELECT invoice_id, pakd_id, pakd_link, manual_ebt, com2_tier, com2_hv, com2_hv_currency, lead_source, lead_oppty, ai_addon, ai_revenue, ai_revenue_currency FROM invoice_pakd_map WHERE user_id = ?");
     $stmt->bind_param("i", $user_id);
     $stmt->execute();
     $res = $stmt->get_result();

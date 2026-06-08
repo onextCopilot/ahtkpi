@@ -268,6 +268,7 @@ $conn->query("CREATE TABLE IF NOT EXISTS invoice_pakd_map (
     com2_hv              DECIMAL(20,2) DEFAULT NULL,
     com2_hv_currency     VARCHAR(10) DEFAULT 'VND',
     lead_source          VARCHAR(100) DEFAULT NULL,
+    lead_oppty           VARCHAR(100) DEFAULT NULL,
     ai_addon             VARCHAR(50) DEFAULT '',
     ai_revenue           DECIMAL(20,2) DEFAULT NULL,
     ai_revenue_currency  VARCHAR(10) DEFAULT 'VND',
@@ -277,16 +278,41 @@ $conn->query("CREATE TABLE IF NOT EXISTS invoice_pakd_map (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
 // Migrate ai_addon column from TINYINT to VARCHAR if still old type
 $conn->query("ALTER TABLE invoice_pakd_map MODIFY COLUMN ai_addon VARCHAR(50) DEFAULT ''");
+// Lead to Oppty: column now stores a user attribution ('me' / user id) — ensure VARCHAR.
+$oppty_col = $conn->query("SHOW COLUMNS FROM invoice_pakd_map LIKE 'lead_oppty'");
+if ($oppty_col && $oppty_col->num_rows === 0) {
+    $conn->query("ALTER TABLE invoice_pakd_map ADD COLUMN lead_oppty VARCHAR(100) DEFAULT NULL");
+} else {
+    $conn->query("ALTER TABLE invoice_pakd_map MODIFY COLUMN lead_oppty VARCHAR(100) DEFAULT NULL");
+}
 
 // Load existing invoice->PAKD mappings (pakd_id, pakd_link, manual_ebt)
 $inv_pakd_map = [];
-$map_stmt = $conn->prepare("SELECT invoice_id, pakd_id, pakd_link, manual_ebt, com2_tier, com2_hv, com2_hv_currency, lead_source, ai_addon, ai_revenue, ai_revenue_currency FROM invoice_pakd_map WHERE user_id = ?");
+$map_stmt = $conn->prepare("SELECT invoice_id, pakd_id, pakd_link, manual_ebt, com2_tier, com2_hv, com2_hv_currency, lead_source, lead_oppty, ai_addon, ai_revenue, ai_revenue_currency FROM invoice_pakd_map WHERE user_id = ?");
 if ($map_stmt) {
     $map_stmt->bind_param("i", $u_id);
     $map_stmt->execute();
     $map_res = $map_stmt->get_result();
     while ($mr = $map_res->fetch_assoc()) $inv_pakd_map[(int)$mr['invoice_id']] = $mr;
     $map_stmt->close();
+}
+
+// All other system users for the Market-to-Lead / Lead-to-Oppty pickers.
+// AM/BD members sorted to the top, then alphabetical. The current user is excluded —
+// they are represented by the "My Lead" / "Converted By Me" first option.
+$mc_users = [];
+if ($uq = $conn->prepare("SELECT id, full_name, is_am_bd FROM users WHERE id <> ? AND status = 'active' ORDER BY is_am_bd DESC, full_name ASC")) {
+    $uq->bind_param("i", $u_id);
+    $uq->execute();
+    $ur = $uq->get_result();
+    while ($urow = $ur->fetch_assoc()) {
+        $mc_users[] = [
+            'id'    => (int) $urow['id'],
+            'name'  => ($urow['full_name'] !== null && $urow['full_name'] !== '') ? $urow['full_name'] : ('User #' . $urow['id']),
+            'am_bd' => (int) $urow['is_am_bd'],
+        ];
+    }
+    $uq->close();
 }
 
 // Currency → VND conversion rates for HV — sourced entirely from Odoo.
@@ -440,31 +466,52 @@ if ($cf_stmt) {
     }
 }
 
-// ── Market to Lead source ──
-// If the salesperson sourced the lead themselves ("My Lead"), Com1 gets +1%.
-$lead_options = [
-    ''      => '— Nguồn lead —',
-    'self'  => 'My Lead',
-    'mkt'   => 'MKT',
-    'refer' => 'Refer',
-];
-const MC_SELF_LEAD_BONUS = 0.01;   // +1% to Com1 when self-sourced (New clients only)
+// ── Market to Lead / Lead to Oppty ──
+// Both columns are searchable user pickers. The first option attributes the work to the
+// current user — "My Lead" (Market to Lead) or "Converted By Me" (Lead to Oppty) — and
+// grants +0.5% Com1. Any other option attributes it to another AM/BD/User (no bonus).
+// Stored value: the sentinel ('self' / 'me') for the current user, otherwise the user id.
+// Both bonuses are New-client only.
+const MC_SELF_LEAD_BONUS  = 0.005;   // +0.5% to Com1 when Market to Lead = "My Lead"
+const MC_LEAD_OPPTY_BONUS = 0.005;   // +0.5% to Com1 when Lead to Oppty = "Converted By Me"
 
-// Render a Market-to-Lead <select> for a given invoice + selected value.
-// Only New-client invoices may pick a lead source (the +1% bonus is New-only).
-function mc_lead_select($inv_id, $selected, $lead_options, $is_new = true) {
-    $dis = $is_new ? '' : ' disabled title="Chỉ áp dụng cho khách New"';
-    $h = '<select class="lead-select" data-inv="' . (int)$inv_id . '" onchange="saveLead(this)"' . $dis . '>';
+// Sentinel value stored when the current user is attributed, per picker kind.
+function mc_pick_sentinel($kind) { return $kind === 'lead' ? 'self' : 'me'; }
+// Label of the "current user" first option, per picker kind.
+function mc_pick_special($kind)  { return $kind === 'lead' ? 'My Lead' : 'Converted By Me'; }
+
+// Render a searchable user picker for a given invoice.
+//   $kind     : 'lead' (Market to Lead) | 'oppty' (Lead to Oppty)
+//   $cur_val  : stored value — '' | sentinel ('self'/'me') | user id (string)
+//   $mc_users : [['id'=>, 'name'=>, 'am_bd'=>], ...] (current user already excluded)
+//   $is_new   : only New clients may pick (the +0.5% bonus is New-only)
+function mc_user_pick($inv_id, $kind, $cur_val, $mc_users, $is_new) {
+    $cur_val = (string) $cur_val;
+    $sentinel = mc_pick_sentinel($kind);
+    $special  = mc_pick_special($kind);
     if (!$is_new) {
-        // Old clients: show a single inert placeholder.
-        $h .= '<option value="">—</option></select>';
-        return $h;
+        return '<div class="up-wrap up-disabled" title="Chỉ áp dụng cho khách New"><div class="up-btn">—</div></div>';
     }
-    foreach ($lead_options as $val => $label) {
-        $sel = ((string)$selected === (string)$val) ? ' selected' : '';
-        $h .= '<option value="' . htmlspecialchars($val) . '"' . $sel . '>' . htmlspecialchars($label) . '</option>';
+    // Resolve the button label from the stored value.
+    $placeholder = $kind === 'lead' ? '— Nguồn lead —' : '— Người chuyển đổi —';
+    $label = $placeholder;
+    $is_me = false;
+    if ($cur_val === $sentinel) {
+        $label = $special;
+        $is_me = true;
+    } elseif ($cur_val === 'other') {
+        $label = 'Other';
+    } elseif ($cur_val !== '') {
+        $label = 'User #' . $cur_val;
+        foreach ($mc_users as $u) {
+            if ((string)$u['id'] === $cur_val) { $label = $u['name']; break; }
+        }
     }
-    $h .= '</select>';
+    $cls = 'up-btn' . ($is_me ? ' is-me' : ($cur_val !== '' ? ' has-val' : ''));
+    $h  = '<div class="up-wrap" data-inv="' . (int)$inv_id . '" data-kind="' . $kind . '" data-val="' . htmlspecialchars($cur_val) . '">';
+    $h .= '<div class="' . $cls . '" onclick="toggleUserPick(this)">' . htmlspecialchars($label) . '</div>';
+    $h .= '<div class="up-dd"><input type="text" placeholder="Tìm người..." oninput="filterUserPick(this)"><ul></ul></div>';
+    $h .= '</div>';
     return $h;
 }
 
@@ -643,10 +690,13 @@ foreach ($invoices as $inv) {
     } else {
         $com1_base_rate = $is_new ? 0.01 : 0.005;
     }
-    // Market to Lead: +1% to Com1 when the lead was self-sourced (only if a Com1 applies).
-    $lead_source = $inv_map_row && !empty($inv_map_row['lead_source']) ? $inv_map_row['lead_source'] : '';
+    // Market to Lead: +0.5% to Com1 when attributed to the current user ("My Lead"), New only.
+    $lead_source = $inv_map_row && isset($inv_map_row['lead_source']) ? (string)$inv_map_row['lead_source'] : '';
     $lead_bonus = ($lead_source === 'self' && $is_new && $com1_base_rate > 0) ? MC_SELF_LEAD_BONUS : 0;
-    $com1_rate = $com1_base_rate + $lead_bonus;
+    // Lead to Oppty: +0.5% to Com1 when attributed to the current user ("Converted By Me"), New only.
+    $lead_oppty = $inv_map_row && isset($inv_map_row['lead_oppty']) ? (string)$inv_map_row['lead_oppty'] : '';
+    $oppty_bonus = ($lead_oppty === 'me' && $is_new && $com1_base_rate > 0) ? MC_LEAD_OPPTY_BONUS : 0;
+    $com1_rate = $com1_base_rate + $lead_bonus + $oppty_bonus;
     $com1_amount = $amount_vnd * $com1_rate;
 
     // Com2 (High Value): chỉ áp dụng khi EBT >= 20% (bắt buộc). Com2 = HV(VND) × Tier %, paid-in-quarter.
@@ -677,6 +727,7 @@ foreach ($invoices as $inv) {
         'com1_rate' => $com1_rate,
         'com1_base_rate' => $com1_base_rate,
         'lead_source' => $lead_source,
+        'lead_oppty' => $lead_oppty,
         'com1_amount' => $com1_amount,
         'payment_date' => $pay_date_ymd,
         'is_paid' => $is_paid,
@@ -1057,12 +1108,71 @@ foreach ($license_invoices as $inv) {
     ];
 }
 
+// ── Commission Lead/Oppty credited to the viewed user by OTHER AM/BD (cross-user) ──
+// Read straight from invoice_pakd_map: rows where ANOTHER user picked THIS user (by id) as
+// Market-to-Lead or Lead-to-Oppty. Each credit = +0.5% of the invoice revenue (amount/client/
+// payment from the synced Odoo invoice cache). The user's OWN selections ('self'/'me') are NOT
+// included here — they already sit inside grand_com1 (Com Lead/Com Oppty on the main table).
+$credited_details = [];
+$credited_lead_total = 0;
+$credited_oppty_total = 0;
+$credited_external_total = 0;
+$u_id_str = (string) $u_id;
+$credit_rows = [];
+if ($cstmt = $conn->prepare("SELECT user_id, invoice_id, lead_source, lead_oppty, manual_ebt, pakd_id FROM invoice_pakd_map WHERE (lead_source = ? OR lead_oppty = ?) AND user_id <> ?")) {
+    $cstmt->bind_param("ssi", $u_id_str, $u_id_str, $u_id);
+    $cstmt->execute();
+    $rs = $cstmt->get_result();
+    while ($r = $rs->fetch_assoc()) $credit_rows[] = $r;
+    $cstmt->close();
+}
+if ($credit_rows) {
+    $uids = array_values(array_unique(array_map(fn($r) => (int)$r['user_id'], $credit_rows)));
+    $cr_names = [];
+    if ($uids) { $in = implode(',', $uids); if ($q = $conn->query("SELECT id, full_name FROM users WHERE id IN ($in)")) { while ($u = $q->fetch_assoc()) $cr_names[(int)$u['id']] = $u['full_name']; } }
+    $pids = array_values(array_unique(array_filter(array_map(fn($r) => (int)$r['pakd_id'], $credit_rows))));
+    $cr_pakd_ebt = [];
+    if ($pids) { $in = implode(',', $pids); if ($q = $conn->query("SELECT id, revenue, gross_profit FROM pakd WHERE id IN ($in)")) { while ($p = $q->fetch_assoc()) $cr_pakd_ebt[(int)$p['id']] = ($p['revenue'] > 0) ? ($p['gross_profit'] / $p['revenue'] * 100) : null; } }
+    $inv_map_all = [];
+    if (isset($odoo) && $odoo) { try { $inv_map_all = $odoo->getInvoiceMap(); } catch (Throwable $e) { $inv_map_all = []; } }
+    $cr_excl = ['Internal', 'Commission', 'License'];
+    foreach ($credit_rows as $r) {
+        $inv = $inv_map_all[(int)$r['invoice_id']] ?? ($inv_map_all[(string)$r['invoice_id']] ?? null);
+        if (!$inv) continue;
+        if (in_array($inv['x_studio_invoice_type_1'] ?? '', $cr_excl, true)) continue;
+        if (($inv['state'] ?? '') === 'cancel') continue;
+        $pd = null;
+        if (!empty($inv['invoice_payments_widget'])) { $w = $inv['invoice_payments_widget']; if (is_string($w)) $w = json_decode($w, true); if (!empty($w['content'])) { $ds = array_column($w['content'], 'date'); if ($ds) $pd = max($ds); } }
+        if (!$pd && ($inv['payment_state'] ?? '') === 'paid') $pd = $inv['write_date'] ?? null;
+        $pdy = $pd ? substr($pd, 0, 10) : '';
+        $is_paid = (($inv['payment_state'] ?? '') === 'paid');
+        if (!($is_paid && $pdy >= $date_from && $pdy <= $date_to)) continue;
+        $is_new = (stripos($inv['x_studio_client_type'] ?? '', 'new') !== false);
+        $ebt = null;
+        if ($r['manual_ebt'] !== null) $ebt = (float)$r['manual_ebt'];
+        elseif (!empty($r['pakd_id']) && array_key_exists((int)$r['pakd_id'], $cr_pakd_ebt)) $ebt = $cr_pakd_ebt[(int)$r['pakd_id']];
+        $base_ok = $is_new && ($ebt === null || $ebt >= 5);
+        $amt = mc_inv_to_vnd($inv, $inv_cur_rates);
+        $is_lead = ((string)$r['lead_source'] === $u_id_str);
+        $is_opp  = ((string)$r['lead_oppty'] === $u_id_str);
+        $la = ($base_ok && $is_lead) ? $amt * MC_SELF_LEAD_BONUS : 0;
+        $oa = ($base_ok && $is_opp)  ? $amt * MC_LEAD_OPPTY_BONUS : 0;
+        if ($la <= 0 && $oa <= 0) continue;
+        $credited_lead_total += $la; $credited_oppty_total += $oa;
+        $credited_external_total += $la + $oa;
+        $credited_details[] = ['inv' => $inv, 'by' => $cr_names[(int)$r['user_id']] ?? ('User #' . $r['user_id']), 'amt' => $amt, 'is_new' => $is_new, 'ebt' => $ebt, 'pdy' => $pdy, 'is_lead' => $is_lead, 'is_opp' => $is_opp, 'la' => $la, 'oa' => $oa];
+    }
+    usort($credited_details, fn($a, $b) => strcmp($b['pdy'], $a['pdy']));
+}
+$credited_grand = $credited_lead_total + $credited_oppty_total;
+
 // Grand total commission for this quarter = current-quarter net + recovered (thu hồi)
 $grand_com1 = $net_com1 + $total_collected_com1;
 $grand_com2 = $net_com2 + $total_collected_com2;
 $grand_ai_com = $total_ai_com + $total_collected_ai_com;
 $grand_yb = $total_yb + $total_collected_yb;
-$grand_total_com = $grand_com1 + $grand_com2 + $grand_ai_com + $total_so_com;
+// Own Lead/Oppty credits are already inside grand_com1; only the EXTERNAL credits are new.
+$grand_total_com = $grand_com1 + $grand_com2 + $grand_ai_com + $total_so_com + $credited_external_total;
 
 // Available years
 $available_years = [$current_year, $current_year - 1, $current_year - 2];
@@ -1238,8 +1348,9 @@ if ($mc_export === 'excel' || $mc_export === 'pdf') {
         .adj-red { background:rgba(248,113,113,.2); color:#f87171; }
 
         /* Commission cards */
-        .com-grid { display:grid; grid-template-columns:repeat(auto-fit, minmax(200px, 1fr)); gap:0.75rem; margin-bottom:1rem; }
-        .com-card { background:#fff; border:1px solid #e2e8f0; border-radius:10px; padding:1rem 1.1rem; position:relative; overflow:hidden; }
+        /* All commission cards on a single row, shrinking to fit (no wrap, no scroll). */
+        .com-grid { display:grid; grid-auto-flow:column; grid-auto-columns:minmax(0,1fr); gap:0.5rem; margin-bottom:1rem; }
+        .com-card { background:#fff; border:1px solid #e2e8f0; border-radius:10px; padding:0.55rem 0.6rem; position:relative; overflow:hidden; min-width:0; }
         .com-card::before { content:''; position:absolute; top:0; left:0; right:0; height:3px; }
         .com-card.c1::before { background:#3b82f6; }
         .com-card.c2::before { background:#8b5cf6; }
@@ -1248,9 +1359,9 @@ if ($mc_export === 'excel' || $mc_export === 'pdf') {
         .com-card.lic::before { background:#b45309; }
         .com-card.net::before { background:#22c55e; height:4px; }
         .com-card.net { background:linear-gradient(135deg,#f0fdf4 0%,#dcfce7 100%); border:1.5px solid #86efac; }
-        .com-card .cc-label { font-size:11px; color:#94a3b8; text-transform:uppercase; letter-spacing:.04em; margin-bottom:4px; }
-        .com-card .cc-value { font-size:20px; font-weight:700; color:#0f172a; }
-        .com-card .cc-sub { font-size:11px; color:#64748b; margin-top:4px; }
+        .com-card .cc-label { font-size:10px; color:#94a3b8; text-transform:uppercase; letter-spacing:.02em; margin-bottom:3px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+        .com-card .cc-value { font-size:17px; font-weight:700; color:#0f172a; }
+        .com-card .cc-sub { font-size:10px; color:#64748b; margin-top:3px; line-height:1.35; }
         .com-card .cc-tag { font-size:10px; padding:2px 6px; border-radius:4px; display:inline-block; margin-top:6px; }
         .tag-ok { background:#dcfce7; color:#16a34a; }
         .tag-na { background:#f1f5f9; color:#94a3b8; }
@@ -1282,11 +1393,38 @@ if ($mc_export === 'excel' || $mc_export === 'pdf') {
         .b-new { background:#dbeafe; color:#1d4ed8; border-color:#bfdbfe; }
         .b-old { background:#f1f5f9; color:#475569; border-color:#e2e8f0; }
         .mh td { background:#e8f0fe; font-weight:bold; color:#1a73e8; border-top:2px solid #aecbfa; border-bottom:1px solid #aecbfa; padding:6px 8px; }
+        /* Click-to-highlight a row (reading guide). Click again to clear. */
+        .t-card tbody tr:not(.mh) td { cursor:pointer; }
+        tr.row-hl td { background-color:#d8ecff !important; }
+        tr.row-hl:hover td { background-color:#c5e2ff !important; }
 
-        /* Market to Lead */
-        .lead-select { padding:3px 5px; border:1px solid #e2e8f0; border-radius:5px; font-size:11px; background:#fff; cursor:pointer; outline:none; color:#374151; max-width:130px; }
-        .lead-select:focus { border-color:#93c5fd; }
+        /* Market to Lead / Lead to Oppty bonus markers */
         .lead-bonus { color:#f59e0b; font-weight:700; }
+        .oppty-bonus { color:#16a34a; font-weight:700; }
+        /* User picker (Market to Lead + Lead to Oppty) — searchable dropdown */
+        .up-wrap { position:relative; min-width:130px; }
+        .up-btn { display:flex; align-items:center; padding:3px 6px; border:1px solid #e2e8f0; border-radius:5px; background:#fff; cursor:pointer; font-size:11px; color:#374151; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:150px; min-height:22px; }
+        .up-btn:hover { border-color:#93c5fd; }
+        .up-btn.has-val { border-color:#3b82f6; background:#eff6ff; color:#1d4ed8; font-weight:500; }
+        .up-btn.is-me { border-color:#16a34a; background:#f0fdf4; color:#15803d; font-weight:600; }
+        .up-wrap.up-disabled .up-btn { opacity:.5; cursor:not-allowed; background:#f8fafc; }
+        .up-dd { display:none; position:absolute; top:100%; left:0; z-index:9999; background:#fff; border:1px solid #d1d5db; border-radius:8px; box-shadow:0 8px 24px rgba(0,0,0,.15); width:260px; max-height:280px; overflow:hidden; }
+        .up-dd.open { display:block; }
+        .up-dd.portal { position:fixed; }
+        .up-dd input { width:100%; padding:8px 10px; border:none; border-bottom:1px solid #e5e7eb; font-size:12px; outline:none; box-sizing:border-box; }
+        .up-dd ul { list-style:none; margin:0; padding:0; max-height:230px; overflow-y:auto; }
+        .up-dd li { display:flex; align-items:center; justify-content:space-between; gap:6px; padding:6px 10px; cursor:pointer; font-size:12px; border-bottom:1px solid #f3f4f6; }
+        .up-dd li:hover { background:#eff6ff; }
+        .up-dd li.sel { background:#dbeafe; font-weight:600; }
+        .up-dd li.up-clear { color:#ef4444; font-style:italic; }
+        .up-dd li.up-special { background:#f0fdf4; color:#15803d; font-weight:600; }
+        .up-dd li.up-special:hover { background:#dcfce7; }
+        .up-dd li.up-special.sel { background:#bbf7d0; }
+        .up-dd li.up-other { color:#64748b; font-style:italic; }
+        .up-dd li.up-other.sel { background:#e2e8f0; font-style:normal; }
+        .up-dd li .up-name { color:#1f2937; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+        .up-dd li .up-tag { font-size:9px; padding:1px 5px; border-radius:4px; background:#dbeafe; color:#1d4ed8; flex-shrink:0; }
+        .up-dd li .up-bonus { font-size:10px; color:#16a34a; flex-shrink:0; }
 
         /* AI Add-on */
         .ai-select { padding:3px 5px; border:1px solid #e2e8f0; border-radius:5px; font-size:11px; background:#fff; cursor:pointer; outline:none; color:#374151; max-width:140px; }
@@ -1539,6 +1677,15 @@ if ($mc_export === 'excel' || $mc_export === 'pdf') {
                     <span class="cc-tag <?= $total_so_com > 0 ? 'tag-ok' : 'tag-na' ?>" id="ccFirstPoTag"><?= $total_so_com > 0 ? 'Calculated' : (empty($so_list) ? 'Không có SO' : 'Chọn First PO') ?></span>
                 </div>
 
+                <!-- Lead/Oppty Credit (cross-user) -->
+                <div class="com-card" style="border-top-color:#0f766e;">
+                    <div class="cc-label">Lead / Oppty Credit</div>
+                    <div class="cc-value" style="color:#0f766e;"><?= $credited_grand > 0 ? mc_fmt_short($credited_grand) : '–' ?></div>
+                    <div class="cc-sub">AM/BD khác chọn tôi là Market to Lead / Lead to Oppty · +0.5% mỗi loại</div>
+                    <div class="cc-sub"><?= count($credited_details) ?> HĐ · đã cộng vào tổng commission</div>
+                    <span class="cc-tag <?= $credited_grand > 0 ? 'tag-ok' : 'tag-na' ?>"><?= $credited_grand > 0 ? 'Calculated' : 'Chưa có credit' ?></span>
+                </div>
+
                 <!-- Net Commission -->
                 <div class="com-card net">
                     <div class="cc-label">Ước tính Commission Q<?= $selected_quarter ?></div>
@@ -1546,7 +1693,7 @@ if ($mc_export === 'excel' || $mc_export === 'pdf') {
                     <div class="cc-sub">Com1: <strong id="ccCom1Grand"><?= mc_fmt_short($grand_com1) ?></strong><span id="ccCom2Part"<?= $grand_com2 > 0 ? '' : ' style="display:none;"' ?>> · <span style="color:#7c3aed;">Com2: <strong id="ccCom2"><?= mc_fmt_short($grand_com2) ?></strong></span></span><span id="ccAiPart"<?= $grand_ai_com > 0 ? '' : ' style="display:none;"' ?>> · <span style="color:#0891b2;">AI: <strong id="ccAi"><?= mc_fmt_short($grand_ai_com) ?></strong></span></span><span id="ccFirstPoPart"<?= $total_so_com > 0 ? '' : ' style="display:none;"' ?>> · <span style="color:#7c3aed;">1st PO: <strong id="ccFirstPoGrandVal"><?= mc_fmt_short($total_so_com) ?></strong></span></span></div>
                     <div class="cc-sub">Quý này: <strong id="ccThisQ"><?= mc_fmt_short($net_com1 + $net_com2 + $total_ai_com) ?></strong> (× KPI <?= $kpi_adj * 100 ?>%)</div>
                     <div class="cc-sub" id="ccRecoveryPart" style="color:#16a34a;<?= ($total_collected_com1 + $total_collected_com2 + $total_collected_ai_com) > 0 ? '' : 'display:none;' ?>">+ Thu hồi công nợ: <strong id="ccRecovery"><?= mc_fmt_short($total_collected_com1 + $total_collected_com2 + $total_collected_ai_com) ?></strong> (KPI từng quý gốc)</div>
-                    <div class="cc-sub" style="color:#94a3b8;">Chưa gồm YB</div>
+                    <div class="cc-sub" style="color:#0f766e;<?= $credited_external_total > 0 ? '' : 'display:none;' ?>">+ Credit Lead/Oppty (AM/BD khác): <strong><?= mc_fmt_short($credited_external_total) ?></strong></div>
                 </div>
             </div>
 
@@ -1585,12 +1732,17 @@ if ($mc_export === 'excel' || $mc_export === 'pdf') {
                         <th>Invoice Date</th>
                         <th>Payment Date</th>
                         <th>Project</th>
-                        <th>Market to Lead</th>
                         <th>PAKD</th>
                         <th style="text-align:center;">EBT</th>
                         <th style="text-align:right;">Amount</th>
                         <th style="text-align:right;">VND</th>
                         <th>Payment</th>
+                        <th>Market to Lead</th>
+                        <th style="text-align:right;" title="% Com tăng thêm từ Market to Lead = My Lead">MTL%</th>
+                        <th style="text-align:right;" title="Com tăng thêm từ Market to Lead = My Lead">Com Lead</th>
+                        <th>Lead to Oppty</th>
+                        <th style="text-align:right;" title="% Com tăng thêm từ Lead to Oppty = Converted By Me">MTO%</th>
+                        <th style="text-align:right;" title="Com tăng thêm từ Lead to Oppty = Converted By Me">Com Oppty</th>
                         <th style="text-align:right;">Com1 Rate</th>
                         <th style="text-align:right;">Com1</th>
                         <th style="text-align:right;">High Value<span class="hv-info" title="HV = giá chênh lệch (Revenue − Revenue Base) tính TRÊN CHÍNH hóa đơn này, KHÔNG phải của cả hợp đồng.&#10;&#10;➤ Nhập HV theo đúng % đã xuất hóa đơn.&#10;VD: hợp đồng 10.000 USD nhưng hóa đơn này mới xuất 50% → chỉ nhập phần HV tương ứng 50%.">i</span></th>
@@ -1601,20 +1753,34 @@ if ($mc_export === 'excel' || $mc_export === 'pdf') {
                     </tr></thead>
                     <tbody>
                     <?php if (empty($invoice_details)): ?>
-                        <tr><td colspan="20" style="text-align:center;padding:3rem;color:#64748b;">No invoices for Q<?= $selected_quarter ?> <?= $selected_year ?>.</td></tr>
+                        <tr><td colspan="25" style="text-align:center;padding:3rem;color:#64748b;">No invoices for Q<?= $selected_quarter ?> <?= $selected_year ?>.</td></tr>
                     <?php else:
                         $n = 0;
                         foreach ($grouped as $mk => $month_items):
                             $ml = ($mk !== 'unknown') ? date('F Y', strtotime($mk . '-01')) : 'Unknown';
-                            $m_com1 = array_sum(array_column($month_items, 'com1_amount'));
+                            // Com1 money split: base · Market-to-Lead bonus · Lead-to-Oppty bonus
+                            $m_com1 = 0; $m_mlcom = 0; $m_opcom = 0;
+                            foreach ($month_items as $mi) {
+                                $m_com1 += $mi['amount_vnd'] * $mi['com1_base_rate'];
+                                if ($mi['client_type'] === 'New' && $mi['com1_base_rate'] > 0) {
+                                    if ($mi['lead_source'] === 'self') $m_mlcom += $mi['amount_vnd'] * MC_SELF_LEAD_BONUS;
+                                    if ($mi['lead_oppty'] === 'me')    $m_opcom += $mi['amount_vnd'] * MC_LEAD_OPPTY_BONUS;
+                                }
+                            }
                             $m_com2 = array_sum(array_column($month_items, 'com2_gross'));   // gross (KPI_adj áp ở 7 box, không theo dòng)
                             $m_aicom = $ai_kpi_ok ? array_sum(array_column($month_items, 'ai_com_pre')) : 0;
                             $m_vnd = array_sum(array_column($month_items, 'amount_vnd'));
                     ?>
                         <tr class="mh">
-                            <td colspan="11"><?= $ml ?> <span style="font-weight:normal;font-size:.88em;color:#5f6368;margin-left:.5rem;">(<?= count($month_items) ?> inv)</span></td>
+                            <td colspan="10"><?= $ml ?> <span style="font-weight:normal;font-size:.88em;color:#5f6368;margin-left:.5rem;">(<?= count($month_items) ?> inv)</span></td>
                             <td class="amt" style="color:#1a73e8;"><?= mc_fmt_short($m_vnd) ?></td>
                             <td></td>
+                            <td></td>
+                            <td></td>
+                            <td class="amt m-mlcom-sub" data-month="<?= htmlspecialchars($mk) ?>" style="color:#d97706;"><?= $m_mlcom > 0 ? mc_fmt_short($m_mlcom) : '' ?></td>
+                            <td></td>
+                            <td></td>
+                            <td class="amt m-opcom-sub" data-month="<?= htmlspecialchars($mk) ?>" style="color:#16a34a;"><?= $m_opcom > 0 ? mc_fmt_short($m_opcom) : '' ?></td>
                             <td></td>
                             <td class="amt m-com1-sub" data-month="<?= htmlspecialchars($mk) ?>" style="color:#1a73e8;"><?= mc_fmt_short($m_com1) ?></td>
                             <td></td>
@@ -1662,7 +1828,6 @@ if ($mc_export === 'excel' || $mc_export === 'pdf') {
                                 <td><?= $inv_date ?></td>
                                 <td style="<?= $pay_dt !== '—' ? 'color:#16a34a;font-weight:600;' : '' ?>"><?= $pay_dt ?></td>
                                 <td><?= $proj ?></td>
-                                <td class="lead-cell"><?= mc_lead_select($inv_id, $d['lead_source'], $lead_options, $d['client_type'] === 'New') ?></td>
                                 <td>
                                     <div class="pakd-wrap" data-inv="<?= $inv_id ?>" data-pakd-id="<?= $sel_pakd_id ?>" data-link="<?= htmlspecialchars($sel_pakd_link) ?>">
                                         <?php if ($is_link_mode): ?>
@@ -1694,13 +1859,25 @@ if ($mc_export === 'excel' || $mc_export === 'pdf') {
                                 <td class="amt"><?= mc_fmt($amt_orig) ?> <?= $curr ?></td>
                                 <td class="amt"><?= mc_fmt($d['amount_vnd']) ?></td>
                                 <td><span class="badge <?= $ps_cls ?>"><?= $ps_label ?></span></td>
+                                <?php
+                                    $row_paidok = ($d['is_paid'] && $d['paid_in_quarter']);
+                                    $row_base_amt  = $d['amount_vnd'] * $d['com1_base_rate'];
+                                    $row_lead_amt  = ($d['lead_source'] === 'self' && $d['client_type'] === 'New' && $d['com1_base_rate'] > 0) ? $d['amount_vnd'] * MC_SELF_LEAD_BONUS : 0;
+                                    $row_oppty_amt = ($d['lead_oppty'] === 'me'   && $d['client_type'] === 'New' && $d['com1_base_rate'] > 0) ? $d['amount_vnd'] * MC_LEAD_OPPTY_BONUS : 0;
+                                ?>
+                                <td class="lead-cell"><?= mc_user_pick($inv_id, 'lead', $d['lead_source'], $mc_users, $d['client_type'] === 'New') ?></td>
+                                <td class="amt ml-rate-cell"><?php if ($d['lead_source'] === 'self' && $d['client_type'] === 'New' && $d['com1_base_rate'] > 0): ?><span class="lead-bonus" title="Market to Lead = My Lead">+<?= mc_rate_pct(MC_SELF_LEAD_BONUS) ?>%</span><?php else: ?><span style="color:#cbd5e1;">—</span><?php endif; ?></td>
+                                <td class="amt mlcom-cell" data-month="<?= htmlspecialchars($mk) ?>" style="color:<?= $row_lead_amt > 0 ? '#d97706' : '#cbd5e1' ?>;font-weight:600;"><?= $row_lead_amt > 0 ? mc_fmt($row_lead_amt) : '—' ?></td>
+                                <td class="oppty-cell"><?= mc_user_pick($inv_id, 'oppty', $d['lead_oppty'], $mc_users, $d['client_type'] === 'New') ?></td>
+                                <td class="amt oppty-rate-cell"><?php if ($d['lead_oppty'] === 'me' && $d['client_type'] === 'New' && $d['com1_base_rate'] > 0): ?><span class="oppty-bonus" title="Lead to Oppty = Converted By Me">+<?= mc_rate_pct(MC_LEAD_OPPTY_BONUS) ?>%</span><?php else: ?><span style="color:#cbd5e1;">—</span><?php endif; ?></td>
+                                <td class="amt opcom-cell" data-month="<?= htmlspecialchars($mk) ?>" style="color:<?= $row_oppty_amt > 0 ? '#16a34a' : '#cbd5e1' ?>;font-weight:600;"><?= $row_oppty_amt > 0 ? mc_fmt($row_oppty_amt) : '—' ?></td>
                                 <td class="amt com1-rate-cell"><?php
                                     if (!$d['is_paid']): ?><span style="color:#94a3b8;" title="Chưa thanh toán">—</span><?php
                                     elseif (!$d['paid_in_quarter']): ?><span style="color:#f59e0b;" title="Thanh toán ngoài quý này">—</span><?php
-                                    elseif ($d['com1_rate'] == 0 && $d['ebt_pct'] !== null): ?><span style="color:#dc2626;" title="EBT < 5%">0%</span><?php
-                                    elseif ($d['ebt_pct'] === null && empty($sel_pakd_id) && !$is_link_mode): ?><span style="color:#94a3b8;" title="Chưa chọn PAKD"><?= mc_rate_pct($d['com1_rate']) ?>%</span><?php
-                                    else: ?><?= mc_rate_pct($d['com1_rate']) ?>%<?php if ($d['lead_source'] === 'self' && $d['client_type'] === 'New' && $d['com1_base_rate'] > 0): ?><span class="lead-bonus" title="+1% My Lead"> ★</span><?php endif; ?><?php endif; ?></td>
-                                <td class="amt com1-cell" data-section="main" data-month="<?= htmlspecialchars($mk) ?>" data-amount="<?= $d['amount_vnd'] ?>" data-baserate="<?= $d['com1_base_rate'] ?>" data-isnew="<?= $d['client_type'] === 'New' ? 1 : 0 ?>" data-paidok="<?= ($d['is_paid'] && $d['paid_in_quarter']) ? 1 : 0 ?>" data-ebt="<?= $d['ebt_pct'] !== null ? $d['ebt_pct'] : '' ?>" style="color:<?= $d['com1_rate'] == 0 ? ($d['is_paid'] && $d['paid_in_quarter'] ? '#dc2626' : '#94a3b8') : '#1d4ed8' ?>;font-weight:600;"><?= $d['com1_rate'] == 0 && (!$d['is_paid'] || !$d['paid_in_quarter']) ? '—' : mc_fmt($d['com1_amount']) ?></td>
+                                    elseif ($d['com1_base_rate'] == 0 && $d['ebt_pct'] !== null): ?><span style="color:#dc2626;" title="EBT < 5%">0%</span><?php
+                                    elseif ($d['ebt_pct'] === null && empty($sel_pakd_id) && !$is_link_mode): ?><span style="color:#94a3b8;" title="Chưa chọn PAKD"><?= mc_rate_pct($d['com1_base_rate']) ?>%</span><?php
+                                    else: ?><?= mc_rate_pct($d['com1_base_rate']) ?>%<?php endif; ?></td>
+                                <td class="amt com1-cell" data-section="main" data-month="<?= htmlspecialchars($mk) ?>" data-amount="<?= $d['amount_vnd'] ?>" data-baserate="<?= $d['com1_base_rate'] ?>" data-isnew="<?= $d['client_type'] === 'New' ? 1 : 0 ?>" data-paidok="<?= $row_paidok ? 1 : 0 ?>" data-ebt="<?= $d['ebt_pct'] !== null ? $d['ebt_pct'] : '' ?>" style="color:<?= $d['com1_base_rate'] == 0 ? ($row_paidok ? '#dc2626' : '#94a3b8') : '#1d4ed8' ?>;font-weight:600;"><?= !$row_paidok ? '—' : mc_fmt($row_base_amt) ?></td>
                                 <?php $row_ebt_ok = !empty($d['com2_ebt_ok']); $row_elig = ($d['is_paid'] && $d['paid_in_quarter'] && $row_ebt_ok) ? 1 : 0; $row_com2 = ($d['com2_gross'] ?? 0); /* gross (KPI_adj áp ở 7 box) */ $row_hv_vnd = $d['com2_hv_vnd'] ?? null; $row_tier = (float) ($d['com2_tier'] ?? 0); ?>
                                 <td class="hv-cell" data-inv="<?= $inv_id ?>">
                                     <div class="hv-wrap"<?= $row_ebt_ok ? '' : ' title="Com2 yêu cầu EBT ≥ 20%"' ?>>
@@ -1727,18 +1904,26 @@ if ($mc_export === 'excel' || $mc_export === 'pdf') {
                     <!-- ── Thu hồi công nợ (paid this quarter, invoiced earlier) ── -->
                     <?php if (!empty($collected_details)):
                         $col_com1_total = 0;
+                        $col_mlcom_total = 0;
+                        $col_opcom_total = 0;
                         $col_com2_total = 0;
                         $col_ai_com_total = 0;
                         $cn = 0;
                     ?>
                         <tr class="mh">
-                            <td colspan="11" style="background:#dcfce7;color:#16a34a;border-color:#bbf7d0;">
+                            <td colspan="10" style="background:#dcfce7;color:#16a34a;border-color:#bbf7d0;">
                                 Thu hồi công nợ Q<?= $selected_quarter ?>/<?= $selected_year ?>
                                 <span style="font-weight:normal;font-size:.88em;color:#15803d;margin-left:.5rem;">
                                     (<?= count($collected_details) ?> inv · tạo từ quý trước, thanh toán trong quý này)
                                 </span>
                             </td>
                             <td class="amt" style="background:#dcfce7;color:#16a34a;border-color:#bbf7d0;"><?= mc_fmt_short($total_collected_vnd) ?></td>
+                            <td style="background:#dcfce7;border-color:#bbf7d0;"></td>
+                            <td style="background:#dcfce7;border-color:#bbf7d0;"></td>
+                            <td style="background:#dcfce7;border-color:#bbf7d0;"></td>
+                            <td style="background:#dcfce7;border-color:#bbf7d0;"></td>
+                            <td style="background:#dcfce7;border-color:#bbf7d0;"></td>
+                            <td style="background:#dcfce7;border-color:#bbf7d0;"></td>
                             <td style="background:#dcfce7;border-color:#bbf7d0;"></td>
                             <td style="background:#dcfce7;border-color:#bbf7d0;"></td>
                             <td style="background:#dcfce7;border-color:#bbf7d0;"></td>
@@ -1785,10 +1970,15 @@ if ($mc_export === 'excel' || $mc_export === 'pdf') {
                             } else {
                                 $ci_com1_base_rate = $ci_is_new ? 0.01 : 0.005;
                             }
-                            $ci_lead_source = $ci_row_map && !empty($ci_row_map['lead_source']) ? $ci_row_map['lead_source'] : '';
+                            $ci_lead_source = $ci_row_map && isset($ci_row_map['lead_source']) ? (string)$ci_row_map['lead_source'] : '';
                             $ci_lead_bonus = ($ci_lead_source === 'self' && $ci_is_new && $ci_com1_base_rate > 0) ? MC_SELF_LEAD_BONUS : 0;
-                            $ci_com1_rate = $ci_com1_base_rate + $ci_lead_bonus;
+                            $ci_lead_oppty = $ci_row_map && isset($ci_row_map['lead_oppty']) ? (string)$ci_row_map['lead_oppty'] : '';
+                            $ci_oppty_bonus = ($ci_lead_oppty === 'me' && $ci_is_new && $ci_com1_base_rate > 0) ? MC_LEAD_OPPTY_BONUS : 0;
+                            $ci_com1_rate = $ci_com1_base_rate + $ci_lead_bonus + $ci_oppty_bonus;
                             $ci_com1_gross = $cd['amount_vnd'] * $ci_com1_rate;
+                            $ci_base_gross  = $cd['amount_vnd'] * $ci_com1_base_rate;
+                            $ci_lead_gross  = $cd['amount_vnd'] * $ci_lead_bonus;
+                            $ci_oppty_gross = $cd['amount_vnd'] * $ci_oppty_bonus;
                             // KPI adjustment from the quarter this invoice was INVOICED in (not current quarter)
                             $ci_hk = $cd['origin_key'] !== '' ? ($hist_kpi[$cd['origin_key']] ?? null) : null;
                             $ci_kpi_adj = $ci_hk ? $ci_hk['adj'] : 0;
@@ -1798,7 +1988,9 @@ if ($mc_export === 'excel' || $mc_export === 'pdf') {
                             $ci_kpi_level = $ci_hk ? ($ci_hk['level_name'] ?? '') : '';
                             $ci_kpi_target = $ci_hk ? ($ci_hk['target'] ?? 0) : 0;
                             $ci_com1 = $cd['com1_net'] ?? ($ci_com1_gross * $ci_kpi_adj);
-                            $col_com1_total += $ci_com1_gross;   // footer = gross (KPI_adj áp ở 7 box)
+                            $col_com1_total  += $ci_base_gross;   // footer (Com1 base) = gross (KPI_adj áp ở 7 box)
+                            $col_mlcom_total += $ci_lead_gross;
+                            $col_opcom_total += $ci_oppty_gross;
                             $ci_sel_pakd_name = $ci_sel_pakd_id && isset($pakd_map[$ci_sel_pakd_id]) ? htmlspecialchars($pakd_map[$ci_sel_pakd_id]['name']) : '';
                             $ci_sel_ebt = '';
                             if ($ci_sel_manual_ebt !== null) {
@@ -1816,7 +2008,6 @@ if ($mc_export === 'excel' || $mc_export === 'pdf') {
                                 <td><?= $ci_date ?></td>
                                 <td style="color:#16a34a;font-weight:600;"><?= $ci_pay ?></td>
                                 <td><?= $ci_proj ?></td>
-                                <td class="lead-cell"><?= mc_lead_select($ci_id, $ci_lead_source, $lead_options, $ci_is_new) ?></td>
                                 <?php $ci_ai_addon = $cd['ai_addon'] ?? ''; $ci_ai_rev = $cd['ai_rev'] ?? null; $ci_ai_rev_cur = $cd['ai_rev_cur'] ?? 'VND'; $ci_ai_rev_vnd = $cd['ai_rev_vnd'] ?? null; $ci_ai_kpi_ok = !empty($cd['ai_kpi_ok']); ?>
                                 <td>
                                     <div class="pakd-wrap" data-inv="<?= $ci_id ?>" data-pakd-id="<?= $ci_sel_pakd_id ?>" data-link="<?= htmlspecialchars($ci_sel_link) ?>">
@@ -1849,9 +2040,15 @@ if ($mc_export === 'excel' || $mc_export === 'pdf') {
                                 <td class="amt"><?= mc_fmt($ci_amt) ?> <?= $ci_curr ?></td>
                                 <td class="amt"><?= mc_fmt($cd['amount_vnd']) ?></td>
                                 <td><span class="badge <?= $ci_cls ?>"><?= $ci_label ?></span></td>
-                                <td class="amt"><?php if ($ci_com1_rate == 0 && $ci_linked_ebt !== null): ?><span style="color:#dc2626;" title="EBT < 5% → không tính Com">0%</span><?php elseif ($ci_linked_ebt === null && !$ci_sel_pakd_id && !$ci_is_link): ?><span style="color:#94a3b8;"><?= mc_rate_pct($ci_com1_rate) ?>%</span><?php else: ?><?= mc_rate_pct($ci_com1_rate) ?>%<?php if ($ci_lead_source === 'self' && $ci_is_new && $ci_com1_base_rate > 0): ?><span class="lead-bonus" title="+1% My Lead"> ★</span><?php endif; ?><?php endif; ?></td>
+                                <td class="lead-cell"><?= mc_user_pick($ci_id, 'lead', $ci_lead_source, $mc_users, $ci_is_new) ?></td>
+                                <td class="amt ml-rate-cell"><?php if ($ci_lead_source === 'self' && $ci_is_new && $ci_com1_base_rate > 0): ?><span class="lead-bonus" title="Market to Lead = My Lead">+<?= mc_rate_pct(MC_SELF_LEAD_BONUS) ?>%</span><?php else: ?><span style="color:#cbd5e1;">—</span><?php endif; ?></td>
+                                <td class="amt mlcom-cell-rec" style="color:<?= $ci_lead_gross > 0 ? '#d97706' : '#cbd5e1' ?>;font-weight:600;"><?= $ci_lead_gross > 0 ? mc_fmt($ci_lead_gross) : '—' ?></td>
+                                <td class="oppty-cell"><?= mc_user_pick($ci_id, 'oppty', $ci_lead_oppty, $mc_users, $ci_is_new) ?></td>
+                                <td class="amt oppty-rate-cell"><?php if ($ci_lead_oppty === 'me' && $ci_is_new && $ci_com1_base_rate > 0): ?><span class="oppty-bonus" title="Lead to Oppty = Converted By Me">+<?= mc_rate_pct(MC_LEAD_OPPTY_BONUS) ?>%</span><?php else: ?><span style="color:#cbd5e1;">—</span><?php endif; ?></td>
+                                <td class="amt opcom-cell-rec" style="color:<?= $ci_oppty_gross > 0 ? '#16a34a' : '#cbd5e1' ?>;font-weight:600;"><?= $ci_oppty_gross > 0 ? mc_fmt($ci_oppty_gross) : '—' ?></td>
+                                <td class="amt com1-rate-cell-rec"><?php if ($ci_com1_base_rate == 0 && $ci_linked_ebt !== null): ?><span style="color:#dc2626;" title="EBT < 5% → không tính Com">0%</span><?php elseif ($ci_linked_ebt === null && !$ci_sel_pakd_id && !$ci_is_link): ?><span style="color:#94a3b8;"><?= mc_rate_pct($ci_com1_base_rate) ?>%</span><?php else: ?><?= mc_rate_pct($ci_com1_base_rate) ?>%<?php endif; ?></td>
                                 <td class="amt kpi-q-cell com1-cell-rec" data-year="<?= $cd['origin_year'] ?>" data-quarter="<?= $cd['origin_quarter'] ?>" data-amount="<?= $cd['amount_vnd'] ?>" data-baserate="<?= $ci_com1_base_rate ?>" data-isnew="<?= $ci_is_new ? 1 : 0 ?>" data-adj="<?= $ci_kpi_adj ?>" data-ebt="<?= $ci_linked_ebt !== null ? $ci_linked_ebt : '' ?>">
-                                    <div class="com1-rec-val" style="font-weight:600;color:<?= $ci_com1_gross == 0 ? '#94a3b8' : '#1d4ed8' ?>;"><?= mc_fmt($ci_com1_gross) ?></div>
+                                    <div class="com1-rec-val" style="font-weight:600;color:<?= $ci_base_gross == 0 ? '#94a3b8' : '#1d4ed8' ?>;"><?= mc_fmt($ci_base_gross) ?></div>
                                     <?php if ($cd['origin_key'] !== ''):
                                         $kpi_color = $ci_kpi_adj == 0 ? '#dc2626' : ($ci_kpi_adj < 1 ? '#f59e0b' : '#16a34a');
                                     ?>
@@ -1889,6 +2086,11 @@ if ($mc_export === 'excel' || $mc_export === 'pdf') {
                             <td colspan="14" style="background:#dcfce7;color:#15803d;border-color:#bbf7d0;text-align:right;font-weight:600;">
                                 Tổng thu hồi (gross — KPI từng quý gốc áp ở box "Thu hồi")
                             </td>
+                            <td class="amt" id="recMlComTotal" style="background:#dcfce7;color:#d97706;border-color:#bbf7d0;font-weight:700;"><?= $col_mlcom_total > 0 ? mc_fmt($col_mlcom_total) : '' ?></td>
+                            <td style="background:#dcfce7;border-color:#bbf7d0;"></td>
+                            <td style="background:#dcfce7;border-color:#bbf7d0;"></td>
+                            <td class="amt" id="recOpComTotal" style="background:#dcfce7;color:#16a34a;border-color:#bbf7d0;font-weight:700;"><?= $col_opcom_total > 0 ? mc_fmt($col_opcom_total) : '' ?></td>
+                            <td style="background:#dcfce7;border-color:#bbf7d0;"></td>
                             <td class="amt" id="recCom1Total" style="background:#dcfce7;color:#16a34a;border-color:#bbf7d0;font-weight:700;"><?= mc_fmt($col_com1_total) ?></td>
                             <td style="background:#dcfce7;border-color:#bbf7d0;"></td>
                             <td class="amt" id="recCom2Total" style="background:#dcfce7;color:#7c3aed;border-color:#bbf7d0;font-weight:700;"><?= $col_com2_total > 0 ? mc_fmt($col_com2_total) : '' ?></td>
@@ -1900,6 +2102,62 @@ if ($mc_export === 'excel' || $mc_export === 'pdf') {
 
                     </tbody>
                 </table>
+            </div>
+
+            <!-- ─── Commission Lead/Oppty được credit cho tôi (cross-user) ─── -->
+            <div style="margin-top:1.75rem;">
+                <div style="display:flex;align-items:center;gap:.5rem;margin-bottom:.5rem;">
+                    <h3 style="margin:0;font-size:15px;color:#0f766e;font-weight:700;">Commission Lead / Oppty được credit cho tôi</h3>
+                    <span style="font-size:11px;color:#64748b;">(HĐ của AM/BD khác chọn tôi là Market to Lead / Lead to Oppty · +0.5% mỗi loại · đã thanh toán trong Q<?= $selected_quarter ?>/<?= $selected_year ?>)</span>
+                </div>
+                <div class="t-card">
+                    <table>
+                        <thead><tr>
+                            <th>#</th>
+                            <th>Invoice</th>
+                            <th>Customer</th>
+                            <th>Người chọn</th>
+                            <th>Client</th>
+                            <th>Payment Date</th>
+                            <th style="text-align:center;">EBT</th>
+                            <th style="text-align:right;">Amount (VND)</th>
+                            <th>Credit</th>
+                            <th style="text-align:right;">MTL%</th>
+                            <th style="text-align:right;">MTO%</th>
+                            <th style="text-align:right;">Bonus (VND)</th>
+                        </tr></thead>
+                        <tbody>
+                        <?php if (empty($credited_details)): ?>
+                            <tr><td colspan="12" style="text-align:center;padding:2.5rem;color:#64748b;">Chưa có HĐ nào credit cho bạn (đã thanh toán trong Q<?= $selected_quarter ?>/<?= $selected_year ?>).</td></tr>
+                        <?php else: $cdn = 0; foreach ($credited_details as $cdi): $cdn++;
+                            $civ = $cdi['inv'];
+                            $cust = is_array($civ['partner_id']) ? htmlspecialchars($civ['partner_id'][1]) : '—';
+                            $bonus = $cdi['la'] + $cdi['oa'];
+                        ?>
+                            <tr>
+                                <td style="color:#94a3b8;font-size:11px;"><?= $cdn ?></td>
+                                <td style="color:#1155cc;"><?= htmlspecialchars($civ['name'] ?: 'Draft') ?></td>
+                                <td><?= $cust ?></td>
+                                <td><?= htmlspecialchars($cdi['by']) ?></td>
+                                <td><span class="badge <?= $cdi['is_new'] ? 'b-new' : 'b-old' ?>"><?= $cdi['is_new'] ? 'New' : 'Old' ?></span></td>
+                                <td style="color:#16a34a;font-weight:600;"><?= $cdi['pdy'] ? date('d/m/Y', strtotime($cdi['pdy'])) : '—' ?></td>
+                                <td style="text-align:center;"><?= $cdi['ebt'] !== null ? round($cdi['ebt'], 1) . '%' : '' ?></td>
+                                <td class="amt"><?= mc_fmt($cdi['amt']) ?></td>
+                                <td><?php if ($cdi['is_lead']): ?><span class="badge" style="background:#fef3c7;color:#b45309;border-color:#fde68a;">Lead</span> <?php endif; ?><?php if ($cdi['is_opp']): ?><span class="badge" style="background:#dcfce7;color:#15803d;border-color:#bbf7d0;">Oppty</span><?php endif; ?></td>
+                                <td class="amt" style="color:<?= $cdi['la'] > 0 ? '#d97706' : '#cbd5e1' ?>;"><?= $cdi['la'] > 0 ? '+' . mc_rate_pct(MC_SELF_LEAD_BONUS) . '%' : '—' ?></td>
+                                <td class="amt" style="color:<?= $cdi['oa'] > 0 ? '#16a34a' : '#cbd5e1' ?>;"><?= $cdi['oa'] > 0 ? '+' . mc_rate_pct(MC_LEAD_OPPTY_BONUS) . '%' : '—' ?></td>
+                                <td class="amt" style="font-weight:600;color:#0f766e;"><?= mc_fmt($bonus) ?></td>
+                            </tr>
+                        <?php endforeach; ?>
+                            <tr class="mh">
+                                <td colspan="11" style="background:#f0fdfa;color:#0f766e;border-color:#99f6e4;text-align:right;font-weight:600;">Tổng commission được credit (Lead <?= mc_fmt($credited_lead_total) ?> + Oppty <?= mc_fmt($credited_oppty_total) ?>)</td>
+                                <td class="amt" style="background:#f0fdfa;color:#0f766e;border-color:#99f6e4;font-weight:700;"><?= mc_fmt($credited_grand) ?></td>
+                            </tr>
+                        <?php endif; ?>
+                        </tbody>
+                    </table>
+                </div>
+                <div style="font-size:11px;color:#94a3b8;margin-top:4px;">Nguồn: các lựa chọn Market to Lead / Lead to Oppty đã lưu (invoice_pakd_map) của mọi AM/BD. Chỉ tính khi khách New, đã thanh toán trong quý, EBT ≥ 5% (hoặc chưa có EBT). Chỉ gồm HĐ của <strong>AM/BD khác</strong> chọn bạn (không gồm lựa chọn trên HĐ của chính bạn — phần đó đã nằm trong Com1). Tổng này được cộng vào tổng commission.</div>
             </div>
 
             <!-- ─── License Bonus (HĐ type License) ─── -->
@@ -2110,7 +2368,7 @@ if ($mc_export === 'excel' || $mc_export === 'pdf') {
             <details style="margin-top:1rem;font-size:12px;color:#64748b;">
                 <summary style="cursor:pointer;font-weight:600;padding:0.5rem 0;">Quy tắc tính Commission (tham khảo)</summary>
                 <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:1rem;margin-top:0.5rem;line-height:1.8;">
-                    <strong>Com1 (Revenue):</strong> New Client = 1% · Old Client = 0.5% · <span style="color:#f59e0b;">Market to Lead = "My Lead" → +1% Com1 ★ (chỉ khách New)</span> · <span style="color:#dc2626;">EBT &lt; 5% → 0 com (chỉ tính KPI)</span><br>
+                    <strong>Com1 (Revenue):</strong> New Client = 1% · Old Client = 0.5% · <span style="color:#f59e0b;">Market to Lead = "My Lead" → +0.5% Com1 ★ (chỉ khách New; chọn người khác = ghi nhận, không cộng)</span> · <span style="color:#16a34a;">Lead to Oppty = "Converted By Me" → +0.5% Com1 ✚ (chỉ khách New · Contract/PO phát sinh trong 1 năm đầu kể từ Contract/PO đầu tiên của khách)</span> · <span style="color:#dc2626;">EBT &lt; 5% → 0 com (chỉ tính KPI)</span><br>
                     <strong>Com2 (High Value):</strong> Chỉ khi EBT ≥ 20%. HV = Giá chênh = Revenue − Revenue Base (nhập tay, ₫ hoặc $ → quy đổi VND). Tier <strong>tự tính</strong> theo ratio = Revenue / Base (Base = Revenue − HV): &gt;1.5 → 5% · (&gt;1.3–1.5] → 3% · (&gt;1–1.3] → 2% · ≤1 → không có Com2. Com2 = HV(VND) × Tier%. VD: Revenue 2 tỷ, HV 500tr → Base 1.5 tỷ, ratio 1.33 → rank (&gt;1.3–1.5) → Tier 3% → Com2 = 500tr × 3% = 15tr. <span style="color:#f59e0b;">⚠ Lưu ý: HV nhập theo đúng % đã xuất hóa đơn của hợp đồng — VD HĐ 10.000 USD mới xuất 50% thì chỉ nhập 50% phần HV tương ứng, không nhập chênh lệch của cả hợp đồng.</span><br>
                     <strong>KPI Adj:</strong> < 60%: 0 com · 60-80%: 70% com · ≥ 80%: 100% com<br>
                     <strong>Yearly Bonus:</strong> 2% × S_EBT (nếu %A_EBT ≥ 12.5%) hoặc 4% × S_EBT (nếu ≥ 20%)<br>
@@ -2160,6 +2418,7 @@ body.mc-locked .hv-cur,
 body.mc-locked .airev-cur,
 body.mc-locked button[onclick*="savePakd"],
 body.mc-locked button[onclick*="clearPakd"],
+body.mc-locked .up-btn,
 body.mc-locked .pakd-btn { pointer-events:none; opacity:0.55; cursor:not-allowed; }
 body.mc-locked .pakd-btn { cursor:not-allowed; }
 
@@ -2431,6 +2690,12 @@ let COLLECTED_COM1 = <?= json_encode((float)$total_collected_com1) ?>;
 let GRAND_COM1 = <?= json_encode((float)$grand_com1) ?>;
 const KPI_ADJ = <?= json_encode((float)$kpi_adj) ?>;            // current-quarter KPI adjustment
 const SELF_LEAD_BONUS = <?= json_encode((float)MC_SELF_LEAD_BONUS) ?>;
+const OPPTY_BONUS = <?= json_encode((float)MC_LEAD_OPPTY_BONUS) ?>;   // Lead to Oppty +0.5%
+// User picker data (Market to Lead + Lead to Oppty). Current user already excluded.
+const MC_USERS = <?= json_encode($mc_users) ?>;
+const MC_PICK_SPECIAL  = { lead: 'My Lead', oppty: 'Converted By Me' };   // first-option label
+const MC_PICK_SENTINEL = { lead: 'self', oppty: 'me' };                   // stored value for "current user"
+const MC_PICK_PLACEHOLDER = { lead: '— Nguồn lead —', oppty: '— Người chuyển đổi —' };
 const HV_RATES = <?= json_encode(array_map('floatval', $hv_rates)) ?>;
 
 // License Bonus: 10% × EBT(License) for paid-in-quarter rows, gated on quarter KPI ≥ 80% (binary).
@@ -2475,6 +2740,8 @@ let COLLECTED_AI = <?= json_encode((float)$total_collected_ai_com) ?>;
 let GRAND_AI     = <?= json_encode((float)$grand_ai_com) ?>;
 let GRAND_COM2   = <?= json_encode((float)$grand_com2) ?>;
 let GRAND_SO_COM = <?= json_encode((float)$total_so_com) ?>;
+// Lead/Oppty credit from OTHER AM/BD (own credits already live inside GRAND_COM1). Static this session.
+const CREDITED_EXTERNAL = <?= json_encode((float)$credited_external_total) ?>;
 
 // AI commission rate given add-on type + EBT % (mirrors PHP mc_ai_rate).
 function aiRate(addon, ebt) {
@@ -2529,74 +2796,177 @@ function fmtShort(n) {
     return Math.round(n).toLocaleString('en-US');
 }
 
-// Market to Lead: persist the source and (if self-sourced) re-apply the +1% Com1 bonus live.
-function saveLead(select) {
-    if (mcIsLocked()) { showToast('Đã xác nhận — cần Reset to Draft để chỉnh sửa', false); return; }
-    const invId = parseInt(select.dataset.inv);
-    const val = select.value;
-    recomputeCom1();
-    savePakdApi({invoice_id: invId, update_lead: true, lead_source: val});
+// ── Market to Lead / Lead to Oppty: searchable user picker ──
+// Resolve a stored value ('', sentinel, or user id) to its button label.
+function upLabel(kind, val) {
+    if (val === '' || val == null) return MC_PICK_PLACEHOLDER[kind];
+    if (val === MC_PICK_SENTINEL[kind]) return MC_PICK_SPECIAL[kind];
+    if (val === 'other') return 'Other';
+    const u = MC_USERS.find(x => String(x.id) === String(val));
+    return u ? u.name : ('User #' + val);
 }
 
-// Recompute Com1 across both sections after a lead-source change, then refresh Com2 totals.
+let _upPortal = null;
+function closeUserPickPortal() {
+    if (_upPortal) {
+        _upPortal.classList.remove('open');
+        if (_upPortal._origWrap) _upPortal._origWrap.appendChild(_upPortal);
+        _upPortal.classList.remove('portal');
+        _upPortal._origWrap = null;
+        _upPortal = null;
+    }
+}
+
+function positionUpPortal(dd, btn) {
+    const r = btn.getBoundingClientRect();
+    const spaceBelow = window.innerHeight - r.bottom;
+    const dropH = 280;
+    dd.style.top = (spaceBelow >= 120) ? (r.bottom + window.scrollY + 2) + 'px' : (r.top + window.scrollY - dropH - 2) + 'px';
+    dd.style.left = (r.left + window.scrollX) + 'px';
+    dd.style.width = '260px';
+}
+
+function toggleUserPick(btn) {
+    if (mcIsLocked()) { showToast('Đã xác nhận — cần Reset to Draft để chỉnh sửa', false); return; }
+    const wrap = btn.closest('.up-wrap');
+    if (wrap.classList.contains('up-disabled')) return;
+    const dd = wrap.querySelector('.up-dd');
+    if (_upPortal === dd) { closeUserPickPortal(); return; }
+    closeUserPickPortal();
+    dd._origWrap = wrap;
+    document.body.appendChild(dd);
+    dd.classList.add('portal', 'open');
+    positionUpPortal(dd, btn);
+    _upPortal = dd;
+    const input = dd.querySelector('input');
+    input.value = '';
+    input.focus();
+    renderUserPickList(dd, '');
+}
+
+function renderUserPickList(dd, q) {
+    const wrap = dd._origWrap || dd.closest('.up-wrap');
+    const kind = wrap.dataset.kind;
+    const curVal = wrap.dataset.val || '';
+    const lower = q.toLowerCase();
+    const special = MC_PICK_SPECIAL[kind];
+    const sentinel = MC_PICK_SENTINEL[kind];
+    let html = '<li class="up-clear" data-val="">— Bỏ chọn —</li>';
+    if (!lower || special.toLowerCase().includes(lower)) {
+        html += `<li class="up-special${curVal === sentinel ? ' sel' : ''}" data-val="${sentinel}"><span class="up-name">★ ${esc(special)}</span><span class="up-bonus">+0.5%</span></li>`;
+    }
+    if (!lower || 'other ngoài công ty'.includes(lower)) {
+        html += `<li class="up-other${curVal === 'other' ? ' sel' : ''}" data-val="other"><span class="up-name">Other (ngoài công ty)</span></li>`;
+    }
+    MC_USERS.forEach(u => {
+        if (lower && !u.name.toLowerCase().includes(lower)) return;
+        const sel = String(curVal) === String(u.id) ? ' sel' : '';
+        const tag = u.am_bd ? '<span class="up-tag">AM/BD</span>' : '';
+        html += `<li class="${sel}" data-val="${u.id}"><span class="up-name">${esc(u.name)}</span>${tag}</li>`;
+    });
+    const ul = dd.querySelector('ul');
+    ul.innerHTML = html;
+    ul.querySelectorAll('li').forEach(li => li.addEventListener('click', () => selectUserPick(li)));
+}
+
+function filterUserPick(input) { renderUserPickList(input.closest('.up-dd'), input.value); }
+
+function selectUserPick(li) {
+    const dd = li.closest('.up-dd');
+    const wrap = dd._origWrap || dd.closest('.up-wrap');
+    const kind = wrap.dataset.kind;
+    const val = li.dataset.val;                 // '', sentinel, or user id
+    const invId = parseInt(wrap.dataset.inv);
+    wrap.dataset.val = val;
+    const btn = wrap.querySelector('.up-btn');
+    btn.textContent = upLabel(kind, val);
+    btn.classList.remove('has-val', 'is-me');
+    if (val === MC_PICK_SENTINEL[kind]) btn.classList.add('is-me');
+    else if (val !== '') btn.classList.add('has-val');
+    closeUserPickPortal();
+    recomputeCom1();
+    if (kind === 'lead') savePakdApi({invoice_id: invId, update_lead: true, lead_source: val});
+    else savePakdApi({invoice_id: invId, update_oppty: true, lead_oppty: val});
+}
+
+// Set a money cell ('—' grey when zero, otherwise the formatted value in `color`).
+function setMoneyCell(cell, amt, color) {
+    if (!cell) return;
+    if (amt > 0) { cell.textContent = fmtFull(amt); cell.style.color = color; }
+    else { cell.textContent = '—'; cell.style.color = '#cbd5e1'; }
+}
+
+// Recompute Com1 across both sections after a picker change, then refresh Com2 totals.
+// Com1 money is split per row into base · Market-to-Lead bonus · Lead-to-Oppty bonus.
 function recomputeCom1() {
-    const monthSums = {};
+    const mBase = {}, mLead = {}, mOppty = {};
     let grossMain = 0;
     // Current-quarter rows
     document.querySelectorAll('.com1-cell').forEach(cell => {
         const row = cell.closest('tr');
-        const leadSel = row.querySelector('.lead-select');
+        const leadWrap = row.querySelector('.up-wrap[data-kind="lead"]');
+        const opptyWrap = row.querySelector('.up-wrap[data-kind="oppty"]');
         const isNew = cell.dataset.isnew === '1';
-        const self = isNew && leadSel && leadSel.value === 'self';
+        const self = isNew && leadWrap && leadWrap.dataset.val === 'self';
+        const oppty = isNew && opptyWrap && opptyWrap.dataset.val === 'me';
         const amount = parseFloat(cell.dataset.amount) || 0;
         const baseRate = parseFloat(cell.dataset.baserate) || 0;
         const paidok = cell.dataset.paidok === '1';
-        const effRate = baseRate > 0 ? baseRate + (self ? SELF_LEAD_BONUS : 0) : 0;
-        const gross = amount * effRate;
-        // Amount cell
-        if (effRate === 0 && !paidok) { cell.textContent = '—'; }
-        else { cell.textContent = fmtFull(gross); cell.style.color = effRate === 0 ? '#dc2626' : '#1d4ed8'; }
-        // Rate cell (only refresh the percentage when a base Com1 applies)
+        const baseGross  = baseRate > 0 ? amount * baseRate : 0;
+        const leadGross  = (baseRate > 0 && self)  ? amount * SELF_LEAD_BONUS : 0;
+        const opGross    = (baseRate > 0 && oppty) ? amount * OPPTY_BONUS : 0;
+        // Com1 (base) money cell
+        if (baseRate === 0 && !paidok) { cell.textContent = '—'; cell.style.color = '#94a3b8'; }
+        else { cell.textContent = fmtFull(baseGross); cell.style.color = baseRate === 0 ? '#dc2626' : '#1d4ed8'; }
+        setMoneyCell(row.querySelector('.mlcom-cell'), leadGross, '#d97706');
+        setMoneyCell(row.querySelector('.opcom-cell'), opGross, '#16a34a');
+        // Com1 Rate cell shows the BASE rate only; the bonuses live in their own columns.
         if (baseRate > 0) {
             const rateCell = row.querySelector('.com1-rate-cell');
-            if (rateCell) {
-                rateCell.textContent = ratePct(effRate);
-                if (self) {
-                    const star = document.createElement('span');
-                    star.className = 'lead-bonus'; star.title = '+1% My Lead'; star.textContent = ' ★';
-                    rateCell.appendChild(star);
-                }
-            }
+            if (rateCell) rateCell.textContent = ratePct(baseRate);
         }
-        grossMain += gross;
+        updateBonusRateCells(row, self && baseRate > 0, oppty && baseRate > 0);
+        grossMain += baseGross + leadGross + opGross;
         const m = cell.dataset.month || '';
-        monthSums[m] = (monthSums[m] || 0) + gross;
+        mBase[m] = (mBase[m] || 0) + baseGross;
+        mLead[m] = (mLead[m] || 0) + leadGross;
+        mOppty[m] = (mOppty[m] || 0) + opGross;
     });
-    // Month Com1 subtotals (gross, matching the per-row gross display)
-    document.querySelectorAll('.m-com1-sub').forEach(c => {
-        c.textContent = fmtShort(monthSums[c.dataset.month || ''] || 0);
-    });
+    // Month subtotals per money column
+    document.querySelectorAll('.m-com1-sub').forEach(c => { c.textContent = fmtShort(mBase[c.dataset.month || ''] || 0); });
+    document.querySelectorAll('.m-mlcom-sub').forEach(c => { const v = mLead[c.dataset.month || ''] || 0; c.textContent = v > 0 ? fmtShort(v) : ''; });
+    document.querySelectorAll('.m-opcom-sub').forEach(c => { const v = mOppty[c.dataset.month || ''] || 0; c.textContent = v > 0 ? fmtShort(v) : ''; });
     NET_COM1 = grossMain * KPI_ADJ;
 
-    // Recovery rows: cell + footer show GROSS; box "Thu hồi" uses NET (each row's origin-quarter KPI adj).
-    let collectedGross = 0, collectedNet = 0;
+    // Recovery rows: cells + footers show GROSS (split); box "Thu hồi" uses NET (origin-quarter KPI adj).
+    let collectedBase = 0, collectedLead = 0, collectedOp = 0, collectedNet = 0;
     document.querySelectorAll('.com1-cell-rec').forEach(cell => {
         const row = cell.closest('tr');
-        const leadSel = row.querySelector('.lead-select');
+        const leadWrap = row.querySelector('.up-wrap[data-kind="lead"]');
+        const opptyWrap = row.querySelector('.up-wrap[data-kind="oppty"]');
         const isNew = cell.dataset.isnew === '1';
-        const self = isNew && leadSel && leadSel.value === 'self';
+        const self = isNew && leadWrap && leadWrap.dataset.val === 'self';
+        const oppty = isNew && opptyWrap && opptyWrap.dataset.val === 'me';
         const amount = parseFloat(cell.dataset.amount) || 0;
         const baseRate = parseFloat(cell.dataset.baserate) || 0;
         const adj = parseFloat(cell.dataset.adj) || 0;
-        const effRate = baseRate > 0 ? baseRate + (self ? SELF_LEAD_BONUS : 0) : 0;
-        const gross = amount * effRate;
+        const baseGross = baseRate > 0 ? amount * baseRate : 0;
+        const leadGross = (baseRate > 0 && self)  ? amount * SELF_LEAD_BONUS : 0;
+        const opGross   = (baseRate > 0 && oppty) ? amount * OPPTY_BONUS : 0;
         const valDiv = cell.querySelector('.com1-rec-val');
-        if (valDiv) { valDiv.textContent = fmtFull(gross); valDiv.style.color = gross === 0 ? '#94a3b8' : '#1d4ed8'; }
-        collectedGross += gross;
-        collectedNet += gross * adj;
+        if (valDiv) { valDiv.textContent = fmtFull(baseGross); valDiv.style.color = baseGross === 0 ? '#94a3b8' : '#1d4ed8'; }
+        setMoneyCell(row.querySelector('.mlcom-cell-rec'), leadGross, '#d97706');
+        setMoneyCell(row.querySelector('.opcom-cell-rec'), opGross, '#16a34a');
+        updateBonusRateCells(row, self && baseRate > 0, oppty && baseRate > 0);
+        collectedBase += baseGross; collectedLead += leadGross; collectedOp += opGross;
+        collectedNet += (baseGross + leadGross + opGross) * adj;
     });
     const recTot = document.getElementById('recCom1Total');
-    if (recTot) recTot.textContent = fmtFull(collectedGross);   // footer = gross
+    if (recTot) recTot.textContent = fmtFull(collectedBase);   // footer (Com1 base) = gross
+    const recMl = document.getElementById('recMlComTotal');
+    if (recMl) recMl.textContent = collectedLead > 0 ? fmtFull(collectedLead) : '';
+    const recOp = document.getElementById('recOpComTotal');
+    if (recOp) recOp.textContent = collectedOp > 0 ? fmtFull(collectedOp) : '';
     COLLECTED_COM1 = collectedNet;   // box = net
     GRAND_COM1 = NET_COM1 + COLLECTED_COM1;
 
@@ -2613,6 +2983,18 @@ function recomputeCom1() {
 function ratePct(rate) {
     let s = (rate * 100).toFixed(2).replace(/\.?0+$/, '');
     return s + '%';
+}
+
+// Refresh a row's Market-to-Lead % and Lead-to-Oppty % cells from the live picker state.
+function updateBonusRateCells(row, showLead, showOppty) {
+    const ml = row.querySelector('.ml-rate-cell');
+    if (ml) ml.innerHTML = showLead
+        ? `<span class="lead-bonus">+${ratePct(SELF_LEAD_BONUS)}</span>`
+        : '<span style="color:#cbd5e1;">—</span>';
+    const op = row.querySelector('.oppty-rate-cell');
+    if (op) op.innerHTML = showOppty
+        ? `<span class="oppty-bonus">+${ratePct(OPPTY_BONUS)}</span>`
+        : '<span style="color:#cbd5e1;">—</span>';
 }
 
 // Auto Tier % from the Revenue/Base ratio. Base = amount(VND) − HV(VND). ratio = amount/Base.
@@ -2962,7 +3344,7 @@ function recomputeSoCom() {
 
 function refreshGrandTotal() {
     const grandTotal = document.getElementById('ccGrandTotal');
-    if (grandTotal) grandTotal.textContent = fmtShort(GRAND_COM1 + GRAND_COM2 + GRAND_AI + GRAND_SO_COM);
+    if (grandTotal) grandTotal.textContent = fmtShort(GRAND_COM1 + GRAND_COM2 + GRAND_AI + GRAND_SO_COM + CREDITED_EXTERNAL);
 }
 
 // ── Confirmation lock ──
@@ -3011,7 +3393,7 @@ function mcConfirm(action) {
     const payload = {year: <?= $selected_year ?>, quarter: <?= $selected_quarter ?>, action};
     if (action === 'confirm') {
         payload.snapshot = {
-            total:      GRAND_COM1 + GRAND_COM2 + GRAND_AI + GRAND_SO_COM,
+            total:      GRAND_COM1 + GRAND_COM2 + GRAND_AI + GRAND_SO_COM + CREDITED_EXTERNAL,
             com1:       GRAND_COM1,
             com2:       GRAND_COM2,
             ai:         GRAND_AI,
@@ -3046,6 +3428,16 @@ function esc(s) { const d = document.createElement('div'); d.textContent = s; re
 
 document.addEventListener('click', e => {
     if (_portalDd && !e.target.closest('.pakd-dd') && !e.target.closest('.pakd-btn')) closePakdPortal();
+    if (_upPortal && !e.target.closest('.up-dd') && !e.target.closest('.up-btn')) closeUserPickPortal();
+});
+
+// Click-to-highlight a row in the invoice table (reading guide); click again to clear.
+// Ignore clicks on interactive controls so editing/selecting doesn't toggle the row.
+document.addEventListener('click', e => {
+    if (e.target.closest('input, select, textarea, button, a, .up-wrap, .up-dd, .pakd-wrap, .pakd-dd, .kpi-q-badge, [onclick]')) return;
+    const tr = e.target.closest('.t-card tbody tr');
+    if (!tr || tr.classList.contains('mh')) return;
+    tr.classList.toggle('row-hl');
 });
 </script>
 </body>
