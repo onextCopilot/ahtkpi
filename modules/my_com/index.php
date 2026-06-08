@@ -1758,10 +1758,10 @@ if ($mc_export === 'excel' || $mc_export === 'pdf') {
                         <th>Payment</th>
                         <th>Market to Lead</th>
                         <th style="text-align:right;" title="% Com tăng thêm từ Market to Lead = My Lead">MTL%</th>
-                        <th style="text-align:right;" title="Com tăng thêm từ Market to Lead = My Lead">Com Lead</th>
+                        <th style="text-align:right;" title="Com tăng thêm từ Market to Lead = My Lead">MTL Com</th>
                         <th>Lead to Oppty</th>
                         <th style="text-align:right;" title="% Com tăng thêm từ Lead to Oppty = Converted By Me">MTO%</th>
-                        <th style="text-align:right;" title="Com tăng thêm từ Lead to Oppty = Converted By Me">Com Oppty</th>
+                        <th style="text-align:right;" title="Com tăng thêm từ Lead to Oppty = Converted By Me">MTO Com</th>
                         <th style="text-align:right;">Com1 Rate</th>
                         <th style="text-align:right;">Com1</th>
                         <th style="text-align:right;">High Value<span class="hv-info" title="HV = giá chênh lệch (Revenue − Revenue Base) tính TRÊN CHÍNH hóa đơn này, KHÔNG phải của cả hợp đồng.&#10;&#10;➤ Nhập HV theo đúng % đã xuất hóa đơn.&#10;VD: hợp đồng 10.000 USD nhưng hóa đơn này mới xuất 50% → chỉ nhập phần HV tương ứng 50%.">i</span></th>
