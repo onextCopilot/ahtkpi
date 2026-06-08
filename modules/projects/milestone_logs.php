@@ -136,6 +136,16 @@ function ev_badge_color($ev) {
         .modal-close { background:none; border:none; color:var(--gray); font-size:1.4rem; cursor:pointer; line-height:1; }
         .modal-body { padding:16px 20px; overflow:auto; }
         .modal-body pre { font-family:'Fira Mono',monospace; font-size:.8rem; color:#1e293b; white-space:pre-wrap; word-break:break-word; margin:0; }
+        .btn-clear-logs { background:#fef2f2; color:#b91c1c; border:1px solid #f3d2d2; border-radius:8px; padding:8px 14px; cursor:pointer; font-size:.82rem; font-weight:600; }
+        .btn-clear-logs:hover { background:#fee2e2; border-color:#b91c1c; }
+        .clear-box { background:#fff; border-radius:12px; width:90%; max-width:440px; box-shadow:0 20px 50px rgba(0,0,0,.25); }
+        .clear-body { padding:20px; }
+        .clear-body label { display:block; font-size:.8rem; color:var(--gray); margin-bottom:5px; font-weight:600; }
+        .clear-body input[type=date] { width:100%; background:#fff; border:1px solid var(--border); color:var(--slate); border-radius:8px; padding:8px 12px; font-size:.85rem; box-sizing:border-box; font-family:inherit; }
+        .clear-foot { padding:14px 20px; border-top:1px solid var(--border); display:flex; justify-content:flex-end; gap:10px; }
+        .btn-do-clear { background:#b91c1c; color:#fff; border:none; border-radius:8px; padding:8px 18px; cursor:pointer; font-size:.85rem; font-weight:600; }
+        .btn-do-clear:disabled { opacity:.5; cursor:not-allowed; }
+        #clearResult { margin-top:12px; font-size:.82rem; padding:8px 12px; border-radius:6px; display:none; }
     </style>
 </head>
 <body>
@@ -149,8 +159,13 @@ if (file_exists($sidebar_file)) include $sidebar_file;
 
     <div class="logs-header">
         <div class="logs-title"><i class="fas fa-flag-checkered"></i> Log đồng bộ Milestone</div>
-        <a href="/projects/milestones/logs?<?= http_build_query(array_filter(['event'=>$filter_event,'date'=>$filter_date,'q'=>$search])) ?>"
-           class="btn-clear"><i class="fas fa-sync-alt"></i> Refresh</a>
+        <div style="display:flex;gap:10px;align-items:center;">
+            <a href="/projects/milestones/logs?<?= http_build_query(array_filter(['pakd'=>$filter_pakd,'event'=>$filter_event,'date'=>$filter_date,'q'=>$search])) ?>"
+               class="btn-clear"><i class="fas fa-sync-alt"></i> Refresh</a>
+            <?php if (($_SESSION['role'] ?? '') === 'admin'): ?>
+            <button class="btn-clear-logs" onclick="openClearModal()"><i class="fas fa-trash-alt"></i> Xoá log</button>
+            <?php endif; ?>
+        </div>
     </div>
 
     <div class="hook-url-box">
@@ -262,7 +277,77 @@ function showDetail(id) {
 }
 function closeModal() { document.getElementById('detailModal').classList.remove('open'); }
 document.getElementById('detailModal').addEventListener('click', function(e) { if (e.target === this) closeModal(); });
-document.addEventListener('keydown', e => { if (e.key === 'Escape') closeModal(); });
+document.addEventListener('keydown', e => { if (e.key === 'Escape') { closeModal(); if (typeof closeClearModal === 'function') closeClearModal(); } });
 </script>
+
+<?php if (($_SESSION['role'] ?? '') === 'admin'): ?>
+<div class="modal-overlay" id="clearModal">
+    <div class="clear-box">
+        <div class="modal-head">
+            <h3>Xoá log theo khoảng ngày</h3>
+            <button class="modal-close" onclick="closeClearModal()">&times;</button>
+        </div>
+        <div class="clear-body">
+            <p style="font-size:.82rem;color:var(--gray);margin:0 0 16px;">Xoá vĩnh viễn log trong khoảng ngày đã chọn (theo ngày nhận). Không thể hoàn tác.</p>
+            <div style="display:flex;gap:12px;">
+                <div style="flex:1;"><label>Từ ngày</label><input type="date" id="clearFrom"></div>
+                <div style="flex:1;"><label>Đến ngày</label><input type="date" id="clearTo"></div>
+            </div>
+            <div id="clearResult"></div>
+        </div>
+        <div class="clear-foot">
+            <button class="btn-clear" onclick="closeClearModal()">Huỷ</button>
+            <button class="btn-do-clear" id="btnDoClear" onclick="doClear()">Xoá log</button>
+        </div>
+    </div>
+</div>
+<script>
+function openClearModal() {
+    const today = new Date();
+    const from  = new Date(today); from.setDate(from.getDate() - 30);
+    document.getElementById('clearFrom').value = from.toISOString().slice(0,10);
+    document.getElementById('clearTo').value   = today.toISOString().slice(0,10);
+    const res = document.getElementById('clearResult'); res.style.display = 'none';
+    document.getElementById('btnDoClear').disabled = false;
+    document.getElementById('clearModal').classList.add('open');
+}
+function closeClearModal() {
+    const m = document.getElementById('clearModal');
+    if (m) m.classList.remove('open');
+}
+const _cm = document.getElementById('clearModal');
+if (_cm) _cm.addEventListener('click', function(e) { if (e.target === this) closeClearModal(); });
+
+function showClearResult(type, msg) {
+    const el = document.getElementById('clearResult');
+    el.style.display = 'block';
+    if (type === 'success') { el.style.background = '#ecfdf5'; el.style.color = '#047857'; el.style.border = '1px solid #cde9da'; }
+    else { el.style.background = '#fef2f2'; el.style.color = '#b91c1c'; el.style.border = '1px solid #f3d2d2'; }
+    el.textContent = msg;
+}
+function doClear() {
+    const from = document.getElementById('clearFrom').value;
+    const to   = document.getElementById('clearTo').value;
+    if (!from || !to) { showClearResult('error', 'Vui lòng chọn đủ ngày bắt đầu và kết thúc.'); return; }
+    if (from > to)    { showClearResult('error', 'Ngày bắt đầu phải ≤ ngày kết thúc.'); return; }
+    if (!confirm(`Xoá toàn bộ log từ ${from} đến ${to}?\nKhông thể hoàn tác.`)) return;
+    const btn = document.getElementById('btnDoClear');
+    btn.disabled = true; btn.textContent = 'Đang xoá...';
+    fetch('/api/milestone_log_clear', {
+        method: 'POST', headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({date_from: from, date_to: to})
+    })
+    .then(r => r.json())
+    .then(data => {
+        btn.textContent = 'Xoá log';
+        if (data.ok) {
+            showClearResult('success', `Đã xoá ${Number(data.deleted).toLocaleString()} bản ghi (${data.date_from} → ${data.date_to}).`);
+            setTimeout(() => { closeClearModal(); location.reload(); }, 1500);
+        } else { btn.disabled = false; showClearResult('error', data.error || 'Có lỗi xảy ra.'); }
+    })
+    .catch(e => { btn.disabled = false; btn.textContent = 'Xoá log'; showClearResult('error', 'Lỗi kết nối: ' + e); });
+}
+</script>
+<?php endif; ?>
 </body>
 </html>
