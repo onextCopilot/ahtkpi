@@ -17,7 +17,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     if (empty($username) || empty($password)) {
         $error = 'Please enter all required information';
     } else {
-        $stmt = $conn->prepare("SELECT id, username, password, full_name, role, department_id, can_view_invoice, can_view_all_debts, is_am_bd, can_view_odoo_logs FROM users WHERE username = ?");
+        $stmt = $conn->prepare("SELECT id, username, password, full_name, role, department_id, can_view_invoice, can_view_all_debts, is_am_bd, is_marketer, can_view_odoo_logs FROM users WHERE username = ?");
         if (!$stmt) {
             $error = "Lỗi Database: " . $conn->error;
         } else {
@@ -38,6 +38,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                     $_SESSION['can_view_invoice'] = $user['can_view_invoice'];
                     $_SESSION['can_view_all_debts'] = $user['can_view_all_debts'];
                     $_SESSION['is_am_bd'] = $user['is_am_bd'];
+                    $_SESSION['is_marketer'] = $user['is_marketer'] ?? 0;
                     $_SESSION['can_view_odoo_logs'] = $user['can_view_odoo_logs'] ?? 0;
 
                     header("Location: /dashboard");

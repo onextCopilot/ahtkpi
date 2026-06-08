@@ -1,6 +1,23 @@
 <?php
 $current_uri = $_SERVER['REQUEST_URI'];
 
+// Backfill is_marketer into the session for users who logged in before this flag existed
+// (permissions are session-based; this avoids forcing a re-login after the flag is granted).
+if (isset($_SESSION['user_id']) && isset($conn) && !isset($_SESSION['is_marketer'])) {
+    if ($mkStmt = $conn->prepare("SELECT is_marketer FROM users WHERE id = ?")) {
+        $mkStmt->bind_param("i", $_SESSION['user_id']);
+        $mkStmt->execute();
+        if ($mkRow = $mkStmt->get_result()->fetch_assoc()) $_SESSION['is_marketer'] = (int) ($mkRow['is_marketer'] ?? 0);
+        $mkStmt->close();
+    }
+}
+
+// Marketer-only user (no other debt privilege): under Debts Management they may see ONLY My Com.
+$_sidebar_mc_only = !empty($_SESSION['is_marketer'])
+    && empty($_SESSION['is_am_bd'])
+    && empty($_SESSION['can_view_invoice'])
+    && (($_SESSION['role'] ?? '') !== 'admin');
+
 // Check if current user is a CEO approver
 $_sidebar_is_ceo_approver = false;
 if (isset($_SESSION['user_id']) && isset($conn)) {
@@ -64,7 +81,7 @@ function isMenuItemActive($path, $current_uri)
         </a>
 
         <!-- 3. Debts Management Dropdown -->
-        <?php if (!empty($_SESSION['can_view_invoice']) || !empty($_SESSION['is_am_bd']) || $_SESSION['role'] === 'admin'): ?>
+        <?php if (!empty($_SESSION['can_view_invoice']) || !empty($_SESSION['is_am_bd']) || !empty($_SESSION['is_marketer']) || $_SESSION['role'] === 'admin'): ?>
             <div class="nav-item nav-item-parent <?php
             $is_debt_open = strpos($current_uri, '/debt') !== false ||
                 strpos($current_uri, '/my-debt') !== false ||
@@ -87,6 +104,7 @@ function isMenuItemActive($path, $current_uri)
                 </svg>
             </div>
             <div class="submenu <?php echo $is_debt_open ? 'open' : ''; ?>">
+                <?php if (!$_sidebar_mc_only): ?>
                 <a href="/debt" class="submenu-item <?php echo ($current_uri === '/debt') ? 'active' : ''; ?>">
                     <span>All Debts</span>
                 </a>
@@ -102,7 +120,8 @@ function isMenuItemActive($path, $current_uri)
                     class="submenu-item <?php echo (strpos($current_uri, '/my-reports') !== false && strpos($current_uri, '/sale-reports-admin') === false) ? 'active' : ''; ?>">
                     <span>My Reports</span>
                 </a>
-                <?php if (!empty($_SESSION['is_am_bd']) || $_SESSION['role'] === 'admin'): ?>
+                <?php endif; ?>
+                <?php if (!empty($_SESSION['is_am_bd']) || !empty($_SESSION['is_marketer']) || $_SESSION['role'] === 'admin'): ?>
                 <a href="/my-com"
                     class="submenu-item <?php echo strpos($current_uri, '/my-com') !== false ? 'active' : ''; ?>">
                     <span>My Com</span>

@@ -51,12 +51,19 @@ $mc_qs = $viewing_other ? ('&user_id=' . $u_id) : '';
 // Is the viewed user on the AM/BD team? → "Lương KPI quý" is measured against Sale Order
 // (signed-contract) revenue vs the level's so_kpi_quarter_usd (USD) target, instead of invoiced.
 $user_is_am_bd = 0;
-if ($ambd_stmt = $conn->prepare("SELECT is_am_bd FROM users WHERE id = ?")) {
+$user_is_marketer = 0;
+if ($ambd_stmt = $conn->prepare("SELECT is_am_bd, is_marketer FROM users WHERE id = ?")) {
     $ambd_stmt->bind_param("i", $u_id);
     $ambd_stmt->execute();
-    if ($ar = $ambd_stmt->get_result()->fetch_assoc()) $user_is_am_bd = (int) ($ar['is_am_bd'] ?? 0);
+    if ($ar = $ambd_stmt->get_result()->fetch_assoc()) {
+        $user_is_am_bd = (int) ($ar['is_am_bd'] ?? 0);
+        $user_is_marketer = (int) ($ar['is_marketer'] ?? 0);
+    }
     $ambd_stmt->close();
 }
+// Marketer-only view: a Marketer who is NOT AM/BD sees just their Lead/Oppty credit
+// (2 cards + the credited table); all the invoice/KPI/other-commission sections are hidden.
+$marketer_only_view = ($user_is_marketer && !$user_is_am_bd && $role !== 'admin');
 
 // ── User's Sale Level & KPI Target ──
 $user_level = null;
@@ -1552,6 +1559,7 @@ if ($mc_export === 'excel' || $mc_export === 'pdf') {
                 </span>
             </div>
 
+            <?php if (!$marketer_only_view): ?>
             <!-- ─── KPI Progress ─── -->
             <?php if ($user_level):
                 $pct_cls = $kpi_pct >= 80 ? 'good' : ($kpi_pct >= 60 ? 'warn' : 'bad');
@@ -1621,8 +1629,10 @@ if ($mc_export === 'excel' || $mc_export === 'pdf') {
                 </div>
             </div>
 
+            <?php endif; /* end: KPI sections hidden for marketer-only view */ ?>
             <!-- ─── Commission Estimate ─── -->
             <div class="com-grid">
+                <?php if (!$marketer_only_view): ?>
                 <!-- Com1 -->
                 <div class="com-card c1">
                     <div class="cc-label">Com1 (Revenue)</div>
@@ -1677,6 +1687,7 @@ if ($mc_export === 'excel' || $mc_export === 'pdf') {
                     <span class="cc-tag <?= $total_so_com > 0 ? 'tag-ok' : 'tag-na' ?>" id="ccFirstPoTag"><?= $total_so_com > 0 ? 'Calculated' : (empty($so_list) ? 'Không có SO' : 'Chọn First PO') ?></span>
                 </div>
 
+                <?php endif; /* end: other commission cards hidden for marketer-only view */ ?>
                 <!-- Lead/Oppty Credit (cross-user) -->
                 <div class="com-card" style="border-top-color:#0f766e;">
                     <div class="cc-label">Lead / Oppty Credit</div>
@@ -1698,6 +1709,7 @@ if ($mc_export === 'excel' || $mc_export === 'pdf') {
             </div>
 
 
+            <?php if (!$marketer_only_view): ?>
             <!-- ─── Search / Filter ─── -->
             <form method="GET" class="ctrl">
                 <input type="hidden" name="year" value="<?= $selected_year ?>">
@@ -2104,6 +2116,7 @@ if ($mc_export === 'excel' || $mc_export === 'pdf') {
                 </table>
             </div>
 
+            <?php endif; /* end: Search/Filter + Invoice table hidden for marketer-only view */ ?>
             <!-- ─── Commission Lead/Oppty được credit cho tôi (cross-user) ─── -->
             <div style="margin-top:1.75rem;">
                 <div style="display:flex;align-items:center;gap:.5rem;margin-bottom:.5rem;">
@@ -2160,6 +2173,7 @@ if ($mc_export === 'excel' || $mc_export === 'pdf') {
                 <div style="font-size:11px;color:#94a3b8;margin-top:4px;">Nguồn: các lựa chọn Market to Lead / Lead to Oppty đã lưu (invoice_pakd_map) của mọi AM/BD. Chỉ tính khi khách New, đã thanh toán trong quý, EBT ≥ 5% (hoặc chưa có EBT). Chỉ gồm HĐ của <strong>AM/BD khác</strong> chọn bạn (không gồm lựa chọn trên HĐ của chính bạn — phần đó đã nằm trong Com1). Tổng này được cộng vào tổng commission.</div>
             </div>
 
+            <?php if (!$marketer_only_view): ?>
             <!-- ─── License Bonus (HĐ type License) ─── -->
             <div style="margin-top:1.75rem;">
                 <div style="display:flex;align-items:center;gap:.5rem;margin-bottom:.5rem;">
@@ -2403,6 +2417,7 @@ if ($mc_export === 'excel' || $mc_export === 'pdf') {
                 </div>
             </div>
 
+            <?php endif; /* end: License/Sale Orders/Rules/Confirmation hidden for marketer-only view */ ?>
         </div>
     </main>
 </div>

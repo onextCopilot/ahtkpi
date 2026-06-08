@@ -78,6 +78,7 @@ addColumnIfNotExists($conn, 'users', 'can_view_invoice', "TINYINT(1) DEFAULT 0")
 addColumnIfNotExists($conn, 'users', 'can_view_all_debts', "TINYINT(1) DEFAULT 0");
 addColumnIfNotExists($conn, 'users', 'can_view_odoo_logs', "TINYINT(1) DEFAULT 0");
 addColumnIfNotExists($conn, 'users', 'is_am_bd', "TINYINT(1) DEFAULT 0");
+addColumnIfNotExists($conn, 'users', 'is_marketer', "TINYINT(1) DEFAULT 0");
 addColumnIfNotExists($conn, 'users', 'can_view_all_kpi', "TINYINT(1) DEFAULT 0");
 addColumnIfNotExists($conn, 'users', 'viewable_department_ids', "TEXT DEFAULT NULL");
 addColumnIfNotExists($conn, 'users', 'avatar', "VARCHAR(255) DEFAULT NULL"); // Ensure avatar exists
@@ -135,6 +136,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $can_view_odoo_logs = isset($_POST['can_view_odoo_logs']) ? 1 : 0;
             $viewable_dept_ids = isset($_POST['viewable_dept_ids']) ? implode(',', $_POST['viewable_dept_ids']) : '';
             $is_am_bd = isset($_POST['is_am_bd']) ? 1 : 0;
+            $is_marketer = isset($_POST['is_marketer']) ? 1 : 0;
             $team_ids = isset($_POST['team_ids']) ? $_POST['team_ids'] : [];
             $role_val = $_POST['role'] ?? 'user';
             $sale_level_id = ($is_am_bd && !empty($_POST['sale_level_id'])) ? intval($_POST['sale_level_id']) : null;
@@ -152,9 +154,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
             if (!empty($email) && !empty($name) && !empty($username)) {
                 try {
-                    $stmt = $conn->prepare("INSERT INTO users (username, email, full_name, password, employee_code, job_title, level, department_id, status, join_date, can_view_invoice, can_view_all_debts, can_view_all_kpi, can_view_odoo_logs, viewable_department_ids, is_am_bd, role, sale_level_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+                    $stmt = $conn->prepare("INSERT INTO users (username, email, full_name, password, employee_code, job_title, level, department_id, status, join_date, can_view_invoice, can_view_all_debts, can_view_all_kpi, can_view_odoo_logs, viewable_department_ids, is_am_bd, is_marketer, role, sale_level_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
                     $stmt->bind_param(
-                        "sssssssissiiiisisii",
+                        "sssssssissiiiisiisi",
                         $username,
                         $email,
                         $name,
@@ -171,6 +173,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         $can_view_odoo_logs,
                         $viewable_dept_ids,
                         $is_am_bd,
+                        $is_marketer,
                         $role_val,
                         $sale_level_id
                     );
@@ -223,6 +226,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $can_view_odoo_logs = isset($_POST['can_view_odoo_logs']) ? 1 : 0;
             $viewable_dept_ids = isset($_POST['viewable_dept_ids']) ? implode(',', $_POST['viewable_dept_ids']) : '';
             $is_am_bd = isset($_POST['is_am_bd']) ? 1 : 0;
+            $is_marketer = isset($_POST['is_marketer']) ? 1 : 0;
             $team_ids = isset($_POST['team_ids']) ? $_POST['team_ids'] : [];
             $role_val = $_POST['role'] ?? 'user';
             $sale_level_id = ($is_am_bd && !empty($_POST['sale_level_id'])) ? intval($_POST['sale_level_id']) : null;
@@ -237,9 +241,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
             if ($id > 0 && !empty($email)) {
                 try {
-                    $sql = "UPDATE users SET username=?, email=?, full_name=?, employee_code=?, job_title=?, level=?, department_id=?, status=?, join_date=?, can_view_invoice=?, can_view_all_debts=?, can_view_all_kpi=?, can_view_odoo_logs=?, viewable_department_ids=?, is_am_bd=?, role=?, sale_level_id=? WHERE id=?";
+                    $sql = "UPDATE users SET username=?, email=?, full_name=?, employee_code=?, job_title=?, level=?, department_id=?, status=?, join_date=?, can_view_invoice=?, can_view_all_debts=?, can_view_all_kpi=?, can_view_odoo_logs=?, viewable_department_ids=?, is_am_bd=?, is_marketer=?, role=?, sale_level_id=? WHERE id=?";
                     $stmt = $conn->prepare($sql);
-                    $stmt->bind_param("ssssssissiiiisisii", $username, $email, $name, $emp_code, $job, $level, $dept_id, $status, $join_date, $can_view_invoice, $can_view_all_debts, $can_view_all_kpi, $can_view_odoo_logs, $viewable_dept_ids, $is_am_bd, $role_val, $sale_level_id, $id);
+                    $stmt->bind_param("ssssssissiiiisiisii", $username, $email, $name, $emp_code, $job, $level, $dept_id, $status, $join_date, $can_view_invoice, $can_view_all_debts, $can_view_all_kpi, $can_view_odoo_logs, $viewable_dept_ids, $is_am_bd, $is_marketer, $role_val, $sale_level_id, $id);
                     ;
                     $stmt->execute();
 
@@ -1085,6 +1089,10 @@ if ($sl_tbl && $sl_tbl->num_rows > 0) {
                             <label for="is_am_bd" style="font-size: 13px; color: #3c4043;">Is AM/BD Member</label>
                             <input type="checkbox" name="is_am_bd" id="is_am_bd" onchange="toggleTeamSelect()">
                         </div>
+                        <div class="toggle-item">
+                            <label for="is_marketer" style="font-size: 13px; color: #3c4043;">Is Marketer</label>
+                            <input type="checkbox" name="is_marketer" id="is_marketer">
+                        </div>
                     </div>
 
                     <div id="team_select_row" class="team-select-container" style="display:none;">
@@ -1259,6 +1267,7 @@ if ($sl_tbl && $sl_tbl->num_rows > 0) {
             if(tsViewableDepts) tsViewableDepts.clear();
             
             document.getElementById('is_am_bd').checked = false;
+            document.getElementById('is_marketer').checked = false;
             if(tsTeamIds) tsTeamIds.clear();
 
             // Hide history
@@ -1297,6 +1306,7 @@ if ($sl_tbl && $sl_tbl->num_rows > 0) {
             }
 
             document.getElementById('is_am_bd').checked = user.is_am_bd == 1;
+            document.getElementById('is_marketer').checked = user.is_marketer == 1;
 
             // Set teams
             if(tsTeamIds) {
