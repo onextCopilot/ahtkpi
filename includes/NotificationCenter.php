@@ -48,6 +48,11 @@ class NotificationCenter
                     } elseif ($ev === 'ceo_rejected') {
                         $sev = 'danger'; $title = 'PASX bị CEO từ chối';
                         $link = '/projects/pakd/edit?id=' . $row['pakd_id']; $label = 'Xem PAKD';
+                    } elseif (strpos($ev, 'milestone_') === 0) {
+                        $sev = ($ev === 'milestone_deleted') ? 'danger' : (($ev === 'milestone_created') ? 'success' : 'info');
+                        $title = ($ev === 'milestone_deleted') ? 'Milestone bị xoá'
+                               : (($ev === 'milestone_created') ? 'Milestone mới' : 'Milestone cập nhật');
+                        $link = '/projects/du-an/detail?id=' . $row['pakd_id']; $label = 'Xem dự án';
                     } else {
                         $sev = 'info'; $title = 'PASX ' . strtoupper($row['status'] ?? '');
                         $link = '/projects/pakd/edit?id=' . $row['pakd_id']; $label = 'Xem PAKD';

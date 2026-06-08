@@ -43,6 +43,91 @@ function ms_date($v): ?string {
     try { return (new \DateTime($v))->format('Y-m-d'); } catch (\Throwable $e) { return null; }
 }
 
+/** Ghi log mọi event webhook (audit) */
+function ms_log($conn, ?int $pakd_id, ?string $os_milestone_id, ?string $event, ?string $status, ?string $payload, int $http_status, ?string $note): void {
+    try {
+        $conn->query("CREATE TABLE IF NOT EXISTS milestone_webhook_logs (
+            id              INT AUTO_INCREMENT PRIMARY KEY,
+            pakd_id         INT          DEFAULT NULL,
+            os_milestone_id VARCHAR(64)  DEFAULT NULL,
+            event           VARCHAR(64)  DEFAULT NULL,
+            status          VARCHAR(32)  DEFAULT NULL,
+            payload         JSON         DEFAULT NULL,
+            http_status     INT          DEFAULT 200,
+            note            TEXT         DEFAULT NULL,
+            received_at     DATETIME     DEFAULT CURRENT_TIMESTAMP,
+            INDEX idx_pakd (pakd_id)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+        $st = $conn->prepare("INSERT INTO milestone_webhook_logs
+            (pakd_id, os_milestone_id, event, status, payload, http_status, note)
+            VALUES (?,?,?,?,?,?,?)");
+        $st->bind_param("issssis", $pakd_id, $os_milestone_id, $event, $status, $payload, $http_status, $note);
+        $st->execute();
+        $st->close();
+    } catch (\Throwable $e) { error_log('[milestones_sync] log error: ' . $e->getMessage()); }
+}
+
+/** Tạo thông báo cho AM của dự án khi milestone thay đổi */
+function ms_notify($conn, ?int $pakd_id, string $event, array $ms): void {
+    if (!$pakd_id) return; // chưa map được dự án -> không có AM để báo
+    try {
+        $conn->query("CREATE TABLE IF NOT EXISTS pasx_notifications (
+            id            INT AUTO_INCREMENT PRIMARY KEY,
+            user_id       INT NOT NULL,
+            pakd_id       INT NOT NULL,
+            pasx_id       VARCHAR(64) DEFAULT NULL,
+            event         VARCHAR(64) DEFAULT NULL,
+            status        VARCHAR(32) DEFAULT NULL,
+            human_cost    DECIMAL(20,2) DEFAULT NULL,
+            overtime_cost DECIMAL(20,2) DEFAULT NULL,
+            opp_name      VARCHAR(255) DEFAULT NULL,
+            submitted_by  VARCHAR(255) DEFAULT NULL,
+            message       TEXT DEFAULT NULL,
+            is_read       TINYINT(1) DEFAULT 0,
+            created_at    DATETIME DEFAULT CURRENT_TIMESTAMP,
+            INDEX idx_user_read (user_id, is_read)
+        )");
+        try { $conn->query("ALTER TABLE pasx_notifications ADD COLUMN message TEXT DEFAULT NULL"); } catch (\Throwable $e) {}
+
+        // Lấy AM + tên cơ hội
+        $pr = $conn->prepare("SELECT am_user_id, am_name, opportunity_name FROM pakd WHERE id=? LIMIT 1");
+        $pr->bind_param("i", $pakd_id);
+        $pr->execute();
+        $row = $pr->get_result()->fetch_assoc();
+        $pr->close();
+        if (!$row) return;
+
+        $am_user_id = (int)($row['am_user_id'] ?? 0);
+        if (!$am_user_id && !empty($row['am_name'])) {
+            $ur = $conn->prepare("SELECT id FROM users WHERE full_name=? LIMIT 1");
+            $ur->bind_param("s", $row['am_name']);
+            $ur->execute();
+            $u = $ur->get_result()->fetch_assoc();
+            $ur->close();
+            if ($u) $am_user_id = (int)$u['id'];
+        }
+        if (!$am_user_id) return;
+
+        $opp_name = $row['opportunity_name'] ?? null;
+        $status   = isset($ms['status']) ? (string)$ms['status'] : null;
+        $msid     = isset($ms['milestoneId']) ? (string)$ms['milestoneId'] : null;
+        $mname    = !empty($ms['name']) ? (string)$ms['name'] : 'Milestone';
+        $evMap    = ['created'=>'milestone_created','updated'=>'milestone_updated','deleted'=>'milestone_deleted'];
+        $verbMap  = ['created'=>'được tạo','updated'=>'được cập nhật','deleted'=>'đã bị xoá'];
+        $nev      = $evMap[$event]   ?? 'milestone_updated';
+        $verb     = $verbMap[$event] ?? 'được cập nhật';
+        $msg      = 'Milestone "' . $mname . '" ' . $verb . ($status ? ' · ' . $status : '');
+        $submitted_by = null;
+
+        $ni = $conn->prepare("INSERT INTO pasx_notifications
+            (user_id, pakd_id, pasx_id, event, status, opp_name, submitted_by, message)
+            VALUES (?,?,?,?,?,?,?,?)");
+        $ni->bind_param("iissssss", $am_user_id, $pakd_id, $msid, $nev, $status, $opp_name, $submitted_by, $msg);
+        $ni->execute();
+        $ni->close();
+    } catch (\Throwable $e) { error_log('[milestones_sync] notify error: ' . $e->getMessage()); }
+}
+
 // ── Bảng milestone ───────────────────────────────────────────────────────────
 $conn->query("CREATE TABLE IF NOT EXISTS pakd_milestones (
     id                  INT AUTO_INCREMENT PRIMARY KEY,
@@ -88,12 +173,14 @@ if ($expected === '') {
     ms_fail(500, 'Milestone API key chưa được cấu hình trên server');
 }
 if (!is_string($received) || !hash_equals($expected, $received)) {
+    ms_log($conn, null, null, 'auth_failed', null, substr($raw_body, 0, 500), 401, 'Invalid X-Api-Key');
     ms_fail(401, 'Unauthorized');
 }
 
 // ── Parse payload ──────────────────────────────────────────────────────────────
 $data = json_decode($raw_body, true);
 if (!is_array($data)) {
+    ms_log($conn, null, null, 'invalid_json', null, substr($raw_body, 0, 500), 400, 'Invalid JSON body');
     ms_fail(400, 'Invalid JSON body');
 }
 
@@ -159,6 +246,9 @@ if ($event === 'deleted') {
     $del->bind_param("s", $os_milestone_id);
     $del->execute();
     $del->close();
+    ms_log($conn, $pakd_id, $os_milestone_id, 'deleted', $ms['status'] ?? null, $raw_body, 200,
+        $pakd_id ? null : 'Không map được dự án (orphan)');
+    ms_notify($conn, $pakd_id, 'deleted', $ms);
     http_response_code(200);
     echo json_encode([
         'success' => true,
@@ -227,6 +317,12 @@ $gid->execute();
 $grow = $gid->get_result()->fetch_assoc();
 $gid->close();
 if ($grow) $internal_id = (int)$grow['id'];
+
+// Log + thông báo cho AM (event = created | updated)
+$log_event = ($event === 'created') ? 'created' : 'updated';
+ms_log($conn, $pakd_id, $os_milestone_id, $log_event, $status, $raw_body, 200,
+    $pakd_id ? null : 'Không map được dự án (orphan)');
+ms_notify($conn, $pakd_id, $log_event, $ms);
 
 http_response_code(200);
 echo json_encode([
