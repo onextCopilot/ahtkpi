@@ -521,12 +521,12 @@ $pst = $pakd['pasx_status'] ?? '';
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
         :root {
-            --primary: #6366f1; --primary-dark: #4f46e5;
-            --success: #16a34a; --warning: #d97706; --danger: #dc2626;
-            --bg: #f8fafc; --card: #ffffff; --slate: #1e293b;
-            --gray: #64748b; --lgray: #94a3b8; --border: #e2e8f0;
+            --primary: #4f46e5; --primary-dark: #4338ca; --primary-soft: rgba(79,70,229,.07);
+            --success: #047857; --warning: #b45309; --danger: #b91c1c;
+            --bg: #f6f7f9; --card: #ffffff; --slate: #0f172a;
+            --gray: #5b6678; --lgray: #94a3b8; --border: #e6e8ec;
             --r-xl: 18px; --r-lg: 12px; --r-md: 8px; --r-sm: 6px;
-            --sh-sm: 0 1px 3px rgba(0,0,0,.06); --sh-md: 0 4px 16px rgba(0,0,0,.08);
+            --sh-sm: 0 1px 2px rgba(15,23,42,.05); --sh-md: 0 6px 20px rgba(15,23,42,.07);
         }
         * { box-sizing: border-box; }
         body { background: var(--bg); font-family: 'Inter', sans-serif; color: var(--slate); margin: 0; }
@@ -555,22 +555,23 @@ $pst = $pakd['pasx_status'] ?? '';
         /* ── Won Banner ── */
         .won-banner {
             display: flex; align-items: center; gap: 16px;
-            padding: 14px 32px;
-            background: linear-gradient(90deg, #fef3c7 0%, #fde68a 60%, #fef9c3 100%);
-            border-bottom: 2px solid #f59e0b;
+            padding: 13px 32px;
+            background: #fbfaf7;
+            border-bottom: 1px solid var(--border);
+            border-left: 3px solid #c2902a;
         }
-        .won-banner-icon { font-size: 26px; flex-shrink: 0; }
+        .won-banner-icon { font-size: 22px; flex-shrink: 0; color: #c2902a; }
         .won-banner-body { flex: 1; }
-        .won-banner-title { font-size: 14px; font-weight: 800; color: #92400e; }
-        .won-banner-sub   { font-size: 12px; color: #b45309; margin-top: 2px; }
-        .won-badge { display: inline-flex; align-items: center; gap: 5px; background: linear-gradient(135deg,#f59e0b,#d97706); color:#fff; font-size:12px; font-weight:800; padding:5px 14px; border-radius:6px; box-shadow:0 2px 8px rgba(245,158,11,.4); }
+        .won-banner-title { font-size: 14px; font-weight: 700; color: var(--slate); }
+        .won-banner-sub   { font-size: 12px; color: var(--gray); margin-top: 2px; }
+        .won-badge { display: inline-flex; align-items: center; gap: 5px; background: #fdf6e7; color:#92400e; border:1px solid #ecd9a8; font-size:11px; font-weight:700; padding:4px 12px; border-radius:6px; }
 
         /* ── Page Content ── */
         .page-content { padding: 28px 32px 48px; }
 
         /* ── Page header ── */
         .page-header { display: flex; align-items: flex-start; gap: 18px; margin-bottom: 28px; }
-        .page-icon { width: 52px; height: 52px; background: linear-gradient(135deg, #16a34a, #15803d); border-radius: var(--r-lg); display: flex; align-items: center; justify-content: center; color: white; font-size: 22px; box-shadow: 0 4px 12px rgba(22,163,74,.3); flex-shrink: 0; }
+        .page-icon { width: 52px; height: 52px; background: linear-gradient(135deg, #4f46e5, #4338ca); border-radius: var(--r-lg); display: flex; align-items: center; justify-content: center; color: white; font-size: 22px; box-shadow: 0 4px 12px rgba(79,70,229,.22); flex-shrink: 0; }
         .page-header-body { flex: 1; min-width: 0; }
         .page-header-body h1 { font-size: 22px; font-weight: 800; margin: 0 0 6px; line-height: 1.2; }
         .page-header-meta { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
@@ -582,14 +583,14 @@ $pst = $pakd['pasx_status'] ?? '';
         /* ── Metric Cards Row ── */
         .metrics-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 28px; }
         .metric-card { background: var(--card); border-radius: var(--r-lg); border: 1px solid var(--border); box-shadow: var(--sh-sm); padding: 18px 20px; }
-        .metric-card.highlight { border-color: #bbf7d0; background: linear-gradient(135deg, #f0fdf4, #dcfce7); }
-        .metric-card.highlight-warn { border-color: #fde68a; background: linear-gradient(135deg, #fffbeb, #fef9c3); }
-        .metric-card.highlight-danger { border-color: #fecaca; background: linear-gradient(135deg, #fef2f2, #fee2e2); }
+        .metric-card.highlight { border-color: #cde9da; background: #f5fbf8; }
+        .metric-card.highlight-warn { border-color: #f0e2c2; background: #fdfaf3; }
+        .metric-card.highlight-danger { border-color: #f3d2d2; background: #fdf6f6; }
         .metric-label { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: var(--gray); margin-bottom: 8px; }
         .metric-val { font-size: 24px; font-weight: 800; color: var(--slate); line-height: 1; }
-        .metric-val.green { color: #16a34a; }
-        .metric-val.blue  { color: #2563eb; }
-        .metric-val.amber { color: #d97706; }
+        .metric-val.green { color: var(--success); }
+        .metric-val.blue  { color: var(--primary); }
+        .metric-val.amber { color: var(--warning); }
         .metric-sub { font-size: 12px; color: var(--gray); margin-top: 5px; }
 
         /* ── Two-column layout ── */
@@ -597,14 +598,14 @@ $pst = $pakd['pasx_status'] ?? '';
 
         /* ── Cards ── */
         .card { background: var(--card); border-radius: var(--r-lg); border: 1px solid var(--border); box-shadow: var(--sh-sm); margin-bottom: 20px; overflow: hidden; }
-        .card-header { padding: 14px 20px; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 8px; }
+        .card-header { padding: 14px 20px; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 8px; background: #fcfcfd; }
         .card-header h3 { font-size: 14px; font-weight: 700; color: var(--slate); margin: 0; }
-        .card-icon { width: 28px; height: 28px; border-radius: 6px; display: flex; align-items: center; justify-content: center; font-size: 13px; flex-shrink: 0; }
-        .card-icon.green  { background: rgba(22,163,74,.1);  color: #16a34a; }
-        .card-icon.blue   { background: rgba(37,99,235,.1);  color: #2563eb; }
-        .card-icon.amber  { background: rgba(217,119,6,.1);  color: #d97706; }
-        .card-icon.purple { background: rgba(124,58,237,.1); color: #7c3aed; }
-        .card-icon.gray   { background: #f1f5f9;             color: #64748b; }
+        .card-icon { width: 28px; height: 28px; border-radius: 7px; display: flex; align-items: center; justify-content: center; font-size: 13px; flex-shrink: 0; }
+        .card-icon.green  { background: rgba(4,120,87,.09);  color: var(--success); }
+        .card-icon.blue   { background: var(--primary-soft); color: var(--primary); }
+        .card-icon.amber  { background: rgba(180,83,9,.09);  color: var(--warning); }
+        .card-icon.purple { background: rgba(99,91,179,.10); color: #635bb3; }
+        .card-icon.gray   { background: #f1f3f6;             color: var(--gray); }
         .card-body { padding: 16px 20px; }
 
         /* ── Info Grid ── */
@@ -665,7 +666,7 @@ $pst = $pakd['pasx_status'] ?? '';
             border: 2px dashed var(--border); border-radius: 10px; padding: 28px 20px;
             text-align: center; cursor: pointer; transition: all .2s; background: #fafafa;
         }
-        .drop-zone:hover, .drop-zone.drag-over { border-color: var(--primary); background: rgba(99,102,241,.04); }
+        .drop-zone:hover, .drop-zone.drag-over { border-color: var(--primary); background: var(--primary-soft); }
         .drop-zone i { font-size: 28px; color: var(--lgray); margin-bottom: 8px; display: block; }
         .drop-zone p { margin: 0; font-size: 13px; color: var(--gray); }
         .drop-zone small { font-size: 11px; color: var(--lgray); }
