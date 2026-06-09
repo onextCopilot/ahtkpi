@@ -86,3 +86,4 @@ uploads/hrm/cvs/*
 \nuploads/hrm/temp/*\n!uploads/hrm/temp/.gitkeep
 modules/presale/vision/venv/
 modules/presale/vision/venv/
+config/anthropic_key.php
