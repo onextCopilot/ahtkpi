@@ -1112,7 +1112,7 @@ $pst = $pakd['pasx_status'] ?? '';
                                     <button type="button"
                                         onclick="openPayModal(<?= (int)$m['id'] ?>, <?= htmlspecialchars(json_encode($mName), ENT_QUOTES) ?>, <?= htmlspecialchars(json_encode($mInvIds), ENT_QUOTES) ?>)"
                                         style="font-size:11px;font-weight:600;color:var(--primary);background:var(--primary-soft);border:1px solid #dfe3f5;padding:4px 11px;border-radius:6px;cursor:pointer;display:inline-flex;align-items:center;gap:5px;">
-                                        <i class="fas fa-paper-plane" style="font-size:9px;"></i> <?= !empty($mInvs) ? 'Cập nhật hoá đơn & TT' : 'Gắn hoá đơn & đẩy TT' ?>
+                                        <i class="fas fa-paper-plane" style="font-size:9px;"></i> Update cho bộ phận sản xuất
                                     </button>
                                     <?php endif; ?>
                                 </div>
@@ -2100,7 +2100,7 @@ if ($can_push && !empty($milestones)):
 <div id="payModal" style="display:none;position:fixed;inset:0;background:rgba(15,23,42,.55);z-index:1000;align-items:center;justify-content:center;">
   <div style="background:#fff;border-radius:12px;width:92%;max-width:480px;box-shadow:0 20px 50px rgba(0,0,0,.25);">
     <div style="padding:14px 20px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;">
-      <h3 style="margin:0;font-size:15px;"><i class="fas fa-paper-plane" style="color:#0d9488;font-size:13px;"></i> Đẩy thanh toán sang sản xuất</h3>
+      <h3 style="margin:0;font-size:15px;"><i class="fas fa-paper-plane" style="color:#0d9488;font-size:13px;"></i> Update cho bộ phận sản xuất</h3>
       <button onclick="closePayModal()" style="background:none;border:none;font-size:1.4rem;color:var(--gray);cursor:pointer;line-height:1;">&times;</button>
     </div>
     <div style="padding:18px 20px;">
@@ -2115,7 +2115,7 @@ if ($can_push && !empty($milestones)):
     </div>
     <div style="padding:14px 20px;border-top:1px solid var(--border);display:flex;justify-content:flex-end;gap:10px;">
       <button onclick="closePayModal()" class="btn btn-outline">Huỷ</button>
-      <button id="paySubmitBtn" onclick="submitPay()" class="btn btn-primary"><i class="fas fa-paper-plane"></i> Đẩy đi</button>
+      <button id="paySubmitBtn" onclick="submitPay()" class="btn btn-primary"><i class="fas fa-paper-plane"></i> Update</button>
     </div>
   </div>
 </div>
