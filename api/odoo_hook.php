@@ -734,15 +734,25 @@ if ($payload && $event_type === 'invoice') {
         // Lookup chỉ theo odoo_invoice_id — mỗi Odoo invoice có 1 debt record riêng
         // Không dùng vat_invoice name vì nhiều invoice có thể trùng highest_name
         $existRow = null;
-        $q1 = $conn->query("SELECT id, am_email FROM debts WHERE odoo_invoice_id = $inv_id LIMIT 1");
+        $q1 = $conn->query("SELECT id, am_email, invoice_status_class FROM debts WHERE odoo_invoice_id = $inv_id LIMIT 1");
         if ($q1 && $q1->num_rows > 0) {
             $existRow = $q1->fetch_assoc();
         }
 
+        // Các giá trị AM tự phân loại thủ công — hook không được ghi đè
+        $manualClasses = ['Xanh', 'Tốt', 'Trắng', 'PP', 'Chưa xác định'];
+
         if ($existRow) {
-            // Giữ nguyên am_email hiện tại nếu hook không tìm được email mới
-            // (tránh ghi đè email hợp lệ bằng chuỗi rỗng)
+            // Giữ nguyên am_email nếu hook không tìm được email mới
             $emailToUpdate = $am_email ?: ($existRow['am_email'] ?? '');
+
+            // Giữ nguyên invoice_status_class nếu AM đã phân loại thủ công
+            // Chỉ hook được set: Done, Tím, Đỏ (auto từ payment state)
+            $existingClass = $existRow['invoice_status_class'] ?? '';
+            $classToUpdate = in_array($existingClass, $manualClasses, true)
+                ? $existingClass      // giữ nguyên giá trị AM đã set
+                : $inv_status_class;  // dùng giá trị hook tính
+
             $conn->query("UPDATE debts SET
                 odoo_invoice_id      = $inv_id,
                 am                   = {$esc($am_name)},
@@ -756,7 +766,7 @@ if ($payload && $event_type === 'invoice') {
                 currency             = {$esc($ccy)},
                 original_currency    = {$esc($ccy)},
                 payment_status       = {$esc($payment_status)},
-                invoice_status_class = {$esc($inv_status_class)},
+                invoice_status_class = {$esc($classToUpdate)},
                 payment_month        = {$esc($payment_month)},
                 weekly_update        = {$esc($weekly_update)},
                 am_notes             = {$esc($notes)},
