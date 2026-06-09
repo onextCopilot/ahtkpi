@@ -682,11 +682,16 @@ if ($payload && $event_type === 'invoice') {
             }
         }
 
-        // Lấy sale_team_id từ sale_teams theo tên
+        // Lấy sale_team_id từ user_sale_teams theo email của AM trên hệ thống local
+        // (không dùng team_id từ Odoo vì có thể không khớp tên)
         $sale_team_id = null;
-        if ($team_name) {
-            $tRow = $conn->query("SELECT id FROM sale_teams WHERE name = '" . $conn->real_escape_string($team_name) . "' LIMIT 1");
-            if ($tRow && $t = $tRow->fetch_assoc()) $sale_team_id = (int)$t['id'];
+        if ($am_email) {
+            $uRow = $conn->query("SELECT u.id FROM users u WHERE LOWER(u.email) = '" . $conn->real_escape_string(strtolower($am_email)) . "' LIMIT 1");
+            if ($uRow && $u = $uRow->fetch_assoc()) {
+                $local_uid = (int)$u['id'];
+                $tRow = $conn->query("SELECT team_id FROM user_sale_teams WHERE user_id = $local_uid ORDER BY team_id ASC LIMIT 1");
+                if ($tRow && $t = $tRow->fetch_assoc()) $sale_team_id = (int)$t['team_id'];
+            }
         }
 
         // payment_status (PHP 7.4 compatible)
