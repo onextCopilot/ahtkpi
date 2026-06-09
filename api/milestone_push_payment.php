@@ -120,12 +120,14 @@ $ok_count      = 0;
 $last_pay_stat = null;
 
 foreach ($inv_ids as $inv_id) {
-    $iv = $conn->prepare("SELECT odoo_id, name, state, amount_total, currency_name, payment_state, invoice_date, payment_date
+    $iv = $conn->prepare("SELECT odoo_id, name, highest_name, ref, state, amount_total, currency_name, payment_state, invoice_date, payment_date
                           FROM odoo_invoices WHERE odoo_id = ? LIMIT 1");
     $iv->bind_param("i", $inv_id); $iv->execute();
     $inv = $iv->get_result()->fetch_assoc(); $iv->close();
     if (!$inv) { $results[] = ['inv_id' => $inv_id, 'ok' => false, 'msg' => 'Không tìm thấy hoá đơn']; continue; }
 
+    // invoiceCode: name -> highest_name -> ref -> #id (hoá đơn draft thường có name NULL)
+    $invoice_code   = $inv['name'] ?: ($inv['highest_name'] ?: ($inv['ref'] ?: ('#' . $inv['odoo_id'])));
     $invoice_status = strtoupper((string)$inv['state']);                                  // DRAFT / POSTED
     $payment_state  = (strtolower((string)$inv['payment_state']) === 'paid') ? 'PAID' : 'UNPAID';
     $paid_at        = $inv['payment_date'] ?: ($inv['invoice_date'] ?: date('Y-m-d'));
@@ -138,7 +140,7 @@ foreach ($inv_ids as $inv_id) {
         'occurredAt'  => $occurred_at,
         'projectCode' => $project_code,
         'invoice'     => [
-            'invoiceCode'     => $inv['name'],
+            'invoiceCode'     => $invoice_code,
             'invoiceStatus'   => $invoice_status,
             'amount'          => $amount,
             'productionPrice' => $prod_price,
@@ -179,8 +181,8 @@ foreach ($inv_ids as $inv_id) {
     $log_payload = json_encode(['request' => $payload, 'response' => $response ? ($resp ?: $response) : null], JSON_UNESCAPED_UNICODE);
 
     if ($curl_err) {
-        mpp_log($conn, $pakd_id, $os_milestone_id, 'error', $log_payload, $http_code ?: 0, 'curl: ' . $curl_err . ' | inv ' . $inv['name']);
-        $results[] = ['inv_id' => $inv_id, 'code' => $inv['name'], 'ok' => false, 'msg' => 'Lỗi kết nối: ' . $curl_err];
+        mpp_log($conn, $pakd_id, $os_milestone_id, 'error', $log_payload, $http_code ?: 0, 'curl: ' . $curl_err . ' | inv ' . $invoice_code);
+        $results[] = ['inv_id' => $inv_id, 'code' => $invoice_code, 'ok' => false, 'msg' => 'Lỗi kết nối: ' . $curl_err];
         continue;
     }
     if ($http_code >= 200 && $http_code < 300 && (($resp['success'] ?? false) === true || $http_code === 200)) {
@@ -198,7 +200,7 @@ foreach ($inv_ids as $inv_id) {
               invoice_code=VALUES(invoice_code), invoice_status=VALUES(invoice_status), payment_state=VALUES(payment_state),
               amount=VALUES(amount), production_price=VALUES(production_price), currency=VALUES(currency),
               paid_at=VALUES(paid_at), note=VALUES(note), payment_pushed_at=NOW()");
-        $inv_code = $inv['name']; $inv_oid = (int)$inv['odoo_id'];
+        $inv_code = $invoice_code; $inv_oid = (int)$inv['odoo_id'];
         $up->bind_param("iisisssddss" . "s",
             $pakd_id, $milestone_id, $os_milestone_id, $inv_oid, $inv_code, $invoice_status, $payment_state,
             $amount, $prod_price, $resp_currency, $paid_at, $note);
@@ -208,9 +210,15 @@ foreach ($inv_ids as $inv_id) {
         $results[] = ['inv_id' => $inv_id, 'code' => $inv_code, 'ok' => true, 'paymentStatus' => $resp_pay_stat, 'totalPaid' => $total_paid, 'currency' => $resp_currency];
         $ok_count++;
     } else {
-        $err_msg = $resp['message'] ?? $resp['error'] ?? ('HTTP ' . $http_code);
-        mpp_log($conn, $pakd_id, $os_milestone_id, 'error', $log_payload, $http_code, $err_msg . ' | inv ' . $inv['name']);
-        $results[] = ['inv_id' => $inv_id, 'code' => $inv['name'], 'ok' => false, 'msg' => $err_msg, 'http_code' => $http_code];
+        // Bóc message lỗi (OS có thể trả object lồng nhau)
+        $err_msg = 'HTTP ' . $http_code;
+        if (is_array($resp)) {
+            $cand = $resp['message'] ?? $resp['error'] ?? null;
+            if (is_array($cand)) $cand = $cand['message'] ?? json_encode($cand, JSON_UNESCAPED_UNICODE);
+            if ($cand) $err_msg = (string)$cand;
+        }
+        mpp_log($conn, $pakd_id, $os_milestone_id, 'error', $log_payload, $http_code, $err_msg . ' | inv ' . $invoice_code);
+        $results[] = ['inv_id' => $inv_id, 'code' => $invoice_code, 'ok' => false, 'msg' => $err_msg, 'http_code' => $http_code];
     }
 }
 
