@@ -18,6 +18,10 @@ if (!$radar_allowed) {
     exit();
 }
 
+// Trang động — không cho trình duyệt cache (tránh hiện bản cũ khi xem ?id=).
+header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
+header('Pragma: no-cache');
+
 // Nạp engine (các hàm run_pipeline, analyze, ...) mà không kích hoạt CLI/dev-web.
 define('OUTBOUND_RADAR_LIB', true);
 require_once __DIR__ . '/radar.php';
@@ -60,7 +64,7 @@ $viewId  = (int) ($_GET['id'] ?? 0);
 $refresh = !empty($_GET['refresh']);
 $q       = trim((string) ($_GET['q'] ?? ''));
 
-$r          = null;   // kết quả run_pipeline
+$scan          = null;   // kết quả run_pipeline
 $scanId     = null;   // id bản ghi để xem lại
 $scanTime   = null;   // thời điểm quét
 $fromCache  = false;  // lấy từ DB thay vì fetch mới
@@ -70,23 +74,23 @@ if ($viewId) {
     // Xem lại bản đã lưu (không fetch).
     $saved = radar_get_by_id($conn, $viewId);
     if ($saved) {
-        $r = $saved['data']; $scanId = $saved['id']; $scanTime = $saved['created_at'];
+        $scan = $saved['data']; $scanId = $saved['id']; $scanTime = $saved['created_at'];
         $fromCache = true; $noteCurrent = $saved['note'] ?? '';
     } else {
-        $r = ['ok' => false, 'error' => 'Không tìm thấy bản quét #' . $viewId . '.'];
+        $scan = ['ok' => false, 'error' => 'Không tìm thấy bản quét #' . $viewId . '.'];
     }
 } elseif ($url !== '') {
     if (!$refresh) {
         $cached = radar_find_recent($conn, $url, 7); // cache 7 ngày
         if ($cached) {
-            $r = $cached['data']; $scanId = $cached['id']; $scanTime = $cached['created_at'];
+            $scan = $cached['data']; $scanId = $cached['id']; $scanTime = $cached['created_at'];
             $fromCache = true; $noteCurrent = $cached['note'] ?? '';
         }
     }
-    if ($r === null) {
-        $r = run_pipeline($url);
-        if (!empty($r['ok'])) {
-            $scanId   = radar_save_scan($conn, $user_id, $url, $r);
+    if ($scan === null) {
+        $scan = run_pipeline($url);
+        if (!empty($scan['ok'])) {
+            $scanId   = radar_save_scan($conn, $user_id, $url, $scan);
             $scanTime = date('Y-m-d H:i:s');
         }
     }
@@ -110,40 +114,97 @@ $keyMasked     = $keyConfigured
     <link rel="stylesheet" href="/assets/css/dashboard.css">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <style>
-        .radar-container { padding: 24px; max-width: 920px; }
-        .radar-head h1 { font-size: 22px; margin: 0 0 4px; }
-        .radar-head p { color: #6b7280; margin: 0 0 20px; }
-        .radar-form { display: flex; gap: 8px; margin-bottom: 22px; }
-        .radar-form input { flex: 1; padding: 11px 13px; border: 1px solid #e4e7ec; border-radius: 9px; font: inherit; }
-        .radar-form button { padding: 11px 20px; border: 0; border-radius: 9px; background: #2563eb; color: #fff; font-weight: 600; cursor: pointer; }
-        .radar-card { background: #fff; border: 1px solid #e4e7ec; border-radius: 12px; padding: 18px 20px; margin-bottom: 16px; }
-        .radar-card.err { border-color: #fca5a5; background: #fef2f2; color: #b91c1c; }
+        /* layout */
+        .radar-container { padding: 28px 28px 64px; max-width: 960px; margin: 0 auto; }
+        .radar-head { margin-bottom: 22px; }
+        .radar-head h1 { font-size: 24px; font-weight: 700; margin: 0 0 4px; letter-spacing: -.01em; }
+        .radar-head p { color: #6b7280; margin: 0; font-size: 14px; max-width: 660px; line-height: 1.55; }
+        .radar-head-row { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; }
+        .gear-btn { flex: none; width: 40px; height: 40px; padding: 0 !important; border-radius: 10px;
+            background: #fff !important; border: 1px solid #d8dce3 !important; color: #6b7280 !important;
+            font-size: 18px; line-height: 1; cursor: pointer; }
+        .gear-btn:hover { background: #f3f4f6 !important; color: #111827 !important; }
+        .gear-btn.need { border-color: #fcd34d !important; color: #d97706 !important; background: #fffbeb !important; }
+        .settings-pop { display: none; }
+        .settings-pop.open { display: block; }
+
+        /* inputs & buttons (dùng chung) */
+        .radar-container input[type=text],
+        .radar-container input[type=password],
+        .radar-container textarea {
+            border: 1px solid #d8dce3; border-radius: 10px; font: inherit; background: #fff; color: #1f2937;
+            padding: 11px 14px; transition: border-color .15s, box-shadow .15s;
+        }
+        .radar-container input[type=text]:focus,
+        .radar-container input[type=password]:focus,
+        .radar-container textarea:focus {
+            outline: 0; border-color: #2563eb; box-shadow: 0 0 0 3px rgba(37,99,235,.12);
+        }
+        .radar-container button {
+            padding: 11px 18px; border: 0; border-radius: 10px; background: #2563eb; color: #fff;
+            font-weight: 600; font-size: 14px; cursor: pointer; white-space: nowrap;
+            transition: background .15s, transform .05s;
+        }
+        .radar-container button:hover { background: #1d4ed8; }
+        .radar-container button:active { transform: translateY(1px); }
+        .btn-danger { background: #dc2626 !important; }
+        .btn-danger:hover { background: #b91c1c !important; }
+        .btn-link-danger { background: none !important; border: 0 !important; color: #9ca3af !important;
+            cursor: pointer; font-size: 16px; line-height: 1; padding: 2px 6px !important; }
+        .btn-link-danger:hover { color: #b91c1c !important; }
+
+        /* form */
+        .radar-form { display: flex; gap: 10px; margin-bottom: 22px; }
+        .radar-form input { flex: 1; }
+
+        /* card */
+        .radar-card { background: #fff; border: 1px solid #e7e9ee; border-radius: 14px; padding: 20px 22px;
+            margin-bottom: 16px; box-shadow: 0 1px 2px rgba(16,24,40,.04); }
+        .radar-card.err { border-color: #fca5a5; background: #fef2f2; color: #b91c1c; box-shadow: none; }
+        .radar-card.settings { background: #fafbfc; border-style: dashed; box-shadow: none; }
+        .radar-card h3 { font-size: 12px; text-transform: uppercase; letter-spacing: .05em; color: #8a93a2;
+            margin: 0 0 12px; font-weight: 600; }
+
+        /* result header + stats */
         .radar-top { display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 12px; }
-        .radar-score { font-size: 30px; font-weight: 800; color: #2563eb; }
-        .radar-stats { display: flex; flex-wrap: wrap; gap: 22px; margin-top: 16px; }
-        .radar-stats .n { font-size: 24px; font-weight: 700; }
-        .radar-stats .l { color: #6b7280; font-size: 12px; text-transform: uppercase; letter-spacing: .04em; }
-        .radar-card h3 { font-size: 13px; text-transform: uppercase; letter-spacing: .04em; color: #6b7280; margin: 0 0 10px; }
-        .chip { display: inline-block; background: #eef2ff; color: #3730a3; border-radius: 999px; padding: 3px 10px; margin: 3px 4px 0 0; font-size: 13px; }
-        .job { display: flex; gap: 10px; padding: 7px 0; border-bottom: 1px solid #f1f3f4; font-size: 14px; }
+        .radar-score { font-size: 34px; font-weight: 800; color: #2563eb; line-height: 1; }
+        .radar-stats { display: flex; flex-wrap: wrap; gap: 28px; margin-top: 18px; padding-top: 16px; border-top: 1px solid #f1f3f4; }
+        .radar-stats .n { font-size: 26px; font-weight: 700; color: #111827; }
+        .radar-stats .l { color: #8a93a2; font-size: 11px; text-transform: uppercase; letter-spacing: .05em; margin-top: 2px; }
+
+        /* chips, jobs, badge */
+        .chip { display: inline-block; background: #eef2ff; color: #3730a3; border-radius: 999px;
+            padding: 4px 11px; margin: 3px 5px 0 0; font-size: 13px; font-weight: 500; }
+        .job { display: flex; gap: 12px; padding: 9px 0; border-bottom: 1px solid #f1f3f4; font-size: 14px; align-items: baseline; }
         .job:last-child { border: 0; }
-        .job .days { min-width: 54px; color: #d97706; font-weight: 600; }
-        .job .loc { color: #6b7280; }
-        .badge { display: inline-block; background: #059669; color: #fff; border-radius: 7px; padding: 4px 10px; font-weight: 600; font-size: 13px; }
-        .pitch { white-space: pre-wrap; background: #f9fafb; border: 1px dashed #e4e7ec; border-radius: 9px; padding: 14px; font: 14px/1.6 inherit; }
-        .tag { font-size: 12px; color: #6b7280; }
-        .radar-meta { font-size: 13px; color: #6b7280; margin: -8px 0 16px; }
-        .radar-meta a { color: #2563eb; text-decoration: none; }
+        .job .days { min-width: 52px; color: #d97706; font-weight: 600; font-size: 13px; }
+        .job .loc { color: #8a93a2; }
+        .badge { display: inline-block; background: #ecfdf3; color: #027a48; border: 1px solid #a6f4c5;
+            border-radius: 8px; padding: 5px 12px; font-weight: 600; font-size: 13px; }
+
+        /* pitch */
+        .pitch { white-space: pre-wrap; background: #f9fafb; border: 1px solid #eceef2; border-radius: 10px;
+            padding: 16px; font: 14px/1.65 inherit; color: #1f2937; margin: 0; }
+
+        /* misc */
+        .tag { font-size: 12px; color: #8a93a2; }
+        .radar-meta { font-size: 13px; color: #6b7280; margin: -6px 0 16px; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+        .radar-meta a { color: #2563eb; text-decoration: none; font-weight: 500; }
+        .radar-meta a:hover { text-decoration: underline; }
+
+        /* history */
         .radar-hist { width: 100%; border-collapse: collapse; font-size: 14px; }
-        .radar-hist th { text-align: left; color: #6b7280; font-size: 12px; text-transform: uppercase; letter-spacing: .04em; padding: 6px 8px; border-bottom: 1px solid #e4e7ec; }
-        .radar-hist td { padding: 8px; border-bottom: 1px solid #f1f3f4; }
-        .radar-hist tr.cur { background: #eff6ff; }
-        .radar-hist a { color: #1f2937; text-decoration: none; font-weight: 600; }
-        .radar-note { width: 100%; padding: 11px 13px; border: 1px solid #e4e7ec; border-radius: 9px; font: inherit; resize: vertical; }
-        .radar-search { padding: 8px 11px; border: 1px solid #e4e7ec; border-radius: 8px; font: inherit; min-width: 220px; }
-        .btn-danger { background: #dc2626; }
-        .btn-link-danger { background: none; border: 0; color: #b91c1c; cursor: pointer; font-size: 15px; padding: 2px 6px; }
-        .btn-link-danger:hover { color: #7f1d1d; }
+        .radar-hist th { text-align: left; color: #8a93a2; font-size: 11px; text-transform: uppercase; letter-spacing: .05em;
+            padding: 8px; border-bottom: 1px solid #e7e9ee; font-weight: 600; }
+        .radar-hist td { padding: 10px 8px; border-bottom: 1px solid #f4f5f7; vertical-align: top; }
+        .radar-hist tr:hover td { background: #fafbfc; }
+        .radar-hist tr.cur td { background: #eff6ff; }
+        .radar-hist a { color: #111827; text-decoration: none; font-weight: 600; }
+        .radar-hist a:hover { color: #2563eb; }
+
+        /* note + search */
+        .radar-note { width: 100%; resize: vertical; }
+        .radar-search { min-width: 240px; }
     </style>
 </head>
 <body>
@@ -153,8 +214,33 @@ $keyMasked     = $keyConfigured
         <?php include __DIR__ . '/../includes/topbar.php'; ?>
         <div class="radar-container">
             <div class="radar-head">
-                <h1>📡 Outbound Radar</h1>
-                <p>Dò tín hiệu thiếu năng lực dev của một công ty → chấm điểm outsourcing → gợi ý hợp tác + pitch. Dán website hoặc URL job board.</p>
+                <div class="radar-head-row">
+                    <div>
+                        <h1>📡 Outbound Radar</h1>
+                        <p>Dò tín hiệu thiếu năng lực dev của một công ty → chấm điểm outsourcing → gợi ý hợp tác + pitch. Dán website hoặc URL job board.</p>
+                    </div>
+                    <button type="button" class="gear-btn<?= $keyConfigured ? '' : ' need' ?>" title="Cấu hình API key"
+                        onclick="document.getElementById('radarSettings').classList.toggle('open')">⚙</button>
+                </div>
+                <div id="radarSettings" class="settings-pop">
+                    <div class="radar-card settings" style="margin:14px 0 0;">
+                        <h3>Cấu hình API key (Anthropic)</h3>
+                        <p class="tag" style="margin:0 0 10px;">
+                            Trạng thái:
+                            <?php if ($keyConfigured): ?>
+                                <strong style="color:#059669;">Đã cấu hình</strong> (<?= h($keyMasked) ?>)
+                            <?php else: ?>
+                                <strong style="color:#d97706;">Chưa cấu hình</strong> — pitch dùng template, fallback careers-AI không chạy
+                            <?php endif; ?>
+                        </p>
+                        <form method="post" action="/outbound-radar" style="display:flex; gap:8px; flex-wrap:wrap;">
+                            <input type="hidden" name="action" value="save_key">
+                            <input type="password" name="api_key" class="radar-search" style="flex:1; min-width:280px;" placeholder="sk-ant-api03-..." autocomplete="off">
+                            <button type="submit">Lưu key</button>
+                        </form>
+                        <p class="tag" style="margin:10px 0 0;">Lưu vào DB (system_settings) → dùng được cả trên live. Đổi/rotate bất cứ lúc nào.</p>
+                    </div>
+                </div>
             </div>
             <form class="radar-form" method="get" action="/outbound-radar">
                 <input type="text" name="url" autofocus
@@ -163,7 +249,7 @@ $keyMasked     = $keyConfigured
                 <button type="submit">Quét</button>
             </form>
 
-            <?php if ($r && !empty($r['ok'])): ?>
+            <?php if ($scan && !empty($scan['ok'])): ?>
                 <div class="radar-meta">
                     <?= $fromCache ? '🗄️ Bản lưu' : '✨ Vừa quét' ?>
                     <?php if ($scanTime): ?> · <?= h($scanTime) ?><?php endif; ?>
@@ -173,14 +259,14 @@ $keyMasked     = $keyConfigured
                 </div>
             <?php endif; ?>
 
-            <?php if ($r && !$r['ok']): ?>
-                <div class="radar-card err">✗ <?= h($r['error']) ?></div>
-            <?php elseif ($r && $r['ok']):
-                $a = $r['analysis']; $d = $r['detect']; ?>
+            <?php if ($scan && !$scan['ok']): ?>
+                <div class="radar-card err">✗ <?= h($scan['error']) ?></div>
+            <?php elseif ($scan && $scan['ok']):
+                $a = $scan['analysis']; $d = $scan['detect']; ?>
                 <div class="radar-card">
                     <div class="radar-top">
                         <div>
-                            <div style="font-size:19px;font-weight:700;"><?= h($r['company']) ?></div>
+                            <div style="font-size:19px;font-weight:700;"><?= h($scan['company']) ?></div>
                             <div class="tag">ATS: <?= h($d['provider']) ?> · token <?= h($d['token']) ?></div>
                         </div>
                         <div style="text-align:right;">
@@ -219,10 +305,10 @@ $keyMasked     = $keyConfigured
 
                 <div class="radar-card">
                     <h3>Đề xuất hợp tác</h3>
-                    <span class="badge"><?= h($r['eng']['model']) ?></span>
-                    <p class="tag" style="margin:10px 0 0;"><?= h($r['eng']['why']) ?></p>
-                    <h3 style="margin-top:18px;">Pitch (nháp · <?= !empty($r['ai_pitch']) ? 'viết bởi Claude' : 'template' ?>)</h3>
-                    <pre class="pitch"><?= h(sanitize_pitch((string)($r['pitch'] ?? ''))) ?></pre>
+                    <span class="badge"><?= h($scan['eng']['model']) ?></span>
+                    <p class="tag" style="margin:10px 0 0;"><?= h($scan['eng']['why']) ?></p>
+                    <h3 style="margin-top:18px;">Pitch (nháp · <?= !empty($scan['ai_pitch']) ? 'viết bởi Claude' : 'template' ?>)</h3>
+                    <pre class="pitch"><?= h(sanitize_pitch((string)($scan['pitch'] ?? ''))) ?></pre>
                 </div>
 
                 <?php if ($scanId): ?>
@@ -290,23 +376,6 @@ $keyMasked     = $keyConfigured
                 <?php endif; ?>
             </div>
 
-            <div class="radar-card">
-                <h3>⚙ Cấu hình API key (Anthropic)</h3>
-                <p class="tag" style="margin:0 0 10px;">
-                    Trạng thái:
-                    <?php if ($keyConfigured): ?>
-                        <strong style="color:#059669;">Đã cấu hình</strong> (<?= h($keyMasked) ?>)
-                    <?php else: ?>
-                        <strong style="color:#d97706;">Chưa cấu hình</strong> — pitch dùng template, fallback careers-AI không chạy
-                    <?php endif; ?>
-                </p>
-                <form method="post" action="/outbound-radar" style="display:flex; gap:8px; flex-wrap:wrap;">
-                    <input type="hidden" name="action" value="save_key">
-                    <input type="password" name="api_key" class="radar-search" style="min-width:360px;" placeholder="sk-ant-api03-..." autocomplete="off">
-                    <button type="submit">Lưu key</button>
-                </form>
-                <p class="tag" style="margin:10px 0 0;">Lưu vào DB (system_settings) → dùng được cả trên live. Đổi/rotate bất cứ lúc nào.</p>
-            </div>
         </div>
     </main>
 </div>

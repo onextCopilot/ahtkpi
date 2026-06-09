@@ -1,0 +1,996 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Outbound Radar</title>
+    <link rel="stylesheet" href="/assets/css/dashboard.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        /* layout */
+        .radar-container { padding: 28px 28px 64px; max-width: 960px; margin: 0 auto; }
+        .radar-head { margin-bottom: 22px; }
+        .radar-head h1 { font-size: 24px; font-weight: 700; margin: 0 0 4px; letter-spacing: -.01em; }
+        .radar-head p { color: #6b7280; margin: 0; font-size: 14px; max-width: 660px; line-height: 1.55; }
+        .radar-head-row { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; }
+        .gear-btn { flex: none; width: 40px; height: 40px; padding: 0 !important; border-radius: 10px;
+            background: #fff !important; border: 1px solid #d8dce3 !important; color: #6b7280 !important;
+            font-size: 18px; line-height: 1; cursor: pointer; }
+        .gear-btn:hover { background: #f3f4f6 !important; color: #111827 !important; }
+        .gear-btn.need { border-color: #fcd34d !important; color: #d97706 !important; background: #fffbeb !important; }
+        .settings-pop { display: none; }
+        .settings-pop.open { display: block; }
+
+        /* inputs & buttons (dùng chung) */
+        .radar-container input[type=text],
+        .radar-container input[type=password],
+        .radar-container textarea {
+            border: 1px solid #d8dce3; border-radius: 10px; font: inherit; background: #fff; color: #1f2937;
+            padding: 11px 14px; transition: border-color .15s, box-shadow .15s;
+        }
+        .radar-container input[type=text]:focus,
+        .radar-container input[type=password]:focus,
+        .radar-container textarea:focus {
+            outline: 0; border-color: #2563eb; box-shadow: 0 0 0 3px rgba(37,99,235,.12);
+        }
+        .radar-container button {
+            padding: 11px 18px; border: 0; border-radius: 10px; background: #2563eb; color: #fff;
+            font-weight: 600; font-size: 14px; cursor: pointer; white-space: nowrap;
+            transition: background .15s, transform .05s;
+        }
+        .radar-container button:hover { background: #1d4ed8; }
+        .radar-container button:active { transform: translateY(1px); }
+        .btn-danger { background: #dc2626 !important; }
+        .btn-danger:hover { background: #b91c1c !important; }
+        .btn-link-danger { background: none !important; border: 0 !important; color: #9ca3af !important;
+            cursor: pointer; font-size: 16px; line-height: 1; padding: 2px 6px !important; }
+        .btn-link-danger:hover { color: #b91c1c !important; }
+
+        /* form */
+        .radar-form { display: flex; gap: 10px; margin-bottom: 22px; }
+        .radar-form input { flex: 1; }
+
+        /* card */
+        .radar-card { background: #fff; border: 1px solid #e7e9ee; border-radius: 14px; padding: 20px 22px;
+            margin-bottom: 16px; box-shadow: 0 1px 2px rgba(16,24,40,.04); }
+        .radar-card.err { border-color: #fca5a5; background: #fef2f2; color: #b91c1c; box-shadow: none; }
+        .radar-card.settings { background: #fafbfc; border-style: dashed; box-shadow: none; }
+        .radar-card h3 { font-size: 12px; text-transform: uppercase; letter-spacing: .05em; color: #8a93a2;
+            margin: 0 0 12px; font-weight: 600; }
+
+        /* result header + stats */
+        .radar-top { display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 12px; }
+        .radar-score { font-size: 34px; font-weight: 800; color: #2563eb; line-height: 1; }
+        .radar-stats { display: flex; flex-wrap: wrap; gap: 28px; margin-top: 18px; padding-top: 16px; border-top: 1px solid #f1f3f4; }
+        .radar-stats .n { font-size: 26px; font-weight: 700; color: #111827; }
+        .radar-stats .l { color: #8a93a2; font-size: 11px; text-transform: uppercase; letter-spacing: .05em; margin-top: 2px; }
+
+        /* chips, jobs, badge */
+        .chip { display: inline-block; background: #eef2ff; color: #3730a3; border-radius: 999px;
+            padding: 4px 11px; margin: 3px 5px 0 0; font-size: 13px; font-weight: 500; }
+        .job { display: flex; gap: 12px; padding: 9px 0; border-bottom: 1px solid #f1f3f4; font-size: 14px; align-items: baseline; }
+        .job:last-child { border: 0; }
+        .job .days { min-width: 52px; color: #d97706; font-weight: 600; font-size: 13px; }
+        .job .loc { color: #8a93a2; }
+        .badge { display: inline-block; background: #ecfdf3; color: #027a48; border: 1px solid #a6f4c5;
+            border-radius: 8px; padding: 5px 12px; font-weight: 600; font-size: 13px; }
+
+        /* pitch */
+        .pitch { white-space: pre-wrap; background: #f9fafb; border: 1px solid #eceef2; border-radius: 10px;
+            padding: 16px; font: 14px/1.65 inherit; color: #1f2937; margin: 0; }
+
+        /* misc */
+        .tag { font-size: 12px; color: #8a93a2; }
+        .radar-meta { font-size: 13px; color: #6b7280; margin: -6px 0 16px; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+        .radar-meta a { color: #2563eb; text-decoration: none; font-weight: 500; }
+        .radar-meta a:hover { text-decoration: underline; }
+
+        /* history */
+        .radar-hist { width: 100%; border-collapse: collapse; font-size: 14px; }
+        .radar-hist th { text-align: left; color: #8a93a2; font-size: 11px; text-transform: uppercase; letter-spacing: .05em;
+            padding: 8px; border-bottom: 1px solid #e7e9ee; font-weight: 600; }
+        .radar-hist td { padding: 10px 8px; border-bottom: 1px solid #f4f5f7; vertical-align: top; }
+        .radar-hist tr:hover td { background: #fafbfc; }
+        .radar-hist tr.cur td { background: #eff6ff; }
+        .radar-hist a { color: #111827; text-decoration: none; font-weight: 600; }
+        .radar-hist a:hover { color: #2563eb; }
+
+        /* note + search */
+        .radar-note { width: 100%; resize: vertical; }
+        .radar-search { min-width: 240px; }
+    </style>
+</head>
+<body>
+<div class="dashboard-container">
+    <aside class="sidebar">
+    <div class="sidebar-toggle" onclick="toggleSidebar()" title="Toggle Sidebar">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:16px; height:16px;">
+            <rect width="18" height="18" x="3" y="3" rx="2" ry="2"/>
+            <path d="M9 3v18"/>
+            <path d="m14 15-3-3 3-3"/>
+        </svg>
+    </div>
+    <div class="sidebar-header">
+        <a href="/dashboard" class="logo">
+            <img src="https://www.arrowhitech.com/wp-content/uploads/2025/06/Logo.svg" alt="ArrowHitech Logo"
+                class="logo-image">
+        </a>
+    </div>
+
+    <nav class="sidebar-nav">
+        <!-- 1. Dashboard -->
+        <a href="/dashboard" class="nav-item ">
+            <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <rect x="3" y="3" width="7" height="7" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                    stroke-linejoin="round" />
+                <rect x="14" y="3" width="7" height="7" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                    stroke-linejoin="round" />
+                <rect x="14" y="14" width="7" height="7" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                    stroke-linejoin="round" />
+                <rect x="3" y="14" width="7" height="7" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                    stroke-linejoin="round" />
+            </svg>
+            <span>Dashboard</span>
+        </a>
+
+        <!-- Outbound Radar — chỉ hyun.cao -->
+                <a href="/outbound-radar"
+            class="nav-item active">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="12" cy="12" r="2"></circle>
+                <path d="M16.24 7.76a6 6 0 0 1 0 8.49M7.76 16.24a6 6 0 0 1 0-8.49M19.07 4.93a10 10 0 0 1 0 14.14M4.93 19.07a10 10 0 0 1 0-14.14"></path>
+            </svg>
+            <span>Outbound Radar</span>
+        </a>
+        
+        <!-- 2. Planning & Budgeting -->
+        <a href="/plan-budgeting"
+            class="nav-item ">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                stroke-linecap="round" stroke-linejoin="round">
+                <path d="M12 2v20"></path>
+                <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path>
+            </svg>
+            <span>Planning & Budgeting</span>
+        </a>
+
+        <!-- 3. Debts Management Dropdown -->
+                    <div class="nav-item nav-item-parent " onclick="toggleSubmenu(this)">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                    stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                    <polyline points="14 2 14 8 20 8"></polyline>
+                    <line x1="16" y1="13" x2="8" y2="13"></line>
+                    <line x1="16" y1="17" x2="8" y2="17"></line>
+                    <polyline points="10 9 9 9 8 9"></polyline>
+                </svg>
+                <span>Debts Management</span>
+                <svg class="chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <polyline points="6 9 12 15 18 9"></polyline>
+                </svg>
+            </div>
+            <div class="submenu ">
+                                <a href="/debt" class="submenu-item ">
+                    <span>All Debts</span>
+                </a>
+                <a href="/my-debt"
+                    class="submenu-item ">
+                    <span>My Debts</span>
+                </a>
+                <a href="/debt-warning"
+                    class="submenu-item ">
+                    <span>Debts Warning</span>
+                </a>
+                <a href="/my-reports"
+                    class="submenu-item ">
+                    <span>My Reports</span>
+                </a>
+                                                <a href="/my-com"
+                    class="submenu-item ">
+                    <span>My Com</span>
+                </a>
+                                                <a href="/commission-board"
+                    class="submenu-item ">
+                    <span>Commission Board</span>
+                </a>
+                            </div>
+        
+        <!-- 4. Accounting Dropdown -->
+                    <div class="nav-item nav-item-parent " onclick="toggleSubmenu(this)">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                    stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M12 1v22m10-17L12 1 2 6l10 5 10-5Z"></path>
+                    <path d="m2 18 10 5 10-5"></path>
+                    <path d="m2 12 10 5 10-5"></path>
+                </svg>
+                <span>Accounting</span>
+                <svg class="chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <polyline points="6 9 12 15 18 9"></polyline>
+                </svg>
+            </div>
+            <div class="submenu ">
+                <a href="/customers" class="submenu-item ">
+                    <span>Customers</span>
+                </a>
+                <a href="/invoices" class="submenu-item ">
+                    <span>Invoices</span>
+                </a>
+                <a href="/sale-orders"
+                    class="submenu-item ">
+                    <span>Sale Orders</span>
+                </a>
+                <a href="/sale-reports-admin"
+                    class="submenu-item ">
+                    <span>Sale Reports</span>
+                </a>
+            </div>
+        
+        <!-- 5. Business centers (BC) Dropdown -->
+                    <div class="nav-item nav-item-parent " onclick="toggleSubmenu(this)">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                    stroke-linecap="round" stroke-linejoin="round">
+                    <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+                    <line x1="9" y1="3" x2="9" y2="21"></line>
+                </svg>
+                <span>Business centers (BC)</span>
+                <svg class="chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <polyline points="6 9 12 15 18 9"></polyline>
+                </svg>
+            </div>
+            <div class="submenu ">
+                                <a href="/bc-reports"
+                    class="submenu-item ">
+                    <span>BC Reports</span>
+                </a>
+                                
+                <a href="/folio" class="submenu-item ">
+                    <span>Folio – Jira Projects</span>
+                </a>
+            </div>
+        
+        <!-- 6. KPI Management Dropdown -->
+        <div class="nav-item nav-item-parent " onclick="toggleSubmenu(this)">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                stroke-linecap="round" stroke-linejoin="round">
+                <line x1="18" y1="20" x2="18" y2="10"></line>
+                <line x1="12" y1="20" x2="12" y2="4"></line>
+                <line x1="6" y1="20" x2="6" y2="14"></line>
+            </svg>
+            <span>KPI Management</span>
+            <svg class="chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polyline points="6 9 12 15 18 9"></polyline>
+            </svg>
+        </div>
+        <div class="submenu ">
+            <a href="/kpi" class="submenu-item ">
+                <span>General KPI Management</span>
+            </a>
+            <a href="/core-key-kpi"
+                class="submenu-item ">
+                <span>Core & Key KPI</span>
+            </a>
+            <a href="/guides" class="submenu-item ">
+                <span>Guides</span>
+            </a>
+        </div>
+
+        <!-- 7. OKR Management -->
+        <a href="/modules/okr" class="nav-item ">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="12" cy="12" r="10"></circle>
+                <circle cx="12" cy="12" r="6"></circle>
+                <circle cx="12" cy="12" r="2"></circle>
+            </svg>
+            <span>OKR Management</span>
+        </a>
+
+        <!-- 8. Projects Dropdown (AM/BD + Admin only) -->
+                <div class="nav-item nav-item-parent " onclick="toggleSubmenu(this)">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                stroke-linecap="round" stroke-linejoin="round">
+                <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path>
+                <line x1="12" y1="11" x2="12" y2="17"></line>
+                <line x1="9" y1="14" x2="15" y2="14"></line>
+            </svg>
+            <span>Projects</span>
+            <svg class="chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polyline points="6 9 12 15 18 9"></polyline>
+            </svg>
+        </div>
+        <div class="submenu ">
+            <a href="/projects/phuong-an-kinh-doanh"
+                class="submenu-item ">
+                <span>Business Plans</span>
+            </a>
+            <a href="/projects/du-an"
+                class="submenu-item ">
+                <span>My Project</span>
+            </a>
+                    </div>
+        
+        <!-- 8. HRM (hidden) -->
+        
+        <!-- 9. Documents Dropdown -->
+        <div class="nav-item nav-item-parent " onclick="toggleSubmenu(this)">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                stroke-linecap="round" stroke-linejoin="round">
+                <path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"></path>
+                <polyline points="13 2 13 9 20 9"></polyline>
+            </svg>
+            <span>Documents</span>
+            <svg class="chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polyline points="6 9 12 15 18 9"></polyline>
+            </svg>
+        </div>
+        <div class="submenu ">
+            <a href="/tai-lieu-quy-trinh" class="submenu-item ">
+                <span>Tài Liệu - Quy Trình</span>
+            </a>
+            <a href="/documents" class="submenu-item ">
+                <span>Drive</span>
+            </a>
+        </div>
+
+        <!-- 10. Sale Assistant (hidden) -->
+        
+        <a href="/profile" class="nav-item "
+            style="margin-top: 2rem;">
+            <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path
+                    d="M20 21V19C20 17.9391 19.5786 16.9217 18.8284 16.1716C18.0783 15.4214 17.0609 15 16 15H8C6.93913 15 5.92172 15.4214 5.17157 16.1716C4.42143 16.9217 4 17.9391 4 19V21"
+                    stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+                <path
+                    d="M12 11C14.2091 11 16 9.20914 16 7C16 4.79086 14.2091 3 12 3C9.79086 3 8 4.79086 8 7C8 9.20914 9.79086 11 12 11Z"
+                    stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+            </svg>
+            <span>My Profile</span>
+        </a>
+
+                    <a href="/settings" class="nav-item ">
+                <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                        stroke-linejoin="round" />
+                    <path
+                        d="M19.4 15C19.2669 15.3016 19.2272 15.6362 19.286 15.9606C19.3448 16.285 19.4995 16.5843 19.73 16.82L19.79 16.88C19.976 17.0657 20.1235 17.2863 20.2241 17.5291C20.3248 17.7719 20.3766 18.0322 20.3766 18.295C20.3766 18.5578 20.3248 18.8181 20.2241 19.0609C20.1235 19.3037 19.976 19.5243 19.79 19.71C19.6043 19.896 19.3837 20.0435 19.1409 20.1441C18.8981 20.2448 18.6378 20.2966 18.375 20.2966C18.1122 20.2966 17.8519 20.2448 17.6091 20.1441C17.3663 20.0435 17.1457 19.896 16.96 19.71L16.9 19.65C16.6643 19.4195 16.365 19.2648 16.0406 19.206C15.7162 19.1472 15.3816 19.1869 15.08 19.32C14.7842 19.4468 14.532 19.6572 14.3543 19.9255C14.1766 20.1938 14.0813 20.5082 14.08 20.83V21C14.08 21.5304 13.8693 22.0391 13.4942 22.4142C13.1191 22.7893 12.6104 23 12.08 23C11.5496 23 11.0409 22.7893 10.6658 22.4142C10.2907 22.0391 10.08 21.5304 10.08 21V20.91C10.0723 20.579 9.96512 20.258 9.77251 19.9887C9.5799 19.7194 9.31074 19.5143 9 19.4C8.69838 19.2669 8.36381 19.2272 8.03941 19.286C7.71502 19.3448 7.41568 19.4995 7.18 19.73L7.12 19.79C6.93425 19.976 6.71368 20.1235 6.47088 20.2241C6.22808 20.3248 5.96783 20.3766 5.705 20.3766C5.44217 20.3766 5.18192 20.3248 4.93912 20.2241C4.69632 20.1235 4.47575 19.976 4.29 19.79C4.10405 19.6043 3.95653 19.3837 3.85588 19.1409C3.75523 18.8981 3.70343 18.6378 3.70343 18.375C3.70343 18.1122 3.75523 17.8519 3.85588 17.6091C3.95653 17.3663 4.10405 17.1457 4.29 16.96L4.35 16.9C4.58054 16.6643 4.73519 16.365 4.794 16.0406C4.85282 15.7162 4.81312 15.3816 4.68 15.08C4.55324 14.7842 4.34276 14.532 4.07447 14.3543C3.80618 14.1766 3.49179 14.0813 3.17 14.08H3C2.46957 14.08 1.96086 13.8693 1.58579 13.4942C1.21071 13.1191 1 12.6104 1 12.08C1 11.5496 1.21071 11.0409 1.58579 10.6658C1.96086 10.2907 2.46957 10.08 3 10.08H3.09C3.42099 10.0723 3.742 9.96512 4.0113 9.77251C4.28059 9.5799 4.48572 9.31074 4.6 9C4.73312 8.69838 4.77282 8.36381 4.714 8.03941C4.65519 7.71502 4.50054 7.41568 4.27 7.18L4.21 7.12C4.02405 6.93425 3.87653 6.71368 3.77588 6.47088C3.67523 6.22808 3.62343 5.96783 3.62343 5.705C3.62343 5.44217 3.67523 5.18192 3.77588 4.93912C3.87653 4.69632 4.02405 4.47575 4.21 4.29C4.39575 4.10405 4.61632 3.95653 4.85912 3.85588C5.10192 3.75523 5.36217 3.70343 5.625 3.70343C5.88783 3.70343 6.14808 3.75523 6.39088 3.85588C6.63368 3.95653 6.85425 4.10405 7.04 4.29L7.1 4.35C7.33568 4.58054 7.63502 4.73519 7.95941 4.794C8.28381 4.85282 8.61838 4.81312 8.92 4.68H9C9.29577 4.55324 9.54802 4.34276 9.72569 4.07447C9.90337 3.80618 9.99872 3.49179 10 3.17V3C10 2.46957 10.2107 1.96086 10.5858 1.58579C10.9609 1.21071 11.4696 1 12 1C12.5304 1 13.0391 1.21071 13.4142 1.58579C13.7893 1.96086 14 2.46957 14 3V3.09C14.0013 3.41179 14.0966 3.72618 14.2743 3.99447C14.452 4.26276 14.7042 4.47324 15 4.6C15.3016 4.73312 15.6362 4.77282 15.9606 4.714C16.285 4.65519 16.5843 4.50054 16.82 4.27L16.88 4.21C17.0657 4.02405 17.2863 3.87653 17.5291 3.77588C17.7719 3.67523 18.0322 3.62343 18.295 3.62343C18.5578 3.62343 18.8181 3.67523 19.0609 3.77588C19.3037 3.87653 19.5243 4.02405 19.71 4.21C19.896 4.39575 20.0435 4.61632 20.1441 4.85912C20.2448 5.10192 20.2966 5.36217 20.2966 5.625C20.2966 5.88783 20.2448 6.14808 20.1441 6.39088C20.0435 6.63368 19.896 6.85425 19.71 7.04L19.65 7.1C19.4195 7.33568 19.2648 7.63502 19.206 7.95941C19.1472 8.28381 19.1869 8.61838 19.32 8.92V9C19.4468 9.29577 19.6572 9.54802 19.9255 9.72569C20.1938 9.90337 20.5082 9.99872 20.83 10H21C21.5304 10 22.0391 10.2107 22.4142 10.5858C22.7893 10.9609 23 11.4696 23 12C23 12.5304 22.7893 13.0391 22.4142 13.4142C22.0391 13.7893 21.5304 14 21 14H20.91C20.5882 14.0013 20.2738 14.0966 20.0055 14.2743C19.7372 14.452 19.5268 14.7042 19.4 15Z"
+                        stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+                </svg>
+                <span>Settings</span>
+            </a>
+        
+        <a href="/logout" class="nav-item logout"
+            style="margin-top: auto; border-top: 1px solid #334155; padding-top: 1.5rem; border-radius: 0;">
+            <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path
+                    d="M9 21H5C4.46957 21 3.96086 20.7893 3.58579 20.4142C3.21071 20.0391 3 19.5304 3 19V5C3 4.46957 3.21071 3.96086 3.58579 3.58579C3.96086 3.21071 4.46957 3 5 3H9"
+                    stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+                <path d="M16 17L21 12L16 7" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                    stroke-linejoin="round" />
+                <path d="M21 12H9" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                    stroke-linejoin="round" />
+            </svg>
+            <span>Logout</span>
+        </a>
+    </nav>
+</aside>
+
+<script>
+    function toggleSidebar() {
+        const sidebar = document.querySelector('.sidebar');
+        const mainContent = document.querySelector('.main-content');
+        if (!sidebar) return;
+
+        const isCollapsed = sidebar.classList.toggle('collapsed');
+        if (mainContent) mainContent.classList.toggle('collapsed');
+        
+        localStorage.setItem('sidebar-collapsed', isCollapsed);
+    }
+
+    // Initialize sidebar state on load
+    (function() {
+        const sidebar = document.querySelector('.sidebar');
+        const mainContent = document.querySelector('.main-content');
+        const isCollapsed = localStorage.getItem('sidebar-collapsed') === 'true';
+        
+        if (isCollapsed) {
+            if (sidebar) sidebar.classList.add('collapsed');
+            if (mainContent) mainContent.classList.add('collapsed');
+        }
+
+        // Expand sidebar on click if it's collapsed
+        const sidebarNav = document.querySelector('.sidebar-nav');
+        if (sidebarNav) {
+            sidebarNav.addEventListener('click', function(e) {
+                if (sidebar && sidebar.classList.contains('collapsed')) {
+                    const navItem = e.target.closest('.nav-item');
+                    if (navItem) {
+                        toggleSidebar();
+                    }
+                }
+            }, true); // Use capture phase to catch the click before navigation or submenu toggle
+        }
+    })();
+
+    function toggleSubmenu(element) {
+        const isOpening = !element.classList.contains('open');
+
+        if (isOpening) {
+            // Close all other open submenus
+            document.querySelectorAll('.nav-item-parent.open').forEach(el => {
+                if (el !== element) {
+                    el.classList.remove('open');
+                    const sub = el.nextElementSibling;
+                    if (sub && sub.classList.contains('submenu')) {
+                        sub.classList.remove('open');
+                    }
+                }
+            });
+        }
+
+        // Toggle the clicked menu
+        element.classList.toggle('open');
+        const submenu = element.nextElementSibling;
+        if (submenu && submenu.classList.contains('submenu')) {
+            submenu.classList.toggle('open');
+        }
+    }
+</script>    <main class="main-content">
+        <header class="top-bar">
+    <div class="page-title">
+        <h1>
+            Management System        </h1>
+            </div>
+    <div class="user-menu" style="display: flex; align-items: center; gap: 12px;">
+        <div class="user-info" style="text-align: right; display: flex; flex-direction: column;">
+            <span style="font-weight: 600; font-size: 0.9rem; color: #1e293b; line-height: 1.2;">
+                Hyun Cao            </span>
+            <span style="font-size: 0.75rem; color: #64748b; text-transform: capitalize;">
+                admin            </span>
+        </div>
+
+        <!-- Notification Bell dropdown logic -->
+        <div class="notification-container" style="position: relative;">
+            <a href="#" class="notification-bell" onclick="toggleNotifications(event)"
+                style="position: relative; color: #64748b; margin-right: 8px; text-decoration: none; display: flex; align-items: center; justify-content: center; width: 36px; height: 36px; border-radius: 50%; transition: background-color 0.2s;"
+                onmouseover="this.style.backgroundColor='#f1f5f9'"
+                onmouseout="this.style.backgroundColor='transparent'">
+                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none"
+                    stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path>
+                    <path d="M13.73 21a2 2 0 0 1-3.46 0"></path>
+                </svg>
+                                    <span id="notif-badge"
+                        style="position: absolute; top: 4px; right: 4px; width: 14px; height: 14px; background-color: #ef4444; color: white; border-radius: 50%; border: 2px solid white; font-size: 8px; font-weight: bold; display: flex; align-items: center; justify-content: center;">9+</span>
+                            </a>
+
+            <!-- Dropdown Menu -->
+            <div id="notification-dropdown"
+                style="display: none; position: absolute; top: 45px; right: 0; width: 320px; background: white; border: 1px solid #e2e8f0; border-radius: 8px; box-shadow: 0 10px 15px -3px rgba(0,0,0,0.1); z-index: 1000; overflow: hidden;">
+                <div
+                    style="padding: 12px 16px; border-bottom: 1px solid #f1f5f9; display: flex; justify-content: space-between; align-items: center; background: #f8fafc;">
+                    <span style="font-weight: 600; font-size: 0.95rem; color: #1e293b;">Thông báo</span>
+                                            <a href="#" onclick="markAllAsRead(event); markAllPasxNotifRead();"
+                            style="font-size: 0.8rem; color: #3b82f6; text-decoration: none;">Đánh dấu đã đọc tất cả</a>
+                                    </div>
+                <div style="max-height: 350px; overflow-y: auto;">
+                                        <div class="notif-item pasx-notif-item" id="pasx-notif-40"
+                        style="padding:12px 16px;border-bottom:1px solid #f1f5f9;background:#f0fdfa;border-left:3px solid #99f6e4;position:relative;transition:background .2s;"
+                        onmouseover="this.style.filter='brightness(0.97)'" onmouseout="this.style.filter='none'">
+                        <div style="font-size:.82rem;font-weight:700;color:#0d9488;margin-bottom:3px;display:flex;align-items:center;gap:6px;">
+                            <i class="fas fa-flag-checkered"></i>
+                            Milestone cập nhật                        </div>
+                        <div style="font-size:.83rem;color:#1e293b;font-weight:600;margin-bottom:2px;">
+                            CSI Website                        </div>
+                                                <div style="font-size:.75rem;color:#b45309;margin-bottom:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:260px;" title="Milestone &quot;Tested by Hyun&quot; được cập nhật · IN_PROGRESS">
+                            <i class="fas fa-comment-alt" style="margin-right:3px;opacity:.7;"></i>Milestone &quot;Tested by Hyun&quot; được cập nhật · IN_PROGRESS                        </div>
+                                                <div style="font-size:.72rem;color:#94a3b8;margin-bottom:8px;">
+                            08/06/2026 17:33                        </div>
+                        <div style="display:flex;gap:8px;align-items:center;">
+                            <a href="/projects/du-an/detail?id=180"
+                                style="font-size:.75rem;color:#0d9488;text-decoration:none;border:1px solid #0d9488;padding:3px 10px;border-radius:5px;font-weight:600;">
+                                Xem dự án</a>
+                            <a href="/projects/pakd/edit?id=180"
+                                style="font-size:.75rem;color:#64748b;text-decoration:none;border:1px solid #e2e8f0;padding:3px 10px;border-radius:5px;">
+                                Chi tiết</a>
+                            <button onclick="markPasxNotifRead(40, 'pasx-notif-40')"
+                                style="background:none;border:1px solid #e2e8f0;color:#94a3b8;padding:3px 8px;border-radius:5px;font-size:.72rem;cursor:pointer;margin-left:auto;">
+                                Đã đọc</button>
+                        </div>
+                    </div>
+                                        <div class="notif-item pasx-notif-item" id="pasx-notif-39"
+                        style="padding:12px 16px;border-bottom:1px solid #f1f5f9;background:#f0fdfa;border-left:3px solid #99f6e4;position:relative;transition:background .2s;"
+                        onmouseover="this.style.filter='brightness(0.97)'" onmouseout="this.style.filter='none'">
+                        <div style="font-size:.82rem;font-weight:700;color:#0d9488;margin-bottom:3px;display:flex;align-items:center;gap:6px;">
+                            <i class="fas fa-flag-checkered"></i>
+                            Milestone cập nhật                        </div>
+                        <div style="font-size:.83rem;color:#1e293b;font-weight:600;margin-bottom:2px;">
+                            CSI Website                        </div>
+                                                <div style="font-size:.75rem;color:#b45309;margin-bottom:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:260px;" title="Milestone &quot;Tested by Hyun&quot; được cập nhật · NOT_STARTED">
+                            <i class="fas fa-comment-alt" style="margin-right:3px;opacity:.7;"></i>Milestone &quot;Tested by Hyun&quot; được cập nhật · NOT_STARTED                        </div>
+                                                <div style="font-size:.72rem;color:#94a3b8;margin-bottom:8px;">
+                            08/06/2026 17:32                        </div>
+                        <div style="display:flex;gap:8px;align-items:center;">
+                            <a href="/projects/du-an/detail?id=180"
+                                style="font-size:.75rem;color:#0d9488;text-decoration:none;border:1px solid #0d9488;padding:3px 10px;border-radius:5px;font-weight:600;">
+                                Xem dự án</a>
+                            <a href="/projects/pakd/edit?id=180"
+                                style="font-size:.75rem;color:#64748b;text-decoration:none;border:1px solid #e2e8f0;padding:3px 10px;border-radius:5px;">
+                                Chi tiết</a>
+                            <button onclick="markPasxNotifRead(39, 'pasx-notif-39')"
+                                style="background:none;border:1px solid #e2e8f0;color:#94a3b8;padding:3px 8px;border-radius:5px;font-size:.72rem;cursor:pointer;margin-left:auto;">
+                                Đã đọc</button>
+                        </div>
+                    </div>
+                                        <div class="notif-item pasx-notif-item" id="pasx-notif-38"
+                        style="padding:12px 16px;border-bottom:1px solid #f1f5f9;background:#f0fdfa;border-left:3px solid #99f6e4;position:relative;transition:background .2s;"
+                        onmouseover="this.style.filter='brightness(0.97)'" onmouseout="this.style.filter='none'">
+                        <div style="font-size:.82rem;font-weight:700;color:#0d9488;margin-bottom:3px;display:flex;align-items:center;gap:6px;">
+                            <i class="fas fa-flag-checkered"></i>
+                            Milestone cập nhật                        </div>
+                        <div style="font-size:.83rem;color:#1e293b;font-weight:600;margin-bottom:2px;">
+                            CSI Website                        </div>
+                                                <div style="font-size:.75rem;color:#b45309;margin-bottom:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:260px;" title="Milestone &quot;RMS/POS - Completion of Blueprint Documents&quot; được cập nhật · IN_PROGRESS">
+                            <i class="fas fa-comment-alt" style="margin-right:3px;opacity:.7;"></i>Milestone &quot;RMS/POS - Completion of Blueprint Documents&quot; đượ…                        </div>
+                                                <div style="font-size:.72rem;color:#94a3b8;margin-bottom:8px;">
+                            08/06/2026 17:31                        </div>
+                        <div style="display:flex;gap:8px;align-items:center;">
+                            <a href="/projects/du-an/detail?id=180"
+                                style="font-size:.75rem;color:#0d9488;text-decoration:none;border:1px solid #0d9488;padding:3px 10px;border-radius:5px;font-weight:600;">
+                                Xem dự án</a>
+                            <a href="/projects/pakd/edit?id=180"
+                                style="font-size:.75rem;color:#64748b;text-decoration:none;border:1px solid #e2e8f0;padding:3px 10px;border-radius:5px;">
+                                Chi tiết</a>
+                            <button onclick="markPasxNotifRead(38, 'pasx-notif-38')"
+                                style="background:none;border:1px solid #e2e8f0;color:#94a3b8;padding:3px 8px;border-radius:5px;font-size:.72rem;cursor:pointer;margin-left:auto;">
+                                Đã đọc</button>
+                        </div>
+                    </div>
+                                        <div class="notif-item pasx-notif-item" id="pasx-notif-37"
+                        style="padding:12px 16px;border-bottom:1px solid #f1f5f9;background:#f0fdfa;border-left:3px solid #99f6e4;position:relative;transition:background .2s;"
+                        onmouseover="this.style.filter='brightness(0.97)'" onmouseout="this.style.filter='none'">
+                        <div style="font-size:.82rem;font-weight:700;color:#0d9488;margin-bottom:3px;display:flex;align-items:center;gap:6px;">
+                            <i class="fas fa-flag-checkered"></i>
+                            Milestone cập nhật                        </div>
+                        <div style="font-size:.83rem;color:#1e293b;font-weight:600;margin-bottom:2px;">
+                            CSI Website                        </div>
+                                                <div style="font-size:.75rem;color:#b45309;margin-bottom:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:260px;" title="Milestone &quot;RMS/POS - Completion of Blueprint Documents&quot; được cập nhật · IN_PROGRESS">
+                            <i class="fas fa-comment-alt" style="margin-right:3px;opacity:.7;"></i>Milestone &quot;RMS/POS - Completion of Blueprint Documents&quot; đượ…                        </div>
+                                                <div style="font-size:.72rem;color:#94a3b8;margin-bottom:8px;">
+                            08/06/2026 17:31                        </div>
+                        <div style="display:flex;gap:8px;align-items:center;">
+                            <a href="/projects/du-an/detail?id=180"
+                                style="font-size:.75rem;color:#0d9488;text-decoration:none;border:1px solid #0d9488;padding:3px 10px;border-radius:5px;font-weight:600;">
+                                Xem dự án</a>
+                            <a href="/projects/pakd/edit?id=180"
+                                style="font-size:.75rem;color:#64748b;text-decoration:none;border:1px solid #e2e8f0;padding:3px 10px;border-radius:5px;">
+                                Chi tiết</a>
+                            <button onclick="markPasxNotifRead(37, 'pasx-notif-37')"
+                                style="background:none;border:1px solid #e2e8f0;color:#94a3b8;padding:3px 8px;border-radius:5px;font-size:.72rem;cursor:pointer;margin-left:auto;">
+                                Đã đọc</button>
+                        </div>
+                    </div>
+                                        <div class="notif-item pasx-notif-item" id="pasx-notif-36"
+                        style="padding:12px 16px;border-bottom:1px solid #f1f5f9;background:#f0fdfa;border-left:3px solid #99f6e4;position:relative;transition:background .2s;"
+                        onmouseover="this.style.filter='brightness(0.97)'" onmouseout="this.style.filter='none'">
+                        <div style="font-size:.82rem;font-weight:700;color:#0d9488;margin-bottom:3px;display:flex;align-items:center;gap:6px;">
+                            <i class="fas fa-flag-checkered"></i>
+                            Milestone cập nhật                        </div>
+                        <div style="font-size:.83rem;color:#1e293b;font-weight:600;margin-bottom:2px;">
+                            CSI Website                        </div>
+                                                <div style="font-size:.75rem;color:#b45309;margin-bottom:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:260px;" title="Milestone &quot;RMS/POS - Completion of Blueprint Documents&quot; được cập nhật · IN_PROGRESS">
+                            <i class="fas fa-comment-alt" style="margin-right:3px;opacity:.7;"></i>Milestone &quot;RMS/POS - Completion of Blueprint Documents&quot; đượ…                        </div>
+                                                <div style="font-size:.72rem;color:#94a3b8;margin-bottom:8px;">
+                            08/06/2026 17:29                        </div>
+                        <div style="display:flex;gap:8px;align-items:center;">
+                            <a href="/projects/du-an/detail?id=180"
+                                style="font-size:.75rem;color:#0d9488;text-decoration:none;border:1px solid #0d9488;padding:3px 10px;border-radius:5px;font-weight:600;">
+                                Xem dự án</a>
+                            <a href="/projects/pakd/edit?id=180"
+                                style="font-size:.75rem;color:#64748b;text-decoration:none;border:1px solid #e2e8f0;padding:3px 10px;border-radius:5px;">
+                                Chi tiết</a>
+                            <button onclick="markPasxNotifRead(36, 'pasx-notif-36')"
+                                style="background:none;border:1px solid #e2e8f0;color:#94a3b8;padding:3px 8px;border-radius:5px;font-size:.72rem;cursor:pointer;margin-left:auto;">
+                                Đã đọc</button>
+                        </div>
+                    </div>
+                                        <div class="notif-item pasx-notif-item" id="pasx-notif-35"
+                        style="padding:12px 16px;border-bottom:1px solid #f1f5f9;background:#f0fdfa;border-left:3px solid #99f6e4;position:relative;transition:background .2s;"
+                        onmouseover="this.style.filter='brightness(0.97)'" onmouseout="this.style.filter='none'">
+                        <div style="font-size:.82rem;font-weight:700;color:#0d9488;margin-bottom:3px;display:flex;align-items:center;gap:6px;">
+                            <i class="fas fa-flag-checkered"></i>
+                            Milestone cập nhật                        </div>
+                        <div style="font-size:.83rem;color:#1e293b;font-weight:600;margin-bottom:2px;">
+                            CSI Website                        </div>
+                                                <div style="font-size:.75rem;color:#b45309;margin-bottom:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:260px;" title="Milestone &quot;RMS/POS - Completion of Blueprint Documents&quot; được cập nhật · IN_PROGRESS">
+                            <i class="fas fa-comment-alt" style="margin-right:3px;opacity:.7;"></i>Milestone &quot;RMS/POS - Completion of Blueprint Documents&quot; đượ…                        </div>
+                                                <div style="font-size:.72rem;color:#94a3b8;margin-bottom:8px;">
+                            08/06/2026 17:28                        </div>
+                        <div style="display:flex;gap:8px;align-items:center;">
+                            <a href="/projects/du-an/detail?id=180"
+                                style="font-size:.75rem;color:#0d9488;text-decoration:none;border:1px solid #0d9488;padding:3px 10px;border-radius:5px;font-weight:600;">
+                                Xem dự án</a>
+                            <a href="/projects/pakd/edit?id=180"
+                                style="font-size:.75rem;color:#64748b;text-decoration:none;border:1px solid #e2e8f0;padding:3px 10px;border-radius:5px;">
+                                Chi tiết</a>
+                            <button onclick="markPasxNotifRead(35, 'pasx-notif-35')"
+                                style="background:none;border:1px solid #e2e8f0;color:#94a3b8;padding:3px 8px;border-radius:5px;font-size:.72rem;cursor:pointer;margin-left:auto;">
+                                Đã đọc</button>
+                        </div>
+                    </div>
+                                        <div class="notif-item pasx-notif-item" id="pasx-notif-34"
+                        style="padding:12px 16px;border-bottom:1px solid #f1f5f9;background:#f0fdfa;border-left:3px solid #99f6e4;position:relative;transition:background .2s;"
+                        onmouseover="this.style.filter='brightness(0.97)'" onmouseout="this.style.filter='none'">
+                        <div style="font-size:.82rem;font-weight:700;color:#0d9488;margin-bottom:3px;display:flex;align-items:center;gap:6px;">
+                            <i class="fas fa-flag-checkered"></i>
+                            Milestone cập nhật                        </div>
+                        <div style="font-size:.83rem;color:#1e293b;font-weight:600;margin-bottom:2px;">
+                            CSI Website                        </div>
+                                                <div style="font-size:.75rem;color:#b45309;margin-bottom:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:260px;" title="Milestone &quot;RMS/POS - Completion of Blueprint Documents&quot; được cập nhật · IN_PROGRESS">
+                            <i class="fas fa-comment-alt" style="margin-right:3px;opacity:.7;"></i>Milestone &quot;RMS/POS - Completion of Blueprint Documents&quot; đượ…                        </div>
+                                                <div style="font-size:.72rem;color:#94a3b8;margin-bottom:8px;">
+                            08/06/2026 17:28                        </div>
+                        <div style="display:flex;gap:8px;align-items:center;">
+                            <a href="/projects/du-an/detail?id=180"
+                                style="font-size:.75rem;color:#0d9488;text-decoration:none;border:1px solid #0d9488;padding:3px 10px;border-radius:5px;font-weight:600;">
+                                Xem dự án</a>
+                            <a href="/projects/pakd/edit?id=180"
+                                style="font-size:.75rem;color:#64748b;text-decoration:none;border:1px solid #e2e8f0;padding:3px 10px;border-radius:5px;">
+                                Chi tiết</a>
+                            <button onclick="markPasxNotifRead(34, 'pasx-notif-34')"
+                                style="background:none;border:1px solid #e2e8f0;color:#94a3b8;padding:3px 8px;border-radius:5px;font-size:.72rem;cursor:pointer;margin-left:auto;">
+                                Đã đọc</button>
+                        </div>
+                    </div>
+                                        <div class="notif-item pasx-notif-item" id="pasx-notif-33"
+                        style="padding:12px 16px;border-bottom:1px solid #f1f5f9;background:#f0fdfa;border-left:3px solid #99f6e4;position:relative;transition:background .2s;"
+                        onmouseover="this.style.filter='brightness(0.97)'" onmouseout="this.style.filter='none'">
+                        <div style="font-size:.82rem;font-weight:700;color:#0d9488;margin-bottom:3px;display:flex;align-items:center;gap:6px;">
+                            <i class="fas fa-flag-checkered"></i>
+                            Milestone mới                        </div>
+                        <div style="font-size:.83rem;color:#1e293b;font-weight:600;margin-bottom:2px;">
+                            CSI Website                        </div>
+                                                <div style="font-size:.75rem;color:#b45309;margin-bottom:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:260px;" title="Milestone &quot;Tested by Hyun&quot; được tạo · NOT_STARTED">
+                            <i class="fas fa-comment-alt" style="margin-right:3px;opacity:.7;"></i>Milestone &quot;Tested by Hyun&quot; được tạo · NOT_STARTED                        </div>
+                                                <div style="font-size:.72rem;color:#94a3b8;margin-bottom:8px;">
+                            08/06/2026 17:25                        </div>
+                        <div style="display:flex;gap:8px;align-items:center;">
+                            <a href="/projects/du-an/detail?id=180"
+                                style="font-size:.75rem;color:#0d9488;text-decoration:none;border:1px solid #0d9488;padding:3px 10px;border-radius:5px;font-weight:600;">
+                                Xem dự án</a>
+                            <a href="/projects/pakd/edit?id=180"
+                                style="font-size:.75rem;color:#64748b;text-decoration:none;border:1px solid #e2e8f0;padding:3px 10px;border-radius:5px;">
+                                Chi tiết</a>
+                            <button onclick="markPasxNotifRead(33, 'pasx-notif-33')"
+                                style="background:none;border:1px solid #e2e8f0;color:#94a3b8;padding:3px 8px;border-radius:5px;font-size:.72rem;cursor:pointer;margin-left:auto;">
+                                Đã đọc</button>
+                        </div>
+                    </div>
+                                        <div class="notif-item pasx-notif-item" id="pasx-notif-32"
+                        style="padding:12px 16px;border-bottom:1px solid #f1f5f9;background:#f0fdfa;border-left:3px solid #99f6e4;position:relative;transition:background .2s;"
+                        onmouseover="this.style.filter='brightness(0.97)'" onmouseout="this.style.filter='none'">
+                        <div style="font-size:.82rem;font-weight:700;color:#0d9488;margin-bottom:3px;display:flex;align-items:center;gap:6px;">
+                            <i class="fas fa-flag-checkered"></i>
+                            Milestone mới                        </div>
+                        <div style="font-size:.83rem;color:#1e293b;font-weight:600;margin-bottom:2px;">
+                            CSI Website                        </div>
+                                                <div style="font-size:.75rem;color:#b45309;margin-bottom:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:260px;" title="Milestone &quot;RMS/POS - Completion of Blueprint Documents&quot; được tạo · IN_PROGRESS">
+                            <i class="fas fa-comment-alt" style="margin-right:3px;opacity:.7;"></i>Milestone &quot;RMS/POS - Completion of Blueprint Documents&quot; đượ…                        </div>
+                                                <div style="font-size:.72rem;color:#94a3b8;margin-bottom:8px;">
+                            08/06/2026 17:21                        </div>
+                        <div style="display:flex;gap:8px;align-items:center;">
+                            <a href="/projects/du-an/detail?id=180"
+                                style="font-size:.75rem;color:#0d9488;text-decoration:none;border:1px solid #0d9488;padding:3px 10px;border-radius:5px;font-weight:600;">
+                                Xem dự án</a>
+                            <a href="/projects/pakd/edit?id=180"
+                                style="font-size:.75rem;color:#64748b;text-decoration:none;border:1px solid #e2e8f0;padding:3px 10px;border-radius:5px;">
+                                Chi tiết</a>
+                            <button onclick="markPasxNotifRead(32, 'pasx-notif-32')"
+                                style="background:none;border:1px solid #e2e8f0;color:#94a3b8;padding:3px 8px;border-radius:5px;font-size:.72rem;cursor:pointer;margin-left:auto;">
+                                Đã đọc</button>
+                        </div>
+                    </div>
+                                        <div class="notif-item pasx-notif-item" id="pasx-notif-31"
+                        style="padding:12px 16px;border-bottom:1px solid #f1f5f9;background:#f5f3ff;border-left:3px solid #ede9fe;position:relative;transition:background .2s;"
+                        onmouseover="this.style.filter='brightness(0.97)'" onmouseout="this.style.filter='none'">
+                        <div style="font-size:.82rem;font-weight:700;color:#6366f1;margin-bottom:3px;display:flex;align-items:center;gap:6px;">
+                            <i class="fas fa-cog"></i>
+                            PASX DONE                        </div>
+                        <div style="font-size:.83rem;color:#1e293b;font-weight:600;margin-bottom:2px;">
+                            CSI Website                        </div>
+                                                <div style="font-size:.75rem;color:#64748b;margin-bottom:4px;">
+                            Human: 40.000.000 ₫
+                             · OT: 0 ₫                        </div>
+                                                <div style="font-size:.72rem;color:#94a3b8;margin-bottom:8px;">
+                            08/06/2026 16:40                        </div>
+                        <div style="display:flex;gap:8px;align-items:center;">
+                            <a href="/projects/pakd/edit?id=180"
+                                style="font-size:.75rem;color:#6366f1;text-decoration:none;border:1px solid #6366f1;padding:3px 10px;border-radius:5px;font-weight:600;">
+                                Xem PAKD</a>
+                            <a href="/projects/pakd/edit?id=180"
+                                style="font-size:.75rem;color:#64748b;text-decoration:none;border:1px solid #e2e8f0;padding:3px 10px;border-radius:5px;">
+                                Chi tiết</a>
+                            <button onclick="markPasxNotifRead(31, 'pasx-notif-31')"
+                                style="background:none;border:1px solid #e2e8f0;color:#94a3b8;padding:3px 8px;border-radius:5px;font-size:.72rem;cursor:pointer;margin-left:auto;">
+                                Đã đọc</button>
+                        </div>
+                    </div>
+                                                                                    
+                                    </div>
+                <a href="/notifications" style="display:block;text-align:center;padding:11px;font-size:.85rem;font-weight:600;color:#3b82f6;text-decoration:none;border-top:1px solid #f1f5f9;background:#f8fafc;">
+                    Xem tất cả thông báo →
+                </a>
+            </div>
+        </div>
+
+        <a href="/modules/profile" class="user-avatar"
+            style="text-decoration: none; display: flex; align-items: center; justify-content: center; width: 36px; height: 36px; border-radius: 50%; overflow: hidden; background: #3b82f6; color: white; font-weight: bold; border: 2px solid white; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+                            <img src="/public/uploads/avatars/avatar_20_1773225130.png" alt="Avatar"
+                    style="width: 100%; height: 100%; object-fit: cover;">
+                    </a>
+    </div>
+    <script>
+        function toggleNotifications(e) {
+            e.preventDefault();
+            const dropdown = document.getElementById('notification-dropdown');
+            dropdown.style.display = dropdown.style.display === 'none' ? 'block' : 'none';
+        }
+
+        // Close when clicking outside
+        document.addEventListener('click', function (e) {
+            const container = document.querySelector('.notification-container');
+            const dropdown = document.getElementById('notification-dropdown');
+            if (container && dropdown && !container.contains(e.target)) {
+                dropdown.style.display = 'none';
+            }
+        });
+
+        function markNotificationRead(debtId, level, elemId) {
+            fetch('/api/mark_notification_read', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ debt_id: debtId, warning_level: level })
+            })
+                .then(res => res.json())
+                .then(data => {
+                    if (data.success) {
+                        const elem = document.getElementById(elemId);
+                        if (elem) {
+                            elem.style.height = elem.offsetHeight + 'px';
+                            elem.style.transition = 'all 0.3s';
+                            elem.style.opacity = '0';
+                            setTimeout(() => { elem.style.display = 'none'; }, 300);
+                        }
+                        // decrease badge
+                        decreaseBadge();
+                    }
+                });
+        }
+
+        function markAllAsRead(e) {
+            e.preventDefault();
+            const notifs = [
+                            ];
+            if (notifs.length === 0) return;
+
+            fetch('/api/mark_notification_read', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action: 'mark_all', notifications: notifs })
+            })
+                .then(res => res.json())
+                .then(data => {
+                    if (data.success) {
+                        // hide all items
+                        document.querySelectorAll('.notif-item').forEach(el => el.style.display = 'none');
+                        const badge = document.getElementById('notif-badge');
+                        if (badge) badge.style.display = 'none';
+                    }
+                });
+        }
+
+        function decreaseBadge() {
+            const badge = document.getElementById('notif-badge');
+            if (badge) {
+                let text = badge.innerText;
+                if (text === '9+') return; // simplify if 9+
+                let count = parseInt(text);
+                if (!isNaN(count) && count > 1) {
+                    badge.innerText = count - 1;
+                } else {
+                    badge.style.display = 'none';
+                }
+            }
+        }
+
+        function markPasxNotifRead(id, elemId) {
+            fetch('/api/notifications/mark_read', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({id: id})
+            }).then(r => r.json()).then(d => {
+                if (d.ok) {
+                    const el = document.getElementById(elemId);
+                    if (el) { el.style.opacity = '0'; el.style.transition = 'opacity .3s'; setTimeout(() => el.remove(), 300); }
+                    decreaseBadge();
+                }
+            });
+        }
+
+        function markAllPasxNotifRead() {
+            fetch('/api/notifications/mark_read', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({all: true})
+            }).then(r => r.json()).then(d => {
+                if (d.ok) {
+                    document.querySelectorAll('.pasx-notif-item').forEach(el => {
+                        el.style.opacity = '0'; el.style.transition = 'opacity .3s';
+                        setTimeout(() => el.remove(), 300);
+                    });
+                }
+            });
+        }
+    </script>
+</header>        <div class="radar-container">
+            <div class="radar-head">
+                <div class="radar-head-row">
+                    <div>
+                        <h1>📡 Outbound Radar</h1>
+                        <p>Dò tín hiệu thiếu năng lực dev của một công ty → chấm điểm outsourcing → gợi ý hợp tác + pitch. Dán website hoặc URL job board.</p>
+                    </div>
+                    <button type="button" class="gear-btn" title="Cấu hình API key"
+                        onclick="document.getElementById('radarSettings').classList.toggle('open')">⚙</button>
+                </div>
+                <div id="radarSettings" class="settings-pop">
+                    <div class="radar-card settings" style="margin:14px 0 0;">
+                        <h3>Cấu hình API key (Anthropic)</h3>
+                        <p class="tag" style="margin:0 0 10px;">
+                            Trạng thái:
+                                                            <strong style="color:#059669;">Đã cấu hình</strong> (sk-ant-a...QgAA)
+                                                    </p>
+                        <form method="post" action="/outbound-radar" style="display:flex; gap:8px; flex-wrap:wrap;">
+                            <input type="hidden" name="action" value="save_key">
+                            <input type="password" name="api_key" class="radar-search" style="flex:1; min-width:280px;" placeholder="sk-ant-api03-..." autocomplete="off">
+                            <button type="submit">Lưu key</button>
+                        </form>
+                        <p class="tag" style="margin:10px 0 0;">Lưu vào DB (system_settings) → dùng được cả trên live. Đổi/rotate bất cứ lúc nào.</p>
+                    </div>
+                </div>
+            </div>
+            <form class="radar-form" method="get" action="/outbound-radar">
+                <input type="text" name="url" autofocus
+                       placeholder="vd: jobs.ashbyhq.com/Ashby · boards.greenhouse.io/gitlab · acme.com"
+                       value="">
+                <button type="submit">Quét</button>
+            </form>
+
+                            <div class="radar-meta">
+                    🗄️ Bản lưu                     · 2026-06-09 15:33:50                                    </div>
+            
+                            <!-- RADAR_RESULT_RENDERED -->
+                <div class="radar-card">
+                    <div class="radar-top">
+                        <div>
+                            <div style="font-size:19px;font-weight:700;">stonedigital.com.au</div>
+                            <div class="tag">ATS: careers-page (AI) · token stonedigital.com.au</div>
+                        </div>
+                        <div style="text-align:right;">
+                            <div class="radar-score">13<span style="font-size:15px;color:#6b7280;">/100</span></div>
+                            <div class="tag">điểm phù hợp</div>
+                        </div>
+                    </div>
+                    <div class="radar-stats">
+                        <div><div class="n">5</div><div class="l">tổng job</div></div>
+                        <div><div class="n">1</div><div class="l">job dev</div></div>
+                        <div><div class="n">0</div><div class="l">mở 45+ ngày</div></div>
+                        <div><div class="n">0</div><div class="l">contract/freelance</div></div>
+                    </div>
+                </div>
+
+                <div class="radar-card">
+                    <h3>Khớp năng lực Onext</h3>
+                    <span class="chip">web/ecommerce · 1</span>                                        <h3 style="margin-top:16px;">Skill nổi bật</h3>
+                    <span class="chip">php (1)</span><span class="chip">woocommerce (1)</span><span class="chip">wordpress (1)</span>                </div>
+
+                <div class="radar-card">
+                    <h3>Vị trí dev đang mở (tối đa 12)</h3>
+                                            <div class="job">
+                            <span class="days">[?]</span>
+                            <span><a href="https://stonedigital.com.au/careers" target="_blank" rel="noopener" style="color:#1f2937;text-decoration:none;">Senior WordPress Developer</a>
+                                <span class="loc">· Pyrmont NSW, Australia</span>                            </span>
+                        </div>
+                                    </div>
+
+                <div class="radar-card">
+                    <h3>Đề xuất hợp tác</h3>
+                    <span class="badge">Staff Augmentation / Contract</span>
+                    <p class="tag" style="margin:10px 0 0;">Công ty chỉ mở 1 role dev (Senior WordPress Developer), không có role mở lâu (45d+) và không có contract role. Nhu cầu nhỏ, tập trung vào WordPress/WooCommerce/PHP — đây là trường hợp điển hình để chào staff augmentation: bổ sung 1-2 dev offshore chuyên WordPress với chi phí thấp hơn, lấp nhanh năng lực mà không cần dự án trọn gói. Onext mạnh về web/ecommerce nên skill match rất tốt.</p>
+                    <h3 style="margin-top:18px;">Pitch (nháp · viết bởi Claude)</h3>
+                    <pre class="pitch">Subject: Senior WordPress dev, backup option for Stone Digital
+
+Hi team,
+
+I noticed you&#039;re hiring a Senior WordPress Developer, likely for WooCommerce/PHP work. Filling a single senior role locally in AU can take weeks, and the pipeline often slows delivery in the meantime.
+
+At Onext Digital we provide offshore WordPress/WooCommerce specialists (PHP, custom themes/plugins, performance) who plug into your existing workflow and overlap with AU hours. You get senior capability at offshore cost, without the long local hiring cycle, and you can scale up or down as project load changes.
+
+Would a quick 15-min call next week make sense to see if a vetted WordPress dev could complement your team? Happy to share 2-3 relevant ecommerce profiles first.
+
+Best regards,
+Onext Digital</pre>
+                </div>
+
+                                <div class="radar-card">
+                    <h3>Ghi chú lead</h3>
+                    <form method="post" action="/outbound-radar">
+                        <input type="hidden" name="action" value="save_note">
+                        <input type="hidden" name="id" value="4">
+                        <textarea name="note" rows="3" class="radar-note" placeholder="Ghi chú nội bộ: đã liên hệ? phản hồi? người phụ trách?..."></textarea>
+                        <div style="margin-top:10px; display:flex; gap:10px; align-items:center;">
+                            <button type="submit">Lưu ghi chú</button>
+                            <span class="tag">Lead #4</span>
+                        </div>
+                    </form>
+                    <form method="post" action="/outbound-radar" onsubmit="return confirm('Xoá bản quét này khỏi lịch sử?');" style="margin-top:12px;">
+                        <input type="hidden" name="action" value="delete_scan">
+                        <input type="hidden" name="id" value="4">
+                        <button type="submit" class="btn-danger">🗑 Xoá lead này</button>
+                    </form>
+                </div>
+                            
+            <div class="radar-card">
+                <div style="display:flex; justify-content:space-between; align-items:center; gap:12px; flex-wrap:wrap;">
+                    <h3 style="margin:0;">Lịch sử quét (2)</h3>
+                    <form method="get" action="/outbound-radar" style="display:flex; gap:6px;">
+                        <input type="text" name="q" value="" placeholder="Tìm công ty / url / ghi chú" class="radar-search">
+                        <button type="submit">Tìm</button>
+                                            </form>
+                </div>
+                                    <table class="radar-hist" style="margin-top:12px;">
+                        <thead>
+                            <tr><th>Công ty</th><th>Điểm</th><th>Dev</th><th>Nguồn</th><th>Người quét</th><th>Lúc</th><th></th></tr>
+                        </thead>
+                        <tbody>
+                                                    <tr class="">
+                                <td>
+                                    <a href="/outbound-radar?id=5">volodigital.au</a>
+                                                                    </td>
+                                <td><b>8</b></td>
+                                <td>1</td>
+                                <td><span class="tag">AI · pitch AI</span></td>
+                                <td class="tag">Hyun Cao</td>
+                                <td class="tag">2026-06-09 15:46:54</td>
+                                <td>
+                                    <form method="post" action="/outbound-radar" onsubmit="return confirm('Xoá lead này?');" style="margin:0;">
+                                        <input type="hidden" name="action" value="delete_scan">
+                                        <input type="hidden" name="id" value="5">
+                                        <button type="submit" class="btn-link-danger" title="Xoá">✕</button>
+                                    </form>
+                                </td>
+                            </tr>
+                                                    <tr class="cur">
+                                <td>
+                                    <a href="/outbound-radar?id=4">stonedigital.com.au</a>
+                                                                    </td>
+                                <td><b>13</b></td>
+                                <td>1</td>
+                                <td><span class="tag">AI · pitch AI</span></td>
+                                <td class="tag">Admin</td>
+                                <td class="tag">2026-06-09 15:33:50</td>
+                                <td>
+                                    <form method="post" action="/outbound-radar" onsubmit="return confirm('Xoá lead này?');" style="margin:0;">
+                                        <input type="hidden" name="action" value="delete_scan">
+                                        <input type="hidden" name="id" value="4">
+                                        <button type="submit" class="btn-link-danger" title="Xoá">✕</button>
+                                    </form>
+                                </td>
+                            </tr>
+                                                </tbody>
+                    </table>
+                            </div>
+
+        </div>
+    </main>
+</div>
+</body>
+</html>
