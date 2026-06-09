@@ -65,7 +65,7 @@ $os_milestone_id = (string)$ms['os_milestone_id'];
 $project_code    = $ms['project_code'] ?: ($pakd['project_code'] ?? null);
 
 // ── Hoá đơn ────────────────────────────────────────────────────────────────────
-$iv = $conn->prepare("SELECT odoo_id, name, amount_total, amount_residual, currency_name, payment_state, invoice_date
+$iv = $conn->prepare("SELECT odoo_id, name, amount_total, amount_residual, currency_name, payment_state, invoice_date, payment_date
                       FROM odoo_invoices WHERE odoo_id = ? LIMIT 1");
 $iv->bind_param("i", $inv_id);
 $iv->execute();
@@ -77,8 +77,8 @@ if (!$inv) { echo json_encode(['ok' => false, 'msg' => 'Không tìm thấy hoá 
 $pmap = ['paid'=>'PAID','not_paid'=>'NOT_PAID','partial'=>'PARTIAL','in_payment'=>'IN_PAYMENT','reversed'=>'REVERSED'];
 $payment_state = $pmap[strtolower((string)$inv['payment_state'])] ?? strtoupper((string)$inv['payment_state']);
 
-// paidAt: ưu tiên input -> ngày HĐ -> hôm nay
-$paid_at = $paid_at_in ?: ($inv['invoice_date'] ?: date('Y-m-d'));
+// paidAt: ưu tiên input -> ngày khách thanh toán (payment_date) -> ngày HĐ -> hôm nay
+$paid_at = $paid_at_in ?: ($inv['payment_date'] ?: ($inv['invoice_date'] ?: date('Y-m-d')));
 
 // invoiceUrl từ Odoo
 $odooBaseUrl = '';

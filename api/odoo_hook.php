@@ -501,6 +501,7 @@ if ($payload && $event_type === 'invoice') {
         move_type              VARCHAR(50)   DEFAULT NULL,
         invoice_date           DATE          DEFAULT NULL,
         invoice_date_due       DATE          DEFAULT NULL,
+        payment_date           DATE          DEFAULT NULL,
         partner_id             INT           DEFAULT NULL,
         partner_name           VARCHAR(500)  DEFAULT NULL,
         currency_id            INT           DEFAULT NULL,
@@ -530,6 +531,12 @@ if ($payload && $event_type === 'invoice') {
         INDEX idx_origin (invoice_origin),
         INDEX idx_state (state)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+
+    // Auto-migrate: cột payment_date (ngày khách thanh toán thực tế) cho bảng đã tồn tại
+    $_pdchk = $conn->query("SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='odoo_invoices' AND COLUMN_NAME='payment_date'");
+    if ($_pdchk && $_pdchk->num_rows === 0) {
+        $conn->query("ALTER TABLE odoo_invoices ADD COLUMN payment_date DATE DEFAULT NULL AFTER invoice_date_due");
+    }
 
     $inv_odoo_id  = (int)($payload['id'] ?? $payload['record_id'] ?? 0);
     $inv_event    = $payload['event'] ?? 'write';
@@ -780,6 +787,22 @@ if ($payload && $event_type === 'invoice') {
         $g['move_type']         = $payload['move_type'] ?? null;
         $g['invoice_date']      = ($payload['invoice_date']     && $payload['invoice_date']     !== false) ? $payload['invoice_date']     : null;
         $g['invoice_date_due']  = ($payload['invoice_date_due'] && $payload['invoice_date_due'] !== false) ? $payload['invoice_date_due'] : null;
+        // Ngày khách thanh toán thực tế: lấy lần thanh toán mới nhất từ invoice_payments_widget,
+        // fallback các field trực tiếp nếu Odoo gửi kèm.
+        $g['payment_date'] = null;
+        $_wid = $payload['invoice_payments_widget'] ?? null;
+        if (is_string($_wid) && $_wid !== '') { $_wid = json_decode($_wid, true); }
+        if (is_array($_wid) && !empty($_wid['content']) && is_array($_wid['content'])) {
+            foreach ($_wid['content'] as $_p) {
+                $_d = $_p['date'] ?? null;
+                if ($_d && $_d !== false && (!$g['payment_date'] || $_d > $g['payment_date'])) $g['payment_date'] = $_d;
+            }
+        }
+        if (!$g['payment_date']) {
+            foreach (['payment_date','last_payment_date','date_paid'] as $_k) {
+                if (!empty($payload[$_k]) && $payload[$_k] !== false) { $g['payment_date'] = $payload[$_k]; break; }
+            }
+        }
         $g['partner_id']        = is_array($payload['partner_id'])           ? (int)($payload['partner_id']['id']           ?? 0) : null;
         $g['partner_name']      = is_array($payload['partner_id'])           ? ($payload['partner_id']['name']               ?? null) : null;
         $g['currency_id']       = is_array($payload['currency_id'])          ? (int)($payload['currency_id']['id']           ?? 0) : null;
@@ -808,7 +831,7 @@ if ($payload && $event_type === 'invoice') {
         $escInt = fn($v) => $v === null ? 'NULL' : (int)$v;
 
         $conn->query("INSERT INTO odoo_invoices
-            (odoo_id,name,highest_name,state,move_type,invoice_date,invoice_date_due,
+            (odoo_id,name,highest_name,state,move_type,invoice_date,invoice_date_due,payment_date,
              partner_id,partner_name,currency_id,currency_name,company_currency_name,
              amount_untaxed,amount_tax,amount_total,amount_residual,
              amount_total_signed,amount_residual_signed,payment_state,invoice_origin,
@@ -817,7 +840,7 @@ if ($payload && $event_type === 'invoice') {
             VALUES (
              $inv_odoo_id,
              {$esc($g['name'])},{$esc($g['highest_name'])},{$esc($g['state'])},{$esc($g['move_type'])},
-             {$esc($g['invoice_date'])},{$esc($g['invoice_date_due'])},
+             {$esc($g['invoice_date'])},{$esc($g['invoice_date_due'])},{$esc($g['payment_date'])},
              {$escInt($g['partner_id'])},{$esc($g['partner_name'])},
              {$escInt($g['currency_id'])},{$esc($g['currency_name'])},{$esc($g['company_currency'])},
              {$g['amount_untaxed']},{$g['amount_tax']},{$g['amount_total']},{$g['amount_residual']},
@@ -831,6 +854,7 @@ if ($payload && $event_type === 'invoice') {
             ON DUPLICATE KEY UPDATE
              name=VALUES(name), highest_name=VALUES(highest_name), state=VALUES(state),
              invoice_date=VALUES(invoice_date), invoice_date_due=VALUES(invoice_date_due),
+             payment_date=VALUES(payment_date),
              partner_id=VALUES(partner_id), partner_name=VALUES(partner_name),
              currency_id=VALUES(currency_id), currency_name=VALUES(currency_name),
              company_currency_name=VALUES(company_currency_name),
