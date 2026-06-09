@@ -301,6 +301,30 @@ try {
     $inv_fetch_error = $e->getMessage();
 }
 
+// Build invoice-to-SO map: $invoicesBySO[so_odoo_id] = [inv, inv, ...]
+$invoicesBySO = [];
+foreach ($invoices as $inv) {
+    $matched = false;
+    // Primary: SO.invoice_ids contains this invoice's odoo_id
+    foreach ($sale_orders as $so) {
+        $soInvIds = array_map('intval', (array)($so['invoice_ids'] ?? []));
+        if (in_array((int)$inv['odoo_id'], $soInvIds, true)) {
+            $invoicesBySO[$so['odoo_id']][] = $inv;
+            $matched = true;
+            break;
+        }
+    }
+    // Fallback: invoice_origin = SO name
+    if (!$matched && !empty($inv['invoice_origin'])) {
+        foreach ($sale_orders as $so) {
+            if (!empty($so['name']) && $so['name'] === $inv['invoice_origin']) {
+                $invoicesBySO[$so['odoo_id']][] = $inv;
+                break;
+            }
+        }
+    }
+}
+
 // PASX history (latest 5)
 $pasx_logs = [];
 try {
@@ -1231,6 +1255,113 @@ $pst = $pakd['pasx_status'] ?? '';
                                     </div>
                                     <?php endif; ?>
 
+                                    <!-- Invoices nested under this SO -->
+                                    <?php
+                                    $soInvList = $invoicesBySO[$so['odoo_id']] ?? [];
+                                    ?>
+                                    <div style="margin-top:10px;border:1px solid #e0e7ff;border-radius:7px;overflow:hidden;">
+                                        <div style="display:flex;align-items:center;gap:6px;padding:7px 12px;background:#f5f5ff;border-bottom:1px solid #e0e7ff;">
+                                            <i class="fas fa-receipt" style="font-size:10px;color:#6366f1;"></i>
+                                            <span style="font-size:11px;font-weight:700;color:#4338ca;">Hoá đơn</span>
+                                            <span style="font-size:11px;color:#818cf8;">(<?= count($soInvList) ?>)</span>
+                                            <?php if ($inv_fetch_error): ?>
+                                            <span style="margin-left:auto;font-size:10px;color:#dc2626;"><i class="fas fa-exclamation-circle"></i> Lỗi tải HĐ</span>
+                                            <?php endif; ?>
+                                        </div>
+                                        <?php if (empty($soInvList)): ?>
+                                        <div style="padding:10px 14px;font-size:11.5px;color:#94a3b8;font-style:italic;">
+                                            <i class="fas fa-minus-circle" style="font-size:9px;margin-right:4px;"></i>Chưa có hoá đơn nào
+                                        </div>
+                                        <?php else: ?>
+                                        <div style="overflow-x:auto;">
+                                        <table style="width:100%;border-collapse:collapse;font-size:11.5px;">
+                                            <thead>
+                                                <tr style="background:#fafafe;border-bottom:1px solid #e0e7ff;">
+                                                    <th style="padding:6px 12px;text-align:left;font-size:10px;font-weight:700;color:#6366f1;white-space:nowrap;">Số hoá đơn</th>
+                                                    <th style="padding:6px 8px;text-align:left;font-size:10px;font-weight:700;color:#6366f1;white-space:nowrap;">Trạng thái</th>
+                                                    <th style="padding:6px 8px;text-align:left;font-size:10px;font-weight:700;color:#6366f1;white-space:nowrap;">Thanh toán</th>
+                                                    <th style="padding:6px 8px;text-align:left;font-size:10px;font-weight:700;color:#6366f1;white-space:nowrap;">Ngày HĐ</th>
+                                                    <th style="padding:6px 8px;text-align:left;font-size:10px;font-weight:700;color:#6366f1;white-space:nowrap;">Hạn TT</th>
+                                                    <th style="padding:6px 8px;text-align:right;font-size:10px;font-weight:700;color:#6366f1;white-space:nowrap;">Tổng</th>
+                                                    <th style="padding:6px 8px;text-align:right;font-size:10px;font-weight:700;color:#dc2626;white-space:nowrap;">Còn nợ</th>
+                                                    <?php if ($is_admin): ?><th style="padding:6px 6px;width:24px;"></th><?php endif; ?>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                            <?php foreach ($soInvList as $inv):
+                                                $invName     = $inv['name'] ?: ($inv['highest_name'] ?? 'Draft');
+                                                $invId       = (int)($inv['odoo_id'] ?? 0);
+                                                $invUrl      = $odooBaseUrl ? $odooBaseUrl . '/web#id=' . $invId . '&model=account.move&view_type=form' : '#';
+                                                $invCcy      = $inv['currency_name'] ?? 'VND';
+                                                $amtTotal    = (float)($inv['amount_total']    ?? 0);
+                                                $amtResidual = (float)($inv['amount_residual'] ?? 0);
+                                                $isRefund    = ($inv['move_type'] ?? '') === 'out_refund';
+                                            ?>
+                                            <tr style="border-bottom:1px solid #f1f5f9;" onmouseover="this.style.background='#f5f5ff'" onmouseout="this.style.background=''">
+                                                <td style="padding:6px 12px;white-space:nowrap;">
+                                                    <a href="<?= htmlspecialchars($invUrl) ?>" target="_blank"
+                                                       style="font-weight:700;color:#4f46e5;text-decoration:none;display:inline-flex;align-items:center;gap:4px;font-size:11.5px;">
+                                                        <i class="fas fa-external-link-alt" style="font-size:8px;"></i>
+                                                        <?= htmlspecialchars($invName) ?>
+                                                    </a>
+                                                    <?php if ($isRefund): ?>
+                                                    <span style="margin-left:3px;font-size:9px;font-weight:700;padding:1px 4px;border-radius:3px;background:#f5f3ff;color:#7c3aed;">CR</span>
+                                                    <?php endif; ?>
+                                                </td>
+                                                <td style="padding:6px 8px;"><?= invStateBadge($inv['state'] ?? 'draft') ?></td>
+                                                <td style="padding:6px 8px;"><?= invPaymentBadge($inv['payment_state'] ?? 'not_paid') ?></td>
+                                                <td style="padding:6px 8px;color:var(--gray);font-size:11px;white-space:nowrap;">
+                                                    <?= !empty($inv['invoice_date']) ? date('d/m/Y', strtotime($inv['invoice_date'])) : '—' ?>
+                                                </td>
+                                                <td style="padding:6px 8px;color:var(--gray);font-size:11px;white-space:nowrap;">
+                                                    <?= !empty($inv['invoice_date_due']) ? date('d/m/Y', strtotime($inv['invoice_date_due'])) : '—' ?>
+                                                </td>
+                                                <td style="padding:6px 8px;text-align:right;font-weight:700;font-variant-numeric:tabular-nums;white-space:nowrap;font-size:11.5px;">
+                                                    <?= number_format($amtTotal, 0, ',', '.') ?>
+                                                    <span style="font-size:9px;color:var(--lgray);margin-left:1px;"><?= htmlspecialchars($invCcy) ?></span>
+                                                </td>
+                                                <td style="padding:6px 8px;text-align:right;font-weight:700;color:<?= $amtResidual > 0 ? '#dc2626' : '#16a34a' ?>;font-variant-numeric:tabular-nums;white-space:nowrap;font-size:11.5px;">
+                                                    <?= number_format($amtResidual, 0, ',', '.') ?>
+                                                    <span style="font-size:9px;color:var(--lgray);margin-left:1px;"><?= htmlspecialchars($invCcy) ?></span>
+                                                </td>
+                                                <?php if ($is_admin): ?>
+                                                <td style="padding:6px 6px;text-align:center;">
+                                                    <button onclick="deleteInvoice(<?= $invId ?>)" title="Xóa"
+                                                        style="border:none;background:none;cursor:pointer;color:#fca5a5;font-size:11px;padding:2px 4px;border-radius:4px;line-height:1;"
+                                                        onmouseover="this.style.color='#dc2626';this.style.background='#fee2e2'"
+                                                        onmouseout="this.style.color='#fca5a5';this.style.background='none'">
+                                                        <i class="fas fa-trash"></i>
+                                                    </button>
+                                                </td>
+                                                <?php endif; ?>
+                                            </tr>
+                                            <?php endforeach; ?>
+                                            </tbody>
+                                            <?php if (count($soInvList) > 1):
+                                                $invSubTotal    = array_sum(array_column($soInvList, 'amount_total'));
+                                                $invSubResidual = array_sum(array_column($soInvList, 'amount_residual'));
+                                                $ccyInv = $soInvList[0]['currency_name'] ?? 'VND';
+                                            ?>
+                                            <tfoot>
+                                                <tr style="background:#f0f0ff;border-top:1px solid #c7d2fe;">
+                                                    <td colspan="5" style="padding:5px 12px;font-size:11px;font-weight:700;color:#4338ca;">Tổng <?= count($soInvList) ?> HĐ</td>
+                                                    <td style="padding:5px 8px;text-align:right;font-weight:800;color:#1e293b;font-variant-numeric:tabular-nums;white-space:nowrap;font-size:11.5px;">
+                                                        <?= number_format($invSubTotal, 0, ',', '.') ?>
+                                                        <span style="font-size:9px;color:var(--lgray);margin-left:1px;"><?= htmlspecialchars($ccyInv) ?></span>
+                                                    </td>
+                                                    <td style="padding:5px 8px;text-align:right;font-weight:800;color:#dc2626;font-variant-numeric:tabular-nums;white-space:nowrap;font-size:11.5px;">
+                                                        <?= number_format($invSubResidual, 0, ',', '.') ?>
+                                                        <span style="font-size:9px;color:var(--lgray);margin-left:1px;"><?= htmlspecialchars($ccyInv) ?></span>
+                                                    </td>
+                                                    <?php if ($is_admin): ?><td></td><?php endif; ?>
+                                                </tr>
+                                            </tfoot>
+                                            <?php endif; ?>
+                                        </table>
+                                        </div>
+                                        <?php endif; ?>
+                                    </div><!-- /invoices nested -->
+
                                 </div><!-- /SO block -->
                                 <?php endforeach; ?>
 
@@ -1256,134 +1387,6 @@ $pst = $pakd['pasx_status'] ?? '';
                                     </div>
                                 </div>
                                 <?php endif; ?>
-
-                            <?php endif; ?>
-                        </div>
-                    </div>
-
-                    <!-- Invoices -->
-                    <div class="card">
-                        <div class="card-header" style="justify-content:space-between;">
-                            <div style="display:flex;align-items:center;gap:8px;">
-                                <div class="card-icon" style="background:rgba(220,38,38,.1);color:#dc2626;"><i class="fas fa-receipt"></i></div>
-                                <h3>Hoá đơn (Odoo)
-                                    <?php if (!empty($invoices)): ?>
-                                    <span style="font-size:12px;font-weight:500;color:var(--gray);margin-left:4px;">(<?= count($invoices) ?>)</span>
-                                    <?php endif; ?>
-                                </h3>
-                            </div>
-                            <?php if ($inv_fetch_error): ?>
-                            <span style="font-size:11px;color:#dc2626;"><i class="fas fa-exclamation-circle"></i> Lỗi</span>
-                            <?php endif; ?>
-                        </div>
-                        <div class="card-body" style="padding:0;">
-                            <?php if ($inv_fetch_error): ?>
-                                <div style="padding:16px 20px;font-size:12px;color:#dc2626;display:flex;align-items:center;gap:8px;">
-                                    <i class="fas fa-exclamation-circle"></i>
-                                    <?= htmlspecialchars($inv_fetch_error) ?>
-                                </div>
-                            <?php elseif (empty($invoices)): ?>
-                                <div class="empty-state" style="padding:28px;">
-                                    <i class="fas fa-receipt"></i>
-                                    <p>Chưa có hoá đơn nào được liên kết với dự án này</p>
-                                </div>
-                            <?php else: ?>
-                                <div style="overflow-x:auto;">
-                                <table style="width:100%;border-collapse:collapse;font-size:12.5px;">
-                                    <thead>
-                                        <tr style="background:#f8fafc;border-bottom:1px solid var(--border);">
-                                            <th style="padding:9px 14px;text-align:left;font-size:10.5px;font-weight:700;color:var(--gray);white-space:nowrap;">Số hoá đơn</th>
-                                            <th style="padding:9px 10px;text-align:left;font-size:10.5px;font-weight:700;color:var(--gray);white-space:nowrap;">Trạng thái</th>
-                                            <th style="padding:9px 10px;text-align:left;font-size:10.5px;font-weight:700;color:var(--gray);white-space:nowrap;">Thanh toán</th>
-                                            <th style="padding:9px 10px;text-align:left;font-size:10.5px;font-weight:700;color:var(--gray);white-space:nowrap;">Ngày HĐ</th>
-                                            <th style="padding:9px 10px;text-align:left;font-size:10.5px;font-weight:700;color:var(--gray);white-space:nowrap;">Hạn TT</th>
-                                            <th style="padding:9px 10px;text-align:right;font-size:10.5px;font-weight:700;color:var(--gray);white-space:nowrap;">Tổng</th>
-                                            <th style="padding:9px 10px;text-align:right;font-size:10.5px;font-weight:700;color:#dc2626;white-space:nowrap;">Còn nợ</th>
-                                            <th style="padding:9px 10px;text-align:left;font-size:10.5px;font-weight:700;color:var(--gray);min-width:100px;">Tiến độ</th>
-                                            <?php if ($is_admin): ?><th style="padding:9px 8px;width:32px;"></th><?php endif; ?>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                    <?php foreach ($invoices as $inv):
-                                        $invName     = $inv['name'] ?: ($inv['highest_name'] ?? 'Draft');
-                                        $invId       = (int)($inv['odoo_id'] ?? 0);
-                                        $invUrl      = $odooBaseUrl ? $odooBaseUrl . '/web#id=' . $invId . '&model=account.move&view_type=form' : '#';
-                                        $invCcy      = $inv['currency_name'] ?? 'VND';
-                                        $amtTotal    = (float)($inv['amount_total']    ?? 0);
-                                        $amtResidual = (float)($inv['amount_residual'] ?? 0);
-                                        $paidPct     = $amtTotal > 0 ? min(100, round(($amtTotal - $amtResidual) / $amtTotal * 100)) : 0;
-                                        $isRefund    = ($inv['move_type'] ?? '') === 'out_refund';
-                                    ?>
-                                    <tr style="border-bottom:1px solid #f1f5f9;" onmouseover="this.style.background='#fafafa'" onmouseout="this.style.background=''">
-                                        <td style="padding:9px 14px;">
-                                            <a href="<?= htmlspecialchars($invUrl) ?>" target="_blank"
-                                               style="font-weight:700;color:#dc2626;text-decoration:none;display:inline-flex;align-items:center;gap:5px;font-size:12.5px;">
-                                                <i class="fas fa-external-link-alt" style="font-size:9px;"></i>
-                                                <?= htmlspecialchars($invName) ?>
-                                            </a>
-                                            <?php if ($isRefund): ?>
-                                            <span style="margin-left:4px;font-size:9px;font-weight:700;padding:1px 5px;border-radius:3px;background:#f5f3ff;color:#7c3aed;">CR</span>
-                                            <?php endif; ?>
-                                        </td>
-                                        <td style="padding:9px 10px;"><?= invStateBadge($inv['state'] ?? 'draft') ?></td>
-                                        <td style="padding:9px 10px;"><?= invPaymentBadge($inv['payment_state'] ?? 'not_paid') ?></td>
-                                        <td style="padding:9px 10px;color:var(--gray);font-size:12px;white-space:nowrap;">
-                                            <?= !empty($inv['invoice_date']) ? date('d/m/Y', strtotime($inv['invoice_date'])) : '—' ?>
-                                        </td>
-                                        <td style="padding:9px 10px;color:var(--gray);font-size:12px;white-space:nowrap;">
-                                            <?= !empty($inv['invoice_date_due']) ? date('d/m/Y', strtotime($inv['invoice_date_due'])) : '—' ?>
-                                        </td>
-                                        <td style="padding:9px 10px;text-align:right;font-weight:700;font-variant-numeric:tabular-nums;white-space:nowrap;">
-                                            <?= number_format($amtTotal, 0, ',', '.') ?>
-                                            <span style="font-size:9px;color:var(--lgray);margin-left:2px;"><?= htmlspecialchars($invCcy) ?></span>
-                                        </td>
-                                        <td style="padding:9px 10px;text-align:right;font-weight:700;color:<?= $amtResidual > 0 ? '#dc2626' : '#16a34a' ?>;font-variant-numeric:tabular-nums;white-space:nowrap;">
-                                            <?= number_format($amtResidual, 0, ',', '.') ?>
-                                            <span style="font-size:9px;color:var(--lgray);margin-left:2px;"><?= htmlspecialchars($invCcy) ?></span>
-                                        </td>
-                                        <td style="padding:9px 10px;min-width:100px;">
-                                            <div style="display:flex;align-items:center;gap:6px;">
-                                                <div style="flex:1;background:#e2e8f0;border-radius:99px;height:5px;overflow:hidden;">
-                                                    <div style="width:<?= $paidPct ?>%;background:<?= $paidPct >= 100 ? '#16a34a' : '#dc2626' ?>;height:100%;"></div>
-                                                </div>
-                                                <span style="font-size:10px;font-weight:700;color:<?= $paidPct >= 100 ? '#16a34a' : '#dc2626' ?>;white-space:nowrap;"><?= $paidPct ?>%</span>
-                                            </div>
-                                        </td>
-                                        <?php if ($is_admin): ?>
-                                        <td style="padding:9px 8px;text-align:center;">
-                                            <button onclick="deleteInvoice(<?= $invId ?>)" title="Xóa"
-                                                style="border:none;background:none;cursor:pointer;color:#fca5a5;font-size:12px;padding:3px 5px;border-radius:4px;line-height:1;"
-                                                onmouseover="this.style.color='#dc2626';this.style.background='#fee2e2'"
-                                                onmouseout="this.style.color='#fca5a5';this.style.background='none'">
-                                                <i class="fas fa-trash"></i>
-                                            </button>
-                                        </td>
-                                        <?php endif; ?>
-                                    </tr>
-                                    <?php endforeach; ?>
-                                    </tbody>
-                                    <?php if (count($invoices) > 1):
-                                        $invGrandTotal    = array_sum(array_column($invoices, 'amount_total'));
-                                        $invGrandResidual = array_sum(array_column($invoices, 'amount_residual'));
-                                        $ccy0inv = $invoices[0]['currency_name'] ?? 'VND';
-                                    ?>
-                                    <tfoot>
-                                        <tr style="background:#f8fafc;border-top:2px solid var(--border);">
-                                            <td colspan="5" style="padding:8px 14px;font-size:12px;font-weight:700;color:var(--gray);">Tổng <?= count($invoices) ?> hoá đơn</td>
-                                            <td style="padding:8px 10px;text-align:right;font-weight:800;color:var(--slate);font-variant-numeric:tabular-nums;white-space:nowrap;">
-                                                <?= number_format($invGrandTotal, 0, ',', '.') ?>
-                                                <span style="font-size:9px;color:var(--lgray);margin-left:2px;"><?= htmlspecialchars($ccy0inv) ?></span>
-                                            </td>
-                                            <td style="padding:8px 10px;text-align:right;font-weight:800;color:#dc2626;font-variant-numeric:tabular-nums;white-space:nowrap;">
-                                                <?= number_format($invGrandResidual, 0, ',', '.') ?>
-                                                <span style="font-size:9px;color:var(--lgray);margin-left:2px;"><?= htmlspecialchars($ccy0inv) ?></span>
-                                            </td>
-                                            <td></td>
-                                        </tr>
-                                    </tfoot>
-                                    <?php endif; ?>
-                                </table>
-                                </div>
 
                             <?php endif; ?>
                         </div>
