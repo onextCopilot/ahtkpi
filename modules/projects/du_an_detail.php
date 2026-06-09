@@ -2083,7 +2083,7 @@ if ($can_push && !empty($milestones)):
         $state = strtolower((string)($iv['state'] ?? ''));
         $ms_inv_js[] = [
             'id'          => (int)$iv['odoo_id'],
-            'name'        => $iv['name'] ?: ('#' . $iv['odoo_id']),
+            'name'        => $iv['name'] ?: ($iv['highest_name'] ?? '') ?: ('#' . $iv['odoo_id']),
             'amount'      => (float)($iv['amount_total'] ?? 0),
             'currency'    => $iv['currency_name'] ?: 'VND',
             'state'       => $state,
