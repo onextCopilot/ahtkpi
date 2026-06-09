@@ -765,6 +765,10 @@ if ($payload && $event_type === 'invoice') {
         $removeDebtByInvId($inv_odoo_id);
         $debug['inv_deleted'] = $inv_odoo_id;
 
+        // Auto: gỡ hoá đơn khỏi milestone liên quan (không cần AM)
+        require_once __DIR__ . '/../includes/milestone_os_push.php';
+        try { $debug['ms_unlinked'] = ms_os_unlink_invoice($conn, $inv_odoo_id); } catch (\Throwable $e) { $debug['ms_sync_error'] = $e->getMessage(); }
+
         // Cập nhật invoice_ids của SO tương ứng
         if ($inv_origin_del) {
             $soLookup = $conn->query(
@@ -872,6 +876,16 @@ if ($payload && $event_type === 'invoice') {
         ");
         $debug['inv_upserted'] = $inv_odoo_id;
         $debug['inv_error']    = $conn->error ?: null;
+
+        // Auto: đồng bộ milestone gắn hoá đơn này sang OS (đổi sang paid, cancel… không cần AM)
+        require_once __DIR__ . '/../includes/milestone_os_push.php';
+        try {
+            if (($g['state'] ?? '') === 'cancel') {
+                $debug['ms_unlinked'] = ms_os_unlink_invoice($conn, $inv_odoo_id);
+            } else {
+                $debug['ms_resynced'] = ms_os_resync_invoice($conn, $inv_odoo_id);
+            }
+        } catch (\Throwable $e) { $debug['ms_sync_error'] = $e->getMessage(); }
 
         // ── Sync vào debts ────────────────────────────────────────────────────
         $_inv_type = $payload['x_studio_invoice_type_1'] ?? '';
