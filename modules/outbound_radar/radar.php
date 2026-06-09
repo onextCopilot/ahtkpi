@@ -482,8 +482,12 @@ const CLAUDE_MODEL = 'claude-opus-4-8'; // đổi 'claude-sonnet-4-6' để rẻ
 
 function anthropic_api_key(): ?string
 {
+    // Thứ tự: biến môi trường → DB (set bởi index.php qua GLOBALS) → file local.
     $env = getenv('ANTHROPIC_API_KEY');
     if ($env) return $env;
+    if (!empty($GLOBALS['RADAR_API_KEY'])) {
+        return (string) $GLOBALS['RADAR_API_KEY'];
+    }
     $f = __DIR__ . '/../../config/anthropic_key.php';
     if (is_file($f)) {
         $k = require $f;

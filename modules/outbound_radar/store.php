@@ -136,6 +136,37 @@ function radar_history(mysqli $conn, int $limit = 30, string $q = ''): array
     return $rows;
 }
 
+/** Đọc 1 giá trị cấu hình từ system_settings. */
+function radar_get_setting(mysqli $conn, string $key): ?string
+{
+    $stmt = $conn->prepare("SELECT setting_value FROM system_settings WHERE setting_key = ? LIMIT 1");
+    $stmt->bind_param('s', $key);
+    $stmt->execute();
+    $row = $stmt->get_result()->fetch_assoc();
+    $stmt->close();
+    return $row['setting_value'] ?? null;
+}
+
+/** Lưu/cập nhật 1 giá trị cấu hình vào system_settings. */
+function radar_set_setting(mysqli $conn, string $key, string $val, string $desc = ''): void
+{
+    $stmt = $conn->prepare("SELECT id FROM system_settings WHERE setting_key = ? LIMIT 1");
+    $stmt->bind_param('s', $key);
+    $stmt->execute();
+    $exists = $stmt->get_result()->fetch_assoc();
+    $stmt->close();
+
+    if ($exists) {
+        $stmt = $conn->prepare("UPDATE system_settings SET setting_value = ? WHERE setting_key = ?");
+        $stmt->bind_param('ss', $val, $key);
+    } else {
+        $stmt = $conn->prepare("INSERT INTO system_settings (setting_key, setting_value, description) VALUES (?,?,?)");
+        $stmt->bind_param('sss', $key, $val, $desc);
+    }
+    $stmt->execute();
+    $stmt->close();
+}
+
 /** Xoá một bản quét. */
 function radar_delete(mysqli $conn, int $id): void
 {

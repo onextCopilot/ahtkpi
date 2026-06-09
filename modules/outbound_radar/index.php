@@ -27,10 +27,22 @@ radar_ensure_table($conn);
 
 $user_id = (int) $_SESSION['user_id'];
 
-// --- Xử lý POST (xoá / lưu ghi chú) trước khi xuất HTML ---
+// Nạp API key từ DB (system_settings) cho engine dùng — hoạt động trên live.
+$dbKey = radar_get_setting($conn, 'anthropic_api_key');
+if ($dbKey) {
+    $GLOBALS['RADAR_API_KEY'] = $dbKey;
+}
+
+// --- Xử lý POST (xoá / lưu ghi chú / lưu API key) trước khi xuất HTML ---
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $action = $_POST['action'] ?? '';
     $pid    = (int) ($_POST['id'] ?? 0);
+    if ($action === 'save_key') {
+        radar_set_setting($conn, 'anthropic_api_key', trim((string) ($_POST['api_key'] ?? '')),
+            'Anthropic API key cho Outbound Radar');
+        header('Location: /outbound-radar');
+        exit();
+    }
     if ($action === 'delete_scan' && $pid) {
         radar_delete($conn, $pid);
         header('Location: /outbound-radar');
@@ -81,6 +93,13 @@ if ($viewId) {
 }
 
 $history = radar_history($conn, 50, $q);
+
+// Trạng thái API key (để hiển thị che bớt).
+$effectiveKey  = anthropic_api_key();
+$keyConfigured = !empty($effectiveKey);
+$keyMasked     = $keyConfigured
+    ? substr((string) $effectiveKey, 0, 8) . '...' . substr((string) $effectiveKey, -4)
+    : '';
 ?>
 <!DOCTYPE html>
 <html lang="vi">
@@ -269,6 +288,24 @@ $history = radar_history($conn, 50, $q);
                         </tbody>
                     </table>
                 <?php endif; ?>
+            </div>
+
+            <div class="radar-card">
+                <h3>⚙ Cấu hình API key (Anthropic)</h3>
+                <p class="tag" style="margin:0 0 10px;">
+                    Trạng thái:
+                    <?php if ($keyConfigured): ?>
+                        <strong style="color:#059669;">Đã cấu hình</strong> (<?= h($keyMasked) ?>)
+                    <?php else: ?>
+                        <strong style="color:#d97706;">Chưa cấu hình</strong> — pitch dùng template, fallback careers-AI không chạy
+                    <?php endif; ?>
+                </p>
+                <form method="post" action="/outbound-radar" style="display:flex; gap:8px; flex-wrap:wrap;">
+                    <input type="hidden" name="action" value="save_key">
+                    <input type="password" name="api_key" class="radar-search" style="min-width:360px;" placeholder="sk-ant-api03-..." autocomplete="off">
+                    <button type="submit">Lưu key</button>
+                </form>
+                <p class="tag" style="margin:10px 0 0;">Lưu vào DB (system_settings) → dùng được cả trên live. Đổi/rotate bất cứ lúc nào.</p>
             </div>
         </div>
     </main>
