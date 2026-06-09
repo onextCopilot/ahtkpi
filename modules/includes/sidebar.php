@@ -306,7 +306,8 @@ function isMenuItemActive($path, $current_uri)
         </div>
         <?php endif; ?>
 
-        <!-- 8. HRM -->
+        <!-- 8. HRM (hidden) -->
+        <?php /* TEMP HIDDEN
         <a href="/hrm" class="nav-item <?php echo isMenuItemActive('/hrm', $current_uri); ?>">
             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
@@ -316,6 +317,7 @@ function isMenuItemActive($path, $current_uri)
             </svg>
             <span>HRM</span>
         </a>
+        */ ?>
 
         <!-- 9. Documents Dropdown -->
         <div class="nav-item nav-item-parent <?php
@@ -341,8 +343,10 @@ function isMenuItemActive($path, $current_uri)
             </a>
         </div>
 
-        <!-- 10. Sale Assistant -->
-        <?php if ($_SESSION['role'] === 'admin' || ($_SESSION['full_name'] ?? '') === 'Hyun Cao'): ?>
+        <!-- 10. Sale Assistant (hidden) -->
+        <?php /* TEMP HIDDEN
+        if ($_SESSION['role'] === 'admin' || ($_SESSION['full_name'] ?? '') === 'Hyun Cao'):
+        ?>
         <a href="/presale" class="nav-item <?php echo isMenuItemActive('/presale', $current_uri); ?>">
             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
                 stroke-linecap="round" stroke-linejoin="round">
@@ -352,7 +356,7 @@ function isMenuItemActive($path, $current_uri)
             </svg>
             <span>Sale Assistant</span>
         </a>
-        <?php endif; ?>
+        <?php endif; */ ?>
 
         <a href="/profile" class="nav-item <?php echo isMenuItemActive('/profile', $current_uri); ?>"
             style="margin-top: 2rem;">
