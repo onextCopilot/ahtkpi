@@ -10,6 +10,14 @@ if (!isset($_SESSION['user_id'])) {
     exit();
 }
 
+// Chỉ account hyun.cao được dùng Outbound Radar.
+$radar_allowed = (($_SESSION['username'] ?? '') === 'hyun.cao')
+    || (($_SESSION['full_name'] ?? '') === 'Hyun Cao');
+if (!$radar_allowed) {
+    header("Location: /dashboard");
+    exit();
+}
+
 // Nạp engine (các hàm run_pipeline, analyze, ...) mà không kích hoạt CLI/dev-web.
 define('OUTBOUND_RADAR_LIB', true);
 require_once __DIR__ . '/radar.php';
