@@ -65,7 +65,7 @@ $os_milestone_id = (string)$ms['os_milestone_id'];
 $project_code    = $ms['project_code'] ?: ($pakd['project_code'] ?? null);
 
 // ── Hoá đơn ────────────────────────────────────────────────────────────────────
-$iv = $conn->prepare("SELECT odoo_id, name, amount_total, amount_residual, currency_name, payment_state, invoice_date, payment_date
+$iv = $conn->prepare("SELECT odoo_id, name, state, amount_total, amount_residual, currency_name, payment_state, invoice_date, payment_date
                       FROM odoo_invoices WHERE odoo_id = ? LIMIT 1");
 $iv->bind_param("i", $inv_id);
 $iv->execute();
@@ -73,9 +73,10 @@ $inv = $iv->get_result()->fetch_assoc();
 $iv->close();
 if (!$inv) { echo json_encode(['ok' => false, 'msg' => 'Không tìm thấy hoá đơn']); exit; }
 
-// Map payment_state -> chữ hoa cho OS
-$pmap = ['paid'=>'PAID','not_paid'=>'NOT_PAID','partial'=>'PARTIAL','in_payment'=>'IN_PAYMENT','reversed'=>'REVERSED'];
-$payment_state = $pmap[strtolower((string)$inv['payment_state'])] ?? strtoupper((string)$inv['payment_state']);
+// Kiểu hoá đơn: DRAFT / POSTED / CANCEL
+$invoice_status = strtoupper((string)$inv['state']);          // 'draft'->DRAFT, 'posted'->POSTED
+// Thanh toán: chỉ 'paid' mới tính PAID, còn lại UNPAID
+$payment_state  = (strtolower((string)$inv['payment_state']) === 'paid') ? 'PAID' : 'UNPAID';
 
 // paidAt: ưu tiên input -> ngày khách thanh toán (payment_date) -> ngày HĐ -> hôm nay
 $paid_at = $paid_at_in ?: ($inv['payment_date'] ?: ($inv['invoice_date'] ?: date('Y-m-d')));
@@ -103,11 +104,12 @@ $payload = [
     'projectCode' => $project_code,
     'invoice'     => [
         'invoiceCode'     => $inv['name'],
+        'invoiceStatus'   => $invoice_status,   // DRAFT / POSTED
         'amount'          => (float)$inv['amount_total'],
         'productionPrice' => $prod_price,
         'currency'        => $inv['currency_name'] ?: 'VND',
         'paidAt'          => $paid_at,
-        'paymentState'    => $payment_state,
+        'paymentState'    => $payment_state,     // PAID / UNPAID
         'invoiceUrl'      => $invoice_url,
         'note'            => $note !== '' ? $note : null,
     ],

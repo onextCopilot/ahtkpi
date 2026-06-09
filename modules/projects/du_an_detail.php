@@ -2061,16 +2061,20 @@ function showToast(msg, type='success') {
 
 <?php
 if ($can_push && !empty($milestones)):
-    $payLabelMap = ['not_paid'=>'Chưa TT','in_payment'=>'Đang TT','paid'=>'Đã TT','partial'=>'TT một phần','reversed'=>'Đã hoàn'];
     $ms_inv_js = [];
     foreach ($invoices as $iv) {
-        $ps = strtolower((string)($iv['payment_state'] ?? ''));
+        $ps    = strtolower((string)($iv['payment_state'] ?? ''));
+        $state = strtolower((string)($iv['state'] ?? ''));
         $ms_inv_js[] = [
             'id'          => (int)$iv['odoo_id'],
             'name'        => $iv['name'] ?: ('#' . $iv['odoo_id']),
             'amount'      => (float)($iv['amount_total'] ?? 0),
             'currency'    => $iv['currency_name'] ?: 'VND',
-            'payLabel'    => $payLabelMap[$ps] ?? ($ps ?: '—'),
+            'state'       => $state,
+            'isDraft'     => ($state !== 'posted'),
+            'stateLabel'  => ($state === 'posted' ? 'Posted' : ($state === 'draft' ? 'Nháp' : ($state ?: '—'))),
+            'paid'        => ($ps === 'paid'),
+            'payLabel'    => ($ps === 'paid' ? 'Paid' : 'Unpaid'),
             'paymentDate' => !empty($iv['payment_date']) ? $iv['payment_date'] : (!empty($iv['invoice_date']) ? $iv['invoice_date'] : ''),
         ];
     }
@@ -2106,7 +2110,7 @@ if ($can_push && !empty($milestones)):
 const MS_PAKD_ID  = <?= (int)$pakd_id ?>;
 const MS_INVOICES = <?= json_encode($ms_inv_js, JSON_UNESCAPED_UNICODE) ?>;
 let _payMsId = 0;
-function _payInvLabel(iv){ return iv.name + ' · ' + Number(iv.amount).toLocaleString('vi-VN') + ' ' + iv.currency + ' · ' + iv.payLabel; }
+function _payInvLabel(iv){ return iv.name + ' · ' + Number(iv.amount).toLocaleString('vi-VN') + ' ' + iv.currency + ' · ' + iv.stateLabel + ' · ' + iv.payLabel; }
 function openPayModal(msId, msName, currentInvId){
   _payMsId = msId;
   document.getElementById('payMsName').textContent = msName;
@@ -2131,14 +2135,19 @@ function onPaySelect(){
   // Auto-fill: Production Price = full tiền HĐ; Ngày thanh toán = ngày khách TT (payment_date)
   document.getElementById('payProdPrice').value = iv ? iv.amount : '';
   document.getElementById('payPaidAt').value    = iv && iv.paymentDate ? iv.paymentDate : new Date().toISOString().slice(0,10);
-  document.getElementById('payInvInfo').innerHTML = iv
-    ? ('Trạng thái TT: <strong>'+iv.payLabel+'</strong> · Tổng: '+Number(iv.amount).toLocaleString('vi-VN')+' '+iv.currency
-       + (iv.paymentDate ? ' · Ngày TT: '+iv.paymentDate : ''))
-    : '';
+  let info = '';
+  if (iv) {
+    info = 'Hoá đơn: <strong>'+iv.stateLabel+'</strong> · TT: <strong>'+iv.payLabel+'</strong> · Tổng: '+Number(iv.amount).toLocaleString('vi-VN')+' '+iv.currency
+         + (iv.paymentDate ? ' · Ngày TT: '+iv.paymentDate : '');
+    if (iv.isDraft) info += '<div style="margin-top:5px;color:#b45309;"><i class="fas fa-exclamation-triangle" style="font-size:10px;"></i> Hoá đơn chưa POSTED (nháp) — nên để kế toán xác nhận trước khi đẩy.</div>';
+  }
+  document.getElementById('payInvInfo').innerHTML = info;
 }
 function submitPay(){
   const invId = document.getElementById('paySelect').value;
   if (!invId){ showToast('Vui lòng chọn hoá đơn', 'error'); return; }
+  const iv = MS_INVOICES.find(x => String(x.id) === String(invId));
+  if (iv && iv.isDraft && !confirm('Hoá đơn "'+iv.name+'" chưa POSTED (nháp). Vẫn đẩy sang sản xuất?')) return;
   const btn = document.getElementById('paySubmitBtn'); const old = btn.innerHTML;
   btn.disabled = true; btn.innerHTML = 'Đang gửi...';
   const body = new URLSearchParams({
