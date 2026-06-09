@@ -332,6 +332,18 @@ try {
     $mRes->close();
 } catch (\Throwable $e) {} // bảng có thể chưa tồn tại nếu chưa nhận webhook nào
 
+// Hoá đơn đã gắn vào từng milestone (nhiều hoá đơn / milestone)
+$ms_inv_map = [];
+if (!empty($milestones)) {
+    try {
+        $mids = implode(',', array_map(fn($m) => (int)$m['id'], $milestones));
+        if ($mids !== '') {
+            $r = $conn->query("SELECT * FROM pakd_milestone_invoices WHERE milestone_id IN ($mids) ORDER BY id ASC");
+            if ($r) while ($row = $r->fetch_assoc()) $ms_inv_map[(int)$row['milestone_id']][] = $row;
+        }
+    } catch (\Throwable $e) {}
+}
+
 $site_host = (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off' ? 'https' : 'http') . '://' . ($_SERVER['HTTP_HOST'] ?? 'localhost');
 
 function formatFileSize($bytes) {
@@ -1081,22 +1093,26 @@ $pst = $pakd['pasx_status'] ?? '';
                                     <?php endif; ?>
                                 </div>
                                 <?php endif; ?>
-                                <!-- Hoá đơn gắn + đẩy thanh toán -->
-                                <?php if (!empty($m['paid_invoice_code']) || $can_push): ?>
-                                <div style="margin-top:8px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
-                                    <?php if (!empty($m['paid_invoice_code'])): ?>
-                                    <span style="display:inline-flex;align-items:center;gap:6px;font-size:11px;background:#f0fdf4;border:1px solid #cde9da;color:#047857;padding:3px 10px;border-radius:6px;">
+                                <!-- Hoá đơn đã gắn + đẩy thanh toán -->
+                                <?php
+                                $mInvs   = $ms_inv_map[(int)$m['id']] ?? [];
+                                $mInvIds = array_map(fn($x) => (int)$x['invoice_odoo_id'], $mInvs);
+                                ?>
+                                <?php if (!empty($mInvs) || $can_push): ?>
+                                <div style="margin-top:8px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+                                    <?php foreach ($mInvs as $mi): ?>
+                                    <span style="display:inline-flex;align-items:center;gap:6px;font-size:11px;<?= $mi['payment_state']==='PAID' ? 'background:#f0fdf4;border:1px solid #cde9da;color:#047857;' : 'background:#fffbeb;border:1px solid #f0e2c2;color:#b45309;' ?>padding:3px 10px;border-radius:6px;">
                                         <i class="fas fa-file-invoice-dollar" style="font-size:10px;"></i>
-                                        <?= htmlspecialchars($m['paid_invoice_code']) ?>
-                                        <?php if ($m['paid_amount'] !== null): ?>· <?= number_format((float)$m['paid_amount'], 0, ',', '.') ?> <?= htmlspecialchars($m['paid_currency'] ?: '') ?><?php endif; ?>
-                                        <?php if (!empty($m['payment_pushed_at'])): ?>· <span style="color:var(--lgray);">đã đẩy <?= date('d/m/Y', strtotime($m['payment_pushed_at'])) ?></span><?php endif; ?>
+                                        <?= htmlspecialchars($mi['invoice_code']) ?>
+                                        <?php if ($mi['amount'] !== null): ?>· <?= number_format((float)$mi['amount'], 0, ',', '.') ?> <?= htmlspecialchars($mi['currency'] ?: '') ?><?php endif; ?>
+                                        · <?= $mi['payment_state'] === 'PAID' ? 'Paid' : 'Unpaid' ?>
                                     </span>
-                                    <?php endif; ?>
+                                    <?php endforeach; ?>
                                     <?php if ($can_push): ?>
                                     <button type="button"
-                                        onclick="openPayModal(<?= (int)$m['id'] ?>, <?= htmlspecialchars(json_encode($mName), ENT_QUOTES) ?>, <?= htmlspecialchars(json_encode($m['paid_invoice_odoo_id'] ?? null), ENT_QUOTES) ?>)"
+                                        onclick="openPayModal(<?= (int)$m['id'] ?>, <?= htmlspecialchars(json_encode($mName), ENT_QUOTES) ?>, <?= htmlspecialchars(json_encode($mInvIds), ENT_QUOTES) ?>)"
                                         style="font-size:11px;font-weight:600;color:var(--primary);background:var(--primary-soft);border:1px solid #dfe3f5;padding:4px 11px;border-radius:6px;cursor:pointer;display:inline-flex;align-items:center;gap:5px;">
-                                        <i class="fas fa-paper-plane" style="font-size:9px;"></i> <?= !empty($m['paid_invoice_code']) ? 'Cập nhật thanh toán' : 'Gắn hoá đơn & đẩy TT' ?>
+                                        <i class="fas fa-paper-plane" style="font-size:9px;"></i> <?= !empty($mInvs) ? 'Cập nhật hoá đơn & TT' : 'Gắn hoá đơn & đẩy TT' ?>
                                     </button>
                                     <?php endif; ?>
                                 </div>
@@ -2089,14 +2105,11 @@ if ($can_push && !empty($milestones)):
     </div>
     <div style="padding:18px 20px;">
       <div style="font-size:12px;color:var(--gray);margin-bottom:14px;">Milestone: <strong id="payMsName" style="color:var(--slate);"></strong></div>
-      <label style="<?= $payLblStyle ?>">Hoá đơn</label>
-      <select id="paySelect" onchange="onPaySelect()" style="<?= $payInputStyle ?>margin-bottom:6px;"><option value="">— Chọn hoá đơn —</option></select>
-      <div id="payInvInfo" style="font-size:12px;color:var(--gray);min-height:18px;margin-bottom:14px;"></div>
-      <div style="display:flex;gap:12px;margin-bottom:14px;">
-        <div style="flex:1;"><label style="<?= $payLblStyle ?>">Production Price</label><input type="number" id="payProdPrice" step="any" placeholder="vd 10000" style="<?= $payInputStyle ?>"></div>
-        <div style="flex:1;"><label style="<?= $payLblStyle ?>">Ngày thanh toán</label><input type="date" id="payPaidAt" style="<?= $payInputStyle ?>"></div>
-      </div>
-      <label style="<?= $payLblStyle ?>">Ghi chú</label>
+      <label style="<?= $payLblStyle ?>">Hoá đơn (chọn nhiều)</label>
+      <div id="payInvList" style="max-height:220px;overflow:auto;margin-bottom:6px;"></div>
+      <div id="payInvInfo" style="font-size:12px;color:var(--gray);min-height:18px;margin-bottom:6px;"></div>
+      <div style="font-size:11px;color:var(--lgray);margin-bottom:12px;">Production Price = full tiền hoá đơn · Ngày TT lấy theo ngày khách thanh toán của từng hoá đơn.</div>
+      <label style="<?= $payLblStyle ?>">Ghi chú (áp cho các hoá đơn)</label>
       <input type="text" id="payNote" placeholder="vd Thanh toán đợt 1" style="<?= $payInputStyle ?>">
       <div id="payResult" style="display:none;margin-top:12px;font-size:12px;padding:8px 12px;border-radius:6px;"></div>
     </div>
@@ -2110,57 +2123,66 @@ if ($can_push && !empty($milestones)):
 const MS_PAKD_ID  = <?= (int)$pakd_id ?>;
 const MS_INVOICES = <?= json_encode($ms_inv_js, JSON_UNESCAPED_UNICODE) ?>;
 let _payMsId = 0;
-function _payInvLabel(iv){ return iv.name + ' · ' + Number(iv.amount).toLocaleString('vi-VN') + ' ' + iv.currency + ' · ' + iv.stateLabel + ' · ' + iv.payLabel; }
-function openPayModal(msId, msName, currentInvId){
+function _esc(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+function openPayModal(msId, msName, currentIds){
   _payMsId = msId;
   document.getElementById('payMsName').textContent = msName;
-  const sel = document.getElementById('paySelect');
-  sel.innerHTML = '<option value="">— Chọn hoá đơn —</option>';
-  MS_INVOICES.forEach(iv => {
-    const o = document.createElement('option');
-    o.value = iv.id; o.textContent = _payInvLabel(iv);
-    if (currentInvId && Number(currentInvId) === iv.id) o.selected = true;
-    sel.appendChild(o);
-  });
+  const set = new Set((currentIds || []).map(Number));
+  const list = document.getElementById('payInvList');
+  if (!MS_INVOICES.length){
+    list.innerHTML = '<div style="font-size:12px;color:#94a3b8;padding:8px 2px;">Dự án chưa có hoá đơn nào để gắn.</div>';
+  } else {
+    list.innerHTML = MS_INVOICES.map(iv => {
+      const checked = set.has(Number(iv.id)) ? 'checked' : '';
+      const stBg  = iv.isDraft ? 'background:#f1f5f9;color:#64748b;' : 'background:#eef2ff;color:#4338ca;';
+      const payBg = iv.paid    ? 'background:#dcfce7;color:#16a34a;' : 'background:#fee2e2;color:#dc2626;';
+      return '<label style="display:flex;align-items:center;gap:9px;padding:7px 9px;border:1px solid var(--border);border-radius:8px;margin-bottom:6px;cursor:pointer;">'
+        + '<input type="checkbox" class="pay-inv-cb" value="'+iv.id+'" '+checked+' onchange="onPayToggle()" style="width:15px;height:15px;flex-shrink:0;">'
+        + '<span style="flex:1;font-size:12px;color:#1e293b;font-weight:600;min-width:0;">'+_esc(iv.name)+'</span>'
+        + '<span style="font-size:11px;color:#475569;white-space:nowrap;">'+Number(iv.amount).toLocaleString('vi-VN')+' '+iv.currency+'</span>'
+        + '<span style="font-size:10px;font-weight:700;padding:1px 7px;border-radius:5px;'+stBg+'">'+iv.stateLabel+'</span>'
+        + '<span style="font-size:10px;font-weight:700;padding:1px 7px;border-radius:5px;'+payBg+'">'+iv.payLabel+'</span>'
+        + '</label>';
+    }).join('');
+  }
   document.getElementById('payNote').value = '';
   document.getElementById('payResult').style.display = 'none';
   document.getElementById('paySubmitBtn').disabled = false;
-  onPaySelect();
+  onPayToggle();
   document.getElementById('payModal').style.display = 'flex';
 }
 function closePayModal(){ document.getElementById('payModal').style.display = 'none'; }
-function onPaySelect(){
-  const id = document.getElementById('paySelect').value;
-  const iv = MS_INVOICES.find(x => String(x.id) === String(id));
-  // Auto-fill: Production Price = full tiền HĐ; Ngày thanh toán = ngày khách TT (payment_date)
-  document.getElementById('payProdPrice').value = iv ? iv.amount : '';
-  document.getElementById('payPaidAt').value    = iv && iv.paymentDate ? iv.paymentDate : new Date().toISOString().slice(0,10);
+function _payChecked(){ return Array.from(document.querySelectorAll('.pay-inv-cb:checked')).map(c => Number(c.value)); }
+function onPayToggle(){
+  const ids = _payChecked();
+  const sel = MS_INVOICES.filter(iv => ids.includes(Number(iv.id)));
   let info = '';
-  if (iv) {
-    info = 'Hoá đơn: <strong>'+iv.stateLabel+'</strong> · TT: <strong>'+iv.payLabel+'</strong> · Tổng: '+Number(iv.amount).toLocaleString('vi-VN')+' '+iv.currency
-         + (iv.paymentDate ? ' · Ngày TT: '+iv.paymentDate : '');
-    if (iv.isDraft) info += '<div style="margin-top:5px;color:#b45309;"><i class="fas fa-exclamation-triangle" style="font-size:10px;"></i> Hoá đơn chưa POSTED (nháp) — nên để kế toán xác nhận trước khi đẩy.</div>';
+  if (sel.length){
+    const total = {};
+    sel.forEach(iv => { total[iv.currency] = (total[iv.currency] || 0) + Number(iv.amount); });
+    info = 'Đã chọn <strong>'+sel.length+'</strong> hoá đơn · Tổng: '
+         + Object.entries(total).map(([c,a]) => a.toLocaleString('vi-VN')+' '+c).join(' + ');
+    if (sel.some(iv => iv.isDraft)) info += '<div style="margin-top:5px;color:#b45309;"><i class="fas fa-exclamation-triangle" style="font-size:10px;"></i> Có hoá đơn chưa POSTED (nháp) — nên để kế toán xác nhận trước khi đẩy.</div>';
   }
   document.getElementById('payInvInfo').innerHTML = info;
 }
 function submitPay(){
-  const invId = document.getElementById('paySelect').value;
-  if (!invId){ showToast('Vui lòng chọn hoá đơn', 'error'); return; }
-  const iv = MS_INVOICES.find(x => String(x.id) === String(invId));
-  if (iv && iv.isDraft && !confirm('Hoá đơn "'+iv.name+'" chưa POSTED (nháp). Vẫn đẩy sang sản xuất?')) return;
+  const ids = _payChecked();
+  if (!ids.length){ showToast('Vui lòng chọn ít nhất 1 hoá đơn', 'error'); return; }
+  const drafts = MS_INVOICES.filter(iv => ids.includes(Number(iv.id)) && iv.isDraft);
+  if (drafts.length && !confirm(drafts.length + ' hoá đơn chưa POSTED (nháp). Vẫn đẩy sang sản xuất?')) return;
   const btn = document.getElementById('paySubmitBtn'); const old = btn.innerHTML;
   btn.disabled = true; btn.innerHTML = 'Đang gửi...';
-  const body = new URLSearchParams({
-    pakd_id: MS_PAKD_ID, milestone_id: _payMsId, inv_id: invId,
-    production_price: document.getElementById('payProdPrice').value || '',
-    note: document.getElementById('payNote').value || '',
-    paid_at: document.getElementById('payPaidAt').value || ''
-  });
+  const body = new URLSearchParams();
+  body.append('pakd_id', MS_PAKD_ID);
+  body.append('milestone_id', _payMsId);
+  ids.forEach(id => body.append('inv_ids[]', id));
+  body.append('note', document.getElementById('payNote').value || '');
   fetch('/api/milestone_push_payment', { method:'POST', headers:{'Content-Type':'application/x-www-form-urlencoded'}, body })
     .then(r => r.json())
     .then(d => {
       btn.innerHTML = old;
-      if (d.ok){ showToast(d.msg || 'Đã đẩy thanh toán', 'success'); setTimeout(()=>location.reload(), 1200); }
+      if (d.ok){ showToast(d.msg || 'Đã đẩy thanh toán', 'success'); setTimeout(()=>location.reload(), 1300); }
       else { btn.disabled = false; showToast('Lỗi: ' + (d.msg || 'Không rõ'), 'error'); }
     })
     .catch(e => { btn.disabled = false; btn.innerHTML = old; showToast('Lỗi kết nối: ' + e.message, 'error'); });
