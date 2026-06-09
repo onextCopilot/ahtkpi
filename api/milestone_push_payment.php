@@ -71,6 +71,12 @@ if (!$api_url || !$api_token) { echo json_encode(['ok' => false, 'msg' => 'Thi�
 $odooBaseUrl = '';
 try { $os = $conn->query("SELECT odoo_url FROM odoo_settings ORDER BY id DESC LIMIT 1")->fetch_assoc(); $odooBaseUrl = rtrim($os['odoo_url'] ?? '', '/'); } catch (\Throwable $e) {}
 
+// Đảm bảo odoo_invoices có cột payment_date (phòng khi Odoo hook chưa migrate trên server này)
+$_pdchk = $conn->query("SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='odoo_invoices' AND COLUMN_NAME='payment_date'");
+if ($_pdchk && $_pdchk->num_rows === 0) {
+    try { $conn->query("ALTER TABLE odoo_invoices ADD COLUMN payment_date DATE DEFAULT NULL AFTER invoice_date_due"); } catch (\Throwable $e) {}
+}
+
 // ── Bảng con + cột milestone ────────────────────────────────────────────────────
 $conn->query("CREATE TABLE IF NOT EXISTS pakd_milestone_invoices (
     id                INT AUTO_INCREMENT PRIMARY KEY,
