@@ -55,6 +55,15 @@ $where  = ["p.won_status = 'won'"];
 $params = [];
 $types  = '';
 
+// Row-level: AM chỉ thấy dự án của mình; admin thấy tất cả
+$my_full_name = $_SESSION['full_name'] ?? '';
+$my_email     = $_SESSION['email'] ?? '';
+if ($role !== 'admin') {
+    $where[]  = "(p.am_user_id = ? OR p.am_name = ? OR p.am_email = ?)";
+    $params[] = $user_id; $params[] = $my_full_name; $params[] = $my_email;
+    $types   .= 'iss';
+}
+
 if ($search !== '') {
     $where[]  = "(p.name LIKE ? OR p.company_name LIKE ? OR p.am_name LIKE ?)";
     $like     = "%{$search}%";
@@ -104,13 +113,19 @@ $userAvatarMap = [];
 $uRes = $conn->query("SELECT email, full_name, avatar FROM users WHERE email IS NOT NULL AND email != ''");
 if ($uRes) while ($u = $uRes->fetch_assoc()) $userAvatarMap[strtolower($u['email'])] = $u;
 
-// Stats
-$totalWon   = (int)($conn->query("SELECT COUNT(*) as c FROM pakd WHERE won_status='won'")->fetch_assoc()['c'] ?? 0);
-$totalValue = (float)($conn->query("SELECT SUM(opp_value) as s FROM pakd WHERE won_status='won'")->fetch_assoc()['s'] ?? 0);
+// Stats (scope theo AM nếu không phải admin)
+$amStatCond = '';
+if ($role !== 'admin') {
+    $eName = $conn->real_escape_string($my_full_name);
+    $eMail = $conn->real_escape_string($my_email);
+    $amStatCond = " AND (am_user_id = " . (int)$user_id . " OR am_name = '$eName' OR am_email = '$eMail')";
+}
+$totalWon   = (int)($conn->query("SELECT COUNT(*) as c FROM pakd WHERE won_status='won'$amStatCond")->fetch_assoc()['c'] ?? 0);
+$totalValue = (float)($conn->query("SELECT SUM(opp_value) as s FROM pakd WHERE won_status='won'$amStatCond")->fetch_assoc()['s'] ?? 0);
 
 // Status counts (among won deals)
 $statusCounts = ['draft'=>0,'pending'=>0,'approved'=>0,'rejected'=>0];
-$scRes = $conn->query("SELECT status, COUNT(*) as c FROM pakd WHERE won_status='won' GROUP BY status");
+$scRes = $conn->query("SELECT status, COUNT(*) as c FROM pakd WHERE won_status='won'$amStatCond GROUP BY status");
 if ($scRes) while ($sc = $scRes->fetch_assoc()) $statusCounts[$sc['status']] = (int)$sc['c'];
 
 $viMonths = ['','Tháng 1','Tháng 2','Tháng 3','Tháng 4','Tháng 5','Tháng 6','Tháng 7','Tháng 8','Tháng 9','Tháng 10','Tháng 11','Tháng 12'];
