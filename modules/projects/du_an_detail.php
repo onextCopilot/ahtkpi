@@ -2069,11 +2069,12 @@ if ($can_push && !empty($milestones)):
     foreach ($invoices as $iv) {
         $ps = strtolower((string)($iv['payment_state'] ?? ''));
         $ms_inv_js[] = [
-            'id'       => (int)$iv['odoo_id'],
-            'name'     => $iv['name'] ?: ('#' . $iv['odoo_id']),
-            'amount'   => (float)($iv['amount_total'] ?? 0),
-            'currency' => $iv['currency_name'] ?: 'VND',
-            'payLabel' => $payLabelMap[$ps] ?? ($ps ?: '—'),
+            'id'          => (int)$iv['odoo_id'],
+            'name'        => $iv['name'] ?: ('#' . $iv['odoo_id']),
+            'amount'      => (float)($iv['amount_total'] ?? 0),
+            'currency'    => $iv['currency_name'] ?: 'VND',
+            'payLabel'    => $payLabelMap[$ps] ?? ($ps ?: '—'),
+            'paymentDate' => !empty($iv['payment_date']) ? $iv['payment_date'] : (!empty($iv['invoice_date']) ? $iv['invoice_date'] : ''),
         ];
     }
     $payInputStyle = 'width:100%;border:1px solid var(--border);border-radius:8px;padding:9px 11px;font-size:13px;font-family:inherit;box-sizing:border-box;';
@@ -2120,9 +2121,7 @@ function openPayModal(msId, msName, currentInvId){
     if (currentInvId && Number(currentInvId) === iv.id) o.selected = true;
     sel.appendChild(o);
   });
-  document.getElementById('payProdPrice').value = '';
   document.getElementById('payNote').value = '';
-  document.getElementById('payPaidAt').value = new Date().toISOString().slice(0,10);
   document.getElementById('payResult').style.display = 'none';
   document.getElementById('paySubmitBtn').disabled = false;
   onPaySelect();
@@ -2132,8 +2131,12 @@ function closePayModal(){ document.getElementById('payModal').style.display = 'n
 function onPaySelect(){
   const id = document.getElementById('paySelect').value;
   const iv = MS_INVOICES.find(x => String(x.id) === String(id));
+  // Auto-fill: Production Price = full tiền HĐ; Ngày thanh toán = ngày khách TT (payment_date)
+  document.getElementById('payProdPrice').value = iv ? iv.amount : '';
+  document.getElementById('payPaidAt').value    = iv && iv.paymentDate ? iv.paymentDate : new Date().toISOString().slice(0,10);
   document.getElementById('payInvInfo').innerHTML = iv
-    ? ('Trạng thái TT: <strong>'+iv.payLabel+'</strong> · Tổng: '+Number(iv.amount).toLocaleString('vi-VN')+' '+iv.currency)
+    ? ('Trạng thái TT: <strong>'+iv.payLabel+'</strong> · Tổng: '+Number(iv.amount).toLocaleString('vi-VN')+' '+iv.currency
+       + (iv.paymentDate ? ' · Ngày TT: '+iv.paymentDate : ''))
     : '';
 }
 function submitPay(){
