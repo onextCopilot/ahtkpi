@@ -2332,6 +2332,11 @@ if ($res_am && $res_am->num_rows > 0) {
                                             <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/></svg>
                                         </div>
                                     </div>
+                                    <?php
+                                    // Lấy khoảng Paid Date đang lọc trên trang (nếu có) để Check theo đúng kỳ
+                                    $rtcp_page_from = (isset($_GET['pay_month_from']) && preg_match('/^\d{4}-\d{2}-\d{2}$/', $_GET['pay_month_from'])) ? $_GET['pay_month_from'] : '';
+                                    $rtcp_page_to   = (isset($_GET['pay_month_to']) && preg_match('/^\d{4}-\d{2}-\d{2}$/', $_GET['pay_month_to'])) ? $_GET['pay_month_to'] : '';
+                                    ?>
                                     <div style="margin-top: 16px; padding-top: 16px; border-top: 1px solid #eef2ff; display: flex; gap: 8px; align-items: center;">
                                         <select id="rtcp-year" style="flex:0 0 auto; padding:7px 10px; border:1px solid #cbd5e1; border-radius:6px; font-size:13px; background:#fff; outline:none;">
                                             <?php $cy = (int) date('Y'); for ($y = $cy; $y >= $cy - 3; $y--): ?>
@@ -2339,11 +2344,19 @@ if ($res_am && $res_am->num_rows > 0) {
                                             <?php endfor; ?>
                                         </select>
                                         <button type="button" id="rtcp-btn" onclick="runRealtimeCheckPaid()"
+                                            data-page-from="<?php echo htmlspecialchars($rtcp_page_from); ?>"
+                                            data-page-to="<?php echo htmlspecialchars($rtcp_page_to); ?>"
                                             style="flex:1; padding:8px 12px; background:#4f46e5; color:#fff; border:none; border-radius:6px; font-size:13px; font-weight:600; cursor:pointer;">
                                             Check
                                         </button>
                                     </div>
-                                    <div id="rtcp-meta" style="margin-top:10px; font-size:11px; color:#94a3b8; min-height:14px;"></div>
+                                    <div id="rtcp-meta" style="margin-top:10px; font-size:11px; color:#94a3b8; min-height:14px;">
+                                        <?php if ($rtcp_page_from || $rtcp_page_to): ?>
+                                            Sẽ check theo Paid Date đang lọc: <?php echo htmlspecialchars($rtcp_page_from ?: '…'); ?> → <?php echo htmlspecialchars($rtcp_page_to ?: '…'); ?>
+                                        <?php else: ?>
+                                            Chọn năm hoặc đặt filter "Paid Date" để check theo kỳ.
+                                        <?php endif; ?>
+                                    </div>
                                 </div>
                                 <?php endif; ?>
                             </div>
@@ -3296,19 +3309,32 @@ if ($res_am && $res_am->num_rows > 0) {
             tr.classList.toggle('row-selected');
         }
 
-        // Realtime Check Paid: gọi Odoo lấy tổng tiền đã thu (chỉ phần paid) theo năm
+        // Realtime Check Paid: gọi Odoo tính tiền THỰC THU (cash) theo khoảng PAID DATE.
+        // Ưu tiên dùng khoảng Paid Date đang lọc trên trang; nếu không có thì dùng năm đã chọn.
         function runRealtimeCheckPaid() {
             const btn = document.getElementById('rtcp-btn');
             const valEl = document.getElementById('rtcp-value');
             const metaEl = document.getElementById('rtcp-meta');
-            const year = document.getElementById('rtcp-year').value;
             if (!btn) return;
+
+            let from = btn.dataset.pageFrom || '';
+            let to = btn.dataset.pageTo || '';
+            const year = document.getElementById('rtcp-year').value;
+            // Nếu trang không lọc Paid Date thì dùng cả năm đã chọn
+            if (!from && !to) {
+                from = year + '-01-01';
+                to = year + '-12-31';
+            } else {
+                if (!from) from = year + '-01-01';
+                if (!to) to = year + '-12-31';
+            }
+
             const oldText = btn.textContent;
             btn.disabled = true;
             btn.textContent = 'Đang kiểm tra...';
             valEl.innerHTML = '<span style="color:#a5b4fc; font-size:15px;">Đang lấy dữ liệu từ Odoo…</span>';
             metaEl.textContent = '';
-            fetch('/api/realtime_check_paid.php?year=' + encodeURIComponent(year), {
+            fetch('/api/realtime_check_paid.php?from=' + encodeURIComponent(from) + '&to=' + encodeURIComponent(to), {
                     headers: { 'X-Requested-With': 'XMLHttpRequest' }
                 })
                 .then(r => r.json())
@@ -3316,7 +3342,7 @@ if ($res_am && $res_am->num_rows > 0) {
                     if (!data.success) throw new Error(data.error || 'Lỗi không xác định');
                     const f = new Intl.NumberFormat('vi-VN').format(data.paid_vnd);
                     valEl.innerHTML = f + ' <span style="font-size:0.6em; vertical-align:top; color:#6366f1;">VND</span>';
-                    metaEl.textContent = 'Năm ' + data.year + ' · ' + data.paid_invoice_count + '/' + data.invoice_count + ' HĐ có thu · lúc ' + data.checked_at;
+                    metaEl.textContent = 'Thu ' + data.from + ' → ' + data.to + ' · ' + data.invoice_count + ' HĐ / ' + data.payment_count + ' lượt · lúc ' + data.checked_at;
                 })
                 .catch(e => {
                     valEl.innerHTML = '<span style="color:#dc2626; font-size:14px;">Lỗi: ' + e.message + '</span>';

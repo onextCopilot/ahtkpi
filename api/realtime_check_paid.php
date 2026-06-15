@@ -1,7 +1,7 @@
 <?php
 // api/realtime_check_paid.php
-// Realtime: lấy TẤT CẢ invoice khách hàng (out_invoice, posted) trong 1 năm trực tiếp từ Odoo
-// và tính tổng số tiền ĐÃ THU (chỉ phần paid; invoice thu một phần chỉ tính phần đã thu).
+// Realtime: tính tổng TIỀN ĐÃ THU TỪ KHÁCH (cash collected) trong 1 khoảng PAID DATE (ngày thu),
+// lấy trực tiếp từ Odoo qua các lần thanh toán (invoice_payments_widget) — chỉ tính phần đã thu.
 header('Content-Type: application/json');
 
 $old_error_level = error_reporting(0);
@@ -24,83 +24,84 @@ if (stripos($fullName, 'Hyun Cao') === false) {
     exit();
 }
 
-$year = intval($_GET['year'] ?? $_POST['year'] ?? date('Y'));
-if ($year < 2000 || $year > 2100) {
-    $year = (int) date('Y');
+// Khoảng PAID DATE: from/to (YYYY-MM-DD). Nếu không có -> dùng cả năm (year).
+$from = trim((string) ($_GET['from'] ?? $_POST['from'] ?? ''));
+$to   = trim((string) ($_GET['to'] ?? $_POST['to'] ?? ''));
+$validDate = function ($d) { return preg_match('/^\d{4}-\d{2}-\d{2}$/', $d) === 1; };
+
+if (!$validDate($from) || !$validDate($to)) {
+    $year = intval($_GET['year'] ?? $_POST['year'] ?? date('Y'));
+    if ($year < 2000 || $year > 2100) $year = (int) date('Y');
+    $from = sprintf('%04d-01-01', $year);
+    $to   = sprintf('%04d-12-31', $year);
 }
+if ($from > $to) { $tmp = $from; $from = $to; $to = $tmp; }
 
 try {
     $odoo = new OdooAPI();
 
-    $from = sprintf('%04d-01-01', $year);
-    $to   = sprintf('%04d-12-31', $year);
+    // Map currency_id (số) -> rate (đơn vị ngoại tệ trên 1 VND) để quy đổi mọi tiền tệ về VND.
+    $currencies = $odoo->getCurrencies();
+    $idRate = [];
+    foreach ($currencies as $c) {
+        if (isset($c['id'])) $idRate[(int) $c['id']] = (float) $c['rate'];
+    }
 
+    // Lấy hóa đơn KH posted có phát sinh thanh toán; chặn dưới = đầu năm trước của 'from'
+    // để bao gồm cả HĐ phát hành năm trước nhưng thu trong kỳ.
+    $lowerYear = (int) substr($from, 0, 4) - 1;
     $domain = [
         ['move_type', '=', 'out_invoice'],
         ['state', '=', 'posted'],
-        ['invoice_date', '>=', $from],
+        ['payment_state', 'in', ['paid', 'partial', 'in_payment']],
+        ['invoice_date', '>=', sprintf('%04d-01-01', $lowerYear)],
         ['invoice_date', '<=', $to],
     ];
-    $fields = [
-        'amount_total',         // tổng theo tiền hóa đơn
-        'amount_total_signed',  // tổng theo tiền công ty (dùng làm fallback)
-        'amount_residual',      // còn nợ theo tiền hóa đơn
-        'currency_id',
-        'payment_state',
-        'invoice_date',
-    ];
 
-    // limit cao để lấy hết hóa đơn trong năm (an toàn hơn limit=0)
-    $invoices = $odoo->searchRead('account.move', $domain, $fields, 100000, 0);
+    $invoices = $odoo->searchRead('account.move', $domain, ['invoice_payments_widget'], 100000, 0);
     if (!is_array($invoices)) {
         $invoices = [];
     }
 
-    // Tỉ giá theo TIỀN TỆ (rate = số đơn vị ngoại tệ trên 1 VND) để quy đổi VND đúng cho mọi công ty.
-    // (amount_total_signed nằm theo tiền của TỪNG công ty -> sai với công ty không dùng VND, vd A1 SDN BHD = MYR.)
-    $currencies = $odoo->getCurrencies();
-
-    $paid_vnd = 0.0;          // tổng phần đã thu (VND)
-    $total_vnd = 0.0;         // tổng giá trị hóa đơn (VND)
-    $invoice_count = 0;       // số hóa đơn posted trong năm
-    $paid_invoice_count = 0;  // số hóa đơn có thu được tiền (>0)
+    $paid_vnd = 0.0;          // tổng tiền đã thu trong kỳ (VND)
+    $invoice_count = 0;       // số hóa đơn có thu trong kỳ
+    $payment_count = 0;       // số lượt thu trong kỳ
 
     foreach ($invoices as $inv) {
-        $invoice_count++;
+        $w = $inv['invoice_payments_widget'] ?? null;
+        if (is_string($w)) $w = json_decode($w, true);
+        if (empty($w['content']) || !is_array($w['content'])) continue;
 
-        $amount_total = abs((float) ($inv['amount_total'] ?? 0));
-        $residual     = abs((float) ($inv['amount_residual'] ?? 0));
-        $collected    = max(0.0, $amount_total - $residual); // theo tiền hóa đơn
+        $hit = false;
+        foreach ($w['content'] as $p) {
+            // Bỏ qua dòng chênh lệch tỉ giá (không phải tiền thu thực)
+            if (!empty($p['is_exchange'])) continue;
 
-        $curName = is_array($inv['currency_id'] ?? null) ? $inv['currency_id'][1] : 'VND';
-        $rate = isset($currencies[$curName]['rate']) ? (float) $currencies[$curName]['rate'] : 0.0;
+            $d = $p['date'] ?? '';
+            if ($d < $from || $d > $to) continue;
 
-        if ($rate > 0) {
-            // VND = số_tiền_ngoại_tệ / rate
-            $total_vnd += $amount_total / $rate;
-            $paid_row = $collected / $rate;
-        } else {
-            // Fallback: dùng amount_total_signed (tiền công ty) nếu thiếu tỉ giá
-            $total_signed = abs((float) ($inv['amount_total_signed'] ?? 0));
-            $frac = ($amount_total > 0) ? ($collected / $amount_total) : 0.0;
-            $total_vnd += $total_signed;
-            $paid_row = $total_signed * $frac;
+            $amt = (float) ($p['amount'] ?? 0);
+            if ($amt == 0) continue;
+
+            $cid = is_array($p['currency_id'] ?? null) ? (int) ($p['currency_id'][0] ?? 0) : (int) ($p['currency_id'] ?? 0);
+            $rate = $idRate[$cid] ?? 0.0;
+            if ($rate <= 0) continue;
+
+            $paid_vnd += $amt / $rate;
+            $payment_count++;
+            $hit = true;
         }
-
-        $paid_vnd += $paid_row;
-        if ($paid_row > 0.01) {
-            $paid_invoice_count++;
-        }
+        if ($hit) $invoice_count++;
     }
 
     echo json_encode([
-        'success'             => true,
-        'year'                => $year,
-        'paid_vnd'            => round($paid_vnd),
-        'total_vnd'           => round($total_vnd),
-        'invoice_count'       => $invoice_count,
-        'paid_invoice_count'  => $paid_invoice_count,
-        'checked_at'          => date('Y-m-d H:i:s'),
+        'success'        => true,
+        'from'           => $from,
+        'to'             => $to,
+        'paid_vnd'       => round($paid_vnd),
+        'invoice_count'  => $invoice_count,
+        'payment_count'  => $payment_count,
+        'checked_at'     => date('Y-m-d H:i:s'),
     ]);
 } catch (Exception $e) {
     http_response_code(500);
