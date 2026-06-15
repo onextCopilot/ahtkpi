@@ -1959,6 +1959,9 @@ if ($res_am && $res_am->num_rows > 0) {
                             <input type="hidden" name="team" value="<?php echo htmlspecialchars($selected_team); ?>">
                             
                             <label class="filter-item-label">Tìm kiếm nhanh</label>
+                            <span class="filter-hint">Tìm theo Khách hàng, Dự án hoặc <b>Số hóa đơn</b> (vd INV/2026/00006).</span>
+                            <input type="text" name="q" class="search-input" placeholder="Khách hàng, dự án, số hóa đơn..."
+                                value="<?php echo htmlspecialchars($_GET['q'] ?? ''); ?>">
 
                             <label class="filter-item-label">Người quản lý (AM)</label>
                             <span class="filter-hint">Lọc theo Account Manager phụ trách hóa đơn (salesperson trên Odoo).</span>
