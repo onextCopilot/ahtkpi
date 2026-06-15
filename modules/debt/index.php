@@ -208,6 +208,23 @@ if (!empty($_GET['invoice_status_class'])) {
 }
 
 /**
+ * Map tên công ty từ Odoo (company_id) về tên ngắn.
+ *  - "AHT TECH JOINT STOCK COMPANY"      -> AHT TECH
+ *  - "A1 CONSULTING SDN. BHD."           -> A1C MY (Malaysia)
+ *  - "A1 CONSULTING JOINT STOCK COMPANY" -> A1VN
+ * Không khớp -> trả nguyên tên Odoo.
+ */
+function shortCompanyName($odooName)
+{
+    $n = strtoupper(trim((string) $odooName));
+    if ($n === '') return '';
+    if (strpos($n, 'AHT TECH') !== false) return 'AHT TECH';
+    if (strpos($n, 'SDN') !== false || strpos($n, 'BHD') !== false) return 'A1C MY';
+    if (strpos($n, 'A1 CONSULTING') !== false || strpos($n, 'A1C') !== false || strpos($n, 'A1 ') !== false) return 'A1VN';
+    return (string) $odooName;
+}
+
+/**
  * Cờ (đã-thu, còn-nợ) của 1 dòng nợ, dựa trên amount_total/amount_residual của Odoo.
  *  - đã-thu (collected) = amount_total - amount_residual > 0
  *  - còn-nợ (owed)      = amount_residual > 0
@@ -253,6 +270,9 @@ if (!empty($_GET['status'])) {
         return $s !== '';
     }));
 }
+
+// Lọc theo công ty (PHP-side, theo company suy ra từ Odoo — khớp cột hiển thị)
+$company_filter = isset($_GET['company']) ? trim((string) $_GET['company']) : '';
 
 if (!empty($_GET['q'])) {
     $search = $conn->real_escape_string($_GET['q']);
@@ -406,6 +426,14 @@ if ($res) {
             continue;
         }
 
+        // Lọc theo công ty (theo company suy ra từ Odoo, fallback company DB) — lọc trước khi cộng total
+        if ($company_filter !== '') {
+            $rowCompany = ($odoo_inv && isset($odoo_inv['company_id']) && is_array($odoo_inv['company_id']))
+                ? shortCompanyName($odoo_inv['company_id'][1] ?? '')
+                : ($row['company'] ?? '');
+            if ($rowCompany !== $company_filter) continue;
+        }
+
         $amount = (float) $row['amount'];
         $curr = $row['currency'] ?: 'USD';
         $date = !empty($row['invoice_date']) ? $row['invoice_date'] : date('Y-m-d');
@@ -523,6 +551,12 @@ if ($res) {
         // Grouping
         $row['amount'] = $vnd_value;
         $row['currency'] = 'VND';
+
+        // Company: lấy từ Odoo company_id (map tên ngắn) để hiển thị đúng công ty thay vì cứng 'AHT TECH'
+        if ($odoo_inv && isset($odoo_inv['company_id']) && is_array($odoo_inv['company_id'])) {
+            $sc = shortCompanyName($odoo_inv['company_id'][1] ?? '');
+            if ($sc !== '') $row['company'] = $sc;
+        }
 
         // Capture Odoo invoice state (posted / draft / cancel) for display
         $row['odoo_state'] = ($odoo_inv && isset($odoo_inv['state'])) ? (string)$odoo_inv['state'] : '';
@@ -1344,6 +1378,8 @@ if ($res_am && $res_am->num_rows > 0) {
             display: flex;
             justify-content: space-between;
             align-items: center;
+            flex-wrap: wrap;
+            gap: 10px;
             margin-bottom: 1rem;
             background: white;
             padding: 1rem;
@@ -1413,29 +1449,39 @@ if ($res_am && $res_am->num_rows > 0) {
         }
 
         .total-badge {
-            margin-left: auto;
-            margin-right: 1rem;
-            font-size: 0.95rem;
-            font-weight: 600;
+            margin: 0;
+            display: inline-flex;
+            align-items: baseline;
+            gap: 5px;
+            white-space: nowrap;
+            font-size: 0.8rem;
+            font-weight: 700;
             color: #065f46;
             background: #ecfdf5;
-            padding: 6px 12px;
-            border-radius: 6px;
-            border: 1px solid #10b981;
+            border: 1px solid #6ee7b7;
+            padding: 7px 12px;
+            border-radius: 8px;
+            line-height: 1.1;
+        }
+
+        .total-badge .tb-label {
+            font-size: 0.65rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.03em;
+            opacity: 0.75;
         }
 
         .total-badge.paid-badge {
-            margin: 0;
             color: #1d4ed8;
             background: #eff6ff;
-            border-color: #3b82f6;
+            border-color: #93c5fd;
         }
 
         .total-badge.unpaid-badge {
-            margin: 0;
             color: #b91c1c;
             background: #fef2f2;
-            border-color: #ef4444;
+            border-color: #fca5a5;
         }
 
         /* Filter Sidebar Drawer */
@@ -1840,25 +1886,39 @@ if ($res_am && $res_am->num_rows > 0) {
                         ?>
                     </div>
 
-                    <div style="display: flex; align-items: center; gap: 12px; margin-left: auto;">
+                    <div style="display: flex; align-items: center; flex-wrap: wrap; justify-content: flex-end; gap: 8px; margin-left: auto;">
                         <?php if (!in_array($selected_team, ['dashboard', 'analytics'])): ?>
-                        <div class="total-badge">
-                            Total: <?php echo formatVND($total_amount_vnd); ?>
+                        <div class="total-badge" title="Tổng giá trị (theo bộ lọc)">
+                            <span class="tb-label">Total</span><?php echo formatVND($total_amount_vnd); ?>
                         </div>
                         <div class="total-badge paid-badge" title="Tổng phần đã thu được (chỉ tính phần Paid)">
-                            Paid Amount: <?php echo formatVND($total_paid_vnd); ?>
+                            <span class="tb-label">Paid</span><?php echo formatVND($total_paid_vnd); ?>
                         </div>
                         <div class="total-badge unpaid-badge" title="Tổng phần còn nợ (chưa thu)">
-                            Unpaid: <?php echo formatVND($total_unpaid_vnd); ?>
+                            <span class="tb-label">Unpaid</span><?php echo formatVND($total_unpaid_vnd); ?>
                         </div>
                         <?php endif; ?>
+
+                        <!-- Lọc theo công ty (đứng ngoài sidebar) -->
+                        <select class="filter-select" onchange="setCompanyFilter(this.value)" title="Lọc theo công ty (từ Odoo)" style="padding:8px 12px; border:1px solid #cbd5e1; border-radius:8px; background:#fff; color:#475569; cursor:pointer; outline:none; max-width:210px;">
+                            <option value="">Công ty: Tất cả</option>
+                            <?php
+                            $company_options = [
+                                'AHT TECH' => 'AHT TECH JOINT STOCK COMPANY',
+                                'A1VN'     => 'A1 CONSULTING JOINT STOCK COMPANY',
+                                'A1C MY'   => 'A1 CONSULTING SDN. BHD.',
+                            ];
+                            foreach ($company_options as $val => $label): ?>
+                                <option value="<?php echo htmlspecialchars($val); ?>" <?php echo ($company_filter === $val) ? 'selected' : ''; ?>><?php echo htmlspecialchars($label); ?></option>
+                            <?php endforeach; ?>
+                        </select>
 
                         <button class="btn-filter-toggle" onclick="toggleFilterSidebar()">
                             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon></svg>
                             <span>Bộ lọc</span>
                             <?php 
                             $active_filters = 0;
-                            $filter_params = ['am', 'status', 'invoice_status_class', 'year', 'quarter', 'month', 'week', 'date_from', 'date_to', 'exp_pay_date_from', 'exp_pay_date_to', 'pay_month_from', 'pay_month_to', 'q']; 
+                            $filter_params = ['am', 'company', 'status', 'invoice_status_class', 'year', 'quarter', 'month', 'week', 'date_from', 'date_to', 'exp_pay_date_from', 'exp_pay_date_to', 'pay_month_from', 'pay_month_to', 'q'];
                             foreach($filter_params as $p) {
                                 if(!empty($_GET[$p])) $active_filters++;
                             }
@@ -2049,18 +2109,26 @@ if ($res_am && $res_am->num_rows > 0) {
 
                     $counts = [];
                     // Get both sale_team_id and odoo_invoice_id to correctly filter by Odoo status when needed
-                    $c_res = $conn->query("SELECT d.sale_team_id, d.odoo_invoice_id, d.payment_status FROM debts d $cw_sql");
+                    $c_res = $conn->query("SELECT d.sale_team_id, d.odoo_invoice_id, d.payment_status, d.company FROM debts d $cw_sql");
                     if ($c_res) {
                         while ($cr = $c_res->fetch_assoc()) {
                             $k = $cr['sale_team_id'] ?? 'undefined';
+                            $oid = (string)$cr['odoo_invoice_id'];
+                            $cinv = isset($odoo_map[$oid]) ? $odoo_map[$oid] : null;
 
                             // Khớp đúng bộ lọc trạng thái thanh toán (dựa trên Odoo) dùng trong vòng lặp chính
                             if (count($status_filter) > 0) {
-                                $oid = (string)$cr['odoo_invoice_id'];
-                                $cinv = isset($odoo_map[$oid]) ? $odoo_map[$oid] : null;
                                 if (!debtMatchesStatus($cinv, $cr['payment_status'] ?? '', $status_filter)) {
                                     continue;
                                 }
+                            }
+
+                            // Khớp bộ lọc công ty (theo company suy ra từ Odoo)
+                            if ($company_filter !== '') {
+                                $cCompany = ($cinv && isset($cinv['company_id']) && is_array($cinv['company_id']))
+                                    ? shortCompanyName($cinv['company_id'][1] ?? '')
+                                    : ($cr['company'] ?? '');
+                                if ($cCompany !== $company_filter) continue;
                             }
 
                             if (!isset($counts[$k])) $counts[$k] = 0;
@@ -3894,6 +3962,12 @@ if ($res_am && $res_am->num_rows > 0) {
             url.searchParams.delete('exp_pay_date_from');
             url.searchParams.delete('exp_pay_date_to');
             window.location.href = url.toString();
+        }
+
+        function setCompanyFilter(v) {
+            const u = new URL(window.location);
+            if (v) u.searchParams.set('company', v); else u.searchParams.delete('company');
+            window.location = u.toString();
         }
 
         function toggleFilterSidebar() {

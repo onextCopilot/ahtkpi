@@ -194,6 +194,23 @@ if (!empty($_GET['invoice_status_class'])) {
  * Hóa đơn thu một phần (partial) sẽ TRUE cả hai. Không có dữ liệu Odoo thì fallback theo payment_status DB.
  * @return array [bool $hasCollected, bool $hasOwed]
  */
+/**
+ * Map tên công ty từ Odoo (company_id) về tên ngắn khớp với option trong form.
+ *  - "AHT TECH JOINT STOCK COMPANY"     -> AHT TECH
+ *  - "A1 CONSULTING SDN. BHD."          -> A1C MY (Malaysia)
+ *  - "A1 CONSULTING JOINT STOCK COMPANY"-> A1VN
+ * Không khớp -> trả nguyên tên Odoo.
+ */
+function shortCompanyName($odooName)
+{
+    $n = strtoupper(trim((string) $odooName));
+    if ($n === '') return '';
+    if (strpos($n, 'AHT TECH') !== false) return 'AHT TECH';
+    if (strpos($n, 'SDN') !== false || strpos($n, 'BHD') !== false) return 'A1C MY';
+    if (strpos($n, 'A1 CONSULTING') !== false || strpos($n, 'A1C') !== false || strpos($n, 'A1 ') !== false) return 'A1VN';
+    return (string) $odooName;
+}
+
 function debtPaidOwedFlags($odoo_inv, $db_payment_status)
 {
     if ($odoo_inv && isset($odoo_inv['amount_total']) && abs((float) $odoo_inv['amount_total']) > 0) {
@@ -233,6 +250,9 @@ if (!empty($_GET['status'])) {
         return $s !== '';
     }));
 }
+
+// Lọc theo công ty (lọc PHP-side theo company suy ra từ Odoo, khớp cột hiển thị)
+$company_filter = isset($_GET['company']) ? trim((string) $_GET['company']) : '';
 
 if (!empty($_GET['q'])) {
     $search = $conn->real_escape_string($_GET['q']);
@@ -394,6 +414,16 @@ if ($res) {
                 $changed = true;
             }
 
+            // 2b. Company (lấy từ Odoo company_id, map về tên ngắn)
+            $newCompany = is_array($inv['company_id'] ?? null) ? shortCompanyName($inv['company_id'][1]) : '';
+            if ($newCompany !== '' && $newCompany !== ($row['company'] ?? '')) {
+                $upSql[] = "company = ?";
+                $upParams[] = $newCompany;
+                $upTypes .= "s";
+                $row['company'] = $newCompany;
+                $changed = true;
+            }
+
             // 3. Payment Status & Fields (Logic from api/sync_debt.php)
             $pState = $inv['payment_state'] ?? '';
             $newPayStat = ($pState === 'paid' || $pState === 'in_payment') ? 'Paid' : 'Not paid';
@@ -527,6 +557,11 @@ if ($res) {
                 $stmtUp->execute();
                 $stmtUp->close();
             }
+        }
+
+        // Lọc theo công ty (sau khi $row['company'] đã được đồng bộ từ Odoo)
+        if ($company_filter !== '' && ($row['company'] ?? '') !== $company_filter) {
+            continue;
         }
 
         // Convert to VND using Odoo exchange rate ratio if available
@@ -1635,13 +1670,27 @@ if ($team_res && $team_res->num_rows > 0) {
                 <div class="page-controls">
                     <?php
                     $sel_status = $status_filter; // mảng đã parse ở trên
-                    // Đếm số filter đang áp dụng để hiện badge trên nút Bộ lọc
+                    // Đếm số filter đang áp dụng để hiện badge trên nút Bộ lọc (không gồm company vì đã ra ngoài)
                     $mydebt_filter_params = ['q', 'status', 'invoice_status_class', 'year', 'quarter', 'month', 'week'];
                     $mydebt_active = 0;
                     foreach ($mydebt_filter_params as $p) {
                         if (!empty($_GET[$p])) $mydebt_active++;
                     }
                     ?>
+                    <!-- Lọc theo công ty (đứng ngoài sidebar) -->
+                    <select class="filter-select" onchange="setCompanyFilter(this.value)" title="Lọc theo công ty (từ Odoo)">
+                        <option value="">Công ty: Tất cả</option>
+                        <?php
+                        $company_options = [
+                            'AHT TECH' => 'AHT TECH JOINT STOCK COMPANY',
+                            'A1VN'     => 'A1 CONSULTING JOINT STOCK COMPANY',
+                            'A1C MY'   => 'A1 CONSULTING SDN. BHD.',
+                        ];
+                        foreach ($company_options as $val => $label): ?>
+                            <option value="<?php echo htmlspecialchars($val); ?>" <?php echo ($company_filter === $val) ? 'selected' : ''; ?>><?php echo htmlspecialchars($label); ?></option>
+                        <?php endforeach; ?>
+                    </select>
+
                     <!-- Filter Sidebar Drawer -->
                     <div class="filter-sidebar-overlay" id="filterOverlay" onclick="toggleFilterSidebar()"></div>
                     <div class="filter-sidebar" id="filterSidebar">
@@ -2617,6 +2666,12 @@ if ($team_res && $team_res->num_rows > 0) {
         // Click 1 dòng -> đổi nền (chọn); click lại -> trở về bình thường
         function toggleRowSelect(tr) {
             tr.classList.toggle('row-selected');
+        }
+
+        function setCompanyFilter(v) {
+            const u = new URL(window.location);
+            if (v) u.searchParams.set('company', v); else u.searchParams.delete('company');
+            window.location = u.toString();
         }
 
         function toggleFilterSidebar() {
