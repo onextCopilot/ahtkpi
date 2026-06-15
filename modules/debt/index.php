@@ -337,7 +337,8 @@ $selected_team = $_GET['team'] ?? 'dashboard'; // Default to dashboard as reques
 
 // Define teams_to_show globally for JS and PHP tabs
 $teams_to_show = [];
-if ($_SESSION['role'] === 'admin') {
+if ($can_view_all_debts) {
+    // Admin HOẶC user có quyền xem tất cả -> hiện mọi team (sửa bug chart trống cho user view-all)
     $teams_to_show = array_map(function ($t) {
         return ['id' => $t['id'], 'name' => $t['name']];
     }, $all_teams);
