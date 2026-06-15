@@ -450,6 +450,9 @@ if ($res) {
         $row['amount'] = $vnd_value;
         $row['currency'] = 'VND';
 
+        // Capture Odoo invoice state (posted / draft / cancel) for display
+        $row['odoo_state'] = ($odoo_inv && isset($odoo_inv['state'])) ? (string)$odoo_inv['state'] : '';
+
         $mKey = !empty($row['invoice_date']) ? date('m/Y', strtotime($row['invoice_date'])) : 'No Date';
         // Aging calculation (unpaid only)
         if (!$is_paid_status) {
@@ -2674,6 +2677,7 @@ if ($res_am && $res_am->num_rows > 0) {
                                     <th>P&L</th>
                                     <th>Hóa đơn</th>
                                     <th>HĐ VAT</th>
+                                    <th>Trạng thái HĐ</th>
                                     <th>Trạng thái TT</th>
                                     <th>Tháng TT</th>
                                     <th>Cập nhật tuần</th>
@@ -2687,7 +2691,7 @@ if ($res_am && $res_am->num_rows > 0) {
                                 <?php $globalIdx = 1; ?>
                                 <?php foreach ($groupedDebts as $monthName => $ams): ?>
                                     <tr class="group-header">
-                                        <td colspan="23">
+                                        <td colspan="24">
                                             Tháng <?php echo $monthName; ?>
                                             <span class="group-total">(Total:
                                                 <?php echo formatVND($monthTotals[$monthName]); ?>)</span>
@@ -2695,7 +2699,7 @@ if ($res_am && $res_am->num_rows > 0) {
                                     </tr>
                                     <?php foreach ($ams as $amName => $monthItems): ?>
                                         <tr class="group-header-am">
-                                            <td colspan="23">
+                                            <td colspan="24">
                                                 AM: <?php echo htmlspecialchars($amName); ?>
                                                 <span class="group-total"
                                                     style="font-size: 0.8rem; font-weight: normal; opacity: 0.8;">(Subtotal:
@@ -2781,6 +2785,20 @@ if ($res_am && $res_am->num_rows > 0) {
                                                 </td>
                                                 <td><?php echo htmlspecialchars($d['invoice_status'] ?? ''); ?></td>
                                                 <td><?php echo htmlspecialchars($d['vat_invoice'] ?? ''); ?></td>
+                                                <td style="text-align: center;">
+                                                    <?php
+                                                    $oState = $d['odoo_state'] ?? '';
+                                                    if ($oState === 'posted') {
+                                                        echo '<span class="badge" style="background:#dcfce7;color:#166534;border:1px solid #bbf7d0;">Posted</span>';
+                                                    } elseif ($oState === 'draft') {
+                                                        echo '<span class="badge" style="background:#fef9c3;color:#854d0e;border:1px solid #fde68a;">Draft</span>';
+                                                    } elseif ($oState === 'cancel') {
+                                                        echo '<span class="badge" style="background:#fee2e2;color:#991b1b;border:1px solid #fecaca;">Cancelled</span>';
+                                                    } else {
+                                                        echo '<span class="badge" style="background:#f1f5f9;color:#94a3b8;border:1px solid #e2e8f0;">-</span>';
+                                                    }
+                                                    ?>
+                                                </td>
                                                 <td>
                                                     <span
                                                         class="badge <?php echo (stripos($d['payment_status'] ?? '', 'Not') !== false ? 'pay-not-paid' : 'pay-paid'); ?>">
