@@ -1,6 +1,7 @@
 <?php
 require_once __DIR__ . '/../../config/config.php';
 require_once __DIR__ . '/../../libs/OdooAPI.php';
+require_once __DIR__ . '/../../includes/app_settings.php';
 
 // Phải đăng nhập
 if (!isset($_SESSION['user_id'])) {
@@ -30,6 +31,87 @@ $can_access = in_array(strtolower($email), $allowed_emails, true) || in_array($f
 if (!$can_access) {
     header("Location: /");
     exit();
+}
+
+// Bảng lưu cảnh báo "invoice chưa add vào Debts" gửi cho AM
+$conn->query("CREATE TABLE IF NOT EXISTS debt_add_warnings (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    odoo_invoice_id VARCHAR(50),
+    invoice_name VARCHAR(100),
+    company VARCHAR(50),
+    am_name VARCHAR(150),
+    am_user_id INT DEFAULT NULL,
+    amount DECIMAL(18,2) DEFAULT 0,
+    currency VARCHAR(10),
+    penalty_points INT DEFAULT 0,
+    message TEXT,
+    sender_id INT DEFAULT NULL,
+    is_acknowledged TINYINT DEFAULT 0,
+    acknowledged_at TIMESTAMP NULL DEFAULT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+
+$send_result = null;
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'send_warnings') {
+    $items = json_decode($_POST['warnings_json'] ?? '[]', true);
+    if (!is_array($items)) $items = [];
+    $penalty = (int) app_setting_get($conn, 'debt_warning_penalty_points', '5');
+    $sent = 0; $skipped_noam = 0; $skipped_dup = 0;
+
+    foreach ($items as $it) {
+        $oid = trim((string) ($it['id'] ?? ''));
+        $invName = trim((string) ($it['name'] ?? ''));
+        // Cần ít nhất odoo_invoice_id hoặc số hóa đơn (draft chưa có số vẫn gửi được vì có id)
+        if ($oid === '' && $invName === '') continue;
+        $amName = trim((string) ($it['am'] ?? ''));
+        $amEmail = strtolower(trim((string) ($it['am_email'] ?? '')));
+        $company = trim((string) ($it['company'] ?? ''));
+        $amount = (float) ($it['amount'] ?? 0);
+        $currency = trim((string) ($it['currency'] ?? ''));
+        $dispName = $invName !== '' ? $invName : ('nháp #' . $oid);
+
+        // Map AM theo EMAIL (login Odoo) -> users.email — chuẩn nhất, tránh sai do tên có dấu/nickname
+        $amUserId = null;
+        if ($amEmail !== '') {
+            if ($us = $conn->prepare("SELECT id FROM users WHERE LOWER(email) = ? LIMIT 1")) {
+                $us->bind_param("s", $amEmail);
+                $us->execute();
+                if ($u = $us->get_result()->fetch_assoc()) $amUserId = (int) $u['id'];
+                $us->close();
+            }
+        }
+        if (!$amUserId) { $skipped_noam++; continue; }
+
+        // Dedupe (chưa acknowledge): ưu tiên theo odoo_invoice_id, không có thì theo số hóa đơn
+        $dup = false;
+        if ($oid !== '') {
+            if ($ds = $conn->prepare("SELECT id FROM debt_add_warnings WHERE odoo_invoice_id = ? AND am_user_id = ? AND is_acknowledged = 0 LIMIT 1")) {
+                $ds->bind_param("si", $oid, $amUserId); $ds->execute();
+                if ($ds->get_result()->fetch_assoc()) $dup = true;
+                $ds->close();
+            }
+        } else {
+            if ($ds = $conn->prepare("SELECT id FROM debt_add_warnings WHERE invoice_name = ? AND am_user_id = ? AND is_acknowledged = 0 LIMIT 1")) {
+                $ds->bind_param("si", $invName, $amUserId); $ds->execute();
+                if ($ds->get_result()->fetch_assoc()) $dup = true;
+                $ds->close();
+            }
+        }
+        if ($dup) { $skipped_dup++; continue; }
+
+        $msg = "Hóa đơn $dispName" . ($company ? " ($company)" : '') . " chưa được add vào Debts. Vui lòng add ngay, nếu không sẽ bị trừ $penalty điểm KPI.";
+        if ($ins = $conn->prepare("INSERT INTO debt_add_warnings
+            (odoo_invoice_id, invoice_name, company, am_name, am_user_id, amount, currency, penalty_points, message, sender_id)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")) {
+            $sid = (int) $_SESSION['user_id'];
+            $ins->bind_param("ssssidsisi", $oid, $invName, $company, $amName, $amUserId, $amount, $currency, $penalty, $msg, $sid);
+            if ($ins->execute()) $sent++;
+            $ins->close();
+        }
+    }
+    $send_result = "Đã gửi $sent cảnh báo (−$penalty điểm/HĐ)."
+        . ($skipped_dup ? " Bỏ qua $skipped_dup (đã gửi trước đó)." : '')
+        . ($skipped_noam ? " $skipped_noam HĐ chưa map được AM theo email (không gửi)." : '');
 }
 
 function shortCompanyName($odooName)
@@ -77,14 +159,29 @@ try {
         $odoo = new OdooAPI();
         $currencies = $odoo->getCurrencies();
 
-        $fields = ['id', 'name', 'invoice_user_id', 'partner_id', 'amount_total', 'currency_id', 'invoice_date', 'state', 'payment_state', 'company_id'];
+        // Lọc theo ngày hạch toán `date` (cả posted lẫn draft đều có), loại hóa đơn đã hủy.
+        $fields = ['id', 'name', 'invoice_user_id', 'partner_id', 'amount_total', 'currency_id', 'invoice_date', 'date', 'create_date', 'state', 'payment_state', 'company_id'];
         $domain = [
             ['move_type', '=', 'out_invoice'],
-            ['invoice_date', '>=', $from],
-            ['invoice_date', '<=', $to],
+            ['state', '!=', 'cancel'],
+            ['date', '>=', $from],
+            ['date', '<=', $to],
         ];
         $invs = $odoo->searchRead('account.move', $domain, $fields, 100000, 0);
         if (!is_array($invs)) $invs = [];
+
+        // Map salesperson (invoice_user_id) -> EMAIL (login Odoo) để map AM theo email.
+        $spIds = [];
+        foreach ($invs as $i) {
+            if (is_array($i['invoice_user_id'] ?? null)) $spIds[(int) $i['invoice_user_id'][0]] = true;
+        }
+        $spEmail = [];
+        if ($spIds) {
+            $users = $odoo->searchRead('res.users', [['id', 'in', array_keys($spIds)]], ['id', 'login'], 1000, 0);
+            if (is_array($users)) {
+                foreach ($users as $u) $spEmail[(int) $u['id']] = strtolower(trim((string) ($u['login'] ?? '')));
+            }
+        }
 
         // Khóa đối chiếu: ưu tiên odoo_invoice_id (DUY NHẤT toàn cục, không trùng giữa 3 công ty).
         // Số hóa đơn (tên) chỉ dùng fallback cho debts chưa có odoo_invoice_id (tránh trùng cross-company).
@@ -102,29 +199,35 @@ try {
 
         foreach ($invs as $i) {
             $name = trim((string) ($i['name'] ?? ''));
-            if ($name === '' || $name === '/') continue;
+            // KHÔNG bỏ qua draft chưa có số — vẫn đối chiếu được vì có odoo_invoice_id (duy nhất)
 
             $partnerName = is_array($i['partner_id']) ? $i['partner_id'][1] : '';
             if (isInternalCustomer($partnerName)) { $internal_skipped++; continue; }
 
             $total_inv++;
             $iid = (string) ($i['id'] ?? '');
-            if (isset($inDebtsById[$iid]) || isset($inDebtsByName[$name])) { $in_debts_count++; continue; }
+            if (isset($inDebtsById[$iid]) || ($name !== '' && isset($inDebtsByName[$name]))) { $in_debts_count++; continue; }
 
             $cur = is_array($i['currency_id']) ? $i['currency_id'][1] : 'VND';
             $rate = isset($currencies[$cur]['rate']) ? (float) $currencies[$cur]['rate'] : 0;
             $amtVnd = ($rate > 0) ? ((float) $i['amount_total'] / $rate) : (float) $i['amount_total'];
 
+            // Ngày tham chiếu: ưu tiên invoice_date, draft chưa có thì dùng ngày hạch toán `date`
+            $refDate = !empty($i['invoice_date']) ? $i['invoice_date'] : ($i['date'] ?? '');
+
             $missing[] = [
                 'id'       => $i['id'],
                 'name'     => $name,
                 'am'       => is_array($i['invoice_user_id']) ? $i['invoice_user_id'][1] : '',
+                'am_email' => is_array($i['invoice_user_id']) ? ($spEmail[(int) $i['invoice_user_id'][0]] ?? '') : '',
                 'customer' => is_array($i['partner_id']) ? $i['partner_id'][1] : '',
                 'company'  => is_array($i['company_id']) ? shortCompanyName($i['company_id'][1]) : '',
                 'amount'   => (float) $i['amount_total'],
                 'currency' => $cur,
                 'amount_vnd' => $amtVnd,
-                'date'     => $i['invoice_date'] ?? '',
+                'date'     => $refDate,
+                'created'  => $i['create_date'] ?? '',
+                'days'     => !empty($refDate) ? (int) floor((time() - strtotime($refDate)) / 86400) : null,
                 'state'    => $i['state'] ?? '',
                 'pay'      => $i['payment_state'] ?? '',
             ];
@@ -224,6 +327,9 @@ $missing_vnd_total = array_sum(array_column($missing, 'amount_vnd'));
         .dc-tab { padding:8px 14px; border-radius:8px; font-size:14px; font-weight:600; color:#64748b; text-decoration:none; border:1px solid transparent; }
         .dc-tab:hover { background:#f1f5f9; color:#334155; }
         .dc-tab.active { background:#eef2ff; color:#4338ca; border-color:#c7d2fe; }
+        .dc-sendbtn { background:#dc2626; color:#fff; border:none; padding:9px 16px; border-radius:8px; font-weight:700; font-size:13px; cursor:pointer; }
+        .dc-sendbtn:hover { background:#b91c1c; }
+        .dc-sendbtn:disabled { background:#fca5a5; cursor:not-allowed; }
     </style>
 </head>
 
@@ -331,6 +437,9 @@ $missing_vnd_total = array_sum(array_column($missing, 'amount_vnd'));
                         <?php endif; ?>
                     </table>
                 <?php else: ?>
+                    <?php if ($send_result): ?>
+                        <div style="background:#dcfce7;border:1px solid #86efac;color:#166534;padding:10px 14px;border-radius:8px;margin-bottom:14px;font-weight:600;">✓ <?php echo htmlspecialchars($send_result); ?></div>
+                    <?php endif; ?>
                     <div class="dc-cards">
                         <div class="dc-card total">
                             <div class="lbl">Tổng invoice <?php echo $year; ?> (Odoo)</div>
@@ -349,15 +458,26 @@ $missing_vnd_total = array_sum(array_column($missing, 'amount_vnd'));
                         </div>
                     </div>
 
+                    <form method="POST" id="warnForm">
+                        <input type="hidden" name="action" value="send_warnings">
+                        <input type="hidden" name="warnings_json" id="warnings_json">
+                        <div style="display:flex; align-items:center; gap:12px; margin-bottom:10px;">
+                            <button type="button" class="dc-sendbtn" onclick="sendWarnings()">⚠ Gửi cảnh báo (<span id="selCount">0</span>)</button>
+                            <span style="font-size:12px; color:#94a3b8;">Tích chọn các HĐ cần cảnh báo AM — sẽ trừ điểm KPI theo cấu hình.</span>
+                        </div>
+
                     <table class="dc-table">
                         <thead>
                             <tr>
+                                <th style="width:34px; text-align:center;"><input type="checkbox" id="selAll" onclick="toggleAll(this)"></th>
                                 <th>#</th>
                                 <th>CTY</th>
                                 <th>Số hóa đơn</th>
                                 <th>AM</th>
                                 <th>Khách hàng</th>
                                 <th>Ngày HĐ</th>
+                                <th>Ngày tạo<br>(Odoo)</th>
+                                <th style="text-align:center;">Số ngày<br>chưa add</th>
                                 <th style="text-align:right;">Số tiền</th>
                                 <th style="text-align:right;">≈ VND</th>
                                 <th>HĐ</th>
@@ -367,19 +487,33 @@ $missing_vnd_total = array_sum(array_column($missing, 'amount_vnd'));
                         </thead>
                         <tbody>
                             <?php if (empty($missing)): ?>
-                                <tr><td colspan="11" class="dc-empty">🎉 Tất cả invoice năm <?php echo $year; ?> đã có trong Debts.</td></tr>
+                                <tr><td colspan="14" class="dc-empty">🎉 Tất cả invoice năm <?php echo $year; ?> đã có trong Debts.</td></tr>
                             <?php else: ?>
                                 <?php $idx = 1; foreach ($missing as $m):
                                     $sb = $m['state'] === 'posted' ? 'b-posted' : ($m['state'] === 'draft' ? 'b-draft' : 'b-cancel');
                                     $pb = ($m['pay'] === 'paid' || $m['pay'] === 'in_payment') ? 'b-paid' : ($m['pay'] === 'partial' ? 'b-partial' : 'b-notpaid');
                                 ?>
                                     <tr>
+                                        <td style="text-align:center;">
+                                            <input type="checkbox" class="warn-cb" onchange="updateSel()"
+                                                data-id="<?php echo htmlspecialchars($m['id']); ?>"
+                                                data-name="<?php echo htmlspecialchars($m['name']); ?>"
+                                                data-company="<?php echo htmlspecialchars($m['company']); ?>"
+                                                data-am="<?php echo htmlspecialchars($m['am']); ?>"
+                                                data-am-email="<?php echo htmlspecialchars($m['am_email'] ?? ''); ?>"
+                                                data-amount="<?php echo htmlspecialchars($m['amount']); ?>"
+                                                data-currency="<?php echo htmlspecialchars($m['currency']); ?>">
+                                        </td>
                                         <td><?php echo $idx++; ?></td>
                                         <td><span class="co-tag"><?php echo htmlspecialchars($m['company']); ?></span></td>
-                                        <td style="font-weight:600;"><?php echo htmlspecialchars($m['name']); ?></td>
+                                        <td style="font-weight:600;"><?php echo $m['name'] !== '' ? htmlspecialchars($m['name']) : '<span style="color:#b45309;font-style:italic;">(Draft chưa có số)</span>'; ?></td>
                                         <td><?php echo htmlspecialchars($m['am']); ?></td>
                                         <td><?php echo htmlspecialchars($m['customer']); ?></td>
                                         <td><?php echo fmtDate($m['date']); ?></td>
+                                        <td style="white-space:nowrap; color:#64748b;"><?php echo $m['created'] ? date('d/m/Y H:i', strtotime($m['created'])) : '—'; ?></td>
+                                        <td style="text-align:center; font-weight:700; <?php echo ($m['days'] !== null && $m['days'] > 14) ? 'color:#dc2626;' : (($m['days'] !== null && $m['days'] > 7) ? 'color:#b45309;' : 'color:#475569;'); ?>">
+                                            <?php echo $m['days'] !== null ? $m['days'] . ' ngày' : '—'; ?>
+                                        </td>
                                         <td class="dc-amt"><?php echo fmtMoney($m['amount']) . ' ' . htmlspecialchars($m['currency']); ?></td>
                                         <td class="dc-amt" style="color:#64748b;"><?php echo fmtMoney($m['amount_vnd']); ?></td>
                                         <td><span class="dc-badge <?php echo $sb; ?>"><?php echo htmlspecialchars($m['state']); ?></span></td>
@@ -392,17 +526,40 @@ $missing_vnd_total = array_sum(array_column($missing, 'amount_vnd'));
                         <?php if (!empty($missing)): ?>
                         <tfoot>
                             <tr style="background:#f8fafc; font-weight:700;">
-                                <td colspan="7" style="text-align:right;">TỔNG (<?php echo fmtMoney(count($missing)); ?> HĐ)</td>
+                                <td colspan="10" style="text-align:right;">TỔNG (<?php echo fmtMoney(count($missing)); ?> HĐ)</td>
                                 <td class="dc-amt"><?php echo fmtMoney($missing_vnd_total); ?> ₫</td>
                                 <td colspan="3"></td>
                             </tr>
                         </tfoot>
                         <?php endif; ?>
                     </table>
+                    </form>
                 <?php endif; ?>
             </div>
         </main>
     </div>
+    <script>
+        function toggleAll(cb) {
+            document.querySelectorAll('.warn-cb').forEach(c => c.checked = cb.checked);
+            updateSel();
+        }
+        function updateSel() {
+            const n = document.querySelectorAll('.warn-cb:checked').length;
+            const el = document.getElementById('selCount');
+            if (el) el.textContent = n;
+        }
+        function sendWarnings() {
+            const checked = Array.from(document.querySelectorAll('.warn-cb:checked'));
+            if (checked.length === 0) { alert('Hãy tích chọn ít nhất 1 hóa đơn.'); return; }
+            if (!confirm('Gửi cảnh báo cho ' + checked.length + ' hóa đơn? AM sẽ bị trừ điểm KPI theo cấu hình.')) return;
+            const items = checked.map(c => ({
+                id: c.dataset.id, name: c.dataset.name, company: c.dataset.company,
+                am: c.dataset.am, am_email: c.dataset.amEmail, amount: c.dataset.amount, currency: c.dataset.currency
+            }));
+            document.getElementById('warnings_json').value = JSON.stringify(items);
+            document.getElementById('warnForm').submit();
+        }
+    </script>
 </body>
 
 </html>

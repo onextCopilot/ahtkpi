@@ -209,7 +209,22 @@ if (isset($_SESSION['is_am_bd']) && $_SESSION['is_am_bd'] == 1) {
     } catch (\Throwable $e) { /* ignore */ }
 }
 
-$total_notif_count = $notif_count + $pasx_notif_count + ($kpi_alert ? 1 : 0);
+// Cảnh báo "invoice chưa add vào Debts" -> hiện ở chuông
+$dw_bell = [];
+if (($_SESSION['user_id'] ?? 0) && isset($conn)) {
+    try {
+        if ($dwb = $conn->prepare("SELECT id, invoice_name, company, penalty_points FROM debt_add_warnings WHERE am_user_id = ? AND is_acknowledged = 0 ORDER BY created_at DESC LIMIT 50")) {
+            $uidb = (int) $_SESSION['user_id'];
+            $dwb->bind_param("i", $uidb);
+            $dwb->execute();
+            $rb = $dwb->get_result();
+            while ($x = $rb->fetch_assoc()) $dw_bell[] = $x;
+            $dwb->close();
+        }
+    } catch (\Throwable $e) { /* bảng chưa tồn tại */ }
+}
+
+$total_notif_count = $notif_count + $pasx_notif_count + ($kpi_alert ? 1 : 0) + count($dw_bell);
 ?>
 <header class="top-bar">
     <div class="page-title">
@@ -261,6 +276,19 @@ $total_notif_count = $notif_count + $pasx_notif_count + ($kpi_alert ? 1 : 0);
                     <?php endif; ?>
                 </div>
                 <div style="max-height: 350px; overflow-y: auto;">
+                    <?php foreach ($dw_bell as $w): ?>
+                        <div class="notif-item dw-bell-item" id="dw-bell-<?php echo (int) $w['id']; ?>"
+                            style="padding:12px 16px;border-bottom:1px solid #f1f5f9;background:#fef2f2;border-left:3px solid #fecaca;">
+                            <div style="font-size:.82rem;font-weight:700;color:#dc2626;margin-bottom:3px;">⚠ Invoice chưa add vào Debts (−<?php echo (int) $w['penalty_points']; ?>đ KPI)</div>
+                            <div style="font-size:.83rem;color:#1e293b;font-weight:600;">
+                                <?php echo htmlspecialchars($w['invoice_name'] !== '' ? $w['invoice_name'] : '(Draft chưa có số)'); ?><?php echo !empty($w['company']) ? ' · ' . htmlspecialchars($w['company']) : ''; ?>
+                            </div>
+                            <div style="margin-top:6px;display:flex;gap:12px;">
+                                <a href="/invoices" style="font-size:.78rem;color:#dc2626;font-weight:700;text-decoration:none;">Add to Debts →</a>
+                                <a href="#" onclick="dwBellAck(<?php echo (int) $w['id']; ?>,'dw-bell-<?php echo (int) $w['id']; ?>');return false;" style="font-size:.78rem;color:#64748b;text-decoration:none;">Đã nhận</a>
+                            </div>
+                        </div>
+                    <?php endforeach; ?>
                     <?php foreach ($pasx_notifs as $pn):
                         $ev = $pn['event'] ?? '';
                         $isCeoReq      = ($ev === 'ceo_approve_request');
@@ -537,6 +565,18 @@ $total_notif_count = $notif_count + $pasx_notif_count + ($kpi_alert ? 1 : 0);
             }
         }
 
+        function dwBellAck(id, elemId) {
+            fetch('/api/debt_warning_ack.php', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                body: 'id=' + encodeURIComponent(id)
+            }).then(r => r.json()).then(function () {
+                const el = document.getElementById(elemId);
+                if (el) { el.style.opacity = '0'; el.style.transition = 'opacity .3s'; setTimeout(() => el.remove(), 300); }
+                if (typeof decreaseBadge === 'function') decreaseBadge();
+            }).catch(function () {});
+        }
+
         function markPasxNotifRead(id, elemId) {
             fetch('/api/notifications/mark_read', {
                 method: 'POST',
@@ -567,3 +607,67 @@ $total_notif_count = $notif_count + $pasx_notif_count + ($kpi_alert ? 1 : 0);
         }
     </script>
 </header>
+
+<?php
+// ── Banner cảnh báo "invoice chưa add vào Debts" (slide-down, lặp lại cho đến khi xác nhận) ──
+$__dw_uid = (int) ($_SESSION['user_id'] ?? 0);
+$__dw_items = [];
+if ($__dw_uid && isset($conn)) {
+    try {
+        if ($dws = $conn->prepare("SELECT id, invoice_name, company, penalty_points FROM debt_add_warnings WHERE am_user_id = ? AND is_acknowledged = 0 ORDER BY created_at DESC")) {
+            $dws->bind_param("i", $__dw_uid);
+            $dws->execute();
+            $rr = $dws->get_result();
+            while ($x = $rr->fetch_assoc()) $__dw_items[] = $x;
+            $dws->close();
+        }
+    } catch (\Throwable $e) { /* bảng chưa tồn tại */ }
+}
+if (!empty($__dw_items)):
+    $__dw_pts = 0;
+    foreach ($__dw_items as $x) $__dw_pts += (int) $x['penalty_points'];
+?>
+<div id="dwBanner" style="position:fixed; top:0; left:0; right:0; z-index:4000; transform:translateY(-110%); transition:transform .45s cubic-bezier(.4,0,.2,1); background:linear-gradient(135deg,#dc2626,#b91c1c); color:#fff; box-shadow:0 6px 24px rgba(0,0,0,.25);">
+    <div style="max-width:1100px; margin:0 auto; padding:14px 20px;">
+        <div style="display:flex; align-items:flex-start; gap:14px;">
+            <div style="font-size:24px; line-height:1;">⚠️</div>
+            <div style="flex:1; min-width:0;">
+                <div style="font-weight:800; font-size:15px;">
+                    Bạn có <?php echo count($__dw_items); ?> hóa đơn CHƯA add vào Debts — nguy cơ bị trừ <?php echo $__dw_pts; ?> điểm KPI
+                </div>
+                <div style="font-size:13px; opacity:.95; margin-top:4px; max-height:84px; overflow:auto;">
+                    <?php foreach ($__dw_items as $x): ?>
+                        • <b><?php echo htmlspecialchars($x['invoice_name'] !== '' ? $x['invoice_name'] : '(Draft chưa có số)'); ?></b><?php echo !empty($x['company']) ? ' ('.htmlspecialchars($x['company']).')' : ''; ?> — <?php echo (int)$x['penalty_points']; ?>đ<br>
+                    <?php endforeach; ?>
+                </div>
+                <div style="margin-top:10px; display:flex; gap:10px; flex-wrap:wrap;">
+                    <a href="/invoices" style="background:#fff; color:#b91c1c; text-decoration:none; font-weight:700; font-size:13px; padding:8px 14px; border-radius:8px;">→ Vào Invoicing để Add to Debts</a>
+                    <button type="button" onclick="dwAck()" style="background:rgba(255,255,255,.18); color:#fff; border:1px solid rgba(255,255,255,.5); font-weight:700; font-size:13px; padding:8px 14px; border-radius:8px; cursor:pointer;">✓ Đã nhận thông tin</button>
+                </div>
+            </div>
+            <button type="button" onclick="dwClose()" title="Đóng (sẽ hiện lại lần sau)" style="background:none; border:none; color:#fff; font-size:22px; line-height:1; cursor:pointer; opacity:.85;">&times;</button>
+        </div>
+    </div>
+</div>
+<script>
+    (function () {
+        var b = document.getElementById('dwBanner');
+        if (!b) return;
+        // slide xuống
+        setTimeout(function () { b.style.transform = 'translateY(0)'; }, 400);
+        // auto-close 15s (chỉ ẩn, lần sau vẫn hiện)
+        window.__dwTimer = setTimeout(dwClose, 15400);
+    })();
+    function dwClose() {
+        var b = document.getElementById('dwBanner');
+        if (b) b.style.transform = 'translateY(-110%)';
+        if (window.__dwTimer) clearTimeout(window.__dwTimer);
+    }
+    function dwAck() {
+        fetch('/api/debt_warning_ack.php', { method: 'POST', headers: { 'X-Requested-With': 'XMLHttpRequest' } })
+            .then(r => r.json())
+            .then(function () { dwClose(); })
+            .catch(function () { dwClose(); });
+    }
+</script>
+<?php endif; ?>

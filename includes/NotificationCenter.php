@@ -71,6 +71,29 @@ class NotificationCenter
             }
         } catch (\Throwable $e) { /* table may not exist yet */ }
 
+        // ── Cảnh báo: invoice chưa add vào Debts (gửi từ Debts Check) ──────────
+        try {
+            $aw = $conn->prepare("SELECT id, invoice_name, company, penalty_points, message, created_at
+                                  FROM debt_add_warnings WHERE am_user_id = ? AND is_acknowledged = 0
+                                  ORDER BY created_at DESC LIMIT 50");
+            if ($aw) {
+                $aw->bind_param("i", $uid);
+                $aw->execute();
+                $r = $aw->get_result();
+                while ($row = $r->fetch_assoc()) {
+                    $items[] = [
+                        'key' => 'debtadd:' . $row['id'], 'kind' => 'debt_add', 'severity' => 'danger',
+                        'title' => 'Invoice chưa add vào Debts (−' . (int) $row['penalty_points'] . ' điểm KPI)',
+                        'body' => $row['invoice_name'] . (!empty($row['company']) ? ' · ' . $row['company'] : ''),
+                        'link' => '/invoices', 'link_label' => 'Add to Debts',
+                        'created_at' => $row['created_at'], 'dismissible' => true,
+                        'mark' => ['type' => 'debt_add', 'id' => (int) $row['id']],
+                    ];
+                }
+                $aw->close();
+            }
+        } catch (\Throwable $e) { /* table may not exist yet */ }
+
         // ── Overdue debts (AM by name) ────────────────────────────────────────
         if ($is_am_bd && $full_name !== '') {
             try {
@@ -190,6 +213,10 @@ class NotificationCenter
             if ($type === 'debt') {
                 $st = $conn->prepare("INSERT IGNORE INTO debt_notifications_read (user_id, debt_id, warning_level) VALUES (?, ?, ?)");
                 $st->bind_param("iii", $uid, $payload['debt_id'], $payload['level']); return $st->execute();
+            }
+            if ($type === 'debt_add') {
+                $st = $conn->prepare("UPDATE debt_add_warnings SET is_acknowledged = 1, acknowledged_at = NOW() WHERE id = ? AND am_user_id = ?");
+                $st->bind_param("ii", $payload['id'], $uid); return $st->execute();
             }
         } catch (\Throwable $e) {
             error_log('NotificationCenter::markRead failed: ' . $e->getMessage());
