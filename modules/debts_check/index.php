@@ -141,7 +141,7 @@ try {
                 WHERE YEAR(d.invoice_date) = $yr
                   AND LOWER(TRIM(COALESCE(d.payment_status, ''))) <> 'paid'   -- bỏ qua HĐ đã thanh toán
                   AND (
-                        d.expected_payment_date IS NULL OR d.expected_payment_date = '' OR d.expected_payment_date = '0000-00-00'
+                        d.expected_payment_date IS NULL
                      OR d.invoice_status_class IS NULL OR TRIM(d.invoice_status_class) = ''
                   )
                 ORDER BY d.invoice_date DESC, d.id DESC";
