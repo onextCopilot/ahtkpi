@@ -138,19 +138,25 @@ if ($res) {
 
         $total_debts++; // Count every record in the filtered result
 
-        $is_paid = (strcasecmp(trim($p_status), 'Paid') === 0);
-        if ($is_paid) {
-            $total_paid_vnd += $vnd_value;
-            if (!isset($teams_data[$t_name]['paid']))
-                $teams_data[$t_name]['paid'] = 0;
-            $teams_data[$t_name]['paid'] += $vnd_value;
+        // Tách phần ĐÃ thu / CÒN nợ (giống /debt): collected = amount_total - amount_residual.
+        // Hóa đơn thu một phần -> chỉ phần đã thu vào Paid, phần còn lại vào Pending.
+        $inv_for_paid = (!empty($oid) && isset($odoo_map[$oid])) ? $odoo_map[$oid] : null;
+        $ot_paid = $inv_for_paid ? abs((float) ($inv_for_paid['amount_total'] ?? 0)) : 0;
+        if ($ot_paid > 0) {
+            $resid = isset($inv_for_paid['amount_residual']) ? abs((float) $inv_for_paid['amount_residual']) : 0;
+            $frac = max(0, min(1, ($ot_paid - $resid) / $ot_paid));
+            $paid_vnd = $vnd_value * $frac;
         } else {
-            // Any status other than 'Paid' is considered Pending
-            $total_unpaid_vnd += $vnd_value;
-            if (!isset($teams_data[$t_name]['unpaid']))
-                $teams_data[$t_name]['unpaid'] = 0;
-            $teams_data[$t_name]['unpaid'] += $vnd_value;
+            $paid_vnd = (strcasecmp(trim($p_status), 'Paid') === 0) ? $vnd_value : 0;
         }
+        $owed_vnd = max(0, $vnd_value - $paid_vnd);
+
+        $total_paid_vnd += $paid_vnd;
+        $total_unpaid_vnd += $owed_vnd;
+        if (!isset($teams_data[$t_name]['paid'])) $teams_data[$t_name]['paid'] = 0;
+        if (!isset($teams_data[$t_name]['unpaid'])) $teams_data[$t_name]['unpaid'] = 0;
+        $teams_data[$t_name]['paid'] += $paid_vnd;
+        $teams_data[$t_name]['unpaid'] += $owed_vnd;
     }
 }
 
