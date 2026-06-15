@@ -53,6 +53,7 @@ $routes = [
     '/settings/arrowhitech' => 'modules/settings/arrowhitech/index.php',
     '/debt' => 'modules/debt/index.php',
     '/my-debt' => 'modules/my_debt/index.php',
+    '/debts-check' => 'modules/debts_check/index.php',
     '/debt-warning' => 'modules/debt_warning/index.php',
     '/customers' => 'modules/customers/index.php',
     '/invoices' => 'modules/invoices/index.php',

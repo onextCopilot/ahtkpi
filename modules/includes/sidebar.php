@@ -21,6 +21,10 @@ $_sidebar_mc_only = !empty($_SESSION['is_marketer'])
     && empty($_SESSION['can_view_invoice'])
     && (($_SESSION['role'] ?? '') !== 'admin');
 
+// Debts Check: chỉ Hyun Cao & nhantt được thấy/truy cập
+$_debts_check_ok = in_array(($_SESSION['full_name'] ?? ''), ['Hyun Cao', 'Nguyen Thi Thanh Nhan'], true)
+    || in_array(strtolower($_SESSION['email'] ?? ''), ['hyun@arrowhitech.com', 'nhanntt@arrowhitech.com'], true);
+
 // Check if current user is a CEO approver
 $_sidebar_is_ceo_approver = false;
 if (isset($_SESSION['user_id']) && isset($conn)) {
@@ -97,7 +101,7 @@ function isMenuItemActive($path, $current_uri)
         </a>
 
         <!-- 3. Debts Management Dropdown -->
-        <?php if (!empty($_SESSION['can_view_invoice']) || !empty($_SESSION['is_am_bd']) || !empty($_SESSION['is_marketer']) || $_SESSION['role'] === 'admin'): ?>
+        <?php if (!empty($_SESSION['can_view_invoice']) || !empty($_SESSION['is_am_bd']) || !empty($_SESSION['is_marketer']) || $_SESSION['role'] === 'admin' || $_debts_check_ok): ?>
             <div class="nav-item nav-item-parent <?php
             $is_debt_open = strpos($current_uri, '/debt') !== false ||
                 strpos($current_uri, '/my-debt') !== false ||
@@ -128,6 +132,14 @@ function isMenuItemActive($path, $current_uri)
                     class="submenu-item <?php echo ($current_uri === '/my-debt' || strpos($current_uri, '/my-debt') !== false) ? 'active' : ''; ?>">
                     <span>My Debts</span>
                 </a>
+                <?php endif; ?>
+                <?php if ($_debts_check_ok): ?>
+                <a href="/debts-check"
+                    class="submenu-item <?php echo (strpos($current_uri, '/debts-check') !== false) ? 'active' : ''; ?>">
+                    <span>Debts Check</span>
+                </a>
+                <?php endif; ?>
+                <?php if (!$_sidebar_mc_only): ?>
                 <a href="/debt-warning"
                     class="submenu-item <?php echo ($current_uri === '/debt-warning' || strpos($current_uri, '/debt-warning') !== false) ? 'active' : ''; ?>">
                     <span>Debts Warning</span>
