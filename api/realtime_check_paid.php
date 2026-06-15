@@ -43,8 +43,9 @@ try {
     ];
     $fields = [
         'amount_total',         // tổng theo tiền hóa đơn
-        'amount_total_signed',  // tổng theo tiền công ty (VND), có dấu
+        'amount_total_signed',  // tổng theo tiền công ty (dùng làm fallback)
         'amount_residual',      // còn nợ theo tiền hóa đơn
+        'currency_id',
         'payment_state',
         'invoice_date',
     ];
@@ -54,6 +55,10 @@ try {
     if (!is_array($invoices)) {
         $invoices = [];
     }
+
+    // Tỉ giá theo TIỀN TỆ (rate = số đơn vị ngoại tệ trên 1 VND) để quy đổi VND đúng cho mọi công ty.
+    // (amount_total_signed nằm theo tiền của TỪNG công ty -> sai với công ty không dùng VND, vd A1 SDN BHD = MYR.)
+    $currencies = $odoo->getCurrencies();
 
     $paid_vnd = 0.0;          // tổng phần đã thu (VND)
     $total_vnd = 0.0;         // tổng giá trị hóa đơn (VND)
@@ -65,16 +70,21 @@ try {
 
         $amount_total = abs((float) ($inv['amount_total'] ?? 0));
         $residual     = abs((float) ($inv['amount_residual'] ?? 0));
-        $total_signed = abs((float) ($inv['amount_total_signed'] ?? 0)); // VND
+        $collected    = max(0.0, $amount_total - $residual); // theo tiền hóa đơn
 
-        $total_vnd += $total_signed;
+        $curName = is_array($inv['currency_id'] ?? null) ? $inv['currency_id'][1] : 'VND';
+        $rate = isset($currencies[$curName]['rate']) ? (float) $currencies[$curName]['rate'] : 0.0;
 
-        if ($amount_total > 0) {
-            // Tỉ lệ đã thu (cùng đơn vị tiền hóa đơn nên không phụ thuộc tỉ giá)
-            $paid_fraction = max(0.0, min(1.0, ($amount_total - $residual) / $amount_total));
-            $paid_row = $total_signed * $paid_fraction; // quy ra VND theo giá trị công ty
+        if ($rate > 0) {
+            // VND = số_tiền_ngoại_tệ / rate
+            $total_vnd += $amount_total / $rate;
+            $paid_row = $collected / $rate;
         } else {
-            $paid_row = 0.0;
+            // Fallback: dùng amount_total_signed (tiền công ty) nếu thiếu tỉ giá
+            $total_signed = abs((float) ($inv['amount_total_signed'] ?? 0));
+            $frac = ($amount_total > 0) ? ($collected / $amount_total) : 0.0;
+            $total_vnd += $total_signed;
+            $paid_row = $total_signed * $frac;
         }
 
         $paid_vnd += $paid_row;
