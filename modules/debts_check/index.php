@@ -140,7 +140,36 @@ $from = sprintf('%04d-01-01', $year);
 $to   = sprintf('%04d-12-31', $year);
 
 $tab = $_GET['tab'] ?? 'missing';
-if (!in_array($tab, ['missing', 'incomplete'], true)) $tab = 'missing';
+if (!in_array($tab, ['missing', 'incomplete', 'confirm'], true)) $tab = 'missing';
+
+// ── Dữ liệu cho tab "Confirm tuần" ──
+$confirm_done = [];   // AM đã confirm tuần đang xem
+$confirm_pending = []; // AM (is_am_bd) chưa confirm
+$cwk = isset($_GET['cwk']) ? (int) $_GET['cwk'] : (int) date('W');
+$cyr = isset($_GET['cyr']) ? (int) $_GET['cyr'] : (int) date('o');
+if ($cwk < 1 || $cwk > 53) $cwk = (int) date('W');
+if ($cyr < 2000 || $cyr > 2100) $cyr = (int) date('o');
+if ($tab === 'confirm') {
+    $conn->query("CREATE TABLE IF NOT EXISTS debt_weekly_confirmations (
+        id INT AUTO_INCREMENT PRIMARY KEY, user_id INT NOT NULL, am_name VARCHAR(150), am_email VARCHAR(150),
+        yr INT NOT NULL, wk INT NOT NULL, confirmed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE KEY uniq_uw (user_id, yr, wk)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+    $confirmedIds = [];
+    if ($cc = $conn->prepare("SELECT user_id, am_name, am_email, confirmed_at FROM debt_weekly_confirmations WHERE yr = ? AND wk = ? ORDER BY confirmed_at ASC")) {
+        $cc->bind_param("ii", $cyr, $cwk);
+        $cc->execute();
+        $rr = $cc->get_result();
+        while ($x = $rr->fetch_assoc()) { $confirm_done[] = $x; $confirmedIds[(int) $x['user_id']] = true; }
+        $cc->close();
+    }
+    // AM (is_am_bd) chưa confirm
+    $ur = $conn->query("SELECT id, full_name, email FROM users WHERE is_am_bd = 1 ORDER BY full_name");
+    if ($ur) {
+        while ($u = $ur->fetch_assoc()) {
+            if (!isset($confirmedIds[(int) $u['id']])) $confirm_pending[] = $u;
+        }
+    }
+}
 
 $error = '';
 $missing = [];
@@ -227,7 +256,11 @@ try {
                 'amount_vnd' => $amtVnd,
                 'date'     => $refDate,
                 'created'  => $i['create_date'] ?? '',
-                'days'     => !empty($refDate) ? (int) floor((time() - strtotime($refDate)) / 86400) : null,
+                // Số ngày chưa add = tính từ ngày TẠO trên Odoo (create_date, luôn là quá khứ);
+                // KHÔNG dùng invoice_date vì draft có thể đặt ngày tương lai -> ra số âm. Kẹp >= 0.
+                'days'     => !empty($i['create_date'])
+                    ? max(0, (int) floor((time() - strtotime($i['create_date'])) / 86400))
+                    : (!empty($refDate) ? max(0, (int) floor((time() - strtotime($refDate)) / 86400)) : null),
                 'state'    => $i['state'] ?? '',
                 'pay'      => $i['payment_state'] ?? '',
             ];
@@ -374,6 +407,7 @@ $missing_vnd_total = array_sum(array_column($missing, 'amount_vnd'));
                     <div class="dc-tabs">
                         <a href="?tab=missing&year=<?php echo $year; ?>" class="dc-tab <?php echo $tab === 'missing' ? 'active' : ''; ?>">Invoice chưa add (Odoo)</a>
                         <a href="?tab=incomplete&year=<?php echo $year; ?>" class="dc-tab <?php echo $tab === 'incomplete' ? 'active' : ''; ?>">Debts thiếu thông tin</a>
+                        <a href="?tab=confirm&year=<?php echo $year; ?>" class="dc-tab <?php echo $tab === 'confirm' ? 'active' : ''; ?>">Confirm theo tuần</a>
                     </div>
                     <div style="margin-left:auto; display:flex; align-items:center; gap:10px;">
                         <label style="font-size:13px; color:#64748b; font-weight:600;">Năm:</label>
@@ -463,6 +497,70 @@ $missing_vnd_total = array_sum(array_column($missing, 'amount_vnd'));
                         </tfoot>
                         <?php endif; ?>
                     </table>
+                <?php elseif ($tab === 'confirm'): ?>
+                    <?php
+                    // Dropdown 12 tuần gần nhất
+                    $weekOpts = [];
+                    for ($i = 0; $i < 12; $i++) {
+                        $t = strtotime("-$i week");
+                        $weekOpts[] = ['wk' => (int) date('W', $t), 'yr' => (int) date('o', $t)];
+                    }
+                    ?>
+                    <div style="display:flex; align-items:center; gap:12px; flex-wrap:wrap; margin-bottom:14px;">
+                        <div style="font-weight:700; font-size:16px; color:#0f172a;">AM đã confirm — Tuần <?php echo $cwk; ?>/<?php echo $cyr; ?></div>
+                        <select class="dc-select" onchange="var p=this.value.split('|');window.location='?tab=confirm&year=<?php echo $year; ?>&cwk='+p[0]+'&cyr='+p[1];" style="margin-left:auto;">
+                            <?php foreach ($weekOpts as $w): ?>
+                                <option value="<?php echo $w['wk'] . '|' . $w['yr']; ?>" <?php echo ($w['wk'] === $cwk && $w['yr'] === $cyr) ? 'selected' : ''; ?>>
+                                    Tuần <?php echo $w['wk']; ?> / <?php echo $w['yr']; ?>
+                                </option>
+                            <?php endforeach; ?>
+                        </select>
+                    </div>
+
+                    <div class="dc-cards" style="grid-template-columns: repeat(2,1fr);">
+                        <div class="dc-card ok">
+                            <div class="lbl">Đã confirm</div>
+                            <div class="val"><?php echo count($confirm_done); ?></div>
+                            <div class="sub">Tuần <?php echo $cwk; ?>/<?php echo $cyr; ?></div>
+                        </div>
+                        <div class="dc-card miss">
+                            <div class="lbl">Chưa confirm (AM/BD)</div>
+                            <div class="val"><?php echo count($confirm_pending); ?></div>
+                            <div class="sub">trong tổng AM/BD</div>
+                        </div>
+                    </div>
+
+                    <table class="dc-table" style="margin-bottom:20px;">
+                        <thead><tr><th>#</th><th>AM đã confirm</th><th>Email</th><th>Thời điểm confirm</th></tr></thead>
+                        <tbody>
+                            <?php if (empty($confirm_done)): ?>
+                                <tr><td colspan="4" class="dc-empty">Chưa có AM nào confirm tuần này.</td></tr>
+                            <?php else: $k = 1; foreach ($confirm_done as $c): ?>
+                                <tr>
+                                    <td><?php echo $k++; ?></td>
+                                    <td style="font-weight:600;"><?php echo htmlspecialchars($c['am_name'] ?: '—'); ?></td>
+                                    <td><?php echo htmlspecialchars($c['am_email'] ?: ''); ?></td>
+                                    <td><?php echo $c['confirmed_at'] ? date('d/m/Y H:i', strtotime($c['confirmed_at'])) : ''; ?></td>
+                                </tr>
+                            <?php endforeach; endif; ?>
+                        </tbody>
+                    </table>
+
+                    <?php if (!empty($confirm_pending)): ?>
+                    <div style="font-weight:700; font-size:14px; color:#b45309; margin:8px 0;">Chưa confirm</div>
+                    <table class="dc-table">
+                        <thead><tr><th>#</th><th>AM/BD</th><th>Email</th></tr></thead>
+                        <tbody>
+                            <?php $k = 1; foreach ($confirm_pending as $u): ?>
+                                <tr>
+                                    <td><?php echo $k++; ?></td>
+                                    <td style="font-weight:600;"><?php echo htmlspecialchars($u['full_name']); ?></td>
+                                    <td><?php echo htmlspecialchars($u['email'] ?? ''); ?></td>
+                                </tr>
+                            <?php endforeach; ?>
+                        </tbody>
+                    </table>
+                    <?php endif; ?>
                 <?php else: ?>
                     <?php if ($send_result): ?>
                         <div style="background:#dcfce7;border:1px solid #86efac;color:#166534;padding:10px 14px;border-radius:8px;margin-bottom:14px;font-weight:600;">✓ <?php echo htmlspecialchars($send_result); ?></div>

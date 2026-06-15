@@ -769,6 +769,20 @@ if ($team_res && $team_res->num_rows > 0) {
     ];
 }
 
+// ── Confirm công nợ theo tuần hiện tại ──
+$conn->query("CREATE TABLE IF NOT EXISTS debt_weekly_confirmations (
+    id INT AUTO_INCREMENT PRIMARY KEY, user_id INT NOT NULL, am_name VARCHAR(150), am_email VARCHAR(150),
+    yr INT NOT NULL, wk INT NOT NULL, confirmed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE KEY uniq_uw (user_id, yr, wk)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+$cur_wk = (int) date('W');
+$cur_yr = (int) date('o');
+$is_week_confirmed = false;
+if ($cs = $conn->prepare("SELECT id FROM debt_weekly_confirmations WHERE user_id = ? AND yr = ? AND wk = ? LIMIT 1")) {
+    $cs->bind_param("iii", $current_user_id, $cur_yr, $cur_wk);
+    $cs->execute();
+    if ($cs->get_result()->fetch_assoc()) $is_week_confirmed = true;
+    $cs->close();
+}
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -1677,6 +1691,18 @@ if ($team_res && $team_res->num_rows > 0) {
                         if (!empty($_GET[$p])) $mydebt_active++;
                     }
                     ?>
+                    <!-- Confirm công nợ theo tuần -->
+                    <div id="weekConfirmBox" data-confirmed="<?php echo $is_week_confirmed ? '1' : '0'; ?>"
+                        data-wk="<?php echo $cur_wk; ?>" data-yr="<?php echo $cur_yr; ?>"
+                        style="display:flex; align-items:center; gap:8px; margin-right:6px;">
+                        <button type="button" id="weekConfirmBtn" onclick="toggleWeekConfirm()"
+                            style="border:none; border-radius:8px; padding:9px 16px; font-weight:700; font-size:13px; cursor:pointer; <?php echo $is_week_confirmed ? 'background:#dcfce7;color:#166534;border:1px solid #86efac;' : 'background:#16a34a;color:#fff;'; ?>">
+                            <?php echo $is_week_confirmed ? '✓ Đã confirm Tuần ' . $cur_wk : 'Confirm Tuần ' . $cur_wk; ?>
+                        </button>
+                        <a href="#" id="weekUnconfirmLink" onclick="toggleWeekConfirm(true);return false;"
+                            style="font-size:12px;color:#64748b;text-decoration:none; <?php echo $is_week_confirmed ? '' : 'display:none;'; ?>">Bỏ confirm</a>
+                    </div>
+
                     <!-- Lọc theo công ty (đứng ngoài sidebar) -->
                     <select class="filter-select" onchange="setCompanyFilter(this.value)" title="Lọc theo công ty (từ Odoo)">
                         <option value="">Công ty: Tất cả</option>
@@ -2672,6 +2698,35 @@ if ($team_res && $team_res->num_rows > 0) {
             const u = new URL(window.location);
             if (v) u.searchParams.set('company', v); else u.searchParams.delete('company');
             window.location = u.toString();
+        }
+
+        function toggleWeekConfirm(forceUnconfirm) {
+            const box = document.getElementById('weekConfirmBox');
+            const btn = document.getElementById('weekConfirmBtn');
+            const link = document.getElementById('weekUnconfirmLink');
+            const isConfirmed = box.dataset.confirmed === '1';
+            const action = (forceUnconfirm || isConfirmed) ? 'unconfirm' : 'confirm';
+            btn.disabled = true;
+            const body = 'action=' + action + '&wk=' + box.dataset.wk + '&yr=' + box.dataset.yr;
+            fetch('/api/debt_week_confirm.php', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                body: body
+            }).then(r => r.json()).then(d => {
+                btn.disabled = false;
+                if (!d.success) { alert('Lỗi: ' + (d.error || '')); return; }
+                if (d.confirmed) {
+                    box.dataset.confirmed = '1';
+                    btn.textContent = '✓ Đã confirm Tuần ' + box.dataset.wk;
+                    btn.style.cssText = 'border-radius:8px;padding:9px 16px;font-weight:700;font-size:13px;cursor:pointer;background:#dcfce7;color:#166534;border:1px solid #86efac;';
+                    link.style.display = '';
+                } else {
+                    box.dataset.confirmed = '0';
+                    btn.textContent = 'Confirm Tuần ' + box.dataset.wk;
+                    btn.style.cssText = 'border:none;border-radius:8px;padding:9px 16px;font-weight:700;font-size:13px;cursor:pointer;background:#16a34a;color:#fff;';
+                    link.style.display = 'none';
+                }
+            }).catch(() => { btn.disabled = false; alert('Lỗi kết nối'); });
         }
 
         function toggleFilterSidebar() {
