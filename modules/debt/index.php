@@ -14,6 +14,8 @@ $current_user_id = $_SESSION['user_id'];
 $full_name = $_SESSION['full_name'];
 $full_name = $_SESSION['full_name'];
 $role = $_SESSION['role'];
+// Realtime Check Paid card chỉ hiển thị cho Hyun Cao
+$is_hyun = (stripos($full_name ?? '', 'Hyun Cao') !== false);
 
 // Fetch latest avatar from DB to ensure it's up to date
 $stmt = $conn->prepare("SELECT avatar FROM users WHERE id = ?");
@@ -2238,7 +2240,7 @@ if ($res_am && $res_am->num_rows > 0) {
 
                             <!-- Ant Stats Grid -->
                             <div
-                                style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 24px; margin-bottom: 24px;">
+                                style="display: grid; grid-template-columns: repeat(<?php echo $is_hyun ? 5 : 4; ?>, 1fr); gap: 24px; margin-bottom: 24px;">
                                 <?php
                                 $cards = [
                                     [
@@ -2311,6 +2313,39 @@ if ($res_am && $res_am->num_rows > 0) {
                                         </div>
                                     </div>
                                 <?php endforeach; ?>
+
+                                <?php if ($is_hyun): ?>
+                                <!-- Realtime Check Paid (chỉ Hyun Cao) -->
+                                <div style="background: #fff; padding: 24px; border-radius: 8px; border: 1px solid #c7d2fe; transition: all 0.3s; position: relative;"
+                                    onmouseover="this.style.boxShadow='0 4px 12px rgba(0,0,0,0.08)'"
+                                    onmouseout="this.style.boxShadow='none'">
+                                    <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+                                        <div style="flex:1;">
+                                            <div style="color: #6366f1; font-size: 12px; font-weight: 600; margin-bottom: 8px; letter-spacing: 0.5px;">
+                                                REALTIME CHECK PAID
+                                            </div>
+                                            <div id="rtcp-value" style="color: #4338ca; font-size: 26px; line-height: 1.2; font-weight: 600;">
+                                                <span style="color:#a5b4fc; font-size:15px;">Chưa kiểm tra</span>
+                                            </div>
+                                        </div>
+                                        <div style="width: 48px; height: 48px; border-radius: 50%; background: #eef2ff; display: flex; align-items: center; justify-content: center; color: #6366f1;">
+                                            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/></svg>
+                                        </div>
+                                    </div>
+                                    <div style="margin-top: 16px; padding-top: 16px; border-top: 1px solid #eef2ff; display: flex; gap: 8px; align-items: center;">
+                                        <select id="rtcp-year" style="flex:0 0 auto; padding:7px 10px; border:1px solid #cbd5e1; border-radius:6px; font-size:13px; background:#fff; outline:none;">
+                                            <?php $cy = (int) date('Y'); for ($y = $cy; $y >= $cy - 3; $y--): ?>
+                                                <option value="<?php echo $y; ?>"><?php echo $y; ?></option>
+                                            <?php endfor; ?>
+                                        </select>
+                                        <button type="button" id="rtcp-btn" onclick="runRealtimeCheckPaid()"
+                                            style="flex:1; padding:8px 12px; background:#4f46e5; color:#fff; border:none; border-radius:6px; font-size:13px; font-weight:600; cursor:pointer;">
+                                            Check
+                                        </button>
+                                    </div>
+                                    <div id="rtcp-meta" style="margin-top:10px; font-size:11px; color:#94a3b8; min-height:14px;"></div>
+                                </div>
+                                <?php endif; ?>
                             </div>
 
                             <!-- Global Aging and Cash Flow Charts (Stacked by Team) -->
@@ -3259,6 +3294,37 @@ if ($res_am && $res_am->num_rows > 0) {
         // Click 1 dòng -> đổi nền (chọn); click lại -> trở về bình thường
         function toggleRowSelect(tr) {
             tr.classList.toggle('row-selected');
+        }
+
+        // Realtime Check Paid: gọi Odoo lấy tổng tiền đã thu (chỉ phần paid) theo năm
+        function runRealtimeCheckPaid() {
+            const btn = document.getElementById('rtcp-btn');
+            const valEl = document.getElementById('rtcp-value');
+            const metaEl = document.getElementById('rtcp-meta');
+            const year = document.getElementById('rtcp-year').value;
+            if (!btn) return;
+            const oldText = btn.textContent;
+            btn.disabled = true;
+            btn.textContent = 'Đang kiểm tra...';
+            valEl.innerHTML = '<span style="color:#a5b4fc; font-size:15px;">Đang lấy dữ liệu từ Odoo…</span>';
+            metaEl.textContent = '';
+            fetch('/api/realtime_check_paid.php?year=' + encodeURIComponent(year), {
+                    headers: { 'X-Requested-With': 'XMLHttpRequest' }
+                })
+                .then(r => r.json())
+                .then(data => {
+                    if (!data.success) throw new Error(data.error || 'Lỗi không xác định');
+                    const f = new Intl.NumberFormat('vi-VN').format(data.paid_vnd);
+                    valEl.innerHTML = f + ' <span style="font-size:0.6em; vertical-align:top; color:#6366f1;">VND</span>';
+                    metaEl.textContent = 'Năm ' + data.year + ' · ' + data.paid_invoice_count + '/' + data.invoice_count + ' HĐ có thu · lúc ' + data.checked_at;
+                })
+                .catch(e => {
+                    valEl.innerHTML = '<span style="color:#dc2626; font-size:14px;">Lỗi: ' + e.message + '</span>';
+                })
+                .finally(() => {
+                    btn.disabled = false;
+                    btn.textContent = oldText;
+                });
         }
 
         function updateInline(id, field, value, el) {
