@@ -236,6 +236,33 @@ try {
         usort($missing, function ($a, $b) {
             return [$a['company'], $a['name']] <=> [$b['company'], $b['name']];
         });
+
+        // ── Filters cho tab "Invoice chưa add" ──
+        $amOptions = [];
+        foreach ($missing as $m) {
+            if (!empty($m['am'])) $amOptions[$m['am']] = true;
+        }
+        $amOptions = array_keys($amOptions);
+        sort($amOptions);
+
+        $f_company = trim((string) ($_GET['f_company'] ?? ''));
+        $f_am      = trim((string) ($_GET['f_am'] ?? ''));
+        $f_state   = trim((string) ($_GET['f_state'] ?? ''));
+        $f_q       = trim((string) ($_GET['f_q'] ?? ''));
+        $f_q_low   = mb_strtolower($f_q);
+
+        $missingView = array_values(array_filter($missing, function ($m) use ($f_company, $f_am, $f_state, $f_q_low) {
+            if ($f_company !== '' && $m['company'] !== $f_company) return false;
+            if ($f_am !== '' && $m['am'] !== $f_am) return false;
+            if ($f_state !== '' && $m['state'] !== $f_state) return false;
+            if ($f_q_low !== '') {
+                $hay = mb_strtolower(($m['name'] ?? '') . ' ' . ($m['customer'] ?? ''));
+                if (mb_strpos($hay, $f_q_low) === false) return false;
+            }
+            return true;
+        }));
+        $view_vnd_total = array_sum(array_column($missingView, 'amount_vnd'));
+        $has_filter = ($f_company !== '' || $f_am !== '' || $f_state !== '' || $f_q !== '');
     } else {
         // ===== TAB 2: Debts thiếu Exp. Pay Date HOẶC Phân loại HĐ =====
         // Company lấy từ Odoo (cache) để chuẩn, vì cột company trong DB đang cứng "AHT TECH".
@@ -458,6 +485,35 @@ $missing_vnd_total = array_sum(array_column($missing, 'amount_vnd'));
                         </div>
                     </div>
 
+                    <!-- Filter bar -->
+                    <form method="GET" style="display:flex; flex-wrap:wrap; align-items:center; gap:10px; margin-bottom:12px; background:#fff; border:1px solid #e2e8f0; border-radius:10px; padding:12px 14px;">
+                        <input type="hidden" name="tab" value="missing">
+                        <input type="hidden" name="year" value="<?php echo $year; ?>">
+                        <input type="text" name="f_q" value="<?php echo htmlspecialchars($f_q); ?>" placeholder="Tìm số HĐ / khách hàng..." class="dc-select" style="min-width:220px;">
+                        <select name="f_company" class="dc-select">
+                            <option value="">Công ty: Tất cả</option>
+                            <?php foreach (['AHT TECH', 'A1VN', 'A1C MY'] as $co): ?>
+                                <option value="<?php echo $co; ?>" <?php echo $f_company === $co ? 'selected' : ''; ?>><?php echo $co; ?></option>
+                            <?php endforeach; ?>
+                        </select>
+                        <select name="f_am" class="dc-select">
+                            <option value="">AM: Tất cả</option>
+                            <?php foreach ($amOptions as $amo): ?>
+                                <option value="<?php echo htmlspecialchars($amo); ?>" <?php echo $f_am === $amo ? 'selected' : ''; ?>><?php echo htmlspecialchars($amo); ?></option>
+                            <?php endforeach; ?>
+                        </select>
+                        <select name="f_state" class="dc-select">
+                            <option value="">Trạng thái: Tất cả</option>
+                            <option value="posted" <?php echo $f_state === 'posted' ? 'selected' : ''; ?>>Posted</option>
+                            <option value="draft" <?php echo $f_state === 'draft' ? 'selected' : ''; ?>>Draft</option>
+                        </select>
+                        <button type="submit" class="dc-sendbtn" style="background:#4f46e5;">Lọc</button>
+                        <?php if ($has_filter): ?>
+                            <a href="?tab=missing&year=<?php echo $year; ?>" style="font-size:13px; color:#64748b; text-decoration:none;">Xóa lọc</a>
+                        <?php endif; ?>
+                        <span style="margin-left:auto; font-size:13px; color:#64748b; font-weight:600;">Hiển thị <?php echo count($missingView); ?>/<?php echo count($missing); ?> HĐ</span>
+                    </form>
+
                     <form method="POST" id="warnForm">
                         <input type="hidden" name="action" value="send_warnings">
                         <input type="hidden" name="warnings_json" id="warnings_json">
@@ -486,10 +542,10 @@ $missing_vnd_total = array_sum(array_column($missing, 'amount_vnd'));
                             </tr>
                         </thead>
                         <tbody>
-                            <?php if (empty($missing)): ?>
-                                <tr><td colspan="14" class="dc-empty">🎉 Tất cả invoice năm <?php echo $year; ?> đã có trong Debts.</td></tr>
+                            <?php if (empty($missingView)): ?>
+                                <tr><td colspan="14" class="dc-empty"><?php echo $has_filter ? 'Không có HĐ khớp bộ lọc.' : ('🎉 Tất cả invoice năm ' . $year . ' đã có trong Debts.'); ?></td></tr>
                             <?php else: ?>
-                                <?php $idx = 1; foreach ($missing as $m):
+                                <?php $idx = 1; foreach ($missingView as $m):
                                     $sb = $m['state'] === 'posted' ? 'b-posted' : ($m['state'] === 'draft' ? 'b-draft' : 'b-cancel');
                                     $pb = ($m['pay'] === 'paid' || $m['pay'] === 'in_payment') ? 'b-paid' : ($m['pay'] === 'partial' ? 'b-partial' : 'b-notpaid');
                                 ?>
@@ -523,11 +579,11 @@ $missing_vnd_total = array_sum(array_column($missing, 'amount_vnd'));
                                 <?php endforeach; ?>
                             <?php endif; ?>
                         </tbody>
-                        <?php if (!empty($missing)): ?>
+                        <?php if (!empty($missingView)): ?>
                         <tfoot>
                             <tr style="background:#f8fafc; font-weight:700;">
-                                <td colspan="10" style="text-align:right;">TỔNG (<?php echo fmtMoney(count($missing)); ?> HĐ)</td>
-                                <td class="dc-amt"><?php echo fmtMoney($missing_vnd_total); ?> ₫</td>
+                                <td colspan="10" style="text-align:right;">TỔNG (<?php echo fmtMoney(count($missingView)); ?> HĐ)</td>
+                                <td class="dc-amt"><?php echo fmtMoney($view_vnd_total); ?> ₫</td>
                                 <td colspan="3"></td>
                             </tr>
                         </tfoot>
