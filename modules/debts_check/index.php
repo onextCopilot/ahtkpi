@@ -169,6 +169,46 @@ if ($tab === 'confirm') {
             if (!isset($confirmedIds[(int) $u['id']])) $confirm_pending[] = $u;
         }
     }
+
+    // Đếm theo email AM: (a) invoice chưa add vào Debts, (b) debts thiếu thông tin — năm $year
+    $missingByEmail = [];
+    $incompleteByEmail = [];
+    try {
+        $odoo = new OdooAPI();
+        $f2 = sprintf('%04d-01-01', $year);
+        $t2 = sprintf('%04d-12-31', $year);
+        $invs2 = $odoo->searchRead('account.move', [['move_type', '=', 'out_invoice'], ['state', '!=', 'cancel'], ['date', '>=', $f2], ['date', '<=', $t2]], ['id', 'invoice_user_id', 'partner_id'], 100000, 0);
+        if (!is_array($invs2)) $invs2 = [];
+        $sp2 = [];
+        foreach ($invs2 as $i) {
+            if (is_array($i['invoice_user_id'] ?? null)) $sp2[(int) $i['invoice_user_id'][0]] = true;
+        }
+        $spEmail2 = [];
+        if ($sp2) {
+            $u2 = $odoo->searchRead('res.users', [['id', 'in', array_keys($sp2)]], ['id', 'login'], 1000, 0);
+            if (is_array($u2)) foreach ($u2 as $u) $spEmail2[(int) $u['id']] = strtolower(trim((string) ($u['login'] ?? '')));
+        }
+        $inDebts2 = [];
+        $dr2 = $conn->query("SELECT odoo_invoice_id FROM debts WHERE odoo_invoice_id <> '' AND odoo_invoice_id IS NOT NULL");
+        while ($x = $dr2->fetch_assoc()) $inDebts2[(string) $x['odoo_invoice_id']] = true;
+        foreach ($invs2 as $i) {
+            $partner = is_array($i['partner_id']) ? $i['partner_id'][1] : '';
+            if (isInternalCustomer($partner)) continue;
+            if (isset($inDebts2[(string) $i['id']])) continue;
+            $em = is_array($i['invoice_user_id']) ? ($spEmail2[(int) $i['invoice_user_id'][0]] ?? '') : '';
+            if ($em === '') continue;
+            $missingByEmail[$em] = ($missingByEmail[$em] ?? 0) + 1;
+        }
+    } catch (\Throwable $e) { /* Odoo lỗi -> bỏ qua đếm missing */ }
+
+    $iy = (int) $year;
+    $ir2 = $conn->query("SELECT LOWER(am_email) em, COUNT(*) c FROM debts
+                         WHERE YEAR(invoice_date) = $iy
+                           AND LOWER(TRIM(COALESCE(payment_status, ''))) <> 'paid'
+                           AND (expected_payment_date IS NULL OR invoice_status_class IS NULL OR TRIM(invoice_status_class) = '')
+                           AND am_email IS NOT NULL AND am_email <> ''
+                         GROUP BY LOWER(am_email)");
+    if ($ir2) while ($x = $ir2->fetch_assoc()) $incompleteByEmail[$x['em']] = (int) $x['c'];
 }
 
 $error = '';
@@ -370,7 +410,9 @@ $missing_vnd_total = array_sum(array_column($missing, 'amount_vnd'));
         table.dc-table { width: 100%; border-collapse: separate; border-spacing: 0; background: #fff; border: 1px solid #e2e8f0; border-radius: 10px; overflow: hidden; font-size: 13px; }
         table.dc-table th { background: #f8fafc; color: #475569; text-align: left; padding: 10px 12px; font-size: 11px; text-transform: uppercase; letter-spacing: .03em; border-bottom: 2px solid #e2e8f0; white-space: nowrap; }
         table.dc-table td { padding: 9px 12px; border-bottom: 1px solid #f1f5f9; color: #1e293b; vertical-align: middle; }
-        table.dc-table tr:hover td { background: #f8fafc; }
+        table.dc-table tbody tr:nth-child(odd) td { background: #ffffff; }
+        table.dc-table tbody tr:nth-child(even) td { background: #f6f8fc; }
+        table.dc-table tbody tr:hover td { background: #eef2ff; }
         .dc-amt { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; font-weight: 600; }
         .dc-badge { display: inline-block; padding: 2px 7px; border-radius: 4px; font-size: 10px; font-weight: 700; text-transform: uppercase; }
         .b-posted { background: #dcfce7; color: #166534; }
@@ -531,16 +573,22 @@ $missing_vnd_total = array_sum(array_column($missing, 'amount_vnd'));
                     </div>
 
                     <table class="dc-table" style="margin-bottom:20px;">
-                        <thead><tr><th>#</th><th>AM đã confirm</th><th>Email</th><th>Thời điểm confirm</th></tr></thead>
+                        <thead><tr><th>#</th><th>AM đã confirm</th><th>Email</th><th>Thời điểm confirm</th><th style="text-align:center;">Chưa add<br>Debts</th><th style="text-align:center;">Thiếu<br>thông tin</th></tr></thead>
                         <tbody>
                             <?php if (empty($confirm_done)): ?>
-                                <tr><td colspan="4" class="dc-empty">Chưa có AM nào confirm tuần này.</td></tr>
-                            <?php else: $k = 1; foreach ($confirm_done as $c): ?>
+                                <tr><td colspan="6" class="dc-empty">Chưa có AM nào confirm tuần này.</td></tr>
+                            <?php else: $k = 1; foreach ($confirm_done as $c):
+                                $em = strtolower(trim((string) ($c['am_email'] ?? '')));
+                                $nMiss = $missingByEmail[$em] ?? 0;
+                                $nInc = $incompleteByEmail[$em] ?? 0;
+                            ?>
                                 <tr>
                                     <td><?php echo $k++; ?></td>
                                     <td style="font-weight:600;"><?php echo htmlspecialchars($c['am_name'] ?: '—'); ?></td>
                                     <td><?php echo htmlspecialchars($c['am_email'] ?: ''); ?></td>
                                     <td><?php echo $c['confirmed_at'] ? date('d/m/Y H:i', strtotime($c['confirmed_at'])) : ''; ?></td>
+                                    <td style="text-align:center; font-weight:700; color:<?php echo $nMiss > 0 ? '#dc2626' : '#94a3b8'; ?>;"><?php echo $nMiss; ?></td>
+                                    <td style="text-align:center; font-weight:700; color:<?php echo $nInc > 0 ? '#b45309' : '#94a3b8'; ?>;"><?php echo $nInc; ?></td>
                                 </tr>
                             <?php endforeach; endif; ?>
                         </tbody>
@@ -549,13 +597,19 @@ $missing_vnd_total = array_sum(array_column($missing, 'amount_vnd'));
                     <?php if (!empty($confirm_pending)): ?>
                     <div style="font-weight:700; font-size:14px; color:#b45309; margin:8px 0;">Chưa confirm</div>
                     <table class="dc-table">
-                        <thead><tr><th>#</th><th>AM/BD</th><th>Email</th></tr></thead>
+                        <thead><tr><th>#</th><th>AM/BD</th><th>Email</th><th style="text-align:center;">Chưa add<br>Debts</th><th style="text-align:center;">Thiếu<br>thông tin</th></tr></thead>
                         <tbody>
-                            <?php $k = 1; foreach ($confirm_pending as $u): ?>
+                            <?php $k = 1; foreach ($confirm_pending as $u):
+                                $em = strtolower(trim((string) ($u['email'] ?? '')));
+                                $nMiss = $missingByEmail[$em] ?? 0;
+                                $nInc = $incompleteByEmail[$em] ?? 0;
+                            ?>
                                 <tr>
                                     <td><?php echo $k++; ?></td>
                                     <td style="font-weight:600;"><?php echo htmlspecialchars($u['full_name']); ?></td>
                                     <td><?php echo htmlspecialchars($u['email'] ?? ''); ?></td>
+                                    <td style="text-align:center; font-weight:700; color:<?php echo $nMiss > 0 ? '#dc2626' : '#94a3b8'; ?>;"><?php echo $nMiss; ?></td>
+                                    <td style="text-align:center; font-weight:700; color:<?php echo $nInc > 0 ? '#b45309' : '#94a3b8'; ?>;"><?php echo $nInc; ?></td>
                                 </tr>
                             <?php endforeach; ?>
                         </tbody>
