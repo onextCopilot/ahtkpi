@@ -86,9 +86,19 @@ try {
         $invs = $odoo->searchRead('account.move', $domain, $fields, 100000, 0);
         if (!is_array($invs)) $invs = [];
 
-        $inDebts = [];
-        $dr = $conn->query("SELECT DISTINCT vat_invoice FROM debts WHERE vat_invoice IS NOT NULL AND vat_invoice <> ''");
-        while ($x = $dr->fetch_assoc()) $inDebts[trim($x['vat_invoice'])] = true;
+        // Khóa đối chiếu: ưu tiên odoo_invoice_id (DUY NHẤT toàn cục, không trùng giữa 3 công ty).
+        // Số hóa đơn (tên) chỉ dùng fallback cho debts chưa có odoo_invoice_id (tránh trùng cross-company).
+        $inDebtsById = [];
+        $inDebtsByName = [];
+        $dr = $conn->query("SELECT odoo_invoice_id, vat_invoice FROM debts");
+        while ($x = $dr->fetch_assoc()) {
+            $oid = (string) ($x['odoo_invoice_id'] ?? '');
+            if ($oid !== '' && $oid !== '0') {
+                $inDebtsById[$oid] = true;
+            } elseif (!empty($x['vat_invoice'])) {
+                $inDebtsByName[trim($x['vat_invoice'])] = true; // chỉ debts chưa link id
+            }
+        }
 
         foreach ($invs as $i) {
             $name = trim((string) ($i['name'] ?? ''));
@@ -98,7 +108,8 @@ try {
             if (isInternalCustomer($partnerName)) { $internal_skipped++; continue; }
 
             $total_inv++;
-            if (isset($inDebts[$name])) { $in_debts_count++; continue; }
+            $iid = (string) ($i['id'] ?? '');
+            if (isset($inDebtsById[$iid]) || isset($inDebtsByName[$name])) { $in_debts_count++; continue; }
 
             $cur = is_array($i['currency_id']) ? $i['currency_id'][1] : 'VND';
             $rate = isset($currencies[$cur]['rate']) ? (float) $currencies[$cur]['rate'] : 0;
