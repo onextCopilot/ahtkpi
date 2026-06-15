@@ -325,13 +325,15 @@ if ($freshInv) {
         if (!empty($fi['currency_name'])) {
             $odoo_map[$fid]['currency_id'] = [0, $fi['currency_name']]; // giữ shape [id, name]
         }
-        // Chỉ override payment_state nếu giá trị mới là paid/in_payment,
-        // HOẶC cache chưa ở trạng thái đã thanh toán.
-        // Tránh trường hợp webhook cũ (not_paid) ghi đè file cache mới (paid).
+        // Chỉ NÂNG cấp trạng thái thanh toán (not_paid < partial < in_payment < paid),
+        // KHÔNG hạ cấp. Tránh bảng odoo_invoices cũ ghi đè 'partial'/'paid' của cache (mới hơn)
+        // thành 'not_paid' -> mất case thanh toán 1 phần.
         if (!empty($fi['payment_state'])) {
-            $paidStates = ['paid', 'in_payment'];
+            $payRank = ['not_paid' => 0, 'reversed' => 0, 'draft' => 0, 'partial' => 1, 'in_payment' => 2, 'paid' => 3];
             $cacheState = $odoo_map[$fid]['payment_state'] ?? '';
-            if (in_array($fi['payment_state'], $paidStates) || !in_array($cacheState, $paidStates)) {
+            $newR = $payRank[$fi['payment_state']] ?? 0;
+            $oldR = $payRank[$cacheState] ?? 0;
+            if ($newR >= $oldR) {
                 $odoo_map[$fid]['payment_state'] = $fi['payment_state'];
             }
         }
