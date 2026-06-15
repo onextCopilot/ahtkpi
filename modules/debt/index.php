@@ -205,16 +205,51 @@ if (!empty($_GET['invoice_status_class'])) {
     if (count($clean) > 0) $where_clauses[] = "d.invoice_status_class IN (" . implode(',', $clean) . ")";
 }
 
-if (!empty($_GET['status'])) {
-    $vals = is_array($_GET['status']) ? $_GET['status'] : [$_GET['status']];
-    $clean = [];
-    foreach ($vals as $v) {
-        if ($v !== '') {
-            if ($v === 'Draft') $clean[] = "'Not paid'";
-            else $clean[] = "'" . $conn->real_escape_string($v) . "'";
-        }
+/**
+ * Cờ (đã-thu, còn-nợ) của 1 dòng nợ, dựa trên amount_total/amount_residual của Odoo.
+ *  - đã-thu (collected) = amount_total - amount_residual > 0
+ *  - còn-nợ (owed)      = amount_residual > 0
+ * Hóa đơn thu một phần (partial) sẽ TRUE cả hai. Không có dữ liệu Odoo thì fallback theo payment_status DB.
+ * @return array [bool $hasCollected, bool $hasOwed]
+ */
+function debtPaidOwedFlags($odoo_inv, $db_payment_status)
+{
+    if ($odoo_inv && isset($odoo_inv['amount_total']) && abs((float) $odoo_inv['amount_total']) > 0) {
+        $total    = abs((float) $odoo_inv['amount_total']);
+        $residual = isset($odoo_inv['amount_residual']) ? abs((float) $odoo_inv['amount_residual']) : 0;
+        $collected = $total - $residual;
+        return [$collected > 0.01, $residual > 0.01];
     }
-    if (count($clean) > 0) $where_clauses[] = "d.payment_status IN (" . implode(',', $clean) . ")";
+    $paid = (strcasecmp(trim((string) $db_payment_status), 'Paid') === 0);
+    return [$paid, !$paid];
+}
+
+/**
+ * Dòng nợ có khớp bộ lọc trạng thái thanh toán không (dựa trên Odoo):
+ *  - 'Draft'    : state = draft
+ *  - 'Paid'     : đã thu được tiền (collected > 0) — gồm cả partial
+ *  - 'Not paid' : còn nợ (owed > 0)               — gồm cả partial
+ * Hóa đơn đã hủy (state = cancel) không khớp filter nào.
+ */
+function debtMatchesStatus($odoo_inv, $db_payment_status, $selected)
+{
+    if (empty($selected)) return true;
+    $state = ($odoo_inv && isset($odoo_inv['state'])) ? (string) $odoo_inv['state'] : '';
+    if ($state === 'draft')  return in_array('Draft', $selected);
+    if ($state === 'cancel') return false;
+    list($hasCollected, $hasOwed) = debtPaidOwedFlags($odoo_inv, $db_payment_status);
+    if (in_array('Paid', $selected) && $hasCollected) return true;
+    if (in_array('Not paid', $selected) && $hasOwed)  return true;
+    return false;
+}
+
+// Trạng thái thanh toán được lọc ở PHP (dựa trên Odoo), không lọc bằng SQL.
+$status_filter = [];
+if (!empty($_GET['status'])) {
+    $status_filter = is_array($_GET['status']) ? $_GET['status'] : [$_GET['status']];
+    $status_filter = array_values(array_filter($status_filter, function ($s) {
+        return $s !== '';
+    }));
 }
 
 if (!empty($_GET['q'])) {
@@ -336,10 +371,14 @@ if (count($where_clauses) > 0) {
 
 $groupedDebts = [];
 $monthTotals = [];
+$monthPaid = [];   // tổng phần đã thu theo tháng
+$monthUnpaid = []; // tổng phần còn nợ theo tháng
 $amTotals = [];
 $dashboardData = []; // team_id => [status_class => [pay_status => total_vnd]]
 $total_amount_usd = 0;
 $total_amount_vnd = 0;
+$total_paid_vnd = 0;   // tổng phần ĐÃ thu (collected) của các dòng hiển thị
+$total_unpaid_vnd = 0; // tổng phần CÒN nợ (owed) của các dòng hiển thị
 
 // New Aggregators for Charts
 $aging_data = ['0-30' => 0, '31-60' => 0, '61-90' => 0, '90+' => 0];
@@ -359,15 +398,9 @@ if ($res) {
         $oid = (string)$row['odoo_invoice_id'];
         $odoo_inv = isset($odoo_map[$oid]) ? $odoo_map[$oid] : null;
 
-        // Strict Filter for "Draft" status (checking Odoo state)
-        $status_filter = $_GET['status'] ?? [];
-        if (!is_array($status_filter)) $status_filter = [$status_filter];
-        
-        if (in_array('Draft', $status_filter)) {
-            $odoo_state = ($odoo_inv && isset($odoo_inv['state'])) ? (string)$odoo_inv['state'] : '';
-            if ($row['payment_status'] === 'Not paid' && !in_array('Not paid', $status_filter)) {
-                if ($odoo_state !== 'draft') continue;
-            }
+        // Lọc theo trạng thái thanh toán dựa trên Odoo (Draft / Not paid / Paid). Partial khớp cả Paid lẫn Not paid.
+        if (count($status_filter) > 0 && !debtMatchesStatus($odoo_inv, $row['payment_status'], $status_filter)) {
+            continue;
         }
 
         $amount = (float) $row['amount'];
@@ -407,12 +440,48 @@ if ($res) {
             $vnd_value = ($rate > 0) ? ($amount / $rate) : $amount;
         }
 
-        $total_amount_vnd += $vnd_value;
+        // Paid Amount (VND): phần đã thu = (amount_total - amount_residual) áp tỉ lệ lên giá trị VND của dòng.
+        $paid_vnd = 0;
+        $odoo_total_for_paid = ($odoo_inv && isset($odoo_inv['amount_total'])) ? abs((float)$odoo_inv['amount_total']) : 0;
+        if ($odoo_total_for_paid > 0) {
+            $residual = ($odoo_inv && isset($odoo_inv['amount_residual'])) ? abs((float)$odoo_inv['amount_residual']) : 0;
+            $paid_fraction = max(0, min(1, ($odoo_total_for_paid - $residual) / $odoo_total_for_paid));
+            $paid_vnd = $vnd_value * $paid_fraction;
+        } else {
+            // Không có dữ liệu Odoo: dựa theo trạng thái nhị phân trong DB
+            $paid_vnd = (strcasecmp(trim((string)($row['payment_status'] ?? '')), 'Paid') === 0) ? $vnd_value : 0;
+        }
+        $owed_vnd = max(0, $vnd_value - $paid_vnd);
+
+        // Phần đóng góp vào Total theo bộ lọc đang chọn:
+        //  - filter Paid     -> chỉ phần đã thu
+        //  - filter Not paid -> chỉ phần còn nợ
+        //  - chọn cả hai / không lọc / Draft -> full
+        $contrib_vnd = $vnd_value;
+        if (count($status_filter) > 0) {
+            $state_for_contrib = ($odoo_inv && isset($odoo_inv['state'])) ? (string)$odoo_inv['state'] : '';
+            $paidSel = in_array('Paid', $status_filter);
+            $notPaidSel = in_array('Not paid', $status_filter);
+            if ($state_for_contrib === 'draft') {
+                $contrib_vnd = $vnd_value;
+            } elseif ($paidSel && $notPaidSel) {
+                $contrib_vnd = $vnd_value;
+            } elseif ($paidSel) {
+                $contrib_vnd = $paid_vnd;
+            } elseif ($notPaidSel) {
+                $contrib_vnd = $owed_vnd;
+            }
+        }
+
+        $total_amount_vnd += $contrib_vnd;
+        $total_paid_vnd += $paid_vnd;     // chỉ tổng phần đã thu
+        $total_unpaid_vnd += $owed_vnd;   // chỉ tổng phần còn nợ
+        $contrib_ratio = ($vnd_value > 0) ? ($contrib_vnd / $vnd_value) : (($contrib_vnd > 0) ? 1 : 0);
         if ($curr === 'USD') {
-            $total_amount_usd += $amount;
-        } else if ($vnd_value > 0) {
+            $total_amount_usd += $amount * $contrib_ratio;
+        } else if ($contrib_vnd > 0) {
             // Use 24000 as a generic VND/USD fallback for the summary if no direct USD rate
-            $total_amount_usd += ($vnd_value / 24000);
+            $total_amount_usd += ($contrib_vnd / 24000);
         }
 
         $row['amount_original'] = $amount;
@@ -437,13 +506,15 @@ if ($res) {
         // Fix: Use strict strict comparison because 'Not paid' contains string 'Paid'
         $is_paid_status = (strcasecmp(trim($pStatus), 'Paid') === 0);
 
-        if ($is_paid_status) {
-            $dashboardData[$tId][$sClass]['Paid'] += $vnd_value;
-            $dashboardData[$tId][$sClass]['Paid_Count']++;
-        } else {
-            // Include 'Not paid' and any other status
-            $dashboardData[$tId][$sClass]['Not paid'] += $vnd_value;
+        // Dashboard: tách đúng phần ĐÃ thu / CÒN nợ (không cộng full theo nhị phân nữa).
+        // Hóa đơn thu một phần đóng góp vào CẢ Paid (phần đã thu) lẫn Not paid (phần còn nợ).
+        $dashboardData[$tId][$sClass]['Paid'] += $paid_vnd;
+        $dashboardData[$tId][$sClass]['Not paid'] += $owed_vnd;
+        // Đếm: còn nợ -> Pending, đã thu đủ -> Paid
+        if ($owed_vnd > 0.01) {
             $dashboardData[$tId][$sClass]['Not_Paid_Count']++;
+        } else {
+            $dashboardData[$tId][$sClass]['Paid_Count']++;
         }
 
         // Grouping
@@ -452,6 +523,11 @@ if ($res) {
 
         // Capture Odoo invoice state (posted / draft / cancel) for display
         $row['odoo_state'] = ($odoo_inv && isset($odoo_inv['state'])) ? (string)$odoo_inv['state'] : '';
+        // Capture Odoo payment_state (not_paid / partial / in_payment / paid / reversed) for display
+        $row['odoo_payment_state'] = ($odoo_inv && isset($odoo_inv['payment_state'])) ? (string)$odoo_inv['payment_state'] : '';
+
+        // Paid Amount (VND) đã tính ở trên (phần đã thu của hóa đơn)
+        $row['paid_amount_vnd'] = $paid_vnd;
 
         $mKey = !empty($row['invoice_date']) ? date('m/Y', strtotime($row['invoice_date'])) : 'No Date';
         // Aging calculation (unpaid only)
@@ -476,13 +552,19 @@ if ($res) {
 
         $groupedDebts[$mKey][$amKey][] = $row;
 
-        if (!isset($monthTotals[$mKey]))
+        // Subtotal nhóm dùng cùng phần đóng góp như Total (theo bộ lọc)
+        if (!isset($monthTotals[$mKey])) {
             $monthTotals[$mKey] = 0;
-        $monthTotals[$mKey] += $vnd_value;
+            $monthPaid[$mKey] = 0;
+            $monthUnpaid[$mKey] = 0;
+        }
+        $monthTotals[$mKey] += $contrib_vnd;
+        $monthPaid[$mKey] += $paid_vnd;
+        $monthUnpaid[$mKey] += $owed_vnd;
 
         if (!isset($amTotals[$mKey][$amKey]))
             $amTotals[$mKey][$amKey] = 0;
-        $amTotals[$mKey][$amKey] += $vnd_value;
+        $amTotals[$mKey][$amKey] += $contrib_vnd;
     }
 }
 $debts = []; // To keep debtsData for JS populated
@@ -725,8 +807,7 @@ if ($res_am && $res_am->num_rows > 0) {
             min-width: 100%;
             border-collapse: separate;
             border-spacing: 0;
-            font-size: 13px;
-            /* Slightly larger text */
+            font-size: 12px;
             font-family: 'Inter', sans-serif;
             white-space: nowrap;
             color: #334155;
@@ -742,34 +823,51 @@ if ($res_am && $res_am->num_rows > 0) {
             /* Gray text */
             font-weight: 600;
             text-transform: uppercase;
-            font-size: 11px;
-            letter-spacing: 0.05em;
-            padding: 12px 16px;
+            font-size: 10.5px;
+            letter-spacing: 0.03em;
+            padding: 7px 8px;
             text-align: left;
             border-bottom: 2px solid #e2e8f0;
             z-index: 10;
             white-space: normal;
-            line-height: 1.4;
+            line-height: 1.3;
             vertical-align: middle;
-            min-width: 120px;
+            min-width: 52px;
         }
 
         table.debt-table tbody td {
-            padding: 10px 16px;
+            padding: 6px 8px;
             border-bottom: 1px solid #f1f5f9;
             vertical-align: middle;
             color: #1e293b;
             transition: background-color 0.15s;
         }
 
-        /* Subtle Striping */
-        table.debt-table tbody tr:nth-child(even) td {
-            background-color: #fafafa;
+        /* Let long text columns wrap instead of forcing the table wider */
+        table.debt-table tbody td.cell-company,
+        table.debt-table tbody td.project-tooltip-trigger {
+            white-space: normal;
+            max-width: 200px;
+            line-height: 1.35;
         }
 
-        table.debt-table tbody tr:hover td {
+        /* Zebra striping theo từng dòng dữ liệu (bỏ qua dòng group header) */
+        table.debt-table tbody tr.data-row.row-odd td {
+            background-color: #ffffff;
+        }
+
+        table.debt-table tbody tr.data-row.row-even td {
             background-color: #f1f5f9;
+        }
+
+        table.debt-table tbody tr.data-row:hover td {
+            background-color: #e0e7ff;
             cursor: pointer;
+        }
+
+        /* Dòng được chọn (click) — đè lên cả striping lẫn hover */
+        table.debt-table tbody tr.data-row.row-selected td {
+            background-color: #bfdbfe !important;
         }
 
         .cell-company {
@@ -1074,6 +1172,18 @@ if ($res_am && $res_am->num_rows > 0) {
             margin-left: 10px;
         }
 
+        .group-paid {
+            color: #2563eb;
+            margin-left: 14px;
+            font-weight: 600;
+        }
+
+        .group-unpaid {
+            color: #dc2626;
+            margin-left: 14px;
+            font-weight: 600;
+        }
+
         /* Status Colors (Same as My Debt) */
         .status-done {
             background-color: #16a34a;
@@ -1191,6 +1301,14 @@ if ($res_am && $res_am->num_rows > 0) {
             border-radius: 4px;
         }
 
+        .pay-partial {
+            background-color: #fef3c7;
+            color: #b45309;
+            font-weight: 700;
+            padding: 4px 8px;
+            border-radius: 4px;
+        }
+
         .prod-dc5 {
             background-color: #b91c1c;
             color: white;
@@ -1303,6 +1421,20 @@ if ($res_am && $res_am->num_rows > 0) {
             border: 1px solid #10b981;
         }
 
+        .total-badge.paid-badge {
+            margin: 0;
+            color: #1d4ed8;
+            background: #eff6ff;
+            border-color: #3b82f6;
+        }
+
+        .total-badge.unpaid-badge {
+            margin: 0;
+            color: #b91c1c;
+            background: #fef2f2;
+            border-color: #ef4444;
+        }
+
         /* Filter Sidebar Drawer */
         .filter-sidebar-overlay {
             display: none;
@@ -1372,6 +1504,22 @@ if ($res_am && $res_am->num_rows > 0) {
             color: #64748b;
             text-transform: uppercase;
             letter-spacing: 0.05em;
+        }
+
+        .filter-hint {
+            display: block;
+            margin: -2px 0 8px 0;
+            font-size: 11px;
+            font-weight: 400;
+            line-height: 1.45;
+            color: #94a3b8;
+            text-transform: none;
+            letter-spacing: 0;
+        }
+
+        .filter-hint b {
+            color: #64748b;
+            font-weight: 600;
         }
 
         .filter-sidebar .filter-select,
@@ -1690,10 +1838,18 @@ if ($res_am && $res_am->num_rows > 0) {
                     </div>
 
                     <div style="display: flex; align-items: center; gap: 12px; margin-left: auto;">
+                        <?php if (!in_array($selected_team, ['dashboard', 'analytics'])): ?>
                         <div class="total-badge">
                             Total: <?php echo formatVND($total_amount_vnd); ?>
                         </div>
-                        
+                        <div class="total-badge paid-badge" title="Tổng phần đã thu được (chỉ tính phần Paid)">
+                            Paid Amount: <?php echo formatVND($total_paid_vnd); ?>
+                        </div>
+                        <div class="total-badge unpaid-badge" title="Tổng phần còn nợ (chưa thu)">
+                            Unpaid: <?php echo formatVND($total_unpaid_vnd); ?>
+                        </div>
+                        <?php endif; ?>
+
                         <button class="btn-filter-toggle" onclick="toggleFilterSidebar()">
                             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon></svg>
                             <span>Bộ lọc</span>
@@ -1742,6 +1898,7 @@ if ($res_am && $res_am->num_rows > 0) {
                             <label class="filter-item-label">Tìm kiếm nhanh</label>
 
                             <label class="filter-item-label">Người quản lý (AM)</label>
+                            <span class="filter-hint">Lọc theo Account Manager phụ trách hóa đơn (salesperson trên Odoo).</span>
                             <select name="am[]" multiple class="filter-select ts-multiselect" placeholder="Tất cả AM">
                                 <option value="">Tất cả AM</option>
                                 <?php foreach ($am_list as $am_name): ?>
@@ -1752,14 +1909,23 @@ if ($res_am && $res_am->num_rows > 0) {
                             </select>
 
                             <label class="filter-item-label">Trạng thái thanh toán</label>
+                            <span class="filter-hint">
+                                Theo dữ liệu Odoo:
+                                <b>Draft</b> = hóa đơn nháp ·
+                                <b>Not paid</b> = đã posted, còn nợ ·
+                                <b>Paid</b> = đã thu được tiền.
+                                Hóa đơn thu một phần (partial) xuất hiện ở <b>cả</b> Paid lẫn Not paid;
+                                khi đó Total chỉ cộng phần tương ứng (Paid → đã thu, Not paid → còn nợ).
+                            </span>
                             <select name="status[]" multiple class="filter-select ts-multiselect" placeholder="Tất cả trạng thái">
                                 <option value="">Tất cả trạng thái</option>
+                                <option value="Draft" <?php echo is_filter_selected('status', 'Draft') ? 'selected' : ''; ?>>Draft</option>
                                 <option value="Not paid" <?php echo is_filter_selected('status', 'Not paid') ? 'selected' : ''; ?>>Not paid</option>
                                 <option value="Paid" <?php echo is_filter_selected('status', 'Paid') ? 'selected' : ''; ?>>Paid</option>
-                                <option value="Draft" <?php echo is_filter_selected('status', 'Draft') ? 'selected' : ''; ?>>Draft</option>
                             </select>
 
                             <label class="filter-item-label">Phân loại Invoice</label>
+                            <span class="filter-hint">Nhãn màu phân loại nội bộ (cột “Phân loại HĐ”): Done/Tím = đã thu, Đỏ = quá hạn, Trắng/Xanh/PP/Draft… — khác với Trạng thái thanh toán ở trên.</span>
                             <select name="invoice_status_class[]" multiple class="filter-select ts-multiselect" placeholder="Tất cả phân loại">
                                 <option value="">Tất cả phân loại</option>
                                 <option value="Trắng" <?php echo is_filter_selected('invoice_status_class', 'Trắng') ? 'selected' : ''; ?>>Trắng</option>
@@ -1773,6 +1939,7 @@ if ($res_am && $res_am->num_rows > 0) {
                             </select>
 
                             <label class="filter-item-label">Khoảng thời gian ( Invoice Date)</label>
+                            <span class="filter-hint">Lọc theo <b>ngày xuất hóa đơn</b> (invoice date).</span>
                             <div style="display:flex; flex-direction:column; gap:8px; margin-bottom:20px;">
                                 <div style="display:flex; align-items:center; gap:8px; background:#f8fafc; border:1px solid #cbd5e1; border-radius:6px; padding:8px 10px;">
                                     <span style="font-size:12px; color:#94a3b8; width:30px;">Từ:</span>
@@ -1785,6 +1952,7 @@ if ($res_am && $res_am->num_rows > 0) {
                             </div>
 
                             <label class="filter-item-label">Exp. Pay Date (Ngày TT dự kiến)</label>
+                            <span class="filter-hint">Lọc theo <b>ngày dự kiến thu tiền</b> (expected payment date).</span>
                             <div style="display:flex; flex-direction:column; gap:8px; margin-bottom:20px;">
                                 <div style="display:flex; align-items:center; gap:8px; background:#f8fafc; border:1px solid #cbd5e1; border-radius:6px; padding:8px 10px;">
                                     <span style="font-size:12px; color:#94a3b8; width:30px;">Từ:</span>
@@ -1797,6 +1965,7 @@ if ($res_am && $res_am->num_rows > 0) {
                             </div>
 
                             <label class="filter-item-label">Paid Date ( Thời gian Invoice TT)</label>
+                            <span class="filter-hint">Lọc theo <b>ngày thực tế đã thu tiền</b> (chỉ áp dụng cho hóa đơn đã/đang thu).</span>
                             <div style="display:flex; flex-direction:column; gap:8px; margin-bottom:20px;">
                                 <div style="display:flex; align-items:center; gap:8px; background:#f8fafc; border:1px solid #cbd5e1; border-radius:6px; padding:8px 10px;">
                                     <span style="font-size:12px; color:#94a3b8; width:30px;">Từ:</span>
@@ -1809,6 +1978,7 @@ if ($res_am && $res_am->num_rows > 0) {
                             </div>
 
                             <label class="filter-item-label">Thời gian (Theo Quý/Tháng)</label>
+                            <span class="filter-hint">Lọc theo Năm/Quý/Tháng của <b>ngày xuất hóa đơn</b> (invoice date).</span>
                             <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px; margin-bottom:20px;">
                                 <select name="year[]" multiple class="filter-select ts-multiselect" placeholder="Năm" style="margin-bottom:0;">
                                     <option value="">Năm</option>
@@ -1841,6 +2011,7 @@ if ($res_am && $res_am->num_rows > 0) {
                             </select>
 
                              <label class="filter-item-label">Cập nhật Tuần</label>
+                            <span class="filter-hint">Lọc theo tuần thu tiền trong tháng (cột “Cập nhật tuần”, vd Tuần 1–5).</span>
                             <select name="week[]" multiple class="filter-select ts-multiselect" placeholder="Tất cả tuần" style="margin-bottom:20px;">
                                 <option value="">Tất cả tuần</option>
                                 <?php
@@ -1875,21 +2046,20 @@ if ($res_am && $res_am->num_rows > 0) {
 
                     $counts = [];
                     // Get both sale_team_id and odoo_invoice_id to correctly filter by Odoo status when needed
-                    $c_res = $conn->query("SELECT d.sale_team_id, d.odoo_invoice_id FROM debts d $cw_sql");
+                    $c_res = $conn->query("SELECT d.sale_team_id, d.odoo_invoice_id, d.payment_status FROM debts d $cw_sql");
                     if ($c_res) {
                         while ($cr = $c_res->fetch_assoc()) {
                             $k = $cr['sale_team_id'] ?? 'undefined';
-                            
-                            // If strict "Draft" filter is active, we must match the Odoo state check used in the main loop
-                            if (isset($_GET['status']) && $_GET['status'] === 'Draft') {
+
+                            // Khớp đúng bộ lọc trạng thái thanh toán (dựa trên Odoo) dùng trong vòng lặp chính
+                            if (count($status_filter) > 0) {
                                 $oid = (string)$cr['odoo_invoice_id'];
-                                $odoo_inv = isset($odoo_map[$oid]) ? $odoo_map[$oid] : null;
-                                $odoo_state = ($odoo_inv && isset($odoo_inv['state'])) ? (string)$odoo_inv['state'] : '';
-                                if ($odoo_state !== 'draft') {
+                                $cinv = isset($odoo_map[$oid]) ? $odoo_map[$oid] : null;
+                                if (!debtMatchesStatus($cinv, $cr['payment_status'] ?? '', $status_filter)) {
                                     continue;
                                 }
                             }
-                            
+
                             if (!isset($counts[$k])) $counts[$k] = 0;
                             $counts[$k]++;
                         }
@@ -2666,24 +2836,20 @@ if ($res_am && $res_am->num_rows > 0) {
                                     <th>AM</th>
                                     <th>Sale Team</th>
                                     <th>Tên khách hàng</th>
-                                    <th>Tên dự án</th>
                                     <th>Ngày hóa đơn</th>
-                                    <th>Mốc thanh toán</th>
                                     <th>Exp. Prod Date</th>
                                     <th>Exp. Pay Date</th>
                                     <th>Phân loại HĐ</th>
                                     <th>Tiền</th>
                                     <th>Số tiền</th>
+                                    <th>Paid Amount</th>
                                     <th>P&L</th>
-                                    <th>Hóa đơn</th>
                                     <th>HĐ VAT</th>
                                     <th>Trạng thái HĐ</th>
                                     <th>Trạng thái TT</th>
                                     <th>Tháng TT</th>
                                     <th>Cập nhật tuần</th>
-                                    <th>Ghi chú AM</th>
-                                    <th>Ghi chú Delivery</th>
-                                    <th>Trạng thái SX</th>
+                                    <th>Tên dự án</th>
                                     <th style="width: 50px; text-align: center;">Action</th>
                                 </tr>
                             </thead>
@@ -2691,15 +2857,17 @@ if ($res_am && $res_am->num_rows > 0) {
                                 <?php $globalIdx = 1; ?>
                                 <?php foreach ($groupedDebts as $monthName => $ams): ?>
                                     <tr class="group-header">
-                                        <td colspan="24">
+                                        <td colspan="20">
                                             Tháng <?php echo $monthName; ?>
                                             <span class="group-total">(Total:
                                                 <?php echo formatVND($monthTotals[$monthName]); ?>)</span>
+                                            <span class="group-paid">Paid: <?php echo formatVND($monthPaid[$monthName] ?? 0); ?></span>
+                                            <span class="group-unpaid">Unpaid: <?php echo formatVND($monthUnpaid[$monthName] ?? 0); ?></span>
                                         </td>
                                     </tr>
                                     <?php foreach ($ams as $amName => $monthItems): ?>
                                         <tr class="group-header-am">
-                                            <td colspan="24">
+                                            <td colspan="20">
                                                 AM: <?php echo htmlspecialchars($amName); ?>
                                                 <span class="group-total"
                                                     style="font-size: 0.8rem; font-weight: normal; opacity: 0.8;">(Subtotal:
@@ -2707,7 +2875,7 @@ if ($res_am && $res_am->num_rows > 0) {
                                             </td>
                                         </tr>
                                         <?php foreach ($monthItems as $d): ?>
-                                            <tr style="cursor: default;">
+                                            <tr class="data-row <?php echo ($globalIdx % 2 === 0) ? 'row-even' : 'row-odd'; ?>" onclick="toggleRowSelect(this)">
                                                 <td style="text-align: center;"><?php echo $globalIdx++; ?></td>
                                                 <td class="cell-company"><?php echo htmlspecialchars($d['company']); ?></td>
                                                 <td>
@@ -2738,13 +2906,7 @@ if ($res_am && $res_am->num_rows > 0) {
                                                     style="cursor: pointer; position: relative;">
                                                     <?php echo htmlspecialchars($d['client_name'] ?? ''); ?>
                                                 </td>
-                                                <td class="project-tooltip-trigger"
-                                                    data-project-name="<?php echo htmlspecialchars($d['project_name'] ?? ''); ?>"
-                                                    style="position: relative; cursor: pointer;">
-                                                    <?php echo htmlspecialchars($d['project_name'] ?? ''); ?>
-                                                </td>
                                                 <td><?php echo formatDate($d['invoice_date']); ?></td>
-                                                <td><?php echo htmlspecialchars($d['payment_milestone'] ?? ''); ?></td>
                                                 <td><?php echo $d['expected_prod_date']; ?></td>
                                                 <td><?php echo $d['expected_payment_date']; ?></td>
                                                 <td style="position: relative; text-align: center;">
@@ -2777,13 +2939,18 @@ if ($res_am && $res_am->num_rows > 0) {
                                                 <td class="cell-amount">
                                                     <?php echo formatCurrency($d['amount'] ?? 0, 'VND'); ?>
                                                 </td>
+                                                <td class="cell-amount" style="color: #059669;">
+                                                    <?php
+                                                    $paidVnd = (float)($d['paid_amount_vnd'] ?? 0);
+                                                    echo $paidVnd > 0 ? formatCurrency($paidVnd, 'VND') : '-';
+                                                    ?>
+                                                </td>
                                                 <td>
                                                     <span
                                                         class="badge <?php echo (stripos($d['pl_class'] ?? '', 'Xấu') !== false ? 'pl-xau' : ((stripos($d['pl_class'] ?? '', 'TB') !== false) ? 'pl-tb' : 'pl-tot')); ?>">
                                                         <?php echo htmlspecialchars($d['pl_class'] ?? ''); ?>
                                                     </span>
                                                 </td>
-                                                <td><?php echo htmlspecialchars($d['invoice_status'] ?? ''); ?></td>
                                                 <td><?php echo htmlspecialchars($d['vat_invoice'] ?? ''); ?></td>
                                                 <td style="text-align: center;">
                                                     <?php
@@ -2800,25 +2967,32 @@ if ($res_am && $res_am->num_rows > 0) {
                                                     ?>
                                                 </td>
                                                 <td>
-                                                    <span
-                                                        class="badge <?php echo (stripos($d['payment_status'] ?? '', 'Not') !== false ? 'pay-not-paid' : 'pay-paid'); ?>">
-                                                        <?php echo htmlspecialchars($d['payment_status'] ?? ''); ?>
-                                                    </span>
+                                                    <?php
+                                                    // Use Odoo payment_state (more granular) when available, else fall back to DB payment_status
+                                                    $payState = $d['odoo_payment_state'] ?? '';
+                                                    if ($payState === 'partial') {
+                                                        $payCls = 'pay-partial';
+                                                        $payLbl = 'Partial';
+                                                    } elseif ($payState === 'paid' || $payState === 'in_payment') {
+                                                        $payCls = 'pay-paid';
+                                                        $payLbl = 'Paid';
+                                                    } elseif ($payState === 'not_paid' || $payState === 'reversed') {
+                                                        $payCls = 'pay-not-paid';
+                                                        $payLbl = ($payState === 'reversed') ? 'Reversed' : 'Not paid';
+                                                    } else {
+                                                        // No Odoo match: fall back to stored binary status
+                                                        $payCls = (stripos($d['payment_status'] ?? '', 'Not') !== false) ? 'pay-not-paid' : 'pay-paid';
+                                                        $payLbl = $d['payment_status'] ?? '';
+                                                    }
+                                                    ?>
+                                                    <span class="badge <?php echo $payCls; ?>"><?php echo htmlspecialchars($payLbl); ?></span>
                                                 </td>
                                                 <td><?php echo htmlspecialchars($d['payment_month'] ?? ''); ?></td>
                                                 <td><?php echo htmlspecialchars($d['weekly_update'] ?? ''); ?></td>
-                                                <td><?php echo htmlspecialchars($d['am_notes'] ?? ''); ?></td>
-                                                <td><?php echo htmlspecialchars($d['delivery_notes'] ?? ''); ?></td>
-                                                <td style="position: relative; text-align: center;">
-                                                    <?php
-                                                    $ps = $d['production_status'] ?? '';
-                                                    $prodClass = 'prod-dc2';
-                                                    if (stripos($ps, 'Overdue') !== false || stripos($ps, 'DC5') !== false)
-                                                        $prodClass = 'prod-dc5';
-                                                    elseif (stripos($ps, 'DC1') !== false)
-                                                        $prodClass = 'prod-dc1';
-                                                    ?>
-                                                    <?php echo htmlspecialchars($d['production_status'] ?? ''); ?>
+                                                <td class="project-tooltip-trigger"
+                                                    data-project-name="<?php echo htmlspecialchars($d['project_name'] ?? ''); ?>"
+                                                    style="position: relative; cursor: pointer;">
+                                                    <?php echo htmlspecialchars($d['project_name'] ?? ''); ?>
                                                 </td>
                                                 <td style="text-align: center;">
                                                     <?php if ($role === 'admin'): ?>
@@ -3080,6 +3254,11 @@ if ($res_am && $res_am->num_rows > 0) {
                 document.getElementById('deleteId').value = id;
                 document.getElementById('deleteForm').submit();
             }
+        }
+
+        // Click 1 dòng -> đổi nền (chọn); click lại -> trở về bình thường
+        function toggleRowSelect(tr) {
+            tr.classList.toggle('row-selected');
         }
 
         function updateInline(id, field, value, el) {
