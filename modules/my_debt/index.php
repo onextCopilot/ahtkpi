@@ -187,9 +187,51 @@ if (!empty($_GET['invoice_status_class'])) {
     }
 }
 
+/**
+ * Cờ (đã-thu, còn-nợ) của 1 dòng nợ, dựa trên amount_total/amount_residual của Odoo.
+ *  - đã-thu (collected) = amount_total - amount_residual > 0
+ *  - còn-nợ (owed)      = amount_residual > 0
+ * Hóa đơn thu một phần (partial) sẽ TRUE cả hai. Không có dữ liệu Odoo thì fallback theo payment_status DB.
+ * @return array [bool $hasCollected, bool $hasOwed]
+ */
+function debtPaidOwedFlags($odoo_inv, $db_payment_status)
+{
+    if ($odoo_inv && isset($odoo_inv['amount_total']) && abs((float) $odoo_inv['amount_total']) > 0) {
+        $total    = abs((float) $odoo_inv['amount_total']);
+        $residual = isset($odoo_inv['amount_residual']) ? abs((float) $odoo_inv['amount_residual']) : 0;
+        $collected = $total - $residual;
+        return [$collected > 0.01, $residual > 0.01];
+    }
+    $paid = (strcasecmp(trim((string) $db_payment_status), 'Paid') === 0);
+    return [$paid, !$paid];
+}
+
+/**
+ * Dòng nợ có khớp bộ lọc trạng thái thanh toán không (dựa trên Odoo):
+ *  - 'Draft'    : state = draft
+ *  - 'Paid'     : đã thu được tiền (collected > 0) — gồm cả partial
+ *  - 'Not paid' : còn nợ (owed > 0)               — gồm cả partial
+ * Hóa đơn đã hủy (state = cancel) không khớp filter nào.
+ */
+function debtMatchesStatus($odoo_inv, $db_payment_status, $selected)
+{
+    if (empty($selected)) return true;
+    $state = ($odoo_inv && isset($odoo_inv['state'])) ? (string) $odoo_inv['state'] : '';
+    if ($state === 'draft')  return in_array('Draft', $selected);
+    if ($state === 'cancel') return false;
+    list($hasCollected, $hasOwed) = debtPaidOwedFlags($odoo_inv, $db_payment_status);
+    if (in_array('Paid', $selected) && $hasCollected) return true;
+    if (in_array('Not paid', $selected) && $hasOwed)  return true;
+    return false;
+}
+
+// Trạng thái thanh toán được lọc ở PHP (dựa trên Odoo), không lọc bằng SQL.
+$status_filter = [];
 if (!empty($_GET['status'])) {
-    $status_filter = $conn->real_escape_string($_GET['status']);
-    $filter_clauses[] = "d.payment_status = '$status_filter'";
+    $status_filter = is_array($_GET['status']) ? $_GET['status'] : [$_GET['status']];
+    $status_filter = array_values(array_filter($status_filter, function ($s) {
+        return $s !== '';
+    }));
 }
 
 if (!empty($_GET['q'])) {
@@ -238,8 +280,12 @@ if (count($filter_clauses) > 0 || count($time_clauses) > 0) {
 
 $groupedDebts = [];
 $monthTotals = [];
+$monthPaid = [];   // tổng phần đã thu theo tháng
+$monthUnpaid = []; // tổng phần còn nợ theo tháng
 $total_amount_usd = 0;
 $total_amount_vnd = 0;
+$total_paid_vnd = 0;   // tổng phần ĐÃ thu (collected) của các dòng hiển thị
+$total_unpaid_vnd = 0; // tổng phần CÒN nợ (owed) của các dòng hiển thị
 $res = $conn->query("SELECT d.*, st.name as team_name FROM debts d LEFT JOIN sale_teams st ON d.sale_team_id = st.id $where_sql ORDER BY (d.invoice_date IS NULL OR d.invoice_date < '1000-01-01') DESC, d.invoice_date DESC, d.id DESC");
 
 // Trigger cache refresh if needed (OdooAPI::getInvoices handles the 1-hour check internally)
@@ -281,6 +327,10 @@ foreach ($odoo_map as $inv) {
     }
 }
 
+// Tỉ giá theo TIỀN TỆ (rate = số đơn vị ngoại tệ trên 1 VND) — dùng quy đổi VND cho
+// bản ghi KHÔNG link Odoo (vd record mới nhập tay). Tránh getRate() bị cross-company.
+$currencyMap = $odoo->getCurrencies();
+
 if ($res) {
     // Pre-fetch AM names to emails for one-time auto-population
     $am_name_map = [];
@@ -292,6 +342,13 @@ if ($res) {
     }
 
     while ($row = $res->fetch_assoc()) {
+        // Lọc theo trạng thái thanh toán dựa trên Odoo (Draft / Not paid / Paid). Partial khớp cả Paid lẫn Not paid.
+        $oid_for_filter = (string) $row['odoo_invoice_id'];
+        $odoo_inv_for_filter = isset($odoo_map[$oid_for_filter]) ? $odoo_map[$oid_for_filter] : null;
+        if (count($status_filter) > 0 && !debtMatchesStatus($odoo_inv_for_filter, $row['payment_status'], $status_filter)) {
+            continue;
+        }
+
         $amount = (float) $row['amount'];
         $curr = $row['currency'] ?: 'USD';
         $date = !empty($row['invoice_date']) ? $row['invoice_date'] : date('Y-m-d');
@@ -497,22 +554,66 @@ if ($res) {
             }
         }
 
-        // Fallback to manual rate calculation if needed
+        // Fallback (bản ghi không link Odoo): quy đổi VND theo tỉ giá tiền tệ từ getCurrencies().
+        // rate = số đơn vị ngoại tệ / 1 VND  => VND = amount / rate. VND thì rate = 1.
         if ($vnd_value <= 0) {
-            $rate = $odoo->getRate($curr, $date);
-            // AHT TECH is a VND company: getRate(curr) = foreign_currency per 1 VND,
-            // so amount / rate already yields VND directly. No vnd_multiplier needed.
-            $vnd_value = ($rate > 0) ? ($amount / $rate) : $amount;
+            if ($curr === 'VND') {
+                $vnd_value = $amount;
+            } else {
+                $cr = isset($currencyMap[$curr]['rate']) ? (float) $currencyMap[$curr]['rate'] : 0;
+                $vnd_value = ($cr > 0) ? ($amount / $cr) : $amount;
+            }
         }
 
-        $total_amount_vnd += $vnd_value;
-        
+        // Odoo invoice dùng để tính phần đã thu / còn nợ / trạng thái hiển thị
+        $odoo_inv_for_state = (!empty($oid) && isset($odoo_map[$oid])) ? $odoo_map[$oid] : null;
+        $row['odoo_state'] = ($odoo_inv_for_state && isset($odoo_inv_for_state['state'])) ? (string) $odoo_inv_for_state['state'] : '';
+        $row['odoo_payment_state'] = ($odoo_inv_for_state && isset($odoo_inv_for_state['payment_state'])) ? (string) $odoo_inv_for_state['payment_state'] : '';
+
+        // Paid Amount (VND): phần đã thu = (amount_total - amount_residual) áp tỉ lệ lên giá trị VND của dòng.
+        $paid_vnd = 0;
+        $odoo_total_for_paid = ($odoo_inv_for_state && isset($odoo_inv_for_state['amount_total'])) ? abs((float) $odoo_inv_for_state['amount_total']) : 0;
+        if ($odoo_total_for_paid > 0) {
+            $residual = ($odoo_inv_for_state && isset($odoo_inv_for_state['amount_residual'])) ? abs((float) $odoo_inv_for_state['amount_residual']) : 0;
+            $paid_fraction = max(0, min(1, ($odoo_total_for_paid - $residual) / $odoo_total_for_paid));
+            $paid_vnd = $vnd_value * $paid_fraction;
+        } else {
+            // Không có dữ liệu Odoo: dựa theo trạng thái nhị phân trong DB
+            $paid_vnd = (strcasecmp(trim((string) ($row['payment_status'] ?? '')), 'Paid') === 0) ? $vnd_value : 0;
+        }
+        $owed_vnd = max(0, $vnd_value - $paid_vnd);
+        $row['paid_amount_vnd'] = $paid_vnd;
+
+        // Phần đóng góp vào Total theo bộ lọc đang chọn:
+        //  - filter Paid     -> chỉ phần đã thu
+        //  - filter Not paid -> chỉ phần còn nợ
+        //  - chọn cả hai / không lọc / Draft -> full
+        $contrib_vnd = $vnd_value;
+        if (count($status_filter) > 0) {
+            $state_for_contrib = $row['odoo_state'];
+            $paidSel = in_array('Paid', $status_filter);
+            $notPaidSel = in_array('Not paid', $status_filter);
+            if ($state_for_contrib === 'draft') {
+                $contrib_vnd = $vnd_value;
+            } elseif ($paidSel && $notPaidSel) {
+                $contrib_vnd = $vnd_value;
+            } elseif ($paidSel) {
+                $contrib_vnd = $paid_vnd;
+            } elseif ($notPaidSel) {
+                $contrib_vnd = $owed_vnd;
+            }
+        }
+
+        $total_amount_vnd += $contrib_vnd;
+        $total_paid_vnd += $paid_vnd;     // chỉ tổng phần đã thu
+        $total_unpaid_vnd += $owed_vnd;   // chỉ tổng phần còn nợ
+
         // Track total in USD for generic reference
         if ($curr === 'USD') {
             $total_amount_usd += $amount;
         } else if ($vnd_value > 0) {
             // Use 24000 as a generic VND/USD fallback for the USD summary if no direct USD rate
-            $total_amount_usd += ($vnd_value / 24000); 
+            $total_amount_usd += ($vnd_value / 24000);
         }
 
         // Grouping
@@ -524,9 +625,14 @@ if ($res) {
 
         $mKey = (!empty($row['invoice_date']) && $row['invoice_date'] > '1000-01-01') ? date('m/Y', strtotime($row['invoice_date'])) : 'Nợ chưa vào tháng';
         $groupedDebts[$mKey][] = $row;
-        if (!isset($monthTotals[$mKey]))
+        if (!isset($monthTotals[$mKey])) {
             $monthTotals[$mKey] = 0;
-        $monthTotals[$mKey] += $vnd_value;
+            $monthPaid[$mKey] = 0;
+            $monthUnpaid[$mKey] = 0;
+        }
+        $monthTotals[$mKey] += $contrib_vnd;
+        $monthPaid[$mKey] += $paid_vnd;
+        $monthUnpaid[$mKey] += $owed_vnd;
     }
 }
 $debts = []; // To keep debtsData for JS populated
@@ -680,134 +786,49 @@ if ($team_res && $team_res->num_rows > 0) {
 
         table.debt-table {
             width: max-content;
-            /* Allow table to be wider than container */
             min-width: 100%;
-            /* But at least 100% */
             border-collapse: separate;
             border-spacing: 0;
-            font-size: 13px;
+            font-size: 12px;
+            font-family: 'Inter', sans-serif;
             white-space: nowrap;
+            color: #334155;
         }
 
         /* Sticky Header */
         table.debt-table thead th {
             position: sticky;
             top: 0;
-            background-color: #004b75;
-            color: white;
+            background-color: #f8fafc;
+            color: #475569;
             font-weight: 600;
-            padding: 10px 12px;
+            text-transform: uppercase;
+            font-size: 10.5px;
+            letter-spacing: 0.03em;
+            padding: 7px 8px;
             text-align: left;
-            border-bottom: 2px solid #003655;
+            border-bottom: 2px solid #e2e8f0;
             z-index: 10;
             white-space: normal;
             line-height: 1.3;
             vertical-align: middle;
-            min-width: 100px;
-            max-height: 52px;
-            overflow: visible;
-            /* Changed from hidden to allow resizer handles */
-            position: sticky !important;
-            /* Ensure sticky wins */
-        }
-
-        /* Ensure th is relative for resizers */
-        table.debt-table thead th {
-            position: sticky !important;
-        }
-
-        /* Column borders in header */
-        table.debt-table thead th:not(:last-child) {
-            border-right: 1px solid rgba(255, 255, 255, 0.2);
+            min-width: 52px;
         }
 
         table.debt-table tbody td {
-            padding: 8px 10px;
-            border-bottom: 1px solid #e0e0e0;
-            border-right: 1px solid #f0f0f0;
+            padding: 6px 8px;
+            border-bottom: 1px solid #f1f5f9;
             vertical-align: middle;
-            color: #333;
+            color: #1e293b;
+            transition: background-color 0.15s;
         }
 
-        /* Sticky Columns */
-        table.debt-table th:nth-child(1),
-        table.debt-table tr:not(.group-header) td:nth-child(1) {
-            box-sizing: border-box;
-            position: sticky;
-            left: 0;
-            z-index: 8;
-            width: 40px;
-            min-width: 40px;
-            max-width: 40px;
-        }
-
-        table.debt-table th:nth-child(2),
-        table.debt-table tr:not(.group-header) td:nth-child(2) {
-            box-sizing: border-box;
-            position: sticky;
-            left: 40px;
-            z-index: 8;
-            width: 80px;
-            min-width: 80px;
-            max-width: 80px;
-            text-align: center;
-        }
-
-        table.debt-table th:nth-child(3),
-        table.debt-table tr:not(.group-header) td:nth-child(3) {
-            box-sizing: border-box;
-            position: sticky;
-            left: 120px;
-            z-index: 8;
-            width: 80px;
-            min-width: 80px;
-            max-width: 80px;
-        }
-
-        table.debt-table th:nth-child(4),
-        table.debt-table tr:not(.group-header) td:nth-child(4) {
-            box-sizing: border-box;
-            position: sticky;
-            left: 200px;
-            z-index: 8;
-            width: 100px;
-            min-width: 100px;
-            max-width: 100px;
-        }
-
-        table.debt-table th:nth-child(5),
-        table.debt-table tr:not(.group-header) td:nth-child(5) {
-            box-sizing: border-box;
-            position: sticky;
-            left: 300px;
-            z-index: 8;
-            width: 140px;
-            min-width: 140px;
-            max-width: 140px;
-        }
-
-        table.debt-table th:nth-child(6),
-        table.debt-table tr:not(.group-header) td:nth-child(6) {
-            box-sizing: border-box;
-            position: sticky;
-            left: 440px;
-            z-index: 8;
-            width: 220px;
-            min-width: 220px;
-            max-width: 220px;
-        }
-
-        table.debt-table th:nth-child(7),
-        table.debt-table tr:not(.group-header) td:nth-child(7) {
-            box-sizing: border-box;
-            position: sticky;
-            left: 660px;
-            z-index: 8;
-            width: 220px;
-            min-width: 220px;
-            max-width: 220px;
-            border-right: 1px solid #cbd5e1 !important;
-            box-shadow: 2px 0 5px -2px rgba(0, 0, 0, 0.1);
+        /* Let long text columns wrap instead of forcing the table wider */
+        table.debt-table tbody td.cell-company,
+        table.debt-table tbody td.project-tooltip-trigger {
+            white-space: normal;
+            max-width: 200px;
+            line-height: 1.35;
         }
 
         .col-resizer {
@@ -835,48 +856,23 @@ if ($team_res && $team_res->num_rows > 0) {
             user-select: none;
         }
 
-        .sticky-editable-cell {
-            position: sticky !important;
-            z-index: 8;
+        /* Zebra striping theo từng dòng dữ liệu (bỏ qua dòng group header) */
+        table.debt-table tbody tr.data-row.row-odd td {
+            background-color: #ffffff;
         }
 
-        table.debt-table tr:not(.group-header) td:nth-child(1),
-        table.debt-table tr:not(.group-header) td:nth-child(2),
-        table.debt-table tr:not(.group-header) td:nth-child(3),
-        table.debt-table tr:not(.group-header) td:nth-child(4),
-        table.debt-table tr:not(.group-header) td:nth-child(5),
-        table.debt-table tr:not(.group-header) td:nth-child(6),
-        table.debt-table tr:not(.group-header) td:nth-child(7) {
-            background-color: inherit;
+        table.debt-table tbody tr.data-row.row-even td {
+            background-color: #f1f5f9;
         }
 
-        table.debt-table th:nth-child(1),
-        table.debt-table th:nth-child(2),
-        table.debt-table th:nth-child(3),
-        table.debt-table th:nth-child(4),
-        table.debt-table th:nth-child(5),
-        table.debt-table th:nth-child(6),
-        table.debt-table th:nth-child(7) {
-            z-index: 12;
-            background-color: #004b75;
-        }
-
-        table.debt-table tbody {
-            background-color: #fff;
-        }
-
-        table.debt-table tbody tr {
-            background-color: #fff;
-        }
-
-        /* Row Stripes */
-        table.debt-table tbody tr:nth-child(even) {
-            background-color: #f8fafc;
-        }
-
-        table.debt-table tbody tr:hover {
-            background-color: #e3f2fd;
+        table.debt-table tbody tr.data-row:hover td {
+            background-color: #e0e7ff;
             cursor: pointer;
+        }
+
+        /* Dòng được chọn (click) — đè lên cả striping lẫn hover */
+        table.debt-table tbody tr.data-row.row-selected td {
+            background-color: #bfdbfe !important;
         }
 
         .cell-company {
@@ -1044,6 +1040,14 @@ if ($team_res && $team_res->num_rows > 0) {
             border-radius: 4px;
         }
 
+        .pay-partial {
+            background-color: #fef3c7;
+            color: #b45309;
+            font-weight: 700;
+            padding: 4px 8px;
+            border-radius: 4px;
+        }
+
         .prod-dc5 {
             background-color: #b91c1c;
             color: white;
@@ -1118,19 +1122,20 @@ if ($team_res && $team_res->num_rows > 0) {
         .btn-add {
             background: #0f172a;
             color: white;
-            border: none;
-            padding: 10px 16px;
-            border-radius: 6px;
+            border: 1px solid #0f172a;
+            padding: 8px 16px;
+            border-radius: 8px;
             cursor: pointer;
             font-weight: 600;
             display: flex;
             align-items: center;
-            gap: 6px;
+            gap: 8px;
             transition: all 0.2s;
         }
 
         .btn-add:hover {
             background: #334155;
+            border-color: #334155;
         }
 
         .group-header td {
@@ -1147,15 +1152,52 @@ if ($team_res && $team_res->num_rows > 0) {
             margin-left: 10px;
         }
 
-        .total-badge {
-            margin-left: auto;
-            margin-right: 1rem;
-            font-size: 0.95rem;
+        .group-paid {
+            color: #2563eb;
+            margin-left: 14px;
             font-weight: 600;
-            color: #475569;
-            background: #f1f5f9;
-            padding: 6px 12px;
-            border-radius: 6px;
+        }
+
+        .group-unpaid {
+            color: #dc2626;
+            margin-left: 14px;
+            font-weight: 600;
+        }
+
+        .total-badge {
+            margin: 0;
+            display: inline-flex;
+            align-items: baseline;
+            gap: 5px;
+            white-space: nowrap;
+            font-size: 0.8rem;
+            font-weight: 700;
+            color: #065f46;
+            background: #ecfdf5;
+            border: 1px solid #6ee7b7;
+            padding: 7px 12px;
+            border-radius: 8px;
+            line-height: 1.1;
+        }
+
+        .total-badge .tb-label {
+            font-size: 0.65rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.03em;
+            opacity: 0.75;
+        }
+
+        .total-badge.paid-badge {
+            color: #1d4ed8;
+            background: #eff6ff;
+            border-color: #93c5fd;
+        }
+
+        .total-badge.unpaid-badge {
+            color: #b91c1c;
+            background: #fef2f2;
+            border-color: #fca5a5;
         }
 
         /* Professional Modal Styling */
@@ -1452,6 +1494,131 @@ if ($team_res && $team_res->num_rows > 0) {
             transition: background-color 2s ease-out;
             border: 2px solid #fbc02d;
         }
+
+        /* Filter Sidebar Drawer (giống /debt) */
+        .btn-filter-toggle {
+            background: white;
+            border: 1px solid #cbd5e1;
+            color: #475569;
+            padding: 8px 16px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            transition: all 0.2s;
+            position: relative;
+        }
+
+        .btn-filter-toggle:hover {
+            border-color: #2563eb;
+            color: #2563eb;
+            background: #f0f7ff;
+        }
+
+        .filter-badge {
+            position: absolute;
+            top: -6px;
+            right: -6px;
+            background: #2563eb;
+            color: white;
+            font-size: 10px;
+            min-width: 18px;
+            height: 18px;
+            padding: 0 4px;
+            border-radius: 9px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 700;
+        }
+
+        .filter-sidebar-overlay {
+            display: none;
+            position: fixed;
+            inset: 0;
+            background: rgba(0, 0, 0, 0.4);
+            backdrop-filter: blur(2px);
+            z-index: 2000;
+        }
+
+        .filter-sidebar {
+            position: fixed;
+            top: 0;
+            right: -360px;
+            width: 360px;
+            max-width: 90vw;
+            height: 100%;
+            background: white;
+            z-index: 2001;
+            box-shadow: -4px 0 20px rgba(0, 0, 0, 0.1);
+            display: flex;
+            flex-direction: column;
+            transition: right 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        .filter-sidebar.open {
+            right: 0;
+        }
+
+        .filter-sidebar-header {
+            padding: 1.25rem 1.5rem;
+            border-bottom: 1px solid #f1f5f9;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: #f8fafc;
+        }
+
+        .filter-sidebar-header h3 {
+            margin: 0;
+            font-size: 1.1rem;
+            color: #0f172a;
+            font-weight: 700;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .filter-sidebar-header .close {
+            cursor: pointer;
+            font-size: 1.6rem;
+            line-height: 1;
+            color: #94a3b8;
+        }
+
+        .filter-sidebar-body {
+            flex: 1;
+            padding: 1.5rem;
+            overflow-y: auto;
+        }
+
+        .filter-sidebar-footer {
+            padding: 1.25rem 1.5rem;
+            border-top: 1px solid #f1f5f9;
+            display: flex;
+            gap: 12px;
+        }
+
+        .filter-item-label {
+            display: block;
+            margin-bottom: 8px;
+            font-size: 12px;
+            font-weight: 700;
+            color: #64748b;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        .filter-sidebar .filter-select,
+        .filter-sidebar .search-input {
+            width: 100%;
+            margin-bottom: 20px;
+            padding: 10px 12px;
+            background: #fff;
+            border: 1px solid #cbd5e1;
+        }
     </style>
 </head>
 
@@ -1466,77 +1633,121 @@ if ($team_res && $team_res->num_rows > 0) {
 
             <div class="debt-container">
                 <div class="page-controls">
-                    <form method="GET" class="filter-group">
-                        <input type="text" name="q" class="search-input"
-                            placeholder="Search Client, Project, Invoice..."
-                            value="<?php echo htmlspecialchars($_GET['q'] ?? ''); ?>">
+                    <?php
+                    $sel_status = $status_filter; // mảng đã parse ở trên
+                    // Đếm số filter đang áp dụng để hiện badge trên nút Bộ lọc
+                    $mydebt_filter_params = ['q', 'status', 'invoice_status_class', 'year', 'quarter', 'month', 'week'];
+                    $mydebt_active = 0;
+                    foreach ($mydebt_filter_params as $p) {
+                        if (!empty($_GET[$p])) $mydebt_active++;
+                    }
+                    ?>
+                    <!-- Filter Sidebar Drawer -->
+                    <div class="filter-sidebar-overlay" id="filterOverlay" onclick="toggleFilterSidebar()"></div>
+                    <div class="filter-sidebar" id="filterSidebar">
+                        <div class="filter-sidebar-header">
+                            <h3><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon></svg> Bộ lọc dữ liệu</h3>
+                            <span class="close" onclick="toggleFilterSidebar()">&times;</span>
+                        </div>
+                        <div class="filter-sidebar-body">
+                            <form method="GET" id="filterForm">
+                                <label class="filter-item-label">Tìm kiếm nhanh</label>
+                                <input type="text" name="q" class="search-input"
+                                    placeholder="Client, Project, Invoice..."
+                                    value="<?php echo htmlspecialchars($_GET['q'] ?? ''); ?>">
 
-                        <select name="status" class="filter-select" onchange="this.form.submit()">
-                            <option value="">Status: All</option>
-                            <option value="Not paid" <?php echo (isset($_GET['status']) && $_GET['status'] == 'Not paid') ? 'selected' : ''; ?>>Not paid</option>
-                            <option value="Paid" <?php echo (isset($_GET['status']) && $_GET['status'] == 'Paid') ? 'selected' : ''; ?>>Paid</option>
-                        </select>
+                                <label class="filter-item-label">Trạng thái thanh toán</label>
+                                <select name="status" class="filter-select" title="Draft = nháp · Not paid = posted còn nợ · Paid = đã thu (partial xuất hiện ở cả Paid lẫn Not paid)">
+                                    <option value="">Tất cả</option>
+                                    <option value="Draft" <?php echo in_array('Draft', $sel_status) ? 'selected' : ''; ?>>Draft</option>
+                                    <option value="Not paid" <?php echo in_array('Not paid', $sel_status) ? 'selected' : ''; ?>>Not paid</option>
+                                    <option value="Paid" <?php echo in_array('Paid', $sel_status) ? 'selected' : ''; ?>>Paid</option>
+                                </select>
 
-                        <select name="invoice_status_class" class="filter-select" onchange="this.form.submit()">
-                            <option value="">Phân loại HĐ: All</option>
-                            <option value="Trắng" <?php echo (isset($_GET['invoice_status_class']) && $_GET['invoice_status_class'] == 'Trắng') ? 'selected' : ''; ?>>Trắng</option>
-                            <option value="Xanh" <?php echo (isset($_GET['invoice_status_class']) && $_GET['invoice_status_class'] == 'Xanh') ? 'selected' : ''; ?>>Xanh (Tốt)</option>
-                            <option value="Tím" <?php echo (isset($_GET['invoice_status_class']) && $_GET['invoice_status_class'] == 'Tím') ? 'selected' : ''; ?>>Tím</option>
-                            <option value="Đỏ" <?php echo (isset($_GET['invoice_status_class']) && $_GET['invoice_status_class'] == 'Đỏ') ? 'selected' : ''; ?>>Đỏ</option>
-                            <option value="PP" <?php echo (isset($_GET['invoice_status_class']) && $_GET['invoice_status_class'] == 'PP') ? 'selected' : ''; ?>>PP</option>
-                            <option value="Draft" <?php echo (isset($_GET['invoice_status_class']) && $_GET['invoice_status_class'] == 'Draft') ? 'selected' : ''; ?>>Draft</option>
-                            <option value="Done" <?php echo (isset($_GET['invoice_status_class']) && $_GET['invoice_status_class'] == 'Done') ? 'selected' : ''; ?>>Done</option>
-                            <option value="Chưa xác định" <?php echo (isset($_GET['invoice_status_class']) && $_GET['invoice_status_class'] == 'Chưa xác định') ? 'selected' : ''; ?>>Chưa xác định
-                            </option>
-                        </select>
+                                <label class="filter-item-label">Phân loại HĐ</label>
+                                <select name="invoice_status_class" class="filter-select">
+                                    <option value="">Tất cả</option>
+                                    <option value="Trắng" <?php echo (isset($_GET['invoice_status_class']) && $_GET['invoice_status_class'] == 'Trắng') ? 'selected' : ''; ?>>Trắng</option>
+                                    <option value="Xanh" <?php echo (isset($_GET['invoice_status_class']) && $_GET['invoice_status_class'] == 'Xanh') ? 'selected' : ''; ?>>Xanh (Tốt)</option>
+                                    <option value="Tím" <?php echo (isset($_GET['invoice_status_class']) && $_GET['invoice_status_class'] == 'Tím') ? 'selected' : ''; ?>>Tím</option>
+                                    <option value="Đỏ" <?php echo (isset($_GET['invoice_status_class']) && $_GET['invoice_status_class'] == 'Đỏ') ? 'selected' : ''; ?>>Đỏ</option>
+                                    <option value="PP" <?php echo (isset($_GET['invoice_status_class']) && $_GET['invoice_status_class'] == 'PP') ? 'selected' : ''; ?>>PP</option>
+                                    <option value="Draft" <?php echo (isset($_GET['invoice_status_class']) && $_GET['invoice_status_class'] == 'Draft') ? 'selected' : ''; ?>>Draft</option>
+                                    <option value="Done" <?php echo (isset($_GET['invoice_status_class']) && $_GET['invoice_status_class'] == 'Done') ? 'selected' : ''; ?>>Done</option>
+                                    <option value="Chưa xác định" <?php echo (isset($_GET['invoice_status_class']) && $_GET['invoice_status_class'] == 'Chưa xác định') ? 'selected' : ''; ?>>Chưa xác định</option>
+                                </select>
 
-                        <select name="year" class="filter-select" onchange="this.form.submit()">
-                            <option value="">Year: All</option>
-                            <?php
-                            $currentYear = date('Y');
-                            for ($y = $currentYear; $y >= $currentYear - 2; $y--) {
-                                $sel = (isset($_GET['year']) && $_GET['year'] == $y) ? 'selected' : '';
-                                echo "<option value='$y' $sel>$y</option>";
-                            }
-                            ?>
-                        </select>
+                                <label class="filter-item-label">Năm</label>
+                                <select name="year" class="filter-select">
+                                    <option value="">Tất cả</option>
+                                    <?php
+                                    $currentYear = date('Y');
+                                    for ($y = $currentYear; $y >= $currentYear - 2; $y--) {
+                                        $sel = (isset($_GET['year']) && $_GET['year'] == $y) ? 'selected' : '';
+                                        echo "<option value='$y' $sel>$y</option>";
+                                    }
+                                    ?>
+                                </select>
 
-                        <select name="quarter" class="filter-select" onchange="this.form.submit()">
-                            <option value="">Quarter: All</option>
-                            <option value="1" <?php echo (isset($_GET['quarter']) && $_GET['quarter'] == '1') ? 'selected' : ''; ?>>Q1</option>
-                            <option value="2" <?php echo (isset($_GET['quarter']) && $_GET['quarter'] == '2') ? 'selected' : ''; ?>>Q2</option>
-                            <option value="3" <?php echo (isset($_GET['quarter']) && $_GET['quarter'] == '3') ? 'selected' : ''; ?>>Q3</option>
-                            <option value="4" <?php echo (isset($_GET['quarter']) && $_GET['quarter'] == '4') ? 'selected' : ''; ?>>Q4</option>
-                        </select>
+                                <label class="filter-item-label">Quý</label>
+                                <select name="quarter" class="filter-select">
+                                    <option value="">Tất cả</option>
+                                    <option value="1" <?php echo (isset($_GET['quarter']) && $_GET['quarter'] == '1') ? 'selected' : ''; ?>>Q1</option>
+                                    <option value="2" <?php echo (isset($_GET['quarter']) && $_GET['quarter'] == '2') ? 'selected' : ''; ?>>Q2</option>
+                                    <option value="3" <?php echo (isset($_GET['quarter']) && $_GET['quarter'] == '3') ? 'selected' : ''; ?>>Q3</option>
+                                    <option value="4" <?php echo (isset($_GET['quarter']) && $_GET['quarter'] == '4') ? 'selected' : ''; ?>>Q4</option>
+                                </select>
 
-                        <select name="month" class="filter-select" onchange="this.form.submit()">
-                            <option value="">Month: All</option>
-                            <?php
-                            for ($m = 1; $m <= 12; $m++) {
-                                $sel = (isset($_GET['month']) && $_GET['month'] == $m) ? 'selected' : '';
-                                $mName = date('F', mktime(0, 0, 0, $m, 1));
-                                echo "<option value='$m' $sel>$mName</option>";
-                            }
-                            ?>
-                        </select>
+                                <label class="filter-item-label">Tháng</label>
+                                <select name="month" class="filter-select">
+                                    <option value="">Tất cả</option>
+                                    <?php
+                                    for ($m = 1; $m <= 12; $m++) {
+                                        $sel = (isset($_GET['month']) && $_GET['month'] == $m) ? 'selected' : '';
+                                        $mName = date('F', mktime(0, 0, 0, $m, 1));
+                                        echo "<option value='$m' $sel>$mName</option>";
+                                    }
+                                    ?>
+                                </select>
 
-                        <select name="week" class="filter-select" onchange="this.form.submit()">
-                            <option value="">Tuần: All</option>
-                            <?php
-                            for ($w = 1; $w <= 5; $w++) {
-                                $sel = (isset($_GET['week']) && $_GET['week'] == $w) ? 'selected' : '';
-                                echo "<option value='$w' $sel>Tuần $w</option>";
-                            }
-                            ?>
-                        </select>
-                        <button type="submit" style="display:none;"></button>
-                    </form>
-
-                    <div class="total-badge" style="background: #ecfdf5; border-color: #10b981; color: #065f46;">
-                        Total: <?php echo formatVND($total_amount_vnd); ?>
+                                <label class="filter-item-label">Cập nhật tuần</label>
+                                <select name="week" class="filter-select">
+                                    <option value="">Tất cả</option>
+                                    <?php
+                                    for ($w = 1; $w <= 5; $w++) {
+                                        $sel = (isset($_GET['week']) && $_GET['week'] == $w) ? 'selected' : '';
+                                        echo "<option value='$w' $sel>Tuần $w</option>";
+                                    }
+                                    ?>
+                                </select>
+                                <button type="submit" style="display:none;"></button>
+                            </form>
+                        </div>
+                        <div class="filter-sidebar-footer">
+                            <button type="button" class="btn-cancel" style="flex:1;" onclick="window.location.href='?'">Xóa hết</button>
+                            <button type="button" class="btn-submit" style="flex:1;" onclick="document.getElementById('filterForm').submit()">Áp dụng</button>
+                        </div>
                     </div>
 
-                    <button class="btn-add" onclick="openModal('add')">
+                    <div style="display: flex; align-items: center; gap: 8px; margin-left: auto;">
+                        <div class="total-badge" title="Tổng giá trị (theo bộ lọc)">
+                            <span class="tb-label">Total</span><?php echo formatVND($total_amount_vnd); ?>
+                        </div>
+                        <div class="total-badge paid-badge" title="Tổng phần đã thu được">
+                            <span class="tb-label">Paid</span><?php echo formatVND($total_paid_vnd); ?>
+                        </div>
+                        <div class="total-badge unpaid-badge" title="Tổng phần còn nợ">
+                            <span class="tb-label">Unpaid</span><?php echo formatVND($total_unpaid_vnd); ?>
+                        </div>
+                    </div>
+
+                    <button type="button" class="btn-filter-toggle" onclick="toggleFilterSidebar()" style="margin-left: 12px;">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon></svg>
+                        <span>Bộ lọc</span>
+                        <?php if ($mydebt_active > 0): ?><span class="filter-badge"><?php echo $mydebt_active; ?></span><?php endif; ?>
+                    </button>
+
+                    <button class="btn-add" onclick="openModal('add')" style="margin-left: 10px;">
                         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
                             stroke-width="3">
                             <line x1="12" y1="5" x2="12" y2="19"></line>
@@ -1556,41 +1767,37 @@ if ($team_res && $team_res->num_rows > 0) {
                     <table class="debt-table" id="myDebtsTable">
                         <thead>
                             <tr>
-                                <th>#</th>
-                                <th>Action</th>
+                                <th style="width: 30px !important; text-align: center;">#</th>
+                                <th style="width: 50px; text-align: center;">Action</th>
                                 <th>CTY</th>
                                 <th>Sale Team</th>
-                                <th>AM</th>
-                                <th>Tên<br>khách hàng</th>
-                                <th>Tên dự án</th>
-                                <th>Ngày<br>hóa đơn</th>
-                                <th>Mốc<br>thanh toán</th>
-                                <th>Ngày DK<br>hoàn thành SX</th>
-                                <th>Ngày DK<br>khách TT</th>
-                                <th>Phân loại<br>hóa đơn</th>
+                                <th>Tên khách hàng</th>
+                                <th>Ngày hóa đơn</th>
+                                <th>Exp. Prod Date</th>
+                                <th>Exp. Pay Date</th>
+                                <th>Phân loại HĐ</th>
                                 <th>Tiền</th>
                                 <th>Số tiền</th>
+                                <th>Paid Amount</th>
                                 <th>P&L</th>
-                                <th>Hóa đơn</th>
-                                <th>HĐ<br>VAT</th>
-                                <th>Trạng thái<br>TT</th>
-                                <th>Tháng<br>TT</th>
-                                <th>Cập nhật<br>tuần</th>
-                                <th>Ghi chú<br>AM</th>
-                                <th>Ghi chú<br>Delivery</th>
-                                <th>Trạng thái<br>SX</th>
+                                <th>HĐ VAT</th>
+                                <th>Trạng thái HĐ</th>
+                                <th>Trạng thái TT</th>
+                                <th>Tháng TT</th>
+                                <th>Cập nhật tuần</th>
+                                <th>Tên dự án</th>
                             </tr>
                         </thead>
                         <tbody>
                             <?php $globalIdx = 1; ?>
                             <?php foreach ($groupedDebts as $monthName => $monthItems): ?>
                                 <tr class="group-header">
-                                    <td colspan="23">
-                                        <div style="position: sticky; left: 20px; display: inline-block; z-index: 13;">
-                                            <?php echo (strpos($monthName, '/') !== false) ? "Tháng $monthName" : $monthName; ?>
-                                            <span class="group-total">(Total:
-                                                <?php echo formatVND($monthTotals[$monthName]); ?>)</span>
-                                        </div>
+                                    <td colspan="19">
+                                        <?php echo (strpos($monthName, '/') !== false) ? "Tháng $monthName" : $monthName; ?>
+                                        <span class="group-total">(Total:
+                                            <?php echo formatVND($monthTotals[$monthName]); ?>)</span>
+                                        <span class="group-paid">Paid: <?php echo formatVND($monthPaid[$monthName] ?? 0); ?></span>
+                                        <span class="group-unpaid">Unpaid: <?php echo formatVND($monthUnpaid[$monthName] ?? 0); ?></span>
                                     </td>
                                 </tr>
                                 <?php foreach ($monthItems as $d): ?>
@@ -1598,10 +1805,11 @@ if ($team_res && $team_res->num_rows > 0) {
                                     $is_highlight = (isset($_GET['highlight_id']) && $_GET['highlight_id'] == $d['id']);
                                     ?>
                                     <tr id="debt-row-<?php echo $d['id']; ?>"
-                                        class="<?php echo $is_highlight ? 'highlight-row' : ''; ?>"
+                                        class="data-row <?php echo ($globalIdx % 2 === 0) ? 'row-even' : 'row-odd'; ?> <?php echo $is_highlight ? 'highlight-row' : ''; ?>"
+                                        onclick="toggleRowSelect(this)"
                                         ondblclick="openModal('edit', <?php echo $d['id']; ?>)">
-                                        <td style="text-align: center; padding: 4px;"><?php echo $globalIdx++; ?></td>
-                                        <td style="text-align:center; white-space: nowrap; padding: 0;">
+                                        <td style="text-align: center;"><?php echo $globalIdx++; ?></td>
+                                        <td style="text-align:center; white-space: nowrap;">
                                             <button class="btn-sync-row"
                                                 onclick="syncDebt(<?php echo $d['id']; ?>, <?php echo htmlspecialchars(json_encode((string) ($d['vat_invoice'] ?? '')), ENT_QUOTES); ?>, this); event.stopPropagation();"
                                                 title="Sync from Odoo"
@@ -1643,38 +1851,8 @@ if ($team_res && $team_res->num_rows > 0) {
                                         </td>
                                         <td class="cell-company"><?php echo htmlspecialchars($d['company']); ?></td>
                                         <td><?php echo htmlspecialchars($d['team_name'] ?? ''); ?></td>
-                                        <td>
-                                            <?php
-                                            // Format AM Badge
-                                            $am_class = 'am-default';
-                                            if (stripos($d['am'], 'Emily') !== false)
-                                                $am_class = 'am-emily';
-                                            if (stripos($d['am'], 'Hyun') !== false)
-                                                $am_class = 'am-hyun';
-                                            if (stripos($d['am'], 'Ryan') !== false)
-                                                $am_class = 'am-ryan';
-                                            ?>
-                                            <span
-                                                class="badge am-badge <?php echo $am_class; ?>"><?php echo htmlspecialchars($d['am']); ?></span>
-                                        </td>
                                         <td class="cell-company"><?php echo htmlspecialchars($d['client_name'] ?? ''); ?></td>
-                                        <td class="sticky-editable-cell">
-                                            <input type="text" value="<?php echo htmlspecialchars($d['project_name'] ?? ''); ?>"
-                                                class="project-autocomplete-input" autocomplete="off"
-                                                onclick="event.stopPropagation();"
-                                                onfocus="this.style.borderColor = '#cbd5e1'; this.style.backgroundColor = '#fff';"
-                                                onblur="setTimeout(() => { if (window.projectSuggestionsBox && projectSuggestionsBox.style.display === 'none') { this.style.borderColor = 'transparent'; this.style.backgroundColor = 'transparent'; updateInline(<?php echo $d['id']; ?>, 'project_name', this.value, this); } }, 300)"
-                                                        style="width: 100%; border: 1px solid transparent; background: transparent; padding: 8px 10px; font-family: inherit; font-size: inherit; outline: none; box-sizing: border-box;">
-                                                </td>
                                                 <td><?php echo formatDate($d['invoice_date']); ?></td>
-                                                <td style="position: relative;">
-                                                    <input type="text"
-                                                        value="<?php echo htmlspecialchars($d['payment_milestone'] ?? ''); ?>"
-                                                        onclick="event.stopPropagation();"
-                                                        onfocus="this.style.borderColor = '#cbd5e1'; this.style.backgroundColor = '#fff';"
-                                                        onblur="this.style.borderColor = 'transparent'; this.style.backgroundColor = 'transparent'; updateInline(<?php echo $d['id']; ?>, 'payment_milestone', this.value, this)"
-                                                        style="width: 100%; border: 1px solid transparent; background: transparent; padding: 8px 10px; font-family: inherit; font-size: inherit; outline: none; box-sizing: border-box;">
-                                                </td>
                                                 <td style="position: relative;">
                                                     <input type="date" value="<?php echo $d['expected_prod_date']; ?>"
                                                         onclick="event.stopPropagation();"
@@ -1739,6 +1917,12 @@ if ($team_res && $team_res->num_rows > 0) {
                                                 <td class="cell-amount">
                                                     <?php echo formatCurrency($d['amount'] ?? 0, 'VND'); ?>
                                                 </td>
+                                                <td class="cell-amount" style="color: #059669;">
+                                                    <?php
+                                                    $paidVnd = (float) ($d['paid_amount_vnd'] ?? 0);
+                                                    echo $paidVnd > 0 ? formatCurrency($paidVnd, 'VND') : '-';
+                                                    ?>
+                                                </td>
                                                 <td style="position: relative; text-align: center;">
                                                     <?php
                                                     $plVal = $d['pl_class'] ?? '';
@@ -1755,58 +1939,51 @@ if ($team_res && $team_res->num_rows > 0) {
                                                         </option>
                                                     </select>
                                                 </td>
-                                                <td style="position: relative;">
-                                                    <input type="text"
-                                                        value="<?php echo htmlspecialchars($d['invoice_status'] ?? ''); ?>"
-                                                        onclick="event.stopPropagation();"
-                                                        onfocus="this.style.borderColor = '#cbd5e1'; this.style.backgroundColor = '#fff';"
-                                                        onblur="this.style.borderColor = 'transparent'; this.style.backgroundColor = 'transparent'; updateInline(<?php echo $d['id']; ?>, 'invoice_status', this.value, this)"
-                                                        style="width: 100%; border: 1px solid transparent; background: transparent; padding: 8px 10px; font-family: inherit; font-size: inherit; outline: none; box-sizing: border-box;">
-                                                </td>
                                                 <td><?php echo htmlspecialchars($d['vat_invoice'] ?? ''); ?></td>
+                                                <td style="text-align: center;">
+                                                    <?php
+                                                    $oState = $d['odoo_state'] ?? '';
+                                                    if ($oState === 'posted') {
+                                                        echo '<span class="badge" style="background:#dcfce7;color:#166534;border:1px solid #bbf7d0;">Posted</span>';
+                                                    } elseif ($oState === 'draft') {
+                                                        echo '<span class="badge" style="background:#fef9c3;color:#854d0e;border:1px solid #fde68a;">Draft</span>';
+                                                    } elseif ($oState === 'cancel') {
+                                                        echo '<span class="badge" style="background:#fee2e2;color:#991b1b;border:1px solid #fecaca;">Cancelled</span>';
+                                                    } else {
+                                                        echo '<span class="badge" style="background:#f1f5f9;color:#94a3b8;border:1px solid #e2e8f0;">-</span>';
+                                                    }
+                                                    ?>
+                                                </td>
                                                 <td>
-                                                    <span
-                                                        class="badge <?php echo (stripos($d['payment_status'] ?? '', 'Not') !== false ? 'pay-not-paid' : 'pay-paid'); ?>">
-                                                        <?php echo htmlspecialchars($d['payment_status'] ?? ''); ?>
-                                                    </span>
+                                                    <?php
+                                                    // Use Odoo payment_state (more granular) when available, else fall back to DB payment_status
+                                                    $payState = $d['odoo_payment_state'] ?? '';
+                                                    if ($payState === 'partial') {
+                                                        $payCls = 'pay-partial';
+                                                        $payLbl = 'Partial';
+                                                    } elseif ($payState === 'paid' || $payState === 'in_payment') {
+                                                        $payCls = 'pay-paid';
+                                                        $payLbl = 'Paid';
+                                                    } elseif ($payState === 'not_paid' || $payState === 'reversed') {
+                                                        $payCls = 'pay-not-paid';
+                                                        $payLbl = ($payState === 'reversed') ? 'Reversed' : 'Not paid';
+                                                    } else {
+                                                        // No Odoo match: fall back to stored binary status
+                                                        $payCls = (stripos($d['payment_status'] ?? '', 'Not') !== false) ? 'pay-not-paid' : 'pay-paid';
+                                                        $payLbl = $d['payment_status'] ?? '';
+                                                    }
+                                                    ?>
+                                                    <span class="badge <?php echo $payCls; ?>"><?php echo htmlspecialchars($payLbl); ?></span>
                                                 </td>
                                                 <td><?php echo htmlspecialchars($d['payment_month'] ?? ''); ?></td>
                                                 <td><?php echo htmlspecialchars($d['weekly_update'] ?? ''); ?></td>
-                                                <td style="position: relative;">
-                                                    <input type="text" value="<?php echo htmlspecialchars($d['am_notes'] ?? ''); ?>"
+                                                <td class="project-tooltip-trigger" style="position: relative;">
+                                                    <input type="text" value="<?php echo htmlspecialchars($d['project_name'] ?? ''); ?>"
+                                                        class="project-autocomplete-input" autocomplete="off"
                                                         onclick="event.stopPropagation();"
                                                         onfocus="this.style.borderColor = '#cbd5e1'; this.style.backgroundColor = '#fff';"
-                                                        onblur="this.style.borderColor = 'transparent'; this.style.backgroundColor = 'transparent'; updateInline(<?php echo $d['id']; ?>, 'am_notes', this.value, this)"
-                                                        style="width: 100%; border: 1px solid transparent; background: transparent; padding: 8px 10px; font-family: inherit; font-size: 0.85rem; color: #555; outline: none; box-sizing: border-box; text-overflow: ellipsis;">
-                                                </td>
-                                                <td style="position: relative;">
-                                                    <input type="text"
-                                                        value="<?php echo htmlspecialchars($d['delivery_notes'] ?? ''); ?>"
-                                                        onclick="event.stopPropagation();"
-                                                        onfocus="this.style.borderColor = '#cbd5e1'; this.style.backgroundColor = '#fff';"
-                                                        onblur="this.style.borderColor = 'transparent'; this.style.backgroundColor = 'transparent'; updateInline(<?php echo $d['id']; ?>, 'delivery_notes', this.value, this)"
-                                                        style="width: 100%; border: 1px solid transparent; background: transparent; padding: 8px 10px; font-family: inherit; font-size: 0.85rem; color: #555; outline: none; box-sizing: border-box; text-overflow: ellipsis;">
-                                                </td>
-                                                <td style="position: relative; text-align: center;">
-                                                    <?php
-                                                    $ps = $d['production_status'] ?? '';
-                                                    $prodClass = 'prod-dc2';
-                                                    if (stripos($ps, 'Overdue') !== false || stripos($ps, 'DC5') !== false)
-                                                        $prodClass = 'prod-dc5';
-                                                    elseif (stripos($ps, 'DC1') !== false)
-                                                        $prodClass = 'prod-dc1';
-                                                    ?>
-                                                    <select
-                                                        onchange="updateInline(<?php echo $d['id']; ?>, 'production_status', this.value, this)"
-                                                        onclick="event.stopPropagation();"
-                                                        style="width: 100%; border: 1px solid transparent; background: transparent; padding: 4px 8px; font-family: inherit; font-size: 0.85rem; cursor: pointer; border-radius: 4px; outline: none;">
-                                                        <option value="">-- Trạng thái --</option>
-                                                        <option value="BCITO" <?php echo ($ps === 'BCITO') ? 'selected' : ''; ?>>BCITO
-                                                        </option>
-                                                        <?php for ($i = 3; $i <= 10; $i++): ?>
-                                                                <option value="BC<?php echo $i; ?>" <?php echo ($ps === 'BC' . $i) ? 'selected' : ''; ?>>BC<?php echo $i; ?></option>
-                                                        <?php endfor; ?>
-                                                    </select>
+                                                        onblur="setTimeout(() => { if (window.projectSuggestionsBox && projectSuggestionsBox.style.display === 'none') { this.style.borderColor = 'transparent'; this.style.backgroundColor = 'transparent'; updateInline(<?php echo $d['id']; ?>, 'project_name', this.value, this); } }, 300)"
+                                                        style="width: 100%; border: 1px solid transparent; background: transparent; padding: 8px 10px; font-family: inherit; font-size: inherit; outline: none; box-sizing: border-box;">
                                                 </td>
                                             </tr>
                                     <?php endforeach; ?>
@@ -2019,6 +2196,19 @@ if ($team_res && $team_res->num_rows > 0) {
                 document.getElementById('editId').value = "";
                 document.getElementById('btnDelete').style.display = "none";
                 form.reset();
+                // Add mode: amount + currency được phép nhập/chọn
+                const amtElAdd = document.getElementById('amount');
+                amtElAdd.readOnly = false;
+                amtElAdd.style.background = '';
+                amtElAdd.style.opacity = '';
+                amtElAdd.tabIndex = 0;
+                amtElAdd.title = '';
+                const curElAdd = document.getElementById('currency');
+                curElAdd.style.pointerEvents = '';
+                curElAdd.style.background = '';
+                curElAdd.style.opacity = '';
+                curElAdd.tabIndex = 0;
+                curElAdd.title = '';
             } else {
                 // Find data by ID
                 const data = debtsData.find(d => d.id == id);
@@ -2057,8 +2247,22 @@ if ($team_res && $team_res->num_rows > 0) {
                 document.getElementById('client_name').value = data.client_name;
                 document.getElementById('project_name').value = data.project_name;
                 document.getElementById('payment_milestone').value = data.payment_milestone;
-                document.getElementById('amount').value = data.amount;
-                document.getElementById('currency').value = data.currency || 'USD';
+                // Amount: số tiền GỐC (theo tiền hóa đơn), KHÓA không cho sửa (đồng bộ từ Odoo)
+                const amtEl = document.getElementById('amount');
+                amtEl.value = (data.amount_original != null ? data.amount_original : data.amount);
+                amtEl.readOnly = true;
+                amtEl.style.background = '#f1f5f9';
+                amtEl.style.opacity = '0.65';
+                amtEl.tabIndex = -1;
+                amtEl.title = 'Số tiền đồng bộ từ Odoo — không sửa được';
+                // Currency: tiền tệ GỐC của hóa đơn, KHÓA không cho sửa khi edit
+                const curEl = document.getElementById('currency');
+                curEl.value = data.currency_original || data.currency || 'VND';
+                curEl.style.pointerEvents = 'none';
+                curEl.style.background = '#f1f5f9';
+                curEl.style.opacity = '0.65';
+                curEl.tabIndex = -1;
+                curEl.title = 'Tiền tệ theo hóa đơn gốc — không sửa được';
                 document.getElementById('expected_prod_date').value = data.expected_prod_date;
                 document.getElementById('expected_payment_date').value = data.expected_payment_date;
                 document.getElementById('invoice_status_class').value = data.invoice_status_class;
@@ -2410,6 +2614,27 @@ if ($team_res && $team_res->num_rows > 0) {
                 });
         }
 
+        // Click 1 dòng -> đổi nền (chọn); click lại -> trở về bình thường
+        function toggleRowSelect(tr) {
+            tr.classList.toggle('row-selected');
+        }
+
+        function toggleFilterSidebar() {
+            const sidebar = document.getElementById('filterSidebar');
+            const overlay = document.getElementById('filterOverlay');
+            if (!sidebar) return;
+            const isOpen = sidebar.classList.contains('open');
+            if (isOpen) {
+                sidebar.classList.remove('open');
+                overlay.style.display = 'none';
+                document.body.style.overflow = '';
+            } else {
+                sidebar.classList.add('open');
+                overlay.style.display = 'block';
+                document.body.style.overflow = 'hidden';
+            }
+        }
+
         function updateInline(id, field, value, el) {
             const formData = new FormData();
             formData.append('id', id);
@@ -2472,27 +2697,12 @@ if ($team_res && $team_res->num_rows > 0) {
             const styleEl = document.createElement('style');
             document.head.appendChild(styleEl);
 
-            const defaultStickyWidths = [40, 80, 80, 100, 140, 220, 220];
-
             function renderStyles() {
                 let css = "";
-                let runningLeft = 0;
-
                 cols.forEach((th, index) => {
                     const colIndex = index + 1;
-                    const isSticky = colIndex <= 7;
                     let w = widths[colIndex];
-
-                    if (isSticky) {
-                        const actualW = w || defaultStickyWidths[index];
-                        css += "#" + tableId + " th:nth-child(" + colIndex + "), #" + tableId + " tr:not(.group-header) td:nth-child(" + colIndex + ") { " +
-                            "left: " + runningLeft + "px !important; " +
-                            "width: " + actualW + "px !important; " +
-                            "min-width: " + actualW + "px !important; " +
-                            "max-width: " + actualW + "px !important; " +
-                            "}\n";
-                        runningLeft += actualW;
-                    } else if (w) {
+                    if (w) {
                         css += "#" + tableId + " th:nth-child(" + colIndex + "), #" + tableId + " tr:not(.group-header) td:nth-child(" + colIndex + ") { " +
                             "width: " + w + "px !important; " +
                             "min-width: " + w + "px !important; " +
