@@ -309,6 +309,15 @@ $missing_vnd_total = array_sum(array_column($missing, 'amount_vnd'));
                                 <?php endforeach; ?>
                             <?php endif; ?>
                         </tbody>
+                        <?php if (!empty($incomplete)): ?>
+                        <tfoot>
+                            <tr style="background:#f8fafc; font-weight:700;">
+                                <td colspan="7" style="text-align:right;">TỔNG</td>
+                                <td><?php echo fmtMoney($miss_paydate); ?> thiếu</td>
+                                <td><?php echo fmtMoney($miss_class); ?> thiếu</td>
+                            </tr>
+                        </tfoot>
+                        <?php endif; ?>
                     </table>
                 <?php else: ?>
                     <div class="dc-cards">
@@ -369,6 +378,15 @@ $missing_vnd_total = array_sum(array_column($missing, 'amount_vnd'));
                                 <?php endforeach; ?>
                             <?php endif; ?>
                         </tbody>
+                        <?php if (!empty($missing)): ?>
+                        <tfoot>
+                            <tr style="background:#f8fafc; font-weight:700;">
+                                <td colspan="7" style="text-align:right;">TỔNG (<?php echo fmtMoney(count($missing)); ?> HĐ)</td>
+                                <td class="dc-amt"><?php echo fmtMoney($missing_vnd_total); ?> ₫</td>
+                                <td colspan="3"></td>
+                            </tr>
+                        </tfoot>
+                        <?php endif; ?>
                     </table>
                 <?php endif; ?>
             </div>
