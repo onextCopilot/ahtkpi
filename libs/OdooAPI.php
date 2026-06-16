@@ -450,9 +450,8 @@ class OdooAPI
         }
 
         try {
-            // Search res.users by login (email)
-           // $domain = [['login', '=', $email]];
-            $domain = ['|', ['login', '=', $email], ['email', '=', $email]];
+            // Search res.users by login (email) including inactive users
+            $domain = ['&', '|', ['active', '=', true], ['active', '=', false], '|', ['login', '=', $email], ['email', '=', $email]];
             $users = $this->searchRead('res.users', $domain, ['id'], 1);
 
             if (!empty($users) && isset($users[0]['id'])) {
