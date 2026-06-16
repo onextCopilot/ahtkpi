@@ -558,6 +558,10 @@ if ($res) {
             if ($sc !== '') $row['company'] = $sc;
         }
 
+        // Invoice Type (Odoo x_studio_invoice_type_1)
+        $itv = ($odoo_inv && isset($odoo_inv['x_studio_invoice_type_1'])) ? $odoo_inv['x_studio_invoice_type_1'] : '';
+        $row['invoice_type'] = (is_string($itv) && $itv !== 'false') ? $itv : '';
+
         // Capture Odoo invoice state (posted / draft / cancel) for display
         $row['odoo_state'] = ($odoo_inv && isset($odoo_inv['state'])) ? (string)$odoo_inv['state'] : '';
         // Capture Odoo payment_state (not_paid / partial / in_payment / paid / reversed) for display
@@ -2970,6 +2974,7 @@ if ($res_am && $res_am->num_rows > 0) {
                                     <th>Tháng TT</th>
                                     <th>Cập nhật tuần</th>
                                     <th>Tên dự án</th>
+                                    <th>Invoice Type</th>
                                     <th style="width: 50px; text-align: center;">Action</th>
                                 </tr>
                             </thead>
@@ -2977,7 +2982,7 @@ if ($res_am && $res_am->num_rows > 0) {
                                 <?php $globalIdx = 1; ?>
                                 <?php foreach ($groupedDebts as $monthName => $ams): ?>
                                     <tr class="group-header">
-                                        <td colspan="20">
+                                        <td colspan="21">
                                             Tháng <?php echo $monthName; ?>
                                             <span class="group-total">(Total:
                                                 <?php echo formatVND($monthTotals[$monthName]); ?>)</span>
@@ -2987,7 +2992,7 @@ if ($res_am && $res_am->num_rows > 0) {
                                     </tr>
                                     <?php foreach ($ams as $amName => $monthItems): ?>
                                         <tr class="group-header-am">
-                                            <td colspan="20">
+                                            <td colspan="21">
                                                 AM: <?php echo htmlspecialchars($amName); ?>
                                                 <span class="group-total"
                                                     style="font-size: 0.8rem; font-weight: normal; opacity: 0.8;">(Subtotal:
@@ -3113,6 +3118,11 @@ if ($res_am && $res_am->num_rows > 0) {
                                                     data-project-name="<?php echo htmlspecialchars($d['project_name'] ?? ''); ?>"
                                                     style="position: relative; cursor: pointer;">
                                                     <?php echo htmlspecialchars($d['project_name'] ?? ''); ?>
+                                                </td>
+                                                <td>
+                                                    <?php if (!empty($d['invoice_type'])): ?>
+                                                        <span class="badge" style="background:#eef2ff;color:#4338ca;border:1px solid #c7d2fe;"><?php echo htmlspecialchars($d['invoice_type']); ?></span>
+                                                    <?php endif; ?>
                                                 </td>
                                                 <td style="text-align: center;">
                                                     <?php if ($role === 'admin'): ?>
