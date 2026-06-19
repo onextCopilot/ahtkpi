@@ -331,9 +331,9 @@ function isMenuItemActive($path, $current_uri)
         </div>
         <?php endif; ?>
 
-        <!-- 8. HRM (hidden) -->
-        <?php /* TEMP HIDDEN
-        <a href="/hrm" class="nav-item <?php echo isMenuItemActive('/hrm', $current_uri); ?>">
+        <!-- 8. Tuyển dụng (HRM) — chỉ hyun.cao -->
+        <?php if ((($_SESSION['username'] ?? '') === 'hyun.cao') || (($_SESSION['full_name'] ?? '') === 'Hyun Cao')): ?>
+        <a href="/hrm" class="nav-item <?php echo (strpos($current_uri, '/hrm') !== false) ? 'active' : ''; ?>">
             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
                 <circle cx="9" cy="7" r="4"/>
@@ -342,7 +342,7 @@ function isMenuItemActive($path, $current_uri)
             </svg>
             <span>HRM</span>
         </a>
-        */ ?>
+        <?php endif; ?>
 
         <!-- 9. Documents Dropdown -->
         <div class="nav-item nav-item-parent <?php

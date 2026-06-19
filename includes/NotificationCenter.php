@@ -71,6 +71,29 @@ class NotificationCenter
             }
         } catch (\Throwable $e) { /* table may not exist yet */ }
 
+        // ── HRM / Recruitment notifications (HRF approvals, SLA, onboarding…) ──
+        try {
+            $hn = $conn->prepare("SELECT id, title, body, severity, link, created_at
+                                  FROM hrm_notifications WHERE user_id = ? AND is_read = 0
+                                  ORDER BY created_at DESC LIMIT 50");
+            if ($hn) {
+                $hn->bind_param("i", $uid);
+                $hn->execute();
+                $r = $hn->get_result();
+                while ($row = $r->fetch_assoc()) {
+                    $sev = in_array($row['severity'], ['info', 'warning', 'danger', 'success'], true) ? $row['severity'] : 'info';
+                    $items[] = [
+                        'key' => 'hrm:' . $row['id'], 'kind' => 'hrm', 'severity' => $sev,
+                        'title' => $row['title'], 'body' => $row['body'],
+                        'link' => $row['link'] ?: '/hrm', 'link_label' => 'Xem',
+                        'created_at' => $row['created_at'], 'dismissible' => true,
+                        'mark' => ['type' => 'hrm', 'id' => (int) $row['id']],
+                    ];
+                }
+                $hn->close();
+            }
+        } catch (\Throwable $e) { /* table may not exist yet */ }
+
         // ── Cảnh báo: invoice chưa add vào Debts (gửi từ Debts Check) ──────────
         try {
             $aw = $conn->prepare("SELECT id, invoice_name, company, penalty_points, message, created_at
@@ -216,6 +239,10 @@ class NotificationCenter
             }
             if ($type === 'debt_add') {
                 $st = $conn->prepare("UPDATE debt_add_warnings SET is_acknowledged = 1, acknowledged_at = NOW() WHERE id = ? AND am_user_id = ?");
+                $st->bind_param("ii", $payload['id'], $uid); return $st->execute();
+            }
+            if ($type === 'hrm') {
+                $st = $conn->prepare("UPDATE hrm_notifications SET is_read = 1 WHERE id = ? AND user_id = ?");
                 $st->bind_param("ii", $payload['id'], $uid); return $st->execute();
             }
         } catch (\Throwable $e) {

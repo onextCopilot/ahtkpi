@@ -1,611 +1,174 @@
 <?php
-require_once __DIR__ . '/../../config/config.php';
+/**
+ * HRM launcher - landing page for /hrm. An immersive Base.vn-style home: the
+ * whole content column is a teal gradient, with greeting + live clock + Hanoi
+ * weather and a grid of glass app tiles. Recruitment is live; later SOP phases
+ * appear here as they ship.
+ */
+require_once __DIR__ . '/lib/core.php';
+require_once __DIR__ . '/lib/shell.php';
+hrm_require_login();
 
-if (!isset($_SESSION['user_id'])) {
-    header("Location: /login");
-    exit();
+$isAdmin   = ($_SESSION['role'] ?? '') === 'admin';
+$full_name = $_SESSION['full_name'] ?? '';
+
+$pendingHrf = (int)($conn->query("SELECT COUNT(*) c FROM hrm_requests WHERE status='pending'")->fetch_assoc()['c'] ?? 0);
+
+$h = (int)date('G');
+$greet = $h < 11 ? 'Chào buổi sáng' : ($h < 13 ? 'Chào buổi trưa' : ($h < 18 ? 'Chào buổi chiều' : 'Chào buổi tối'));
+$session = $h < 11 ? 'SÁNG' : ($h < 13 ? 'TRƯA' : ($h < 18 ? 'CHIỀU' : 'TỐI'));
+$weekdays = ['CHỦ NHẬT', 'THỨ 2', 'THỨ 3', 'THỨ 4', 'THỨ 5', 'THỨ 6', 'THỨ 7'];
+$dateLine = 'HÀ NỘI, ' . $session . ' ' . $weekdays[(int)date('w')] . ', ' . date('d/m/Y');
+
+// tile: [label, subtitle, href|null, gradient, svg-path, badge|null]
+$tiles = [
+    ['Tuyển dụng', 'E-Hiring', '/hrm/recruitment', 'linear-gradient(135deg,#0e9f6e,#057a55)',
+        '<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>',
+        $pendingHrf ?: null],
+    ['Onboarding', 'Hội nhập 60 ngày', '/hrm/onboarding', 'linear-gradient(135deg,#3b82f6,#1d4ed8)',
+        '<path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/>', null],
+    ['Đánh giá thử việc', 'Probation review', '/hrm/probation', 'linear-gradient(135deg,#f59e0b,#b45309)',
+        '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="9" y1="15" x2="15" y2="15"/>', null],
+    ['KPI & Báo cáo', 'Recruitment KPI', '/hrm/kpi', 'linear-gradient(135deg,#a855f7,#7c3aed)',
+        '<line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/>', null],
+];
+if ($isAdmin) {
+    $tiles[] = ['Cấu hình', 'Vai trò · Email · Kênh', '/hrm/settings', 'linear-gradient(135deg,#64748b,#475569)',
+        '<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>', null];
 }
 
-$user_id   = $_SESSION['user_id'];
-$full_name = $_SESSION['full_name'];
-$role      = $_SESSION['role'];
-$avatar    = $_SESSION['avatar'] ?? null;
-
-// Get hour for greeting
-$hour = (int) date('H');
-if ($hour < 12) {
-    $greeting = 'Good morning';
-} elseif ($hour < 18) {
-    $greeting = 'Good afternoon';
-} else {
-    $greeting = 'Good evening';
-}
-
-// First name only
-$first_name = explode(' ', trim($full_name));
-$first_name = end($first_name);
+hrm_header('HRM', 'Hệ thống quản trị nhân sự AHT');
 ?>
-<!DOCTYPE html>
-<html lang="vi">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>HRM – Quản lý Nhân sự</title>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-    <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; }
+<style>
+/* Immersive teal column (scoped to the launcher only). */
+.main-content{background:
+    radial-gradient(1100px 500px at 88% -10%,rgba(16,159,110,.35),transparent 60%),
+    radial-gradient(900px 600px at 5% 110%,rgba(37,99,235,.18),transparent 55%),
+    linear-gradient(135deg,#06343a 0%,#0a252a 55%,#062b30 100%) !important;
+    min-height:100vh}
+/* launcher head spans full width; flex column so the footer sits at the bottom */
+.rc-wrap{max-width:none;display:flex;flex-direction:column;min-height:calc(100vh - 96px)}
+/* Topbar blends into the gradient; title moved to the page footer. */
+.main-content .top-bar{background:transparent !important;border:none !important;box-shadow:none !important;justify-content:flex-end !important}
+.main-content .top-bar .page-title{display:none !important}
+/* Name already shown in the hero greeting → hide the duplicate in the topbar. */
+.main-content .top-bar .user-info{display:none !important}
+.main-content .top-bar .notification-bell{color:rgba(255,255,255,.85) !important}
+.main-content .top-bar .notification-bell:hover{background:rgba(255,255,255,.12) !important}
 
-        body {
-            font-family: 'Inter', sans-serif;
-            background: linear-gradient(135deg, #0d2e35 0%, #0a3d46 30%, #0d4a55 60%, #0a3a42 100%);
-            min-height: 100vh;
-            color: #fff;
-            display: flex;
-            overflow: hidden;
-        }
+.hrm-hero{display:flex;justify-content:space-between;align-items:center;gap:24px;flex-wrap:wrap;
+    padding:4px 0 28px;margin-bottom:20px;border-bottom:1px solid rgba(255,255,255,.10);color:#fff}
+.hrm-greet{font-size:13px;letter-spacing:.5px;text-transform:uppercase;color:rgba(255,255,255,.6)}
+.hrm-name{font-size:30px;font-weight:700;margin:2px 0 6px;line-height:1.1}
+.hrm-sub{font-size:13px;color:rgba(255,255,255,.72);max-width:430px}
+.hrm-right{display:flex;align-items:center;gap:26px}
+.hrm-clock{font-size:48px;font-weight:300;font-variant-numeric:tabular-nums;letter-spacing:1px;line-height:1;color:#fff}
+.hrm-clock small{font-size:20px;opacity:.55;font-weight:300}
+.hrm-date{font-size:11.5px;letter-spacing:.6px;color:rgba(255,255,255,.6);margin-top:7px}
+.hrm-wx{display:flex;align-items:center;gap:12px;padding-left:26px;border-left:1px solid rgba(255,255,255,.15);min-width:140px;color:#fff}
+.hrm-wx-ic{font-size:42px;line-height:1}
+.hrm-wx-temp{font-size:27px;font-weight:600}
+.hrm-wx-meta{font-size:11px;color:rgba(255,255,255,.62);line-height:1.5}
+.hrm-wx.loading{opacity:.4}
 
-        /* ── LEFT SIDEBAR ── */
-        .hrm-sidebar {
-            width: 200px;
-            min-width: 200px;
-            background: rgba(0,0,0,0.25);
-            border-right: 1px solid rgba(255,255,255,0.06);
-            display: flex;
-            flex-direction: column;
-            padding: 20px 0;
-            backdrop-filter: blur(8px);
-        }
+.hrm-sec{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:rgba(255,255,255,.55);margin:0 0 18px;text-align:center}
+/* Boxless: just a round icon + label, Base.vn-style. */
+.hrm-grid{display:flex;flex-wrap:wrap;gap:6px;justify-content:center}
+.hrm-tile{position:relative;display:flex;flex-direction:column;align-items:center;text-align:center;gap:13px;width:156px;padding:16px 8px;border-radius:16px;text-decoration:none;transition:.16s}
+.hrm-tile.live:hover{background:rgba(255,255,255,.05)}
+.hrm-tile.live:hover .hrm-ic{transform:translateY(-4px);box-shadow:0 16px 30px rgba(0,0,0,.45)}
+.hrm-tile.soon{opacity:.42;cursor:default}
+.hrm-ic-wrap{position:relative}
+.hrm-ic{width:80px;height:80px;border-radius:50%;display:flex;align-items:center;justify-content:center;box-shadow:0 10px 24px rgba(0,0,0,.34);transition:.16s}
+.hrm-ic svg{width:35px;height:35px;fill:none;stroke:#fff;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round}
+.hrm-tl{font-size:14px;font-weight:700;color:#fff}
+.hrm-st{font-size:11px;color:rgba(255,255,255,.55);margin-top:-7px}
+.hrm-soon-tag{position:absolute;top:-2px;right:-12px;font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;background:rgba(255,255,255,.2);color:#fff;padding:2px 8px;border-radius:99px;backdrop-filter:blur(4px)}
+.hrm-badge{position:absolute;top:-2px;right:-6px;min-width:23px;height:23px;padding:0 6px;border-radius:99px;background:#ef4444;color:#fff;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;border:2px solid rgba(6,52,58,.6);box-shadow:0 2px 8px rgba(239,68,68,.5)}
+.hrm-foot{margin-top:auto;padding-top:26px;border-top:1px solid rgba(255,255,255,.08);
+    display:flex;align-items:baseline;gap:10px;color:rgba(255,255,255,.45)}
+.hrm-foot b{color:rgba(255,255,255,.75);font-size:15px;letter-spacing:.5px}
+.hrm-foot span{font-size:12px}
+@media(max-width:720px){.hrm-hero{flex-direction:column;align-items:flex-start}.hrm-clock{font-size:38px}}
+</style>
 
-        .hrm-sidebar .logo-area {
-            padding: 0 20px 24px;
-            border-bottom: 1px solid rgba(255,255,255,0.07);
-            margin-bottom: 12px;
-        }
-
-        .hrm-sidebar .logo-area img {
-            height: 28px;
-            filter: brightness(0) invert(1);
-        }
-
-        .sidebar-section {
-            padding: 6px 20px;
-            font-size: 10px;
-            font-weight: 700;
-            letter-spacing: 1px;
-            color: rgba(255,255,255,0.35);
-            text-transform: uppercase;
-            margin-top: 4px;
-        }
-
-        .sidebar-item {
-            display: block;
-            padding: 9px 20px;
-            font-size: 13px;
-            font-weight: 500;
-            color: rgba(255,255,255,0.75);
-            text-decoration: none;
-            cursor: pointer;
-            transition: all 0.18s;
-            border-left: 2px solid transparent;
-        }
-
-        .sidebar-item:hover {
-            background: rgba(255,255,255,0.06);
-            color: #fff;
-        }
-
-        .sidebar-item.active {
-            color: #fff;
-            border-left-color: #4dd0e1;
-            background: rgba(77,208,225,0.08);
-        }
-
-        /* ── MAIN CONTENT ── */
-        .hrm-main {
-            flex: 1;
-            display: flex;
-            flex-direction: column;
-            overflow: hidden;
-        }
-
-        /* ── TOP BAR ── */
-        .hrm-topbar {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            padding: 14px 32px;
-            background: rgba(0,0,0,0.15);
-            border-bottom: 1px solid rgba(255,255,255,0.05);
-        }
-
-        .hrm-topbar .company-name {
-            font-size: 12px;
-            font-weight: 600;
-            letter-spacing: 0.5px;
-            color: rgba(255,255,255,0.6);
-            text-transform: uppercase;
-        }
-
-        .hrm-topbar .topbar-right {
-            display: flex;
-            align-items: center;
-            gap: 16px;
-        }
-
-        .topbar-avatar {
-            width: 34px;
-            height: 34px;
-            border-radius: 50%;
-            background: linear-gradient(135deg, #4dd0e1, #0097a7);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-weight: 700;
-            font-size: 13px;
-            overflow: hidden;
-            border: 2px solid rgba(255,255,255,0.25);
-        }
-
-        .topbar-avatar img { width: 100%; height: 100%; object-fit: cover; }
-
-        .topbar-icon-btn {
-            width: 32px; height: 32px;
-            border-radius: 50%;
-            background: rgba(255,255,255,0.08);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            cursor: pointer;
-            transition: background 0.2s;
-            border: none;
-            color: rgba(255,255,255,0.7);
-        }
-
-        .topbar-icon-btn:hover { background: rgba(255,255,255,0.15); }
-
-        /* ── CONTENT AREA ── */
-        .hrm-content {
-            flex: 1;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: flex-start;
-            padding: 40px 32px 20px;
-            overflow-y: auto;
-        }
-
-        /* ── SEARCH ── */
-        .search-wrap {
-            width: 100%;
-            max-width: 580px;
-            margin-bottom: 48px;
-        }
-
-        .search-box {
-            width: 100%;
-            background: rgba(255,255,255,0.1);
-            border: 1px solid rgba(255,255,255,0.15);
-            border-radius: 10px;
-            padding: 12px 18px 12px 44px;
-            color: #fff;
-            font-size: 14px;
-            font-family: 'Inter', sans-serif;
-            outline: none;
-            transition: all 0.2s;
-            backdrop-filter: blur(6px);
-        }
-
-        .search-box::placeholder { color: rgba(255,255,255,0.45); }
-        .search-box:focus {
-            background: rgba(255,255,255,0.15);
-            border-color: rgba(77,208,225,0.5);
-        }
-
-        .search-wrap-inner {
-            position: relative;
-        }
-
-        .search-icon {
-            position: absolute;
-            left: 14px;
-            top: 50%;
-            transform: translateY(-50%);
-            color: rgba(255,255,255,0.4);
-            pointer-events: none;
-        }
-
-        /* ── APPS GRID ── */
-        .apps-grid {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 32px 24px;
-            justify-content: center;
-            max-width: 680px;
-            margin-bottom: 60px;
-        }
-
-        .app-item {
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            gap: 8px;
-            cursor: pointer;
-            text-decoration: none;
-            width: 90px;
-            transition: transform 0.18s;
-        }
-
-        .app-item:hover { transform: translateY(-4px); }
-
-        .app-icon {
-            width: 72px;
-            height: 72px;
-            border-radius: 50%;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 30px;
-            transition: box-shadow 0.2s;
-        }
-
-        .app-item:hover .app-icon {
-            box-shadow: 0 8px 24px rgba(0,0,0,0.35);
-        }
-
-        .app-name {
-            font-size: 12px;
-            font-weight: 600;
-            color: rgba(255,255,255,0.9);
-            text-align: center;
-            line-height: 1.3;
-        }
-
-        .app-sub {
-            font-size: 10px;
-            color: rgba(255,255,255,0.5);
-            text-align: center;
-            margin-top: -4px;
-        }
-
-        /* icon colors */
-        .icon-purple  { background: linear-gradient(135deg, #7e57c2, #512da8); }
-        .icon-blue    { background: linear-gradient(135deg, #29b6f6, #0288d1); }
-        .icon-teal    { background: linear-gradient(135deg, #26c6da, #00838f); }
-        .icon-orange  { background: linear-gradient(135deg, #ffa726, #e65100); }
-        .icon-green   { background: linear-gradient(135deg, #66bb6a, #2e7d32); }
-        .icon-red     { background: linear-gradient(135deg, #ef5350, #b71c1c); }
-        .icon-indigo  { background: linear-gradient(135deg, #5c6bc0, #283593); }
-        .icon-pink    { background: linear-gradient(135deg, #ec407a, #880e4f); }
-        .icon-cyan    { background: linear-gradient(135deg, #4dd0e1, #006064); }
-        .icon-amber   { background: linear-gradient(135deg, #ffca28, #ff8f00); }
-
-        /* ── BOTTOM INFO BAR ── */
-        .bottom-bar {
-            width: 100%;
-            display: flex;
-            align-items: center;
-            gap: 32px;
-            padding: 16px 32px;
-            background: rgba(0,0,0,0.2);
-            border-top: 1px solid rgba(255,255,255,0.06);
-            flex-shrink: 0;
-        }
-
-        .clock-block .time {
-            font-size: 36px;
-            font-weight: 300;
-            letter-spacing: 2px;
-            line-height: 1;
-        }
-
-        .clock-block .time span.secs {
-            font-size: 20px;
-            opacity: 0.6;
-            font-weight: 300;
-        }
-
-        .clock-block .date {
-            font-size: 11px;
-            color: rgba(255,255,255,0.5);
-            margin-top: 4px;
-        }
-
-        .weather-block {
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            padding-left: 24px;
-            border-left: 1px solid rgba(255,255,255,0.12);
-        }
-
-        .weather-block .weather-icon { font-size: 40px; line-height: 1; }
-
-        .weather-block .weather-info { font-size: 12px; color: rgba(255,255,255,0.6); }
-
-        .weather-block .weather-temp {
-            font-size: 22px;
-            font-weight: 500;
-            color: rgba(255,255,255,0.9);
-        }
-
-        .greeting-block {
-            padding-left: 24px;
-            border-left: 1px solid rgba(255,255,255,0.12);
-        }
-
-        .greeting-block .greeting-text {
-            font-size: 18px;
-            font-weight: 600;
-            color: #fff;
-        }
-
-        .greeting-block .announcement {
-            font-size: 11px;
-            color: rgba(255,255,255,0.45);
-            margin-top: 2px;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-        }
-
-        .announce-nav {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            margin-top: 4px;
-        }
-
-        .announce-nav button {
-            background: rgba(255,255,255,0.1);
-            border: none;
-            color: rgba(255,255,255,0.6);
-            width: 20px; height: 20px;
-            border-radius: 50%;
-            cursor: pointer;
-            font-size: 12px;
-            display: flex; align-items: center; justify-content: center;
-            transition: background 0.2s;
-        }
-
-        .announce-nav button:hover { background: rgba(255,255,255,0.2); }
-
-        /* ── PAGE DOTS ── */
-        .page-dots {
-            display: flex;
-            gap: 6px;
-            justify-content: center;
-            margin-bottom: 16px;
-        }
-
-        .page-dot {
-            width: 6px; height: 6px;
-            border-radius: 50%;
-            background: rgba(255,255,255,0.3);
-        }
-
-        .page-dot.active {
-            background: rgba(255,255,255,0.85);
-        }
-
-        /* scrollbar */
-        ::-webkit-scrollbar { width: 4px; }
-        ::-webkit-scrollbar-track { background: transparent; }
-        ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.15); border-radius: 2px; }
-    </style>
-</head>
-<body>
-
-<!-- LEFT SIDEBAR -->
-<aside class="hrm-sidebar">
-    <div class="logo-area">
-        <img src="https://www.arrowhitech.com/wp-content/uploads/2025/06/Logo.svg" alt="AHT Logo">
+<div class="hrm-hero">
+    <div>
+        <div class="hrm-greet"><?= h($greet) ?> 👋</div>
+        <div class="hrm-name"><?= h($full_name) ?></div>
+        <div class="hrm-sub">Chào mừng đến hệ thống HRM AHT. Chọn ứng dụng bên dưới để bắt đầu - module Tuyển dụng đã sẵn sàng.</div>
     </div>
-
-    <span class="sidebar-section">Tất cả ứng dụng</span>
-    <a href="#" class="sidebar-item">WORK+</a>
-    <a href="/hrm" class="sidebar-item active" style="border-left-color:#4dd0e1; background:rgba(77,208,225,0.08);">HRM+</a>
-
-    <div style="margin-top: auto; border-top: 1px solid rgba(255,255,255,0.07); padding-top: 10px;">
-        <a href="/dashboard" class="sidebar-item" style="font-size: 12px; color: rgba(255,255,255,0.55); display:flex; align-items:center; gap:8px;">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"/></svg>
-            Về trang chủ
-        </a>
-        <a href="#" class="sidebar-item" style="font-size: 11px; color: rgba(255,255,255,0.4);">Cộng đồng hỏi đáp chia sẻ</a>
-    </div>
-</aside>
-
-<!-- MAIN -->
-<div class="hrm-main">
-
-    <!-- TOP BAR -->
-    <header class="hrm-topbar">
-        <span class="company-name">AHT TECH JSC</span>
-        <div class="topbar-right">
-            <div class="topbar-avatar">
-                <?php if ($avatar): ?>
-                    <img src="<?php echo htmlspecialchars($avatar); ?>" alt="Avatar">
-                <?php else: ?>
-                    <?php echo strtoupper(substr($full_name, 0, 1)); ?>
-                <?php endif; ?>
-            </div>
-            <span style="font-size:13px; font-weight:600; color:rgba(255,255,255,0.85);"><?php echo htmlspecialchars($first_name); ?></span>
-            <button class="topbar-icon-btn" title="Search">
-                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
-            </button>
-            <button class="topbar-icon-btn" title="Notifications">
-                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 01-3.46 0"/></svg>
-            </button>
-            <button class="topbar-icon-btn" title="Apps">
-                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
-            </button>
-            <button class="topbar-icon-btn" title="Menu">
-                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
-            </button>
+    <div class="hrm-right">
+        <div>
+            <div class="hrm-clock" id="hrmClock">--:--<small>:--</small></div>
+            <div class="hrm-date"><?= h($dateLine) ?></div>
         </div>
-    </header>
-
-    <!-- CONTENT -->
-    <div class="hrm-content">
-
-        <!-- SEARCH -->
-        <div class="search-wrap">
-            <div class="search-wrap-inner">
-                <svg class="search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
-                <input type="text" class="search-box" placeholder="Tìm kiếm ứng dụng">
-            </div>
-        </div>
-
-        <!-- APPS -->
-        <div class="apps-grid">
-
-            <a href="/dashboard" class="app-item">
-                <div class="app-icon icon-purple">
-                    <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="1.8"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
-                </div>
-                <span class="app-name">Platform</span>
-                <span class="app-sub">Trang chủ</span>
-            </a>
-
-
-
-            <a href="#" class="app-item">
-                <div class="app-icon icon-teal">
-                    <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="1.8"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>
-                </div>
-                <span class="app-name">Message</span>
-                <span class="app-sub">Nhắn tin</span>
-            </a>
-
-            <a href="#" class="app-item">
-                <div class="app-icon icon-amber">
-                    <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="1.8"><path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/></svg>
-                </div>
-                <span class="app-name">Drive</span>
-                <span class="app-sub">Tài liệu</span>
-            </a>
-
-            <a href="/hrm/candidates" class="app-item">
-                <div class="app-icon icon-indigo">
-                    <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="1.8"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
-                </div>
-                <span class="app-name">Candidates</span>
-                <span class="app-sub">Ứng viên</span>
-            </a>
-
-            <a href="/hrm/e-hiring.php" class="app-item">
-                <div class="app-icon icon-cyan">
-                    <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="1.8"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/></svg>
-                </div>
-                <span class="app-name">E-Hiring</span>
-                <span class="app-sub">Tuyển dụng</span>
-            </a>
-
-            <a href="#" class="app-item">
-                <div class="app-icon icon-green">
-                    <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="1.8"><polyline points="20 6 9 17 4 12"/></svg>
-                </div>
-                <span class="app-name">Test Center</span>
-                <span class="app-sub">Kiểm tra Online</span>
-            </a>
-
-            <a href="#" class="app-item">
-                <div class="app-icon icon-orange">
-                    <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="1.8"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
-                </div>
-                <span class="app-name">Account</span>
-                <span class="app-sub">Tài khoản</span>
-            </a>
-
-
-
-        </div>
-
-        <!-- PAGE DOTS -->
-        <div class="page-dots">
-            <div class="page-dot active"></div>
-            <div class="page-dot"></div>
-            <div class="page-dot"></div>
-        </div>
-
-    </div>
-
-    <!-- BOTTOM BAR -->
-    <div class="bottom-bar">
-
-        <!-- CLOCK -->
-        <div class="clock-block">
-            <div class="time" id="hrm-clock">--:--<span class="secs" id="hrm-secs">--</span></div>
-            <div class="date" id="hrm-date">--</div>
-        </div>
-
-        <!-- WEATHER -->
-        <div class="weather-block">
-            <div class="weather-icon" id="hrm-weather-icon">⛅</div>
+        <div class="hrm-wx loading" id="hrmWx">
+            <div class="hrm-wx-ic" id="wxIc">⛅</div>
             <div>
-                <div class="weather-temp" id="hrm-temp">--°C</div>
-                <div class="weather-info" id="hrm-location">Hà Nội</div>
-            </div>
-            <div style="margin-left:8px; font-size:11px; color:rgba(255,255,255,0.45);">
-                <div>↑ <span id="hrm-hi">--</span></div>
-                <div>↓ <span id="hrm-lo">--</span></div>
+                <div class="hrm-wx-temp" id="wxTemp">--°</div>
+                <div class="hrm-wx-meta" id="wxMeta">Đang tải…</div>
             </div>
         </div>
-
-
-
     </div>
 </div>
 
+<div class="hrm-sec">Ứng dụng</div>
+<div class="hrm-grid">
+<?php foreach ($tiles as $t):
+    [$label,$sub,$href,$grad,$svg,$badge] = $t;
+    if ($href !== null): ?>
+    <a href="<?= h($href) ?>" class="hrm-tile live">
+        <div class="hrm-ic-wrap">
+            <div class="hrm-ic" style="background:<?= $grad ?>"><svg viewBox="0 0 24 24"><?= $svg ?></svg></div>
+            <?php if ($badge): ?><span class="hrm-badge"><?= (int)$badge ?></span><?php endif; ?>
+        </div>
+        <div class="hrm-tl"><?= h($label) ?></div>
+        <div class="hrm-st"><?= h($sub) ?></div>
+    </a>
+    <?php else: ?>
+    <div class="hrm-tile soon" title="Sắp ra mắt">
+        <div class="hrm-ic-wrap">
+            <div class="hrm-ic" style="background:<?= $grad ?>"><svg viewBox="0 0 24 24"><?= $svg ?></svg></div>
+            <span class="hrm-soon-tag">Sắp có</span>
+        </div>
+        <div class="hrm-tl"><?= h($label) ?></div>
+        <div class="hrm-st"><?= h($sub) ?></div>
+    </div>
+    <?php endif; ?>
+<?php endforeach; ?>
+</div>
+
+<div class="hrm-foot">
+    <b>HRM</b><span>Hệ thống quản trị nhân sự AHT</span>
+</div>
+
 <script>
-// ── CLOCK ──
-function updateClock() {
-    const now = new Date();
-    const h = String(now.getHours()).padStart(2,'0');
-    const m = String(now.getMinutes()).padStart(2,'0');
-    const s = String(now.getSeconds()).padStart(2,'0');
-    document.getElementById('hrm-clock').childNodes[0].textContent = h + ':' + m;
-    document.getElementById('hrm-secs').textContent = ':' + s;
-
-    const days = ['Chủ nhật','Thứ hai','Thứ ba','Thứ tư','Thứ năm','Thứ sáu','Thứ bảy'];
-    const months = ['tháng 1','tháng 2','tháng 3','tháng 4','tháng 5','tháng 6','tháng 7','tháng 8','tháng 9','tháng 10','tháng 11','tháng 12'];
-    const d = days[now.getDay()];
-    const mo = months[now.getMonth()];
-    const date = now.getDate();
-    const year = now.getFullYear();
-    document.getElementById('hrm-date').textContent = `HÀ NỘI, ${d.toUpperCase()} ${date}/${String(now.getMonth()+1).padStart(2,'0')}/${year}`;
-}
-updateClock();
-setInterval(updateClock, 1000);
-
-// ── WEATHER (Open-Meteo, no API key needed) ──
-(async function() {
-    try {
-        const geo = await fetch('https://nominatim.openstreetmap.org/search?q=Hanoi&format=json&limit=1').then(r=>r.json());
-        const lat = geo[0]?.lat || 21.0285;
-        const lon = geo[0]?.lon || 105.8542;
-        const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current_weather=true&daily=temperature_2m_max,temperature_2m_min&timezone=Asia/Bangkok`;
-        const data = await fetch(url).then(r=>r.json());
-        const temp = Math.round(data.current_weather?.temperature ?? '--');
-        const hi   = Math.round(data.daily?.temperature_2m_max?.[0] ?? '--');
-        const lo   = Math.round(data.daily?.temperature_2m_min?.[0] ?? '--');
-        const wc   = data.current_weather?.weathercode ?? 0;
-
-        let icon = '☀️';
-        if (wc === 0) icon = '☀️';
-        else if (wc <= 3) icon = '🌤️';
-        else if (wc <= 48) icon = '🌫️';
-        else if (wc <= 67) icon = '🌧️';
-        else if (wc <= 77) icon = '❄️';
-        else if (wc <= 82) icon = '⛈️';
-        else icon = '⛈️';
-
-        document.getElementById('hrm-temp').textContent = temp + '°C';
-        document.getElementById('hrm-hi').textContent   = hi + '°';
-        document.getElementById('hrm-lo').textContent   = lo + '°';
-        document.getElementById('hrm-weather-icon').textContent = icon;
-    } catch(e) {
-        document.getElementById('hrm-temp').textContent = '--°C';
-    }
+(function(){
+    var el=document.getElementById('hrmClock');
+    function tick(){var n=new Date(),p=function(x){return x<10?'0'+x:x;};
+        el.innerHTML=p(n.getHours())+':'+p(n.getMinutes())+'<small>:'+p(n.getSeconds())+'</small>';}
+    tick(); setInterval(tick,1000);
+})();
+(function(){
+    var ICON={0:'☀️',1:'🌤️',2:'⛅',3:'☁️',45:'🌫️',48:'🌫️',51:'🌦️',53:'🌦️',55:'🌧️',
+        61:'🌧️',63:'🌧️',65:'🌧️',71:'🌨️',80:'🌦️',81:'🌧️',82:'⛈️',95:'⛈️',96:'⛈️',99:'⛈️'};
+    var LABEL={0:'Trời quang',1:'Ít mây',2:'Có mây',3:'Nhiều mây',45:'Sương mù',48:'Sương mù',
+        51:'Mưa phùn',53:'Mưa phùn',55:'Mưa phùn',61:'Mưa nhẹ',63:'Mưa',65:'Mưa to',
+        71:'Tuyết',80:'Mưa rào',81:'Mưa rào',82:'Mưa rào mạnh',95:'Dông',96:'Dông',99:'Dông'};
+    var url='https://api.open-meteo.com/v1/forecast?latitude=21.0278&longitude=105.8342'
+        +'&current=temperature_2m,weather_code,wind_speed_10m&daily=sunrise,sunset&timezone=Asia%2FBangkok';
+    fetch(url).then(function(r){return r.json();}).then(function(d){
+        var c=d.current||{}, code=c.weather_code, t=Math.round(c.temperature_2m);
+        var sr=(d.daily&&d.daily.sunrise&&d.daily.sunrise[0]||'').slice(11,16);
+        var ss=(d.daily&&d.daily.sunset&&d.daily.sunset[0]||'').slice(11,16);
+        document.getElementById('wxIc').textContent=ICON[code]||'⛅';
+        document.getElementById('wxTemp').textContent=t+'°C';
+        document.getElementById('wxMeta').innerHTML=(LABEL[code]||'')+'<br>'
+            +'🌬️ '+Math.round(c.wind_speed_10m)+' km/h · ☀️ '+sr+' · 🌙 '+ss;
+        document.getElementById('hrmWx').classList.remove('loading');
+    }).catch(function(){ document.getElementById('hrmWx').style.display='none'; });
 })();
 </script>
-</body>
-</html>
+<?php
+hrm_footer();

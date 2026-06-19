@@ -1,0 +1,787 @@
+<?php
+/**
+ * HRM AJAX endpoint - single handler for recruitment write actions.
+ * Route: /hrm/api   ·   responds JSON.
+ */
+require_once __DIR__ . '/lib/core.php';
+require_once __DIR__ . '/lib/approval.php';
+
+header('Content-Type: application/json; charset=utf-8');
+hrm_require_login();
+
+$uid    = (int)$_SESSION['user_id'];
+$action = $_POST['action'] ?? $_GET['action'] ?? '';
+
+function jout($ok, $data = []) { echo json_encode(['ok' => $ok] + $data, JSON_UNESCAPED_UNICODE); exit; }
+
+switch ($action) {
+
+    /* ── HRF: create (draft) or create + submit ───────────────────────── */
+    case 'save_request': {
+        $title = trim($_POST['title'] ?? '');
+        if ($title === '') { jout(false, ['error' => 'Thiếu tên vị trí']); }
+
+        $code        = hrm_next_code($conn, 'HRF', 'hrm_requests');
+        $dept        = (int)($_POST['department_id'] ?? 0);
+        $office      = (int)($_POST['office_id'] ?? 0);
+        $level       = trim($_POST['level'] ?? '');
+        $qty         = max(1, (int)($_POST['quantity'] ?? 1));
+        $smin        = (float)($_POST['salary_min'] ?? 0);
+        $smax        = (float)($_POST['salary_max'] ?? 0);
+        $needBy      = $_POST['need_by_date'] ?? null; if (!$needBy) { $needBy = null; }
+        $reason      = trim($_POST['reason'] ?? '');
+        $jd          = trim($_POST['jd'] ?? '');
+        $type        = ($_POST['request_type'] ?? 'replacement') === 'new_hc' ? 'new_hc' : 'replacement';
+        $submit      = !empty($_POST['submit']);
+
+        $st = $conn->prepare('INSERT INTO hrm_requests (code,title,department_id,office_id,level,quantity,salary_min,salary_max,need_by_date,reason,jd,request_type,status,created_by) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,"draft",?)');
+        $st->bind_param('ssiisiddssssi', $code, $title, $dept, $office, $level, $qty, $smin, $smax, $needBy, $reason, $jd, $type, $uid);
+        if (!$st->execute()) { jout(false, ['error' => $conn->error]); }
+        $id = $st->insert_id;
+        hrm_audit($conn, $uid, 'hrf_create', 'hrf', $id, $code);
+
+        if ($submit) {
+            $n = hrm_approval_start($conn, 'hrf', $id, $type, $uid);
+            if ($n === 0) { jout(false, ['error' => 'Chưa cấu hình luồng duyệt HRF']); }
+        }
+        jout(true, ['id' => $id, 'code' => $code]);
+    }
+
+    /* ── HRF: update an editable request (draft / rejected) ───────────── */
+    case 'update_request': {
+        $id = (int)($_POST['id'] ?? 0);
+        $req = $conn->query('SELECT * FROM hrm_requests WHERE id = ' . $id)->fetch_assoc();
+        if (!$req) { jout(false, ['error' => 'Không tìm thấy HRF']); }
+        $isAdmin = ($_SESSION['role'] ?? '') === 'admin';
+        if ((int)$req['created_by'] !== $uid && !$isAdmin) { jout(false, ['error' => 'Không có quyền']); }
+        if (!in_array($req['status'], ['draft','rejected'], true) && !$isAdmin) { jout(false, ['error' => 'HRF không thể sửa ở trạng thái này']); }
+
+        $title = trim($_POST['title'] ?? '');
+        if ($title === '') { jout(false, ['error' => 'Thiếu tên vị trí']); }
+        $dept = (int)($_POST['department_id'] ?? 0); $office = (int)($_POST['office_id'] ?? 0);
+        $level = trim($_POST['level'] ?? ''); $qty = max(1, (int)($_POST['quantity'] ?? 1));
+        $smin = (float)($_POST['salary_min'] ?? 0); $smax = (float)($_POST['salary_max'] ?? 0);
+        $needBy = ($_POST['need_by_date'] ?? '') ?: null;
+        $reason = trim($_POST['reason'] ?? ''); $jd = trim($_POST['jd'] ?? '');
+        $type = ($_POST['request_type'] ?? 'replacement') === 'new_hc' ? 'new_hc' : 'replacement';
+        $submit = !empty($_POST['submit']);
+
+        $st = $conn->prepare('UPDATE hrm_requests SET title=?,department_id=?,office_id=?,level=?,quantity=?,salary_min=?,salary_max=?,need_by_date=?,reason=?,jd=?,request_type=? WHERE id=?');
+        $st->bind_param('siisiddssssi', $title, $dept, $office, $level, $qty, $smin, $smax, $needBy, $reason, $jd, $type, $id);
+        $st->execute();
+        hrm_audit($conn, $uid, 'hrf_update', 'hrf', $id, '');
+
+        if ($submit) {
+            $n = hrm_approval_start($conn, 'hrf', $id, $type, $uid);   // resets prior steps + sets pending
+            if ($n === 0) { jout(false, ['error' => 'Chưa cấu hình luồng duyệt HRF']); }
+        } elseif ($req['status'] === 'rejected') {
+            $conn->query('UPDATE hrm_requests SET status="draft" WHERE id=' . $id);  // back to draft on save
+        }
+        jout(true, ['id' => $id]);
+    }
+
+    /* ── HRF: submit an existing draft for approval ───────────────────── */
+    case 'submit_request': {
+        $id = (int)($_POST['id'] ?? 0);
+        $req = $conn->query('SELECT * FROM hrm_requests WHERE id = ' . $id)->fetch_assoc();
+        if (!$req) { jout(false, ['error' => 'Không tìm thấy HRF']); }
+        if ((int)$req['created_by'] !== $uid && ($_SESSION['role'] ?? '') !== 'admin') { jout(false, ['error' => 'Không có quyền']); }
+        if ($req['status'] !== 'draft') { jout(false, ['error' => 'HRF đã được gửi']); }
+        $n = hrm_approval_start($conn, 'hrf', $id, $req['request_type'], $uid);
+        if ($n === 0) { jout(false, ['error' => 'Chưa cấu hình luồng duyệt HRF']); }
+        jout(true, ['steps' => $n]);
+    }
+
+    /* ── HRF: reopen a finished request so it can be re-decided ───────── */
+    case 'reopen_request': {
+        $id = (int)($_POST['id'] ?? 0);
+        $req = $conn->query('SELECT * FROM hrm_requests WHERE id = ' . $id)->fetch_assoc();
+        if (!$req) { jout(false, ['error' => 'Không tìm thấy HRF']); }
+        if (!in_array($req['status'], ['approved', 'rejected'], true)) { jout(false, ['error' => 'HRF chưa kết thúc duyệt']); }
+        if ((int)$req['job_id'] > 0) { jout(false, ['error' => 'HRF đã tạo tin tuyển dụng, không thể mở lại']); }
+
+        // Last acted step.
+        $step = $conn->query("SELECT * FROM hrm_approvals WHERE entity_type='hrf' AND entity_id=$id AND acted_at IS NOT NULL ORDER BY step_order DESC LIMIT 1")->fetch_assoc();
+        if (!$step) { jout(false, ['error' => 'Không có bước duyệt để mở lại']); }
+        if (!hrm_user_has_role($conn, $uid, $step['approver_role'])) { jout(false, ['error' => 'Bạn không phải người duyệt bước này']); }
+
+        $sla = 48;
+        foreach (hrm_approval_flow($conn, 'hrf', '') as $f) { if ((int)$f['step_order'] === (int)$step['step_order']) { $sla = (int)$f['sla_hours']; } }
+        $due = date('Y-m-d H:i:s', strtotime("+{$sla} hours"));
+        $up = $conn->prepare('UPDATE hrm_approvals SET status="pending", acted_at=NULL, acted_by=0, note="", due_at=? WHERE id=?');
+        $up->bind_param('si', $due, $step['id']);
+        $up->execute();
+        $conn->query("UPDATE hrm_requests SET status='pending' WHERE id=$id");
+        hrm_audit($conn, $uid, 'hrf_reopen', 'hrf', $id, 'từ ' . $req['status']);
+        jout(true);
+    }
+
+    /* ── Approval: approve / reject current step ──────────────────────── */
+    case 'approve': case 'reject': {
+        $approvalId = (int)($_POST['approval_id'] ?? 0);
+        $note = trim($_POST['note'] ?? '');
+        $result = hrm_approval_act($conn, $approvalId, $uid, $action === 'approve' ? 'approved' : 'rejected', $note);
+        if (in_array($result, ['invalid', 'forbidden'], true)) {
+            jout(false, ['error' => $result === 'forbidden' ? 'Bạn không phải người duyệt bước này' : 'Bước duyệt không hợp lệ']);
+        }
+        jout(true, ['result' => $result]);
+    }
+
+    /* ── HRF: cancel ──────────────────────────────────────────────────── */
+    case 'cancel_request': {
+        $id = (int)($_POST['id'] ?? 0);
+        $req = $conn->query('SELECT * FROM hrm_requests WHERE id = ' . $id)->fetch_assoc();
+        if (!$req) { jout(false, ['error' => 'Không tìm thấy']); }
+        if ((int)$req['created_by'] !== $uid && ($_SESSION['role'] ?? '') !== 'admin') { jout(false, ['error' => 'Không có quyền']); }
+        $conn->query('UPDATE hrm_requests SET status = "cancelled" WHERE id = ' . $id);
+        hrm_audit($conn, $uid, 'hrf_cancel', 'hrf', $id, '');
+        jout(true);
+    }
+
+    /* ── Settings: recruitment-role assignment (admin) ────────────────── */
+    case 'assign_role': {
+        if (($_SESSION['role'] ?? '') !== 'admin') { jout(false, ['error' => 'Chỉ admin']); }
+        $u = (int)($_POST['user_id'] ?? 0);
+        $role = trim($_POST['rec_role'] ?? '');
+        if (!$u || !array_key_exists($role, hrm_roles())) { jout(false, ['error' => 'Dữ liệu không hợp lệ']); }
+        $st = $conn->prepare('INSERT IGNORE INTO hrm_role_assignments (user_id,rec_role) VALUES (?,?)');
+        $st->bind_param('is', $u, $role);
+        $st->execute();
+        jout(true);
+    }
+    case 'remove_role': {
+        if (($_SESSION['role'] ?? '') !== 'admin') { jout(false, ['error' => 'Chỉ admin']); }
+        $rid = (int)($_POST['id'] ?? 0);
+        $conn->query('DELETE FROM hrm_role_assignments WHERE id = ' . $rid);
+        jout(true);
+    }
+
+    /* ── Settings: email template + toggles ───────────────────────────── */
+    case 'save_email_template': {
+        if (($_SESSION['role'] ?? '') !== 'admin') { jout(false, ['error' => 'Chỉ admin']); }
+        $id = (int)($_POST['id'] ?? 0);
+        $subject = trim($_POST['subject'] ?? '');
+        $body = $_POST['body_html'] ?? '';
+        $enabled = !empty($_POST['enabled']) ? 1 : 0;
+        $st = $conn->prepare('UPDATE hrm_email_templates SET subject = ?, body_html = ?, enabled = ? WHERE id = ?');
+        $st->bind_param('ssii', $subject, $body, $enabled, $id);
+        $st->execute();
+        jout(true);
+    }
+    case 'save_setting': {
+        if (($_SESSION['role'] ?? '') !== 'admin') { jout(false, ['error' => 'Chỉ admin']); }
+        hrm_set_setting($conn, trim($_POST['skey'] ?? ''), trim($_POST['sval'] ?? ''));
+        jout(true);
+    }
+
+    /* ── Settings: per-department stage owners (BC / TA) ──────────────── */
+    case 'save_stage_owner': {
+        if (($_SESSION['role'] ?? '') !== 'admin') { jout(false, ['error' => 'Chỉ admin']); }
+        $dept = (int)($_POST['department_id'] ?? 0);
+        $stage = (int)($_POST['stage_id'] ?? 0);
+        $otype = ($_POST['owner_type'] ?? '') === 'ta' ? 'ta' : 'bc';
+        $userId = (int)($_POST['user_id'] ?? 0);
+        if (!$dept || !$stage) { jout(false, ['error' => 'Thiếu dữ liệu']); }
+        if ($userId > 0) {
+            $st = $conn->prepare('INSERT INTO hrm_stage_owners (department_id,stage_id,owner_type,user_id) VALUES (?,?,?,?) ON DUPLICATE KEY UPDATE user_id=VALUES(user_id)');
+            $st->bind_param('iisi', $dept, $stage, $otype, $userId);
+            $st->execute();
+        } else {
+            $st = $conn->prepare('DELETE FROM hrm_stage_owners WHERE department_id=? AND stage_id=? AND owner_type=?');
+            $st->bind_param('iis', $dept, $stage, $otype);
+            $st->execute();
+        }
+        jout(true);
+    }
+
+    /* ── Settings: per-stage SLA (hours) ──────────────────────────────── */
+    case 'save_stage_sla': {
+        if (($_SESSION['role'] ?? '') !== 'admin') { jout(false, ['error' => 'Chỉ admin']); }
+        $sid = (int)($_POST['stage_id'] ?? 0);
+        $hours = max(0, (int)($_POST['sla_hours'] ?? 0));
+        $st = $conn->prepare('UPDATE hrm_pipeline_stages SET sla_hours = ? WHERE id = ?');
+        $st->bind_param('ii', $hours, $sid);
+        $st->execute();
+        jout(true);
+    }
+
+    /* ── Settings: offices (master data for the office field) ─────────── */
+    case 'save_office': {
+        if (($_SESSION['role'] ?? '') !== 'admin') { jout(false, ['error' => 'Chỉ admin']); }
+        $name = trim($_POST['name'] ?? '');
+        $addr = trim($_POST['address'] ?? '');
+        if ($name === '') { jout(false, ['error' => 'Thiếu tên văn phòng']); }
+        $st = $conn->prepare('INSERT INTO hrm_offices (name, address, active) VALUES (?, ?, 1)');
+        $st->bind_param('ss', $name, $addr);
+        $st->execute();
+        jout(true, ['id' => $st->insert_id]);
+    }
+    case 'update_office': {
+        if (($_SESSION['role'] ?? '') !== 'admin') { jout(false, ['error' => 'Chỉ admin']); }
+        $oid = (int)($_POST['id'] ?? 0);
+        $name = trim($_POST['name'] ?? '');
+        $addr = trim($_POST['address'] ?? '');
+        if (!$oid || $name === '') { jout(false, ['error' => 'Thiếu dữ liệu']); }
+        $st = $conn->prepare('UPDATE hrm_offices SET name = ?, address = ? WHERE id = ?');
+        $st->bind_param('ssi', $name, $addr, $oid);
+        $st->execute();
+        jout(true);
+    }
+    case 'remove_office': {
+        if (($_SESSION['role'] ?? '') !== 'admin') { jout(false, ['error' => 'Chỉ admin']); }
+        $oid = (int)($_POST['id'] ?? 0);
+        $conn->query('DELETE FROM hrm_offices WHERE id = ' . $oid);
+        jout(true);
+    }
+    case 'reorder_offices': {
+        if (($_SESSION['role'] ?? '') !== 'admin') { jout(false, ['error' => 'Chỉ admin']); }
+        $ids = array_filter(array_map('intval', explode(',', $_POST['order'] ?? '')));
+        $pos = 1;
+        $st = $conn->prepare('UPDATE hrm_offices SET sort_order = ? WHERE id = ?');
+        foreach ($ids as $oid) { $st->bind_param('ii', $pos, $oid); $st->execute(); $pos++; }
+        jout(true);
+    }
+
+    /* ════════════════ Phase 2: jobs · pipeline · offer ════════════════ */
+
+    /* Create a job from an approved HRF. */
+    case 'create_job': {
+        $hrfId = (int)($_POST['hrf_id'] ?? 0);
+        $req = $conn->query('SELECT * FROM hrm_requests WHERE id = ' . $hrfId)->fetch_assoc();
+        if (!$req || $req['status'] !== 'approved') { jout(false, ['error' => 'HRF chưa được duyệt']); }
+        if ((int)$req['job_id'] > 0) { jout(false, ['error' => 'HRF đã có tin', 'id' => (int)$req['job_id']]); }
+        $code = hrm_next_code($conn, 'JOB', 'hrm_jobs');
+        $jd = $req['jd'] ?? '';
+        $st = $conn->prepare('INSERT INTO hrm_jobs (request_id,code,title,department_id,office_id,level,salary_min,salary_max,headcount,description,status,created_by) VALUES (?,?,?,?,?,?,?,?,?,?,"draft",?)');
+        $st->bind_param('issiisddisi', $hrfId, $code, $req['title'], $req['department_id'], $req['office_id'], $req['level'], $req['salary_min'], $req['salary_max'], $req['quantity'], $jd, $uid);
+        $st->execute();
+        $jid = $st->insert_id;
+        $conn->query("UPDATE hrm_requests SET job_id=$jid WHERE id=$hrfId");
+        hrm_audit($conn, $uid, 'job_create', 'job', $jid, 'from HRF ' . $req['code']);
+        hrm_sync_job_to_wp($conn, $jid);
+        jout(true, ['id' => $jid]);
+    }
+
+    case 'save_job': {
+        $jid = (int)($_POST['id'] ?? 0);
+        $f = [
+            'title' => trim($_POST['title'] ?? ''), 'department_id' => (int)($_POST['department_id'] ?? 0),
+            'office_id' => (int)($_POST['office_id'] ?? 0), 'level' => trim($_POST['level'] ?? ''),
+            'headcount' => max(1, (int)($_POST['headcount'] ?? 1)), 'salary_min' => (float)($_POST['salary_min'] ?? 0),
+            'salary_max' => (float)($_POST['salary_max'] ?? 0), 'deadline' => ($_POST['deadline'] ?? '') ?: null,
+            'status' => $_POST['status'] ?? 'draft', 'description' => $_POST['description'] ?? '',
+            'jd_skills' => $_POST['jd_skills'] ?? '', 'probation_kpi' => $_POST['probation_kpi'] ?? '',
+        ];
+        if ($f['title'] === '') { jout(false, ['error' => 'Thiếu tên vị trí']); }
+        $st = $conn->prepare('UPDATE hrm_jobs SET title=?,department_id=?,office_id=?,level=?,headcount=?,salary_min=?,salary_max=?,deadline=?,status=?,description=?,jd_skills=?,probation_kpi=? WHERE id=?');
+        $st->bind_param('siisiddsssssi', $f['title'],$f['department_id'],$f['office_id'],$f['level'],$f['headcount'],$f['salary_min'],$f['salary_max'],$f['deadline'],$f['status'],$f['description'],$f['jd_skills'],$f['probation_kpi'],$jid);
+        $st->execute();
+        hrm_audit($conn, $uid, 'job_save', 'job', $jid, '');
+        $sync = hrm_sync_job_to_wp($conn, $jid);
+        jout(true, ['sync' => $sync]);
+    }
+
+    case 'sync_job_channel': {
+        $jid = (int)($_POST['id'] ?? 0);
+        if (!$jid) { jout(false, ['error' => 'Thiếu dữ liệu']); }
+        $res = hrm_sync_job_to_wp($conn, $jid);
+        if (!$res['ok']) { jout(false, ['error' => $res['error'] ?? 'Lỗi đồng bộ']); }
+        jout(true, ['url' => $res['url'] ?? '']);
+    }
+
+    /* Add candidate + create application at SCREENING. */
+    case 'add_candidate': {
+        $jobId = (int)($_POST['job_id'] ?? 0);
+        $name = trim($_POST['full_name'] ?? '');
+        if (!$jobId || $name === '') { jout(false, ['error' => 'Thiếu thông tin']); }
+        $email = trim($_POST['email'] ?? ''); $phone = trim($_POST['phone'] ?? ''); $src = (int)($_POST['source_id'] ?? 0);
+        $st = $conn->prepare('INSERT INTO hrm_candidates (full_name,email,phone,source_id,created_by) VALUES (?,?,?,?,?)');
+        $st->bind_param('sssii', $name, $email, $phone, $src, $uid);
+        $st->execute(); $cid = $st->insert_id;
+
+        $stage = $conn->query("SELECT id,sla_hours FROM hrm_pipeline_stages WHERE code='SCREENING'")->fetch_assoc();
+        $sid = (int)($stage['id'] ?? 0);
+        $st2 = $conn->prepare('INSERT INTO hrm_applications (candidate_id,job_id,stage_id,owner_id) VALUES (?,?,?,?)');
+        $st2->bind_param('iiii', $cid, $jobId, $sid, $uid);
+        $st2->execute(); $aid = $st2->insert_id;
+
+        if (!empty($stage['sla_hours'])) {
+            hrm_sla_open($conn, 'application', $aid, 'screening', date('Y-m-d H:i:s', strtotime('+' . (int)$stage['sla_hours'] . ' hours')));
+        }
+        $job = $conn->query('SELECT title FROM hrm_jobs WHERE id=' . $jobId)->fetch_assoc();
+        if ($email) { hrm_send_email($conn, 'cv_received', $email, ['candidate_name' => $name, 'job_title' => $job['title'] ?? ''], 'application', $aid); }
+        hrm_audit($conn, $uid, 'candidate_add', 'application', $aid, $name);
+        jout(true, ['id' => $aid]);
+    }
+
+    case 'move_stage': {
+        $aid = (int)($_POST['application_id'] ?? 0);
+        $sid = (int)($_POST['stage_id'] ?? 0);
+        $st = $conn->prepare('UPDATE hrm_applications SET stage_id=? WHERE id=? AND status="active"');
+        $st->bind_param('ii', $sid, $aid);
+        $st->execute();
+        $stage = $conn->query('SELECT code,name,sla_hours FROM hrm_pipeline_stages WHERE id=' . $sid)->fetch_assoc();
+        if (!empty($stage['sla_hours'])) {
+            hrm_sla_open($conn, 'application', $aid, strtolower($stage['code']), date('Y-m-d H:i:s', strtotime('+' . (int)$stage['sla_hours'] . ' hours')));
+        }
+        hrm_audit($conn, $uid, 'stage_move', 'application', $aid, $stage['name'] ?? '');
+        jout(true);
+    }
+
+    case 'set_application_owner': {
+        $aid = (int)($_POST['application_id'] ?? 0);
+        $sid = (int)($_POST['stage_id'] ?? 0);
+        $owner = (int)($_POST['user_id'] ?? 0);
+        if (!$aid || !$sid) { jout(false, ['error' => 'Thiếu dữ liệu']); }
+        if ($owner > 0) {
+            $st = $conn->prepare('INSERT INTO hrm_application_assignees (application_id,stage_id,user_id) VALUES (?,?,?) ON DUPLICATE KEY UPDATE user_id=VALUES(user_id)');
+            $st->bind_param('iii', $aid, $sid, $owner);
+            $st->execute();
+            $conn->query("UPDATE hrm_applications SET owner_id=$owner WHERE id=$aid"); // keep current handler in sync
+        } else {
+            $st = $conn->prepare('DELETE FROM hrm_application_assignees WHERE application_id=? AND stage_id=?');
+            $st->bind_param('ii', $aid, $sid);
+            $st->execute();
+        }
+        hrm_audit($conn, $uid, 'application_assign', 'application', $aid, "stage=$sid owner=$owner");
+        jout(true);
+    }
+
+    case 'rate_application': {
+        $aid = (int)($_POST['application_id'] ?? 0);
+        $rating = max(0, min(5, (int)($_POST['rating'] ?? 0)));
+        $st = $conn->prepare('UPDATE hrm_applications SET rating = ? WHERE id = ?');
+        $st->bind_param('ii', $rating, $aid);
+        $st->execute();
+        jout(true);
+    }
+
+    case 'reject_application': {
+        $aid = (int)($_POST['application_id'] ?? 0);
+        $reason = trim($_POST['reason'] ?? '');
+        $rej = $conn->query("SELECT id FROM hrm_pipeline_stages WHERE code='REJECTED'")->fetch_assoc();
+        $st = $conn->prepare('UPDATE hrm_applications SET status="rejected", reject_reason=?, stage_id=? WHERE id=?');
+        $rid = (int)($rej['id'] ?? 0);
+        $st->bind_param('sii', $reason, $rid, $aid);
+        $st->execute();
+        $info = $conn->query("SELECT c.full_name,c.email,j.title FROM hrm_applications a JOIN hrm_candidates c ON c.id=a.candidate_id JOIN hrm_jobs j ON j.id=a.job_id WHERE a.id=$aid")->fetch_assoc();
+        if (!empty($info['email'])) { hrm_send_email($conn, 'reject_screening', $info['email'], ['candidate_name' => $info['full_name'], 'job_title' => $info['title']], 'application', $aid); }
+        hrm_audit($conn, $uid, 'application_reject', 'application', $aid, $reason);
+        jout(true);
+    }
+
+    case 'hire_application': {
+        $aid = (int)($_POST['application_id'] ?? 0);
+        $hired = $conn->query("SELECT id FROM hrm_pipeline_stages WHERE code='HIRED'")->fetch_assoc();
+        $hid = (int)($hired['id'] ?? 0);
+        $conn->query("UPDATE hrm_applications SET status='hired', stage_id=$hid WHERE id=$aid");
+        hrm_audit($conn, $uid, 'application_hire', 'application', $aid, '');
+        jout(true);
+    }
+
+    case 'save_test': {
+        $aid = (int)($_POST['application_id'] ?? 0);
+        $type = trim($_POST['test_type'] ?? ''); $score = (float)($_POST['score'] ?? 0);
+        $passed = $score >= 70 ? 1 : 0;
+        $st = $conn->prepare('INSERT INTO hrm_tests (application_id,test_type,score,passed,evaluator_id,taken_at) VALUES (?,?,?,?,?,NOW())');
+        $st->bind_param('isdii', $aid, $type, $score, $passed, $uid);
+        $st->execute();
+        hrm_audit($conn, $uid, 'test_save', 'application', $aid, $type . ' ' . $score);
+        jout(true);
+    }
+
+    case 'schedule_interview': {
+        $aid = (int)($_POST['application_id'] ?? 0);
+        $round = max(1, (int)($_POST['round'] ?? 1));
+        $type = trim($_POST['interview_type'] ?? 'technical');
+        $at = ($_POST['scheduled_at'] ?? '') ? date('Y-m-d H:i:s', strtotime($_POST['scheduled_at'])) : null;
+        $by = (int)($_POST['interviewer_id'] ?? 0);
+        $loc = trim($_POST['location'] ?? '');
+        $st = $conn->prepare('INSERT INTO hrm_interviews (application_id,round,interview_type,scheduled_at,interviewer_id,location) VALUES (?,?,?,?,?,?)');
+        $st->bind_param('iissis', $aid, $round, $type, $at, $by, $loc);
+        $st->execute();
+        $info = $conn->query("SELECT c.full_name,c.email,j.title FROM hrm_applications a JOIN hrm_candidates c ON c.id=a.candidate_id JOIN hrm_jobs j ON j.id=a.job_id WHERE a.id=$aid")->fetch_assoc();
+        $vars = ['candidate_name'=>$info['full_name'],'job_title'=>$info['title'],'interview_time'=>$at?date('d/m/Y H:i',strtotime($at)):'(sẽ thông báo)','interview_type'=>$type,'location'=>$loc];
+        hrm_dispatch($conn, 'interview_invitation', [
+            'recipients' => $by ? [$by] : [],
+            'notif' => $by ? ['title'=>'Bạn được phân công phỏng vấn: '.$info['full_name'],'body'=>$info['title'].' · '.($at?date('d/m H:i',strtotime($at)):''),'severity'=>'info','link'=>'/hrm/application?id='.$aid] : [],
+            'email' => !empty($info['email']) ? [['to'=>$info['email'],'vars'=>$vars]] : [],
+            'entity_type'=>'application','entity_id'=>$aid,'actor_id'=>$uid,
+        ]);
+        jout(true);
+    }
+
+    case 'save_evaluation': {
+        $aid = (int)($_POST['application_id'] ?? 0);
+        $score = (float)($_POST['total_score'] ?? 0);
+        $rec = trim($_POST['recommendation'] ?? '');
+        $cmt = trim($_POST['comment'] ?? '');
+        $st = $conn->prepare('INSERT INTO hrm_evaluations (application_id,evaluator_id,total_score,recommendation,comment) VALUES (?,?,?,?,?)');
+        $st->bind_param('iidss', $aid, $uid, $score, $rec, $cmt);
+        $st->execute();
+        $conn->query('UPDATE hrm_applications SET score=' . $score . ' WHERE id=' . $aid);
+        hrm_audit($conn, $uid, 'evaluation_save', 'application', $aid, $rec . ' ' . $score);
+        jout(true);
+    }
+
+    case 'create_offer': {
+        $aid = (int)($_POST['application_id'] ?? 0);
+        $salary = (float)($_POST['salary'] ?? 0);
+        $start = ($_POST['start_date'] ?? '') ?: null;
+        $st = $conn->prepare('INSERT INTO hrm_offers (application_id,salary,start_date,created_by) VALUES (?,?,?,?)');
+        $st->bind_param('idsi', $aid, $salary, $start, $uid);
+        $st->execute(); $oid = $st->insert_id;
+        $conn->query("UPDATE hrm_applications SET owner_id=$uid WHERE id=$aid AND owner_id=0");
+        hrm_audit($conn, $uid, 'offer_create', 'offer', $oid, '');
+        jout(true, ['id' => $oid]);
+    }
+
+    case 'submit_offer': {
+        $oid = (int)($_POST['offer_id'] ?? 0);
+        $n = hrm_approval_start($conn, 'offer', $oid, '', $uid);
+        if ($n === 0) { jout(false, ['error' => 'Chưa cấu hình luồng duyệt offer']); }
+        jout(true, ['steps' => $n]);
+    }
+
+    case 'offer_response': {
+        $oid = (int)($_POST['offer_id'] ?? 0);
+        $resp = ($_POST['response'] ?? '') === 'accept' ? 'accepted' : 'declined';
+        $offer = $conn->query('SELECT * FROM hrm_offers WHERE id=' . $oid)->fetch_assoc();
+        if (!$offer) { jout(false, ['error' => 'Không tìm thấy offer']); }
+        $conn->query("UPDATE hrm_offers SET status='$resp', responded_at=NOW() WHERE id=$oid");
+        if ($resp === 'accepted') {
+            $hired = $conn->query("SELECT id FROM hrm_pipeline_stages WHERE code='HIRED'")->fetch_assoc();
+            $hid = (int)($hired['id'] ?? 0);
+            $conn->query('UPDATE hrm_applications SET status="hired", stage_id=' . $hid . ' WHERE id=' . (int)$offer['application_id']);
+        }
+        hrm_audit($conn, $uid, 'offer_' . $resp, 'offer', $oid, '');
+        jout(true);
+    }
+
+    /* ════════════════ Phase 3: onboarding (60-day) ════════════════════ */
+
+    case 'create_onboarding': {
+        $aid = (int)($_POST['application_id'] ?? 0);
+        $app = $conn->query("SELECT a.*, c.full_name, j.title AS job_title, j.level
+                FROM hrm_applications a JOIN hrm_candidates c ON c.id=a.candidate_id JOIN hrm_jobs j ON j.id=a.job_id
+                WHERE a.id=$aid AND a.status='hired'")->fetch_assoc();
+        if (!$app) { jout(false, ['error' => 'Ứng viên chưa ở trạng thái đã tuyển']); }
+        $exists = $conn->query("SELECT id FROM hrm_onboarding WHERE application_id=$aid")->fetch_assoc();
+        if ($exists) { jout(true, ['id' => (int)$exists['id']]); }
+        $st = $conn->prepare('INSERT INTO hrm_onboarding (application_id,candidate_name,job_title,level,ta_id,status) VALUES (?,?,?,?,?,"preboarding")');
+        $st->bind_param('isssi', $aid, $app['full_name'], $app['job_title'], $app['level'], $uid);
+        $st->execute(); $oid = $st->insert_id;
+        hrm_audit($conn, $uid, 'onboarding_create', 'onboarding', $oid, $app['full_name']);
+        jout(true, ['id' => $oid]);
+    }
+
+    case 'save_onboarding': {
+        $oid = (int)($_POST['id'] ?? 0);
+        $o = $conn->query('SELECT * FROM hrm_onboarding WHERE id=' . $oid)->fetch_assoc();
+        if (!$o) { jout(false, ['error' => 'Không tìm thấy']); }
+        $start = ($_POST['start_date'] ?? '') ?: null;
+        $level = trim($_POST['level'] ?? '');
+        $mgr = (int)($_POST['manager_id'] ?? 0); $buddy = (int)($_POST['buddy_id'] ?? 0);
+        $ta = (int)($_POST['ta_id'] ?? 0); $bc = (int)($_POST['bc_director_id'] ?? 0);
+        $status = $start ? 'active' : 'preboarding';
+        $st = $conn->prepare('UPDATE hrm_onboarding SET start_date=?,level=?,manager_id=?,buddy_id=?,ta_id=?,bc_director_id=?,status=? WHERE id=?');
+        $st->bind_param('ssiiiisi', $start, $level, $mgr, $buddy, $ta, $bc, $status, $oid);
+        $st->execute();
+
+        if ($start) {
+            require_once __DIR__ . '/lib/onboarding.php';
+            hrm_onb_generate_plan($conn, $oid, $start);
+        }
+        hrm_audit($conn, $uid, 'onboarding_save', 'onboarding', $oid, '');
+
+        // Notify manager / buddy / bc that they own this onboarding.
+        $recips = array_filter([$mgr, $buddy, $bc]);
+        if ($recips) {
+            hrm_dispatch($conn, 'onboarding_assigned', [
+                'recipients' => $recips,
+                'notif' => ['title' => 'Bạn được phân công onboarding: ' . $o['candidate_name'],
+                            'body' => ($o['job_title'] ?: '') . ($start ? ' · bắt đầu ' . date('d/m/Y', strtotime($start)) : ''),
+                            'severity' => 'info', 'link' => '/hrm/onboarding-detail?id=' . $oid],
+                'entity_type' => 'onboarding', 'entity_id' => $oid, 'actor_id' => $uid,
+            ]);
+        }
+        jout(true);
+    }
+
+    case 'toggle_task': {
+        $tid = (int)($_POST['id'] ?? 0);
+        $done = !empty($_POST['done']) ? 1 : 0;
+        $st = $conn->prepare('UPDATE hrm_onboarding_tasks SET done=?, done_at=' . ($done ? 'NOW()' : 'NULL') . ' WHERE id=?');
+        $st->bind_param('ii', $done, $tid);
+        $st->execute();
+        jout(true);
+    }
+
+    case 'save_checkpoint': {
+        $cid = (int)($_POST['id'] ?? 0);
+        $att = (int)($_POST['score_attitude'] ?? 0); $skl = (int)($_POST['score_skill'] ?? 0); $intg = (int)($_POST['score_integration'] ?? 0);
+        $grade = trim($_POST['result_grade'] ?? ''); $notes = trim($_POST['notes'] ?? '');
+        $st = $conn->prepare('UPDATE hrm_checkpoints SET score_attitude=?,score_skill=?,score_integration=?,result_grade=?,notes=?,status="done",done_at=NOW() WHERE id=?');
+        $st->bind_param('iiissi', $att, $skl, $intg, $grade, $notes, $cid);
+        $st->execute();
+        $row = $conn->query('SELECT onboarding_id, checkpoint_key FROM hrm_checkpoints WHERE id=' . $cid)->fetch_assoc();
+        hrm_audit($conn, $uid, 'checkpoint_done', 'onboarding', (int)($row['onboarding_id'] ?? 0), $row['checkpoint_key'] ?? '');
+        jout(true);
+    }
+
+    case 'complete_onboarding': {
+        $oid = (int)($_POST['id'] ?? 0);
+        $conn->query("UPDATE hrm_onboarding SET status='completed' WHERE id=$oid");
+        hrm_audit($conn, $uid, 'onboarding_complete', 'onboarding', $oid, '');
+        jout(true);
+    }
+
+    /* ════════════════ Phase 4: probation review ═══════════════════════ */
+    case 'save_probation': {
+        $oid = (int)($_POST['onboarding_id'] ?? 0);
+        $aid = (int)($_POST['application_id'] ?? 0);
+        $o = $conn->query('SELECT * FROM hrm_onboarding WHERE id=' . $oid)->fetch_assoc();
+        if (!$o) { jout(false, ['error' => 'Không tìm thấy onboarding']); }
+        $kpi = min(50, max(0, (int)($_POST['score_kpi'] ?? 0)));
+        $comp = min(20, max(0, (int)($_POST['score_competency'] ?? 0)));
+        $att = min(20, max(0, (int)($_POST['score_attitude'] ?? 0)));
+        $cul = min(10, max(0, (int)($_POST['score_culture'] ?? 0)));
+        $total = $kpi + $comp + $att + $cul;
+        $decision = in_array($_POST['decision'] ?? '', ['confirm','extend','reject'], true) ? $_POST['decision'] : ($total >= 85 ? 'confirm' : ($total >= 75 ? 'extend' : 'reject'));
+        $notes = trim($_POST['notes'] ?? '');
+
+        $prev = $conn->query('SELECT id FROM hrm_probation_reviews WHERE onboarding_id=' . $oid . ' ORDER BY id DESC LIMIT 1')->fetch_assoc();
+        if ($prev) {
+            $st = $conn->prepare('UPDATE hrm_probation_reviews SET application_id=?,score_kpi=?,score_competency=?,score_attitude=?,score_culture=?,total=?,decision=?,reviewed_by=?,reviewed_at=NOW(),notes=? WHERE id=?');
+            $pid = (int)$prev['id'];
+            $st->bind_param('iiiiiisisi', $aid, $kpi, $comp, $att, $cul, $total, $decision, $uid, $notes, $pid);
+        } else {
+            $st = $conn->prepare('INSERT INTO hrm_probation_reviews (onboarding_id,application_id,score_kpi,score_competency,score_attitude,score_culture,total,decision,reviewed_by,reviewed_at,notes) VALUES (?,?,?,?,?,?,?,?,?,NOW(),?)');
+            $st->bind_param('iiiiiiisis', $oid, $aid, $kpi, $comp, $att, $cul, $total, $decision, $uid, $notes);
+        }
+        $st->execute();
+
+        // Reflect decision on onboarding lifecycle.
+        $newStatus = $decision === 'confirm' ? 'completed' : ($decision === 'reject' ? 'left' : 'active');
+        $conn->query("UPDATE hrm_onboarding SET status='$newStatus' WHERE id=$oid");
+        hrm_audit($conn, $uid, 'probation_' . $decision, 'onboarding', $oid, $total . '/100');
+
+        // Notify HRBP + manager of the result; on confirm, flag TA recruitment complete (Probation Bonus).
+        $recips = array_filter([(int)$o['manager_id'], (int)$o['bc_director_id']]);
+        foreach (hrm_users_with_role($conn, 'hrbp') as $u) { $recips[] = $u; }
+        if ($recips) {
+            hrm_dispatch($conn, 'probation_result', [
+                'recipients' => $recips,
+                'notif' => ['title' => 'Kết quả thử việc: ' . $o['candidate_name'],
+                            'body' => $total . '/100 · ' . ($decision === 'confirm' ? 'Chính thức' : ($decision === 'extend' ? 'Gia hạn' : 'Không tiếp nhận')),
+                            'severity' => $decision === 'confirm' ? 'success' : ($decision === 'reject' ? 'danger' : 'warning'),
+                            'link' => '/hrm/probation?id=' . $oid],
+                'entity_type' => 'onboarding', 'entity_id' => $oid, 'actor_id' => $uid,
+            ]);
+        }
+        if ($decision === 'confirm' && (int)$o['ta_id']) {
+            hrm_dispatch($conn, 'ta_recruitment_completed', [
+                'recipients' => [(int)$o['ta_id']],
+                'notif' => ['title' => 'Hoàn thành tuyển dụng: ' . $o['candidate_name'],
+                            'body' => 'Nhân sự pass probation - đủ điều kiện Probation Bonus.',
+                            'severity' => 'success', 'link' => '/hrm/probation?id=' . $oid],
+                'entity_type' => 'onboarding', 'entity_id' => $oid, 'actor_id' => $uid,
+            ]);
+        }
+        jout(true);
+    }
+
+    /* ════════════════ Candidate pool: Excel import ════════════════════ */
+    case 'import_candidates': {
+        if (empty($_FILES['file']['tmp_name'])) { jout(false, ['error' => 'Chưa chọn file']); }
+        require_once __DIR__ . '/lib/xlsx.php';
+        try { $rows = hrm_xlsx_rows($_FILES['file']['tmp_name']); }
+        catch (Throwable $e) { jout(false, ['error' => 'Lỗi đọc file: ' . $e->getMessage()]); }
+
+        // Locate header row (has both "ID" and "Email").
+        $hdrIdx = -1;
+        foreach ($rows as $i => $r) {
+            if (in_array('ID', $r, true) && in_array('Email', $r, true)) { $hdrIdx = $i; break; }
+        }
+        if ($hdrIdx < 0) { jout(false, ['error' => 'Không tìm thấy dòng tiêu đề (ID/Email)']); }
+        $map = [];
+        foreach ($rows[$hdrIdx] as $col => $label) { if ($label !== '') { $map[$label] = $col; } }
+        $get = function (array $r, string $label) use ($map) { return isset($map[$label]) ? ($r[$map[$label]] ?? '') : ''; };
+
+        // Source cache (name -> id), create if missing.
+        $srcCache = [];
+        $srcId = function (string $name) use ($conn, &$srcCache) {
+            $name = trim($name);
+            if ($name === '') { return 0; }
+            $key = mb_strtolower($name);
+            if (isset($srcCache[$key])) { return $srcCache[$key]; }
+            $st = $conn->prepare('SELECT id FROM hrm_candidate_sources WHERE name = ? LIMIT 1');
+            $st->bind_param('s', $name); $st->execute();
+            $row = $st->get_result()->fetch_assoc();
+            if ($row) { return $srcCache[$key] = (int)$row['id']; }
+            $ins = $conn->prepare('INSERT INTO hrm_candidate_sources (name) VALUES (?)');
+            $ins->bind_param('s', $name); $ins->execute();
+            return $srcCache[$key] = $ins->insert_id;
+        };
+
+        $ins = 0; $upd = 0; $skip = 0;
+        for ($i = $hdrIdx + 1; $i < count($rows); $i++) {
+            $r = $rows[$i];
+            $name = trim($get($r, 'Tên'));
+            if ($name === '') { $skip++; continue; }
+            $ext = trim($get($r, 'ID'));
+            $email = trim($get($r, 'Email'));
+            $phone = trim($get($r, 'Số điện thoại')) ?: trim($get($r, 'phone'));
+            $pos = trim($get($r, 'Công việc gần nhất'));
+            $cv = trim($get($r, 'Đường dẫn CV'));
+            $gender = trim($get($r, 'Giới tính'));
+            $dob = trim($get($r, 'Ngày tháng năm sinh')); if ($dob === '0/0/0') { $dob = ''; }
+            $score = (float)str_replace(',', '.', trim($get($r, 'Điểm')));
+            $job = trim($get($r, 'Tên tin tuyển dụng'));
+            $stage = trim($get($r, 'Giai đoạn'));
+            $sid = $srcId($get($r, 'Nguồn'));
+            // Extra columns from the Base export.
+            $classification = trim($get($r, 'Phân loại'));
+            $campaign = trim($get($r, 'Chiến dịch'));
+            $idcard = trim($get($r, 'Số CMT'));
+            $tags = trim($get($r, 'Thẻ'));
+            $appliedDate = preg_match('#^(\d{1,2})/(\d{1,2})/(\d{4})$#', $get($r, 'Ngày ứng tuyển'), $m) ? sprintf('%04d-%02d-%02d', $m[3], $m[2], $m[1]) : null;
+            $interview = trim($get($r, 'Thời gian phỏng vấn'));
+            $officeTxt = trim($get($r, 'Văn phòng'));
+            $rejReason = trim($get($r, 'Lý do từ chối'));
+            $updatedSrc = trim($get($r, 'Thời gian cập nhật gần nhất'));
+
+            // Find existing by external_id, else by email.
+            $existing = null;
+            if ($ext !== '') {
+                $st = $conn->prepare('SELECT id FROM hrm_candidates WHERE external_id = ? LIMIT 1');
+                $st->bind_param('s', $ext); $st->execute(); $existing = $st->get_result()->fetch_assoc();
+            }
+            if (!$existing && $email !== '') {
+                $st = $conn->prepare('SELECT id FROM hrm_candidates WHERE email = ? LIMIT 1');
+                $st->bind_param('s', $email); $st->execute(); $existing = $st->get_result()->fetch_assoc();
+            }
+
+            // Build SET clause (admin import, values escaped).
+            $esc = fn($v) => "'" . $conn->real_escape_string((string)$v) . "'";
+            $set = "external_id=" . $esc($ext) . ",full_name=" . $esc($name) . ",email=" . $esc($email)
+                . ",phone=" . $esc($phone) . ",source_id=" . (int)$sid . ",cv_path=" . $esc($cv)
+                . ",current_position=" . $esc($pos) . ",gender=" . $esc($gender) . ",dob=" . $esc($dob)
+                . ",score=" . (float)$score . ",applied_job=" . $esc($job) . ",applied_stage=" . $esc($stage)
+                . ",classification=" . $esc($classification) . ",campaign=" . $esc($campaign) . ",id_card=" . $esc($idcard)
+                . ",tags=" . $esc($tags) . ",applied_date=" . ($appliedDate ? $esc($appliedDate) : 'NULL')
+                . ",interview_date=" . $esc($interview) . ",office_text=" . $esc($officeTxt)
+                . ",reject_reason=" . $esc($rejReason) . ",updated_src=" . $esc($updatedSrc);
+
+            if ($existing) {
+                $conn->query("UPDATE hrm_candidates SET $set WHERE id=" . (int)$existing['id']);
+                $upd++;
+            } else {
+                $conn->query("INSERT INTO hrm_candidates SET $set, created_by=" . (int)$uid);
+                $ins++;
+            }
+        }
+        hrm_audit($conn, $uid, 'candidate_import', 'candidate', 0, "ins=$ins upd=$upd skip=$skip");
+        jout(true, ['inserted' => $ins, 'updated' => $upd, 'skipped' => $skip]);
+    }
+
+    /* Attach an existing pool candidate to a job pipeline (create application). */
+    case 'add_candidate_to_job': {
+        $cid = (int)($_POST['candidate_id'] ?? 0);
+        $jid = (int)($_POST['job_id'] ?? 0);
+        if (!$cid || !$jid) { jout(false, ['error' => 'Thiếu dữ liệu']); }
+        $exist = $conn->query("SELECT id FROM hrm_applications WHERE candidate_id=$cid AND job_id=$jid LIMIT 1")->fetch_assoc();
+        if ($exist) { jout(true, ['id' => (int)$exist['id']]); }
+        $stage = $conn->query("SELECT id,sla_hours FROM hrm_pipeline_stages WHERE code='SCREENING'")->fetch_assoc();
+        $sid = (int)($stage['id'] ?? 0);
+        $st = $conn->prepare('INSERT INTO hrm_applications (candidate_id,job_id,stage_id,owner_id) VALUES (?,?,?,?)');
+        $st->bind_param('iiii', $cid, $jid, $sid, $uid);
+        $st->execute(); $aid = $st->insert_id;
+        if (!empty($stage['sla_hours'])) {
+            hrm_sla_open($conn, 'application', $aid, 'screening', date('Y-m-d H:i:s', strtotime('+' . (int)$stage['sla_hours'] . ' hours')));
+        }
+        hrm_audit($conn, $uid, 'candidate_to_pipeline', 'application', $aid, "cand=$cid job=$jid");
+        jout(true, ['id' => $aid]);
+    }
+
+    /* ════════════════ Job openings: Excel import ══════════════════════ */
+    case 'import_jobs': {
+        if (empty($_FILES['file']['tmp_name'])) { jout(false, ['error' => 'Chưa chọn file']); }
+        require_once __DIR__ . '/lib/xlsx.php';
+        try { $rows = hrm_xlsx_rows($_FILES['file']['tmp_name']); }
+        catch (Throwable $e) { jout(false, ['error' => 'Lỗi đọc file: ' . $e->getMessage()]); }
+
+        $hdrIdx = -1;
+        foreach ($rows as $i => $r) {
+            if (in_array('ID', $r, true) && in_array('Trạng thái', $r, true)) { $hdrIdx = $i; break; }
+        }
+        if ($hdrIdx < 0) { jout(false, ['error' => 'Không tìm thấy dòng tiêu đề (ID/Trạng thái)']); }
+        $map = [];
+        foreach ($rows[$hdrIdx] as $col => $label) { if ($label !== '') { $map[$label] = $col; } }
+        $get = function (array $r, string $label) use ($map) { return isset($map[$label]) ? trim($r[$map[$label]] ?? '') : ''; };
+        $toDate = function (string $d) { return preg_match('#^(\d{1,2})/(\d{1,2})/(\d{4})$#', $d, $m) ? sprintf('%04d-%02d-%02d', $m[3], $m[2], $m[1]) : null; };
+
+        // Department name -> id (match only, company-wide table, no create).
+        $deptMap = [];
+        foreach ($conn->query('SELECT id,name FROM departments') as $d) { $deptMap[mb_strtolower(trim($d['name']))] = (int)$d['id']; }
+        // Office name -> id. Offices are a managed setting (Cấu hình > Văn phòng):
+        // map by name to an EXISTING office only (never create). Exact match first,
+        // else prefix match (setting name is the start of the file's value, which may
+        // append an address or list several offices). Longest setting name wins.
+        $offCache = []; $offList = [];
+        foreach ($conn->query('SELECT id,name FROM hrm_offices') as $o) {
+            $lc = mb_strtolower(trim($o['name']));
+            $offCache[$lc] = (int)$o['id'];
+            $offList[] = [$lc, (int)$o['id']];
+        }
+        usort($offList, fn($a, $b) => mb_strlen($b[0]) <=> mb_strlen($a[0]));
+        $officeId = function (string $name) use ($offCache, $offList) {
+            $k = mb_strtolower(trim($name));
+            if ($k === '') { return 0; }
+            if (isset($offCache[$k])) { return $offCache[$k]; }
+            foreach ($offList as $o) { if (mb_strpos($k, $o[0]) === 0) { return $o[1]; } }
+            return 0;
+        };
+        $mapStatus = function (string $s) {
+            $s = mb_strtolower($s);
+            if (strpos($s, 'publish') !== false) { return 'open'; }
+            if (strpos($s, 'draft') !== false) { return 'draft'; }
+            if (strpos($s, 'clos') !== false || strpos($s, 'unpublish') !== false || strpos($s, 'đóng') !== false) { return 'closed'; }
+            return 'open';
+        };
+
+        $ins = 0; $upd = 0; $skip = 0;
+        for ($i = $hdrIdx + 1; $i < count($rows); $i++) {
+            $r = $rows[$i];
+            $title = mb_substr($get($r, 'Tên'), 0, 200);
+            $ext = $get($r, 'ID');
+            if ($title === '' || $ext === '') { $skip++; continue; }
+            $dept = $deptMap[mb_strtolower($get($r, 'Tên phòng ban'))] ?? 0;
+            $office = $officeId($get($r, 'Tên văn phòng'));
+            $headcount = max(1, (int)$get($r, 'Số lượng cần tuyển'));
+            $status = $mapStatus($get($r, 'Trạng thái'));
+            $deadline = $toDate($get($r, 'Thời gian kết thúc tuyển dụng'));
+            $managers = mb_substr($get($r, 'Người quản lý'), 0, 255);
+            $poster = mb_substr($get($r, 'Người tạo'), 0, 100);
+            $sCreated = $toDate($get($r, 'Thời gian tạo hồ sơ'));
+            $sStart = $toDate($get($r, 'Thời gian bắt đầu tuyển dụng'));
+
+            $exist = $conn->query('SELECT id FROM hrm_jobs WHERE external_id = "' . $conn->real_escape_string($ext) . '" LIMIT 1')->fetch_assoc();
+            if ($exist) {
+                $jid = (int)$exist['id'];
+                $st = $conn->prepare('UPDATE hrm_jobs SET title=?,department_id=?,office_id=?,headcount=?,status=?,deadline=?,managers=?,poster=?,source_created=?,source_start=? WHERE id=?');
+                $st->bind_param('siiissssssi', $title, $dept, $office, $headcount, $status, $deadline, $managers, $poster, $sCreated, $sStart, $jid);
+                $st->execute(); $upd++;
+            } else {
+                $st = $conn->prepare('INSERT INTO hrm_jobs (external_id,code,title,department_id,office_id,headcount,status,deadline,managers,poster,source_created,source_start,created_by) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)');
+                $st->bind_param('sssiiissssssi', $ext, $ext, $title, $dept, $office, $headcount, $status, $deadline, $managers, $poster, $sCreated, $sStart, $uid);
+                $st->execute(); $ins++;
+            }
+        }
+        hrm_audit($conn, $uid, 'job_import', 'job', 0, "ins=$ins upd=$upd skip=$skip");
+        jout(true, ['inserted' => $ins, 'updated' => $upd, 'skipped' => $skip]);
+    }
+
+    default:
+        jout(false, ['error' => 'Unknown action: ' . $action]);
+}
