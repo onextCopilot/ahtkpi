@@ -126,7 +126,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['aht_apply_nonce'])) {
                         curl_setopt($ch, CURLOPT_HTTPHEADER, array(
                             'X-API-Key: ' . $kpi_api_key
                         ));
-                        curl_exec($ch);
+                        $response = curl_exec($ch);
+                        $http_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+                        file_put_contents(__DIR__ . '/webhook_debug.log', date('Y-m-d H:i:s') . " - URL: $kpi_webhook_url - Job: $job_id - Code: $http_code - Resp: " . print_r($response, true) . "\n", FILE_APPEND);
                         curl_close($ch);
                     }
                     // -------------------------------

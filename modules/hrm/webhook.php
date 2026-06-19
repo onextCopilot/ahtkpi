@@ -42,9 +42,9 @@ switch ($action) {
             exit;
         }
 
-        // 1. Find local job
-        $stJob = $conn->prepare('SELECT id, title FROM hrm_jobs WHERE external_id = ? LIMIT 1');
-        $stJob->bind_param('s', $externalJobId);
+        // 1. Find local job by channel_id (WP Post ID) or external_id
+        $stJob = $conn->prepare('SELECT id, title FROM hrm_jobs WHERE channel_id = ? OR external_id = ? LIMIT 1');
+        $stJob->bind_param('is', $externalJobId, $externalJobId);
         $stJob->execute();
         $job = $stJob->get_result()->fetch_assoc();
 
