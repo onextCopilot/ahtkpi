@@ -567,6 +567,33 @@ if ($res) {
         // Capture Odoo payment_state (not_paid / partial / in_payment / paid / reversed) for display
         $row['odoo_payment_state'] = ($odoo_inv && isset($odoo_inv['payment_state'])) ? (string)$odoo_inv['payment_state'] : '';
 
+        // Tháng TT / Cập nhật tuần: derive LIVE from the Odoo payment date so they stay
+        // in sync with the (live) Paid badge, even for invoices not re-synced via sync_debt.php.
+        // Stored DB values take precedence (may be manually edited); only fill when empty.
+        if ($odoo_inv && in_array($row['odoo_payment_state'], ['paid', 'in_payment'], true)
+            && (empty($row['payment_month']) || empty($row['weekly_update']))) {
+            $payDate = $odoo_inv['write_date'] ?? '';
+            $widget = $odoo_inv['invoice_payments_widget'] ?? null;
+            if (is_string($widget)) {
+                $widget = json_decode($widget, true);
+            }
+            if (!empty($widget['content'])) {
+                $payDates = array_column($widget['content'], 'date');
+                if ($payDates) {
+                    $payDate = max($payDates);
+                }
+            }
+            if (!empty($payDate)) {
+                $payTs = strtotime($payDate);
+                if (empty($row['payment_month'])) {
+                    $row['payment_month'] = date('m/Y', $payTs);
+                }
+                if (empty($row['weekly_update'])) {
+                    $row['weekly_update'] = 'Tuần ' . (int)ceil((int)date('j', $payTs) / 7);
+                }
+            }
+        }
+
         // Paid Amount (VND) đã tính ở trên (phần đã thu của hóa đơn)
         $row['paid_amount_vnd'] = $paid_vnd;
 
