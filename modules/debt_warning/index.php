@@ -275,6 +275,8 @@ $res = $conn->query("SELECT d.*, st.name as team_name
                     ORDER BY d.expected_payment_date ASC, d.id DESC");
 
 $odoo_map = $odoo->getInvoiceMap();
+// Company-safe per-currency rates (số ngoại tệ / 1 VND) cho bản ghi KHÔNG link Odoo.
+$currencyMap = $odoo->getCurrencies();
 
 if ($res) {
     $now = new DateTime();
@@ -308,10 +310,14 @@ if ($res) {
             }
         }
 
-        // Fallback to manual rate calculation
+        // Fallback (bản ghi không link Odoo): quy đổi VND theo getCurrencies() (an toàn công ty).
         if ($vnd_value <= 0) {
-            $rate = $odoo->getRate($curr, $date);
-            $vnd_value = ($rate > 0) ? (($amount / $rate) * $vnd_multiplier) : $amount;
+            if ($curr === 'VND') {
+                $vnd_value = $amount;
+            } else {
+                $cr = isset($currencyMap[$curr]['rate']) ? (float) $currencyMap[$curr]['rate'] : 0;
+                $vnd_value = ($cr > 0) ? ($amount / $cr) : $amount;
+            }
         }
 
         $row['amount_original'] = $amount;

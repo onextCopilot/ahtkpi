@@ -20,6 +20,9 @@ if (empty($clientName)) {
 
 // Initialize Odoo API for rates
 $odoo = new OdooAPI();
+// Company-safe per-currency rates (số ngoại tệ / 1 VND). KHÔNG dùng getRate() vì
+// rates.cache bị lẫn tỉ giá giữa các công ty (cross-company).
+$currencyMap = $odoo->getCurrencies();
 
 // Fetch debts for this client
 // Use prepared statements for security
@@ -47,9 +50,13 @@ while ($row = $result->fetch_assoc()) {
     $currency = $row['currency'] ?: 'USD';
     $date = !empty($row['invoice_date']) ? $row['invoice_date'] : date('Y-m-d');
 
-    // Currency conversion logic matching index.php
-    $rate = $odoo->getRate($currency, $date);
-    $vndValue = ($rate > 0) ? ($amount / $rate) : $amount;
+    // Currency conversion (company-safe) matching /debt: VND = amount / rate (rate = ngoại tệ / 1 VND).
+    if ($currency === 'VND') {
+        $vndValue = $amount;
+    } else {
+        $cr = isset($currencyMap[$currency]['rate']) ? (float) $currencyMap[$currency]['rate'] : 0;
+        $vndValue = ($cr > 0) ? ($amount / $cr) : $amount;
+    }
 
     $totalAmount += $vndValue;
     $totalInvoices++;

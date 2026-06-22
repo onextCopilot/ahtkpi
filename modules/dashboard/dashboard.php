@@ -95,6 +95,9 @@ $res = $conn->query("SELECT d.amount, d.currency, d.payment_status, d.invoice_da
 
 $odoo_map = $odoo->getInvoiceMap();
 $rateVndDefault = $odoo->getRate('VND', date('Y-m-d')) ?: 1.0;
+// Company-safe per-currency rates (số ngoại tệ / 1 VND) cho bản ghi KHÔNG link Odoo.
+// Tránh getRate() bị cross-company (rates.cache lẫn tỉ giá công ty MYR-base).
+$currencyMap = $odoo->getCurrencies();
 
 if ($res) {
     while ($row = $res->fetch_assoc()) {
@@ -128,12 +131,15 @@ if ($res) {
             }
         }
 
-        // Fallback to manual rate calculation using robust ratio method
+        // Fallback (bản ghi không link Odoo): quy đổi VND theo getCurrencies() (an toàn công ty).
+        // rate = số ngoại tệ / 1 VND  => VND = amount / rate. VND thì rate = 1.
         if ($vnd_value <= 0) {
-            $rateSource = $odoo->getRate($curr, $date) ?: 1.0;
-            // AHT TECH is a VND company: getRate(curr) = foreign_currency per 1 VND,
-            // so amount / rate already yields VND directly. No vnd_multiplier needed.
-            $vnd_value = ($rateSource > 0) ? ($amount / $rateSource) : $amount;
+            if ($curr === 'VND') {
+                $vnd_value = $amount;
+            } else {
+                $cr = isset($currencyMap[$curr]['rate']) ? (float) $currencyMap[$curr]['rate'] : 0;
+                $vnd_value = ($cr > 0) ? ($amount / $cr) : $amount;
+            }
         }
 
         $total_debts++; // Count every record in the filtered result
