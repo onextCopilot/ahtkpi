@@ -4,25 +4,28 @@
  * PDF (debts_pdf.php) endpoints so access control, filters and the nested
  * grouping (Team → Year → Quarter → Month) stay in one place.
  *
- * VND conversion mirrors the Debt dashboard EXACTLY (booked invoice rate via
- * amount_total_signed ratio, getRate fallback) so the export "quy đổi VND"
- * total equals the dashboard "Total Volume". (Per-currency breakdown still
- * shows raw amounts.)
+ * VND conversion mirrors the Debt page EXACTLY (booked invoice rate via
+ * amount_total_signed ratio; getCurrencies() company-safe fallback for records
+ * not linked to Odoo) so the export "quy đổi VND" total equals the page totals.
+ * (Per-currency breakdown still shows raw amounts.)
  *
  * Returns ['headers' => [...], 'rows' => [...], 'title' => '...', 'count' => N].
  */
 function build_debts_export(mysqli $conn, array $session, array $get): array
 {
     // Odoo for the booked-rate conversion (same as dashboard.php).
-    $odoo = null; $odoo_map = [];
+    $odoo = null; $odoo_map = []; $currencyMap = [];
     try {
         require_once __DIR__ . '/../../libs/OdooAPI.php';
         $odoo = new OdooAPI();
         $odoo_map = $odoo->getInvoiceMap();
+        // Company-safe per-currency rates (rate = số ngoại tệ / 1 VND) for the
+        // no-Odoo-link fallback. getRate() bị cross-company nên KHÔNG dùng ở đó.
+        $currencyMap = $odoo->getCurrencies();
     } catch (\Throwable $e) { $odoo = null; }
 
-    // Per-debt VND value — identical logic to modules/dashboard/dashboard.php.
-    $debtVnd = function (float $amount, string $curr, string $date, $oid) use ($odoo, $odoo_map): float {
+    // Per-debt VND value — identical logic to modules/debt/index.php.
+    $debtVnd = function (float $amount, string $curr, string $date, $oid) use ($odoo, $odoo_map, $currencyMap): float {
         if ($curr === 'VND') return $amount;
         $vnd = 0.0;
         $vnd_multiplier = $odoo ? ($odoo->getRate('VND', $date) ?: 1.0) : 1.0;
@@ -35,9 +38,10 @@ function build_debts_export(mysqli $conn, array $session, array $get): array
                 $vnd = $ratio > 100 ? ($amount * $ratio) : ($amount * $ratio * $vnd_multiplier);
             }
         }
+        // Fallback (bản ghi không link Odoo): quy đổi VND theo tỉ giá tiền tệ từ getCurrencies().
         if ($vnd <= 0) {
-            $rateSource = $odoo ? ($odoo->getRate($curr, $date) ?: 1.0) : 1.0;
-            $vnd = ($rateSource > 0) ? ($amount / $rateSource) : $amount;
+            $cr = isset($currencyMap[$curr]['rate']) ? (float) $currencyMap[$curr]['rate'] : 0;
+            $vnd = ($cr > 0) ? ($amount / $cr) : $amount;
         }
         return $vnd;
     };

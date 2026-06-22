@@ -416,6 +416,10 @@ $res = $conn->query("SELECT d.*, st.name as team_name
 
 $odoo_map = $odoo->getInvoiceMap();
 
+// Tỉ giá theo TIỀN TỆ (rate = số đơn vị ngoại tệ trên 1 VND) — dùng quy đổi VND cho
+// bản ghi KHÔNG link Odoo (vd record nhập tay). Tránh getRate() bị cross-company.
+$currencyMap = $odoo->getCurrencies();
+
 if ($res) {
     while ($row = $res->fetch_assoc()) {
         $oid = (string)$row['odoo_invoice_id'];
@@ -463,12 +467,16 @@ if ($res) {
             }
         }
 
-        // Fallback to manual rate calculation if no odoo data or ratio is 0
+        // Fallback (bản ghi không link Odoo): quy đổi VND theo tỉ giá tiền tệ từ getCurrencies().
+        // rate = số đơn vị ngoại tệ / 1 VND  => VND = amount / rate. VND thì rate = 1.
+        // KHÔNG dùng getRate() ở đây vì nó trả tỉ giá lẫn giữa các công ty (cross-company).
         if ($vnd_value <= 0) {
-            $rate = $odoo->getRate($curr, $date);
-            // AHT TECH is a VND company: getRate(curr) = foreign_currency per 1 VND,
-            // so amount / rate already yields VND directly. No vnd_multiplier needed.
-            $vnd_value = ($rate > 0) ? ($amount / $rate) : $amount;
+            if ($curr === 'VND') {
+                $vnd_value = $amount;
+            } else {
+                $cr = isset($currencyMap[$curr]['rate']) ? (float) $currencyMap[$curr]['rate'] : 0;
+                $vnd_value = ($cr > 0) ? ($amount / $cr) : $amount;
+            }
         }
 
         // Paid Amount (VND): phần đã thu = (amount_total - amount_residual) áp tỉ lệ lên giá trị VND của dòng.
