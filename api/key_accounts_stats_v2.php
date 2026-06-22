@@ -48,8 +48,11 @@ try {
                 $db_meta[(int)$row['odoo_id']] = $row;
             }
 
-            // Merge DB Metadata into Cached Stats
-            foreach ($cache_data['data'] as &$customer) {
+            // Merge DB Metadata into Cached Stats.
+            // Only keep customers that are still key accounts (present in $db_meta),
+            // so toggling a customer OFF removes it from the cached list immediately.
+            $merged = [];
+            foreach ($cache_data['data'] as $customer) {
                 if (isset($db_meta[(int)$customer['id']])) {
                     $m = $db_meta[(int)$customer['id']];
                     $customer['am_bd_id'] = $m['am_bd_id'];
@@ -60,8 +63,13 @@ try {
                     $customer['account_note'] = !empty($m['account_note']) ? $m['account_note'] : $customer['account_note'];
                     $customer['author_name'] = $m['author_name'] ?? $customer['author_name'];
                     $customer['note_time'] = $m['note_time'] ?? $customer['note_time'];
+                    $merged[] = $customer;
                 }
             }
+
+            // Re-sort by order_index to match the DB ordering
+            usort($merged, fn($a, $b) => ((int)($a['order_index'] ?? 0)) <=> ((int)($b['order_index'] ?? 0)));
+            $cache_data['data'] = $merged;
 
             $cache_data['from_cache'] = true;
             $cache_data['cache_time'] = date('Y-m-d H:i:s', filemtime($cache_file));
