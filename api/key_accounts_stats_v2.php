@@ -52,7 +52,9 @@ try {
             // Only keep customers that are still key accounts (present in $db_meta),
             // so toggling a customer OFF removes it from the cached list immediately.
             $merged = [];
+            $cached_ids = [];
             foreach ($cache_data['data'] as $customer) {
+                $cached_ids[(int)$customer['id']] = true;
                 if (isset($db_meta[(int)$customer['id']])) {
                     $m = $db_meta[(int)$customer['id']];
                     $customer['am_bd_id'] = $m['am_bd_id'];
@@ -67,14 +69,22 @@ try {
                 }
             }
 
-            // Re-sort by order_index to match the DB ordering
-            usort($merged, fn($a, $b) => ((int)($a['order_index'] ?? 0)) <=> ((int)($b['order_index'] ?? 0)));
-            $cache_data['data'] = $merged;
+            // Detect key accounts turned ON since the cache was built (in DB but not in cache).
+            // If any exist, the cache is stale for the list: fall through to rebuild
+            // (from local caches, no Odoo refresh) so the new accounts appear with stats.
+            $missing_new = array_diff(array_keys($db_meta), array_keys($cached_ids));
 
-            $cache_data['from_cache'] = true;
-            $cache_data['cache_time'] = date('Y-m-d H:i:s', filemtime($cache_file));
-            echo json_encode($cache_data);
-            exit;
+            if (empty($missing_new)) {
+                // Re-sort by order_index to match the DB ordering
+                usort($merged, fn($a, $b) => ((int)($a['order_index'] ?? 0)) <=> ((int)($b['order_index'] ?? 0)));
+                $cache_data['data'] = $merged;
+
+                $cache_data['from_cache'] = true;
+                $cache_data['cache_time'] = date('Y-m-d H:i:s', filemtime($cache_file));
+                echo json_encode($cache_data);
+                exit;
+            }
+            // else: drop through to full rebuild below
         }
     }
 
