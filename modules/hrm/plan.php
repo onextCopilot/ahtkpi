@@ -203,10 +203,10 @@ function pin($f, $val, $m = null) {  // editable input
             <?php foreach ($months as $mo): ?><th colspan="4" class="grp grp-mo"><?= h($mo) ?></th><?php endforeach; ?>
         </tr>
         <tr>
-            <th>Định biên đã chốt</th><th>Nhân sự</th><th>Có thể đề xuất</th>
-            <th class="grp-mo">Tất cả</th><th>Tuyển mới</th><th>Tuyển thay thế</th>
+            <th>Định biên đã chốt</th><th>Nhân sự</th><th>Đề xuất</th>
+            <th class="grp-mo">Tất cả</th><th>Tuyển mới</th><th>Tuyển TT</th>
             <?php for ($i=0;$i<12;$i++): ?>
-                <th class="grp-mo">Định biên</th><th>Thực tế</th><th>Cần tuyển</th><th>Có thể đề xuất</th>
+                <th class="grp-mo">Định biên</th><th>Thực tế</th><th>Cần tuyển</th><th>Đề xuất</th>
             <?php endfor; ?>
         </tr>
     </thead>
@@ -246,7 +246,7 @@ function pin($f, $val, $m = null) {  // editable input
 
 <div class="rc-muted" style="margin-top:10px">
     "Đề xuất đã duyệt" lấy từ Yêu cầu tuyển dụng (HRF) đã duyệt trong năm <?= (int)$cycle['year'] ?>.
-    Ô nền trắng có thể nhập trực tiếp; "Có thể đề xuất / Cần tuyển" tự tính.
+    Ô nền trắng có thể nhập trực tiếp; "Đề xuất / Cần tuyển" tự tính.
 </div>
 
 <script>
@@ -363,6 +363,18 @@ document.querySelector('table.plan').addEventListener('click', function(e){
     var tr = e.target.closest('tr[data-dept]'); if(!tr) return;
     tr.classList.toggle('sel');
 });
+
+// Header 2 dòng: cho dòng sub-header dính ngay dưới dòng nhóm (đo chiều cao thật để luôn đúng).
+(function(){
+    function syncHead(){
+        var t = document.querySelector('table.plan'); if(!t || !t.tHead) return;
+        var r1 = t.tHead.rows[0], r2 = t.tHead.rows[1]; if(!r2) return;
+        var h = Math.round(r1.getBoundingClientRect().height);
+        for (var i=0;i<r2.cells.length;i++){ r2.cells[i].style.top = h + 'px'; }
+    }
+    syncHead();
+    window.addEventListener('resize', syncHead);
+})();
 </script>
 <?php
 hrm_footer();
