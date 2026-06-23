@@ -42,7 +42,7 @@ class Mailer
             require_once __DIR__ . '/EmailSenders.php';
             $sender = EmailSenders::resolve($conn, $opts['sender'] ?? null);
             if ($sender) {
-                $r = EmailSenders::send($conn, $sender, $to, $subject, $htmlBody, $opts['from_name'] ?? '');
+                $r = EmailSenders::send($conn, $sender, $to, $subject, $htmlBody, $opts);
                 if ($r['ok']) return true;
             }
         } catch (\Throwable $e) {
