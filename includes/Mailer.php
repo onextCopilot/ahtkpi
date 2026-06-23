@@ -35,20 +35,35 @@ class Mailer
      *
      * @param array $opts  ['sender' => id|from_email, 'from_name' => '...']
      */
+    /** Lỗi gửi gần nhất (để caller log lại). */
+    public static $lastError = '';
+
     public static function send($conn, string $to, string $subject, string $htmlBody, array $opts = []): bool
     {
-        if (empty($to)) return false;
+        self::$lastError = '';
+        if (empty($to)) { self::$lastError = 'Thiếu địa chỉ nhận.'; return false; }
+        // Sender được chỉ định rõ (vd theo cấu hình HRM) -> KHÔNG fallback legacy khi lỗi,
+        // tránh gửi từ sai danh tính.
+        $explicit = isset($opts['sender']) && $opts['sender'] !== '' && $opts['sender'] !== null;
         try {
             require_once __DIR__ . '/EmailSenders.php';
             $sender = EmailSenders::resolve($conn, $opts['sender'] ?? null);
             if ($sender) {
                 $r = EmailSenders::send($conn, $sender, $to, $subject, $htmlBody, $opts);
                 if ($r['ok']) return true;
+                self::$lastError = 'Sender "' . ($sender['name'] ?? $sender['from_email'] ?? '') . '": ' . ($r['error'] ?? 'gửi thất bại');
+                if ($explicit) { return false; }   // đã chọn rõ sender -> không gửi từ sender khác
+            } elseif ($explicit) {
+                self::$lastError = 'Không tìm thấy sender đã chọn.';
+                return false;
             }
         } catch (\Throwable $e) {
-            error_log('Mailer::send sender path failed: ' . $e->getMessage());
+            self::$lastError = $e->getMessage();
+            if ($explicit) { return false; }
         }
-        return self::sendLegacy($conn, $to, $subject, $htmlBody);
+        $ok = self::sendLegacy($conn, $to, $subject, $htmlBody);
+        if (!$ok && self::$lastError === '') { self::$lastError = 'Chưa cấu hình sender / SMTP fallback.'; }
+        return $ok;
     }
 
     /**

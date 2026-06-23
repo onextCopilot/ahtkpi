@@ -65,6 +65,7 @@ function hrm_send_email(mysqli $conn, string $eventKey, string $to, array $vars,
     $ok = false; $err = '';
     try {
         $ok = Mailer::send($conn, $to, $subject, $body, $senderRef !== '' ? ['sender' => $senderRef] : []);
+        if (!$ok) { $err = Mailer::$lastError; }
     } catch (Throwable $e) { $err = $e->getMessage(); }
 
     $status = $ok ? 'sent' : 'failed';
