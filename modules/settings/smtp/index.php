@@ -59,7 +59,7 @@ $senders = EmailSenders::all($conn);
 $editId = ($_GET['edit'] ?? '') === 'new' ? 0 : (int)($_GET['edit'] ?? -1);
 $showForm = isset($_GET['edit']);
 $edit = ($editId > 0) ? EmailSenders::find($conn, $editId) : null;
-$e = $edit ?: ['id'=>0,'name'=>'','from_email'=>'','from_name'=>'','smtp_host'=>'smtp.sendgrid.net','smtp_port'=>587,'smtp_encryption'=>'tls','smtp_user'=>'apikey','reply_to'=>'','cc'=>'','bcc'=>''];
+$sf = $edit ?: ['id'=>0,'name'=>'','from_email'=>'','from_name'=>'','smtp_host'=>'smtp.sendgrid.net','smtp_port'=>587,'smtp_encryption'=>'tls','smtp_user'=>'apikey','reply_to'=>'','cc'=>'','bcc'=>''];
 function ev($v) { return htmlspecialchars((string)$v); }
 ?>
 <!DOCTYPE html>
@@ -167,41 +167,41 @@ function ev($v) { return htmlspecialchars((string)$v); }
             <?php if ($showForm): ?>
             <div class="form-card" style="margin-top:1.5rem">
                 <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem">
-                    <h2 style="font-size:1.15rem;margin:0"><?= $e['id'] ? 'Sửa sender' : 'Thêm sender mới' ?></h2>
+                    <h2 style="font-size:1.15rem;margin:0"><?= $sf['id'] ? 'Sửa sender' : 'Thêm sender mới' ?></h2>
                     <button type="button" class="btn-ghost" onclick="fillSendGrid()">⚡ Điền sẵn SendGrid</button>
                 </div>
                 <form method="POST" id="senderForm">
                     <input type="hidden" name="action" value="save_sender">
-                    <input type="hidden" name="id" value="<?= (int)$e['id'] ?>">
+                    <input type="hidden" name="id" value="<?= (int)$sf['id'] ?>">
                     <div class="grid2">
-                        <div class="form-group"><label>Tên hiển thị (nội bộ) *</label><input name="name" required value="<?= ev($e['name']) ?>" placeholder="VD: HR Mailbox"></div>
-                        <div class="form-group"><label>From Name</label><input name="from_name" value="<?= ev($e['from_name']) ?>" placeholder="VD: AHT Tuyển dụng"></div>
+                        <div class="form-group"><label>Tên hiển thị (nội bộ) *</label><input name="name" required value="<?= ev($sf['name']) ?>" placeholder="VD: HR Mailbox"></div>
+                        <div class="form-group"><label>From Name</label><input name="from_name" value="<?= ev($sf['from_name']) ?>" placeholder="VD: AHT Tuyển dụng"></div>
                     </div>
-                    <div class="form-group"><label>From Email (đã verify trong SendGrid) *</label><input id="f_from" name="from_email" type="email" required value="<?= ev($e['from_email']) ?>" placeholder="no-reply@arrowhitech.com">
+                    <div class="form-group"><label>From Email (đã verify trong SendGrid) *</label><input id="f_from" name="from_email" type="email" required value="<?= ev($sf['from_email']) ?>" placeholder="no-reply@arrowhitech.com">
                         <p class="input-hint">Phải là Single Sender / domain đã xác thực trong SendGrid.</p></div>
                     <div class="grid2">
-                        <div class="form-group"><label>SMTP Host</label><input id="f_host" name="smtp_host" value="<?= ev($e['smtp_host']) ?>" placeholder="smtp.sendgrid.net"></div>
-                        <div class="form-group"><label>Port</label><input id="f_port" name="smtp_port" type="number" value="<?= ev($e['smtp_port']) ?>" placeholder="587"></div>
+                        <div class="form-group"><label>SMTP Host</label><input id="f_host" name="smtp_host" value="<?= ev($sf['smtp_host']) ?>" placeholder="smtp.sendgrid.net"></div>
+                        <div class="form-group"><label>Port</label><input id="f_port" name="smtp_port" type="number" value="<?= ev($sf['smtp_port']) ?>" placeholder="587"></div>
                     </div>
                     <div class="grid2">
                         <div class="form-group"><label>Encryption</label>
                             <select id="f_enc" name="smtp_encryption">
                                 <?php foreach (['tls'=>'TLS / STARTTLS (587)','ssl'=>'SSL (465)','none'=>'None'] as $k=>$v): ?>
-                                <option value="<?= $k ?>" <?= ($e['smtp_encryption']??'tls')===$k?'selected':'' ?>><?= $v ?></option><?php endforeach; ?>
+                                <option value="<?= $k ?>" <?= ($sf['smtp_encryption']??'tls')===$k?'selected':'' ?>><?= $v ?></option><?php endforeach; ?>
                             </select></div>
-                        <div class="form-group"><label>Username</label><input id="f_user" name="smtp_user" value="<?= ev($e['smtp_user']) ?>" placeholder="apikey">
+                        <div class="form-group"><label>Username</label><input id="f_user" name="smtp_user" value="<?= ev($sf['smtp_user']) ?>" placeholder="apikey">
                             <p class="input-hint">SendGrid: luôn là <span class="code">apikey</span>.</p></div>
                     </div>
-                    <div class="form-group"><label>Password / API Key <?= $e['id'] ? '(để trống nếu không đổi)' : '*' ?></label>
-                        <input name="smtp_pass" type="password" <?= $e['id'] ? '' : 'required' ?> placeholder="SG.xxxxx (SendGrid API Key)"></div>
+                    <div class="form-group"><label>Password / API Key <?= $sf['id'] ? '(để trống nếu không đổi)' : '*' ?></label>
+                        <input name="smtp_pass" type="password" <?= $sf['id'] ? '' : 'required' ?> placeholder="SG.xxxxx (SendGrid API Key)"></div>
 
                     <div class="form-group" style="border-top:1px solid var(--border-light);padding-top:1rem">
                         <label>Reply-To (mặc định)</label>
-                        <input name="reply_to" value="<?= ev($e['reply_to']) ?>" placeholder="hr@arrowhitech.com">
+                        <input name="reply_to" value="<?= ev($sf['reply_to']) ?>" placeholder="hr@arrowhitech.com">
                         <p class="input-hint">Địa chỉ nhận khi người ta bấm "Reply". Để trống = trả về From Email.</p></div>
                     <div class="grid2">
-                        <div class="form-group"><label>CC (mặc định)</label><input name="cc" value="<?= ev($e['cc']) ?>" placeholder="a@x.com, b@y.com"></div>
-                        <div class="form-group"><label>BCC (mặc định)</label><input name="bcc" value="<?= ev($e['bcc']) ?>" placeholder="archive@arrowhitech.com"></div>
+                        <div class="form-group"><label>CC (mặc định)</label><input name="cc" value="<?= ev($sf['cc']) ?>" placeholder="a@x.com, b@y.com"></div>
+                        <div class="form-group"><label>BCC (mặc định)</label><input name="bcc" value="<?= ev($sf['bcc']) ?>" placeholder="archive@arrowhitech.com"></div>
                     </div>
                     <p class="input-hint" style="margin:-.6rem 0 1rem">CC/BCC nhiều địa chỉ ngăn cách bởi dấu phẩy. Áp dụng cho mọi email gửi từ sender này.</p>
 
