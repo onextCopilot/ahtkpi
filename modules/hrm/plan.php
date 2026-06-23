@@ -146,6 +146,9 @@ table.plan .dept-del:hover{background:#fee2e2;color:#dc2626}
 .plan-readd .chip{display:inline-flex;align-items:center;gap:6px;background:#fff;border:1px dashed #cbd5e1;border-radius:8px;padding:5px 10px;cursor:pointer;color:#334155;font-weight:600}
 .plan-readd .chip:hover{border-color:var(--rc2);color:var(--rc2)}
 table.plan thead .col-dept{z-index:4;background:#f8fafc}
+/* Cột "Định biên đã chốt" đóng băng bên trái, ngay sau cột phòng ban (left set bằng JS). */
+table.plan .col-chot{position:sticky;left:170px;z-index:2;min-width:56px;max-width:62px;white-space:normal;box-shadow:1px 0 0 #e2e8f0}
+table.plan thead .col-chot{z-index:4}
 /* Zebra (chẵn/lẻ) - áp cho cả ô phòng ban dính trái */
 table.plan tbody tr.odd td,table.plan tbody tr.odd .col-dept{background:#ffffff}
 table.plan tbody tr.even td,table.plan tbody tr.even .col-dept{background:#f5f7fa}
@@ -198,12 +201,13 @@ function pin($f, $val, $m = null) {  // editable input
     <thead>
         <tr>
             <th rowspan="2" class="col-dept">Vị trí công việc</th>
-            <th colspan="3" class="grp">Đầu năm</th>
+            <th rowspan="2" class="col-chot">Định biên đã chốt</th>
+            <th colspan="2" class="grp grp-mo">Đầu năm</th>
             <th colspan="3" class="grp grp-mo">Đề xuất đã duyệt</th>
             <?php foreach ($months as $mo): ?><th colspan="4" class="grp grp-mo"><?= h($mo) ?></th><?php endforeach; ?>
         </tr>
         <tr>
-            <th>Định biên đã chốt</th><th>Nhân sự</th><th>Đề xuất</th>
+            <th class="grp-mo">Nhân sự</th><th>Đề xuất</th>
             <th class="grp-mo">Tất cả</th><th>Tuyển mới</th><th>Tuyển TT</th>
             <?php for ($i=0;$i<12;$i++): ?>
                 <th class="grp-mo">Định biên</th><th>Thực tế</th><th>Cần tuyển</th><th>Đề xuất</th>
@@ -214,7 +218,7 @@ function pin($f, $val, $m = null) {  // editable input
         <!-- Tổng số -->
         <tr class="total">
             <td class="col-dept">Tổng số</td>
-            <td data-t="chot"><?= $T['chot'] ?></td><td data-t="ns"><?= $T['ns'] ?></td><td data-t="canp"><?= $T['canp'] ?></td>
+            <td class="col-chot" data-t="chot"><?= $T['chot'] ?></td><td data-t="ns"><?= $T['ns'] ?></td><td data-t="canp"><?= $T['canp'] ?></td>
             <td class="grp-mo" data-t="all"><?= $T['all'] ?></td><td data-t="new"><?= $T['new'] ?></td><td data-t="rep"><?= $T['rep'] ?></td>
             <?php for ($i=0;$i<12;$i++): ?>
                 <td class="grp-mo" data-t="plan" data-m="<?= $i ?>"><?= $T['plan'][$i] ?></td>
@@ -226,7 +230,7 @@ function pin($f, $val, $m = null) {  // editable input
         <?php $ri = 0; foreach ($rows as $deptId => $row): $v = $row['v']; $ri++; ?>
         <tr data-dept="<?= $deptId ?>" data-appr="<?= $v['all'] ?>" class="<?= $ri % 2 ? 'odd' : 'even' ?>">
             <td class="col-dept"><span class="dept-name"><?= h($row['name']) ?></span><button type="button" class="dept-del" title="Xóa phòng ban khỏi bảng" onclick="removeDept(<?= $deptId ?>, this)">×</button></td>
-            <td><?= pin('chot', $v['chot']) ?></td>
+            <td class="col-chot"><?= pin('chot', $v['chot']) ?></td>
             <td><?= pin('ns', $v['ns']) ?></td>
             <td class="calc" data-c="canp"><?= $v['canp'] ?></td>
             <td class="grp-mo <?= $v['all'] ? '' : 'mut' ?>"><?= $v['all'] ?></td>
@@ -364,16 +368,25 @@ document.querySelector('table.plan').addEventListener('click', function(e){
     tr.classList.toggle('sel');
 });
 
-// Header 2 dòng: cho dòng sub-header dính ngay dưới dòng nhóm (đo chiều cao thật để luôn đúng).
+// Sticky chính xác bằng cách đo kích thước thật:
+//  - dòng sub-header dính ngay dưới dòng nhóm (top = chiều cao dòng nhóm)
+//  - cột "Định biên đã chốt" đóng băng ngay sau cột phòng ban (left = bề rộng cột phòng ban)
 (function(){
-    function syncHead(){
+    function syncSticky(){
         var t = document.querySelector('table.plan'); if(!t || !t.tHead) return;
-        var r1 = t.tHead.rows[0], r2 = t.tHead.rows[1]; if(!r2) return;
-        var h = Math.round(r1.getBoundingClientRect().height);
-        for (var i=0;i<r2.cells.length;i++){ r2.cells[i].style.top = h + 'px'; }
+        var r1 = t.tHead.rows[0], r2 = t.tHead.rows[1];
+        if (r2) {
+            var h = Math.round(r1.getBoundingClientRect().height);
+            for (var i=0;i<r2.cells.length;i++){ r2.cells[i].style.top = h + 'px'; }
+        }
+        var dept = t.querySelector('tbody .col-dept') || t.querySelector('thead .col-dept');
+        if (dept) {
+            var w = Math.round(dept.getBoundingClientRect().width);
+            t.querySelectorAll('.col-chot').forEach(function(c){ c.style.left = w + 'px'; });
+        }
     }
-    syncHead();
-    window.addEventListener('resize', syncHead);
+    syncSticky();
+    window.addEventListener('resize', syncSticky);
 })();
 </script>
 <?php
