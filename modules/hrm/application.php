@@ -28,6 +28,11 @@ $evals   = $conn->query("SELECT * FROM hrm_evaluations WHERE application_id=$id 
 $offer   = $conn->query("SELECT * FROM hrm_offers WHERE application_id=$id ORDER BY id DESC LIMIT 1")->fetch_assoc();
 $users   = $conn->query("SELECT id, full_name FROM users WHERE status='active' ORDER BY full_name")->fetch_all(MYSQLI_ASSOC);
 $reasons = $conn->query('SELECT name FROM hrm_rejection_reasons WHERE active=1')->fetch_all(MYSQLI_ASSOC);
+$candTemplates = $conn->query("SELECT event_key, name FROM hrm_email_templates WHERE audience='candidate' AND enabled=1 ORDER BY name")->fetch_all(MYSQLI_ASSOC);
+// Template gợi ý cho giai đoạn hiện tại (gửi thủ công).
+$stageMapKey = $app['stage_id'] ? trim(hrm_setting($conn, 'stage_email_' . (int)$app['stage_id'], '')) : '';
+$stageMapName = '';
+if ($stageMapKey) { foreach ($candTemplates as $t) { if ($t['event_key'] === $stageMapKey) { $stageMapName = $t['name']; break; } } }
 
 hrm_header($app['full_name'], $app['job_title'] . ' · ' . ($app['stage_name'] ?? ''), 'jobs');
 ?>
@@ -54,6 +59,32 @@ hrm_header($app['full_name'], $app['job_title'] . ' · ' . ($app['stage_name'] ?
         <div><div class="rc-muted">Email</div><div><?= h($app['email'] ?: '-') ?></div></div>
         <div><div class="rc-muted">Điện thoại</div><div><?= h($app['phone'] ?: '-') ?></div></div>
     </div>
+</div>
+
+<!-- GỬI EMAIL CHO ỨNG VIÊN (thủ công) -->
+<div class="rc-card">
+    <h3 style="font-size:14px;margin-bottom:6px">Gửi email cho ứng viên</h3>
+    <div class="rc-muted" style="margin-bottom:8px">Chọn mẫu rồi bấm gửi tới <b><?= h($app['email'] ?: '(chưa có email)') ?></b>. Email không tự gửi - bạn chủ động gửi khi cần (từ chối, mời nhận việc, thông báo...).</div>
+    <?php if (empty($app['email'])): ?>
+        <div class="rc-muted">Ứng viên chưa có email nên không gửi được.</div>
+    <?php elseif (!$candTemplates): ?>
+        <div class="rc-muted">Chưa có mẫu email cho ứng viên. Tạo ở <a href="/hrm/settings?tab=email" style="color:var(--rc2)">Cấu hình → Email template</a>.</div>
+    <?php else: ?>
+    <?php if ($stageMapName): ?>
+        <div style="margin-bottom:10px;padding:8px 12px;background:#eef6ff;border:1px solid #cfe4ff;border-radius:8px;display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+            <span style="font-size:13px">Mẫu gợi ý cho bước <b><?= h($app['stage_name']) ?></b>: <b><?= h($stageMapName) ?></b></span>
+            <button class="rc-btn" onclick="sendCandEmailKey('<?= h($stageMapKey) ?>', this)">✉ Gửi mẫu này</button>
+        </div>
+    <?php endif; ?>
+    <div style="display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap">
+        <div class="rc-field" style="margin:0;flex:1;min-width:240px"><label>Mẫu email</label>
+            <select id="mailTpl">
+                <option value="">- Chọn mẫu -</option>
+                <?php foreach ($candTemplates as $t): ?><option value="<?= h($t['event_key']) ?>"><?= h($t['name']) ?></option><?php endforeach; ?>
+            </select></div>
+        <button class="rc-btn" onclick="sendCandEmail()">Gửi email</button>
+    </div>
+    <?php endif; ?>
 </div>
 
 <!-- TEST -->
@@ -158,6 +189,20 @@ function saveTest(){act('save_test',{application_id:<?= $id ?>,test_type:documen
 function schedIv(){act('schedule_interview',{application_id:<?= $id ?>,round:document.getElementById('iv_round').value,interview_type:document.getElementById('iv_type').value,scheduled_at:document.getElementById('iv_at').value,interviewer_id:document.getElementById('iv_by').value,location:document.getElementById('iv_loc').value});}
 function saveEval(){act('save_evaluation',{application_id:<?= $id ?>,total_score:document.getElementById('e_score').value,recommendation:document.getElementById('e_rec').value,comment:document.getElementById('e_cmt').value});}
 function createOffer(){act('create_offer',{application_id:<?= $id ?>,salary:document.getElementById('o_salary').value,start_date:document.getElementById('o_start').value});}
+function sendCandEmail(){
+    const sel=document.getElementById('mailTpl');const k=sel.value;
+    if(!k){alert('Chọn mẫu email');return;}
+    if(!confirm('Gửi email "'+sel.options[sel.selectedIndex].text+'" cho ứng viên?'))return;
+    post('send_candidate_email',{application_id:<?= $id ?>,event_key:k}).then(j=>{alert(j.ok?('Đã gửi email tới '+(j.to||'ứng viên')):(j.error||'Lỗi'));});
+}
+function sendCandEmailKey(k,btn){
+    if(!confirm('Gửi mẫu email này cho ứng viên?'))return;
+    if(btn){btn.disabled=true;}
+    post('send_candidate_email',{application_id:<?= $id ?>,event_key:k}).then(j=>{
+        if(btn){btn.disabled=false;}
+        alert(j.ok?('Đã gửi email tới '+(j.to||'ứng viên')):(j.error||'Lỗi'));
+    });
+}
 </script>
 <?php
 hrm_footer();

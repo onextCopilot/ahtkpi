@@ -186,6 +186,38 @@ switch ($action) {
         $st->execute();
         jout(true);
     }
+    case 'create_email_template': {
+        if (($_SESSION['role'] ?? '') !== 'admin') { jout(false, ['error' => 'Chỉ admin']); }
+        $name = trim($_POST['name'] ?? '');
+        if ($name === '') { jout(false, ['error' => 'Thiếu tên template']); }
+        $audience = ($_POST['audience'] ?? 'candidate') === 'internal' ? 'internal' : 'candidate';
+        $subject = trim($_POST['subject'] ?? '');
+        $body = $_POST['body_html'] ?? '';
+        $enabled = !empty($_POST['enabled']) ? 1 : 0;
+        // event_key: từ input hoặc slug từ tên; chuẩn hóa + đảm bảo duy nhất.
+        $base = strtolower(trim($_POST['event_key'] ?? '')) ?: strtolower($name);
+        $base = preg_replace('/[^a-z0-9]+/', '_', $base);
+        $base = trim($base, '_'); if ($base === '') { $base = 'custom'; }
+        if (!preg_match('/^custom_/', $base)) { $base = 'custom_' . $base; }   // tránh đụng event_key hệ thống
+        $ekey = $base; $i = 1;
+        $chk = $conn->prepare('SELECT id FROM hrm_email_templates WHERE event_key = ?');
+        while (true) {
+            $chk->bind_param('s', $ekey); $chk->execute();
+            if (!$chk->get_result()->fetch_row()) { break; }
+            $ekey = $base . '_' . (++$i);
+        }
+        $st = $conn->prepare('INSERT INTO hrm_email_templates (event_key, name, subject, body_html, audience, enabled) VALUES (?,?,?,?,?,?)');
+        $st->bind_param('sssssi', $ekey, $name, $subject, $body, $audience, $enabled);
+        if (!$st->execute()) { jout(false, ['error' => $conn->error]); }
+        jout(true, ['id' => $st->insert_id, 'event_key' => $ekey]);
+    }
+    case 'delete_email_template': {
+        if (($_SESSION['role'] ?? '') !== 'admin') { jout(false, ['error' => 'Chỉ admin']); }
+        $id = (int)($_POST['id'] ?? 0);
+        $st = $conn->prepare('DELETE FROM hrm_email_templates WHERE id = ?');
+        $st->bind_param('i', $id); $st->execute();
+        jout(true);
+    }
     case 'save_setting': {
         if (($_SESSION['role'] ?? '') !== 'admin') { jout(false, ['error' => 'Chỉ admin']); }
         hrm_set_setting($conn, trim($_POST['skey'] ?? ''), trim($_POST['sval'] ?? ''));
@@ -589,8 +621,7 @@ switch ($action) {
         $rid = (int)($rej['id'] ?? 0);
         $st->bind_param('sii', $reason, $rid, $aid);
         $st->execute();
-        $info = $conn->query("SELECT c.full_name,c.email,j.title FROM hrm_applications a JOIN hrm_candidates c ON c.id=a.candidate_id JOIN hrm_jobs j ON j.id=a.job_id WHERE a.id=$aid")->fetch_assoc();
-        if (!empty($info['email'])) { hrm_send_email($conn, 'reject_screening', $info['email'], ['candidate_name' => $info['full_name'], 'job_title' => $info['title']], 'application', $aid); }
+        // Không tự gửi email cho ứng viên ở đây - email từ chối gửi thủ công qua nút "Gửi email cho ứng viên".
         hrm_audit($conn, $uid, 'application_reject', 'application', $aid, $reason);
         jout(true);
     }
@@ -602,6 +633,19 @@ switch ($action) {
         $conn->query("UPDATE hrm_applications SET status='hired', stage_id=$hid WHERE id=$aid");
         hrm_audit($conn, $uid, 'application_hire', 'application', $aid, '');
         jout(true);
+    }
+
+    /* ── Gửi email thủ công cho ứng viên (chọn template, không auto) ──── */
+    case 'send_candidate_email': {
+        $aid  = (int)($_POST['application_id'] ?? 0);
+        $ekey = trim($_POST['event_key'] ?? '');
+        if (!$aid || $ekey === '') { jout(false, ['error' => 'Thiếu dữ liệu']); }
+        $row = $conn->query("SELECT c.email FROM hrm_applications a JOIN hrm_candidates c ON c.id=a.candidate_id WHERE a.id=$aid")->fetch_assoc();
+        if (empty($row['email'])) { jout(false, ['error' => 'Ứng viên chưa có email']); }
+        $ok = hrm_send_email($conn, $ekey, $row['email'], [], 'application', $aid);
+        if (!$ok) { jout(false, ['error' => 'Gửi thất bại: ' . (Mailer::$lastError ?: 'kiểm tra template đang Bật và sender đã cấu hình')]); }
+        hrm_audit($conn, $uid, 'send_candidate_email', 'application', $aid, $ekey);
+        jout(true, ['to' => $row['email']]);
     }
 
     case 'save_test': {

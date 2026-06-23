@@ -131,17 +131,23 @@ function saveRow(a){const r=a.closest('.off-row');const name=r.querySelector('.o
 
 <?php elseif ($tab === 'pipeline'): ?>
 <div class="rc-card" style="max-width:680px">
-    <h3 style="font-size:14px;margin-bottom:4px">SLA cho từng giai đoạn tuyển dụng</h3>
-    <div class="rc-muted" style="margin-bottom:14px">Đặt thời hạn xử lý (giờ) cho mỗi bước. 0 = không áp SLA. Áp dụng cho ứng viên khi vào bước đó.</div>
+    <h3 style="font-size:14px;margin-bottom:4px">SLA &amp; email gợi ý cho từng giai đoạn</h3>
+    <div class="rc-muted" style="margin-bottom:14px">SLA: thời hạn xử lý (giờ), 0 = không áp. Email gợi ý: chọn template cho mỗi giai đoạn - <b>không tự gửi</b>, mà hiện nút "Gửi mẫu này" ở trang đơn ứng tuyển khi ứng viên đang ở bước đó để bạn gửi thủ công.</div>
     <table class="rc-table">
-        <thead><tr><th>Giai đoạn</th><th>Mã</th><th style="width:160px">SLA (giờ)</th><th></th></tr></thead>
+        <thead><tr><th>Giai đoạn</th><th>Mã</th><th style="width:120px">SLA (giờ)</th><th>Email gợi ý cho giai đoạn</th><th></th></tr></thead>
         <tbody>
-        <?php foreach ($stages as $s): ?>
+        <?php foreach ($stages as $s): $mapKey = hrm_setting($conn, 'stage_email_' . $s['id'], ''); ?>
             <tr>
                 <td><b><?= h($s['name']) ?></b></td>
                 <td class="rc-muted"><?= h($s['code']) ?></td>
-                <td><input type="number" min="0" id="sla<?= $s['id'] ?>" value="<?= (int)$s['sla_hours'] ?>" style="width:110px;padding:7px 10px;border:1px solid var(--bd);border-radius:7px;font-size:13px"></td>
-                <td style="text-align:right"><button class="rc-btn ghost" style="padding:5px 12px" id="slaBtn<?= $s['id'] ?>" onclick="saveSla(<?= $s['id'] ?>,this)">Lưu</button></td>
+                <td><input type="number" min="0" id="sla<?= $s['id'] ?>" value="<?= (int)$s['sla_hours'] ?>" style="width:90px;padding:7px 10px;border:1px solid var(--bd);border-radius:7px;font-size:13px"></td>
+                <td><select onchange="saveStageEmail(<?= $s['id'] ?>,this.value)" style="width:100%;padding:7px 10px;border:1px solid var(--bd);border-radius:7px;font-size:13px">
+                    <option value="">— Không gửi —</option>
+                    <?php foreach ($templates as $t): ?>
+                        <option value="<?= h($t['event_key']) ?>" <?= $mapKey === $t['event_key'] ? 'selected' : '' ?>><?= h($t['name']) ?> (<?= h($t['audience']) ?>)<?= $t['enabled'] ? '' : ' - đang tắt' ?></option>
+                    <?php endforeach; ?>
+                </select></td>
+                <td style="text-align:right"><button class="rc-btn ghost" style="padding:5px 12px" id="slaBtn<?= $s['id'] ?>" onclick="saveSla(<?= $s['id'] ?>,this)">Lưu SLA</button></td>
             </tr>
         <?php endforeach; ?>
         </tbody>
@@ -156,6 +162,10 @@ function saveSla(id,btn){
         const old=btn.textContent;btn.textContent='Đã lưu ✓';btn.style.color='#16a34a';btn.style.borderColor='#16a34a';
         setTimeout(()=>{btn.textContent=old;btn.style.color='';btn.style.borderColor='';},1500);
     });
+}
+function saveStageEmail(stageId,ekey){
+    const fd=new FormData();fd.append('action','save_setting');fd.append('skey','stage_email_'+stageId);fd.append('sval',ekey);
+    fetch('/hrm/api',{method:'POST',body:fd}).then(r=>r.json()).then(j=>{if(!j.ok)alert(j.error||'Lỗi');});
 }
 </script>
 
@@ -225,11 +235,52 @@ function rmRole(id){if(confirm('Gỡ vai trò này?'))post('remove_role',{id:id}
 </script>
 
 <?php elseif ($tab === 'email'): ?>
-<?php foreach ($templates as $t): ?>
+<div class="rc-card" style="margin-bottom:14px">
+    <h3 style="font-size:14px;margin-bottom:6px">Biến chèn được vào tiêu đề / nội dung</h3>
+    <div class="rc-muted" style="margin-bottom:10px">Dùng cú pháp <code>{{tên_biến}}</code> hoặc <code>{tên_biến}</code> (kiểu Base). Hệ thống tự thay bằng dữ liệu thật khi gửi.</div>
+    <div style="display:flex;flex-wrap:wrap;gap:6px 10px;font-size:12px">
+        <?php
+        $varDocs = [
+            'fullname' => 'Tên ứng viên', 'candidate_name' => 'Tên ứng viên', 'email' => 'Email ứng viên',
+            'phone' => 'SĐT ứng viên', 'job' => 'Tên vị trí', 'job_title' => 'Tên vị trí', 'position' => 'Tên vị trí',
+            'job_code' => 'Mã vị trí', 'level' => 'Level', 'department' => 'Phòng ban', 'office' => 'Văn phòng',
+            'location' => 'Địa điểm', 'salary' => 'Khoảng lương', 'stage' => 'Giai đoạn', 'company' => 'Tên công ty',
+            'today' => 'Ngày hôm nay', 'onboard_date' => 'Ngày onboard (HRF)', 'talent_url' => 'Link trang tuyển dụng',
+        ];
+        foreach ($varDocs as $k => $lbl): ?>
+            <span style="background:#f1f5f9;border:1px solid var(--bd);border-radius:6px;padding:3px 8px"><code>{<?= $k ?>}</code> · <?= h($lbl) ?></span>
+        <?php endforeach; ?>
+    </div>
+    <div class="rc-muted" style="margin-top:10px;font-size:11.5px">Ngoài các biến trên, <b>mọi field</b> của ứng viên/tin/HRF đều dùng được qua tiền tố: <code>{candidate_&lt;field&gt;}</code>, <code>{job_&lt;field&gt;}</code>, <code>{hrf_&lt;field&gt;}</code> (vd <code>{candidate_dob}</code>, <code>{candidate_current_position}</code>, <code>{job_deadline}</code>, <code>{job_headcount}</code>). Tên field theo cột trong DB.</div>
+</div>
+
+<div class="rc-card" style="margin-bottom:14px">
+    <div style="display:flex;justify-content:space-between;align-items:center;cursor:pointer" onclick="document.getElementById('newTplBox').style.display=document.getElementById('newTplBox').style.display==='none'?'block':'none'">
+        <h3 style="font-size:14px;margin:0">+ Tạo template mới</h3>
+        <span class="rc-muted" style="font-size:12px">Bấm để mở/đóng</span>
+    </div>
+    <div id="newTplBox" style="display:none;margin-top:12px">
+        <div class="rc-grid2">
+            <div class="rc-field"><label>Tên template *</label><input id="nt_name" placeholder="VD: Mời test đầu vào"></div>
+            <div class="rc-field"><label>Đối tượng</label>
+                <select id="nt_audience"><option value="candidate">Ứng viên (candidate)</option><option value="internal">Nội bộ (internal)</option></select></div>
+        </div>
+        <div class="rc-field"><label>Mã (event_key) - để trống sẽ tự tạo</label><input id="nt_key" placeholder="vd: invite_test (hệ thống thêm tiền tố custom_)"></div>
+        <div class="rc-field"><label>Tiêu đề</label><input id="nt_subject" placeholder="Dùng {{biến}} hoặc {biến}"></div>
+        <div class="rc-field"><label>Nội dung (HTML)</label><textarea id="nt_body" rows="5"></textarea></div>
+        <label style="font-size:12px;display:block;margin-bottom:8px"><input type="checkbox" id="nt_enabled" checked> Bật ngay</label>
+        <button class="rc-btn" onclick="createTpl()">Tạo template</button>
+    </div>
+</div>
+
+<?php foreach ($templates as $t): $isCustom = strpos($t['event_key'], 'custom_') === 0; ?>
 <div class="rc-card">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
         <div><b><?= h($t['name']) ?></b> <span class="rc-muted"><?= h($t['event_key']) ?> · <?= h($t['audience']) ?></span></div>
-        <label style="font-size:12px"><input type="checkbox" <?= $t['enabled']?'checked':'' ?> onchange="saveTpl(<?= $t['id'] ?>,this.closest('.rc-card'))"> Bật</label>
+        <div style="display:flex;align-items:center;gap:12px">
+            <label style="font-size:12px"><input type="checkbox" <?= $t['enabled']?'checked':'' ?> onchange="saveTpl(<?= $t['id'] ?>,this.closest('.rc-card'))"> Bật</label>
+            <?php if ($isCustom): ?><button class="rc-btn ghost" style="padding:4px 10px;color:#dc2626" onclick="delTpl(<?= $t['id'] ?>)">Xóa</button><?php endif; ?>
+        </div>
     </div>
     <div class="rc-field"><label>Tiêu đề</label><input data-f="subject" value="<?= h($t['subject']) ?>"></div>
     <div class="rc-field"><label>Nội dung (HTML, dùng {{biến}})</label><textarea data-f="body" rows="5"><?= h($t['body_html']) ?></textarea></div>
@@ -243,6 +294,23 @@ function saveTpl(id,card){
     fd.append('body_html',card.querySelector('[data-f=body]').value);
     if(card.querySelector('input[type=checkbox]').checked)fd.append('enabled','1');
     fetch('/hrm/api',{method:'POST',body:fd}).then(r=>r.json()).then(j=>{if(!j.ok)alert(j.error||'Lỗi');});
+}
+function createTpl(){
+    const name=document.getElementById('nt_name').value.trim();
+    if(!name){alert('Nhập tên template');return;}
+    const fd=new FormData();fd.append('action','create_email_template');
+    fd.append('name',name);
+    fd.append('audience',document.getElementById('nt_audience').value);
+    fd.append('event_key',document.getElementById('nt_key').value);
+    fd.append('subject',document.getElementById('nt_subject').value);
+    fd.append('body_html',document.getElementById('nt_body').value);
+    if(document.getElementById('nt_enabled').checked)fd.append('enabled','1');
+    fetch('/hrm/api',{method:'POST',body:fd}).then(r=>r.json()).then(j=>{j.ok?location.reload():alert(j.error||'Lỗi');});
+}
+function delTpl(id){
+    if(!confirm('Xóa template này?'))return;
+    const fd=new FormData();fd.append('action','delete_email_template');fd.append('id',id);
+    fetch('/hrm/api',{method:'POST',body:fd}).then(r=>r.json()).then(j=>{j.ok?location.reload():alert(j.error||'Lỗi');});
 }
 </script>
 

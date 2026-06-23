@@ -260,17 +260,10 @@ function hrm_offer_dispatch_result(mysqli $conn, int $offerId, string $result, s
     $link = '/hrm/application?id=' . (int)$o['application_id'];
     $owner = (int)$o['owner_id'] ?: (int)$o['created_by'];
     $title = $result === 'approved'
-        ? 'Offer đã duyệt & đã gửi ứng viên: ' . $o['candidate_name']
+        ? 'Offer đã duyệt - hãy gửi thư mời cho ứng viên: ' . $o['candidate_name']
         : 'Offer bị từ chối: ' . $o['candidate_name'];
-    // On full approval the offer status becomes 'sent' -> email the candidate the offer letter.
-    if ($result === 'approved' && !empty($o['candidate_email'])) {
-        hrm_send_email($conn, 'offer_letter', $o['candidate_email'], [
-            'candidate_name' => $o['candidate_name'], 'job_title' => $o['job_title'],
-            'salary' => number_format((float)$o['salary']), 'currency' => $o['currency'],
-            'start_date' => $o['start_date'] ? date('d/m/Y', strtotime($o['start_date'])) : '',
-            'due_at' => date('d/m/Y', strtotime('+5 days')),
-        ], 'offer', $offerId);
-    }
+    // KHÔNG tự gửi offer letter cho ứng viên. Sau khi duyệt, HR bấm nút
+    // "Gửi email cho ứng viên" (chọn template Thư mời nhận việc) ở trang đơn ứng tuyển.
     hrm_dispatch($conn, $result === 'approved' ? 'offer_approved' : 'offer_rejected', [
         'recipients'  => [$owner],
         'notif'       => [
