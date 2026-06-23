@@ -191,9 +191,13 @@ function hrm_ensure_plan_tables(mysqli $conn): void
         nhan_su INT DEFAULT 0,
         months_plan TEXT,
         months_actual TEXT,
+        removed TINYINT DEFAULT 0,
         updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
         UNIQUE KEY uq_cycle_dept (cycle_id, department_id)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+
+    // removed = phòng ban đã bị xóa khỏi bảng kế hoạch của chu kỳ (live installs may predate it).
+    hrm_ensure_column($conn, 'hrm_plan_lines', 'removed', 'TINYINT DEFAULT 0');
 }
 
 /** Look up a user's display name + email. */

@@ -54,8 +54,19 @@ $departments = $conn->query('SELECT id, name FROM departments ORDER BY sort_orde
 
 // Định biên đã lưu cho chu kỳ này: dept_id => line
 $lines = [];
+$removedSet = [];   // dept_id => true (đã xóa khỏi bảng của chu kỳ)
 $lr = $conn->query('SELECT * FROM hrm_plan_lines WHERE cycle_id = ' . $cid);
-while ($r = $lr->fetch_assoc()) { $lines[(int)$r['department_id']] = $r; }
+while ($r = $lr->fetch_assoc()) {
+    $lines[(int)$r['department_id']] = $r;
+    if (!empty($r['removed'])) { $removedSet[(int)$r['department_id']] = true; }
+}
+
+// Phòng ban hiển thị (bỏ những phòng ban đã xóa) + danh sách đã xóa để thêm lại.
+$removedDepts = [];
+$departments = array_values(array_filter($departments, function ($d) use ($removedSet, &$removedDepts) {
+    if (isset($removedSet[(int)$d['id']])) { $removedDepts[] = $d; return false; }
+    return true;
+}));
 
 // HRF đã duyệt trong năm của chu kỳ, gộp theo phòng ban.
 $appr = [];   // dept_id => [all, new, rep]
@@ -126,6 +137,13 @@ table.plan thead th{position:sticky;top:0;z-index:3;background:#f8fafc;color:var
 table.plan thead tr:nth-child(2) th{top:31px}
 table.plan .grp{background:#f1f5f9;color:#334155;border-bottom:1px solid #e2e8f0}
 table.plan .col-dept{position:sticky;left:0;z-index:2;background:#fff;text-align:left;min-width:210px;max-width:210px;white-space:normal;font-weight:600;color:#0f172a;box-shadow:1px 0 0 #e2e8f0}
+table.plan .col-dept{display:flex;align-items:center;gap:6px;justify-content:space-between}
+table.plan .dept-del{flex:none;width:18px;height:18px;line-height:1;border:none;border-radius:50%;background:#f1f5f9;color:#94a3b8;font-size:14px;cursor:pointer;opacity:0;transition:.15s;padding:0}
+table.plan tbody tr:hover .dept-del{opacity:1}
+table.plan .dept-del:hover{background:#fee2e2;color:#dc2626}
+.plan-readd{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:12px;font-size:12.5px;color:var(--mut)}
+.plan-readd .chip{display:inline-flex;align-items:center;gap:6px;background:#fff;border:1px dashed #cbd5e1;border-radius:8px;padding:5px 10px;cursor:pointer;color:#334155;font-weight:600}
+.plan-readd .chip:hover{border-color:var(--rc2);color:var(--rc2)}
 table.plan thead .col-dept{z-index:4;background:#f8fafc}
 table.plan tbody tr:hover td{background:#fafcff}
 table.plan tbody tr:hover .col-dept{background:#fafcff}
@@ -151,6 +169,14 @@ table.plan td.grp-mo,table.plan th.grp-mo{border-left:2px solid #e2e8f0}
     <button class="plan-add" onclick="addCycle()">+ Thêm chu kỳ</button>
 </div>
 
+<?php if ($removedDepts): ?>
+<div class="plan-readd">
+    <span>Phòng ban đã xóa:</span>
+    <?php foreach ($removedDepts as $rd): ?>
+        <span class="chip" onclick="restoreDept(<?= (int)$rd['id'] ?>)">+ <?= h($rd['name']) ?></span>
+    <?php endforeach; ?>
+</div>
+<?php endif; ?>
 <?php
 // Helper render ô nhập / ô tính.
 function pin($f, $val, $m = null) {  // editable input
@@ -190,7 +216,7 @@ function pin($f, $val, $m = null) {  // editable input
         </tr>
         <?php foreach ($rows as $deptId => $row): $v = $row['v']; ?>
         <tr data-dept="<?= $deptId ?>" data-appr="<?= $v['all'] ?>">
-            <td class="col-dept"><?= h($row['name']) ?></td>
+            <td class="col-dept"><span class="dept-name"><?= h($row['name']) ?></span><button type="button" class="dept-del" title="Xóa phòng ban khỏi bảng" onclick="removeDept(<?= $deptId ?>, this)">×</button></td>
             <td><?= pin('chot', $v['chot']) ?></td>
             <td><?= pin('ns', $v['ns']) ?></td>
             <td class="calc" data-c="canp"><?= $v['canp'] ?></td>
@@ -234,6 +260,20 @@ function delCycle(id){
     fetch('/hrm/api',{method:'POST',body:fd}).then(r=>r.json()).then(j=>{
         if(j.ok){ location.href='/hrm/plan'; } else alert(j.error||'Lỗi');
     });
+}
+function removeDept(deptId, btn){
+    var name = btn.closest('tr').querySelector('.dept-name').textContent;
+    if(!confirm('Xóa phòng ban "'+name+'" khỏi bảng kế hoạch của chu kỳ này?')) return;
+    var fd = new FormData(); fd.append('action','remove_plan_dept'); fd.append('cycle_id', CYCLE); fd.append('department_id', deptId);
+    fetch('/hrm/api',{method:'POST',body:fd}).then(r=>r.json()).then(j=>{
+        if(j.ok){ location.reload(); } else showToast(j.error||'Lỗi', 'error');
+    }).catch(function(){ showToast('Lỗi mạng', 'error'); });
+}
+function restoreDept(deptId){
+    var fd = new FormData(); fd.append('action','restore_plan_dept'); fd.append('cycle_id', CYCLE); fd.append('department_id', deptId);
+    fetch('/hrm/api',{method:'POST',body:fd}).then(r=>r.json()).then(j=>{
+        if(j.ok){ location.reload(); } else showToast(j.error||'Lỗi', 'error');
+    }).catch(function(){ showToast('Lỗi mạng', 'error'); });
 }
 
 // Tính lại 1 dòng phòng ban + cập nhật dòng Tổng số.

@@ -121,6 +121,7 @@ function hrm_schema(): array
         nhan_su INT DEFAULT 0,
         months_plan TEXT,
         months_actual TEXT,
+        removed TINYINT DEFAULT 0,
         updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
         UNIQUE KEY uq_cycle_dept (cycle_id, department_id)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4";

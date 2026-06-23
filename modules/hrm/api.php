@@ -1148,6 +1148,34 @@ switch ($action) {
         jout(true);
     }
 
+    /* ── Kế hoạch tuyển dụng: xóa 1 phòng ban khỏi bảng (đánh dấu removed) ─ */
+    case 'remove_plan_dept': {
+        hrm_ensure_plan_tables($conn);
+        $cid  = (int)($_POST['cycle_id'] ?? 0);
+        $dept = (int)($_POST['department_id'] ?? 0);
+        if ($cid <= 0 || $dept <= 0) { jout(false, ['error' => 'Thiếu chu kỳ hoặc phòng ban']); }
+        $empty = json_encode(array_fill(0, 12, 0));
+        $st = $conn->prepare('INSERT INTO hrm_plan_lines (cycle_id, department_id, months_plan, months_actual, removed)
+            VALUES (?,?,?,?,1) ON DUPLICATE KEY UPDATE removed=1');
+        $st->bind_param('iiss', $cid, $dept, $empty, $empty);
+        if (!$st->execute()) { jout(false, ['error' => $conn->error]); }
+        hrm_audit($conn, $uid, 'plan_dept_remove', 'plan', $cid, 'dept=' . $dept);
+        jout(true);
+    }
+
+    /* ── Kế hoạch tuyển dụng: thêm lại phòng ban vào bảng ─────────────── */
+    case 'restore_plan_dept': {
+        hrm_ensure_plan_tables($conn);
+        $cid  = (int)($_POST['cycle_id'] ?? 0);
+        $dept = (int)($_POST['department_id'] ?? 0);
+        if ($cid <= 0 || $dept <= 0) { jout(false, ['error' => 'Thiếu chu kỳ hoặc phòng ban']); }
+        $st = $conn->prepare('UPDATE hrm_plan_lines SET removed=0 WHERE cycle_id=? AND department_id=?');
+        $st->bind_param('ii', $cid, $dept);
+        $st->execute();
+        hrm_audit($conn, $uid, 'plan_dept_restore', 'plan', $cid, 'dept=' . $dept);
+        jout(true);
+    }
+
     default:
         jout(false, ['error' => 'Unknown action: ' . $action]);
 }
