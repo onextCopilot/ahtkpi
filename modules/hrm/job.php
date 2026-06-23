@@ -337,71 +337,77 @@ $startD = $job['source_start'] ?: $job['created_at'];
         <input type="hidden" id="taAppId" value="0">
         <div class="ta-note" id="taMeta"></div>
 
-        <div class="ta-sec">Lịch sử & hồ sơ ứng viên</div>
-        <div id="taHistory" class="ta-hist"><div class="ta-note">Đang kiểm tra...</div></div>
+        <section class="ta-card">
+            <div class="ta-card-h">Lịch sử &amp; hồ sơ ứng viên</div>
+            <div id="taHistory" class="ta-hist"><div class="ta-note">Đang kiểm tra...</div></div>
+        </section>
 
-        <div class="ta-sec">TA đánh giá (Text/Phone call)</div>
-        <label class="ta-lbl">Background</label>
-        <textarea id="ta_background" rows="2"></textarea>
-        <label class="ta-lbl">Kinh nghiệm (Kỹ năng, Domain, Dự án)</label>
-        <textarea id="ta_experience" rows="3"></textarea>
-        <label class="ta-lbl">Mức lương (hiện tại, kỳ vọng)</label>
-        <input id="ta_salary" type="text">
-        <label class="ta-lbl">Định hướng</label>
-        <textarea id="ta_orientation" rows="2"></textarea>
-        <label class="ta-lbl">Notice Period</label>
-        <select id="ta_notice_period">
-            <option value="">- Chọn -</option>
-            <option>Sẵn sàng đi làm ngay</option>
-            <option>Dưới 1 tuần</option>
-            <option>1 tuần</option>
-            <option>2 tuần</option>
-            <option>3 tuần</option>
-            <option>1 tháng</option>
-            <option>1.5 tháng</option>
-            <option>2 tháng</option>
-            <option>Trên 2 tháng</option>
-            <option>Đang thương lượng / Chưa rõ</option>
-        </select>
-        <div class="ta-row">
-            <div><label class="ta-lbl">Ngoại ngữ</label>
-                <select id="ta_lang">
-                    <option value="">- Chọn -</option>
-                    <option>Tiếng Anh</option>
-                    <option>Tiếng Nhật</option>
-                    <option>Tiếng Trung</option>
-                    <option>Tiếng Hàn</option>
-                    <option>Tiếng Pháp</option>
-                    <option>Tiếng Đức</option>
-                    <option>Khác</option>
-                    <option>Không có</option>
-                </select></div>
-            <div><label class="ta-lbl">Trình độ</label>
-                <select id="ta_lang_level">
-                    <option value="">- Chọn -</option>
-                    <option>Cơ bản</option>
-                    <option>Giao tiếp</option>
-                    <option>Khá</option>
-                    <option>Thành thạo</option>
-                    <option>Bản ngữ / song ngữ</option>
-                </select></div>
-        </div>
+        <section class="ta-card">
+            <div class="ta-card-h">TA đánh giá <span class="ta-tag">Text / Phone call</span></div>
+            <div class="ta-grid">
+                <div class="ta-fld full"><label>Background</label><textarea id="ta_background" rows="2"></textarea></div>
+                <div class="ta-fld full"><label>Kinh nghiệm <span class="ta-hint">(Kỹ năng, Domain, Dự án)</span></label><textarea id="ta_experience" rows="3"></textarea></div>
+                <div class="ta-fld"><label>Mức lương <span class="ta-hint">(hiện tại, kỳ vọng)</span></label><input id="ta_salary" type="text" placeholder="VD: 15tr → 20tr"></div>
+                <div class="ta-fld"><label>Notice Period</label>
+                    <select id="ta_notice_period">
+                        <option value="">- Chọn -</option>
+                        <option>Sẵn sàng đi làm ngay</option>
+                        <option>Dưới 1 tuần</option>
+                        <option>1 tuần</option>
+                        <option>2 tuần</option>
+                        <option>3 tuần</option>
+                        <option>1 tháng</option>
+                        <option>1.5 tháng</option>
+                        <option>2 tháng</option>
+                        <option>Trên 2 tháng</option>
+                        <option>Đang thương lượng / Chưa rõ</option>
+                    </select></div>
+                <div class="ta-fld full"><label>Định hướng</label><textarea id="ta_orientation" rows="2"></textarea></div>
+                <div class="ta-fld"><label>Ngoại ngữ</label>
+                    <select id="ta_lang">
+                        <option value="">- Chọn -</option>
+                        <option>Tiếng Anh</option>
+                        <option>Tiếng Nhật</option>
+                        <option>Tiếng Trung</option>
+                        <option>Tiếng Hàn</option>
+                        <option>Tiếng Pháp</option>
+                        <option>Tiếng Đức</option>
+                        <option>Khác</option>
+                        <option>Không có</option>
+                    </select></div>
+                <div class="ta-fld"><label>Trình độ</label>
+                    <select id="ta_lang_level">
+                        <option value="">- Chọn -</option>
+                        <option>Cơ bản</option>
+                        <option>Giao tiếp</option>
+                        <option>Khá</option>
+                        <option>Thành thạo</option>
+                        <option>Bản ngữ / song ngữ</option>
+                    </select></div>
+            </div>
+        </section>
 
-        <div class="ta-sec">Check reference (optional)</div>
-        <textarea id="ta_reference_check" rows="2" placeholder="Áp dụng: Senior trở lên / Vị trí quản lý"></textarea>
+        <section class="ta-card">
+            <div class="ta-card-h">Check reference <span class="ta-hint">(không bắt buộc · Senior / quản lý)</span></div>
+            <textarea id="ta_reference_check" rows="2" placeholder="Nội dung check reference (nếu có)"></textarea>
+        </section>
 
-        <div class="ta-sec">Ghi chú</div>
-        <textarea id="ta_note" rows="2"></textarea>
+        <section class="ta-card">
+            <div class="ta-card-h">Ghi chú</div>
+            <textarea id="ta_note" rows="2" placeholder="Ghi chú thêm / lý do khi Reject"></textarea>
+        </section>
 
-        <div class="ta-sec">Kết quả</div>
-        <div class="ta-results">
-            <label><input type="radio" name="ta_result" value=""> Lưu nháp (chưa quyết định)</label>
-            <label><input type="radio" name="ta_result" value="reject"> Reject</label>
-            <label><input type="radio" name="ta_result" value="hold"> Hold / Keep in touch</label>
-            <label><input type="radio" name="ta_result" value="send_hm"> Gửi HM đánh giá chuyên môn</label>
-            <label><input type="radio" name="ta_result" value="interview"> Interview (chuyển bước Phỏng vấn)</label>
-        </div>
-        <div class="ta-sla">⏱ SLA: ≤ 48 giờ từ khi nhận CV</div>
+        <section class="ta-card">
+            <div class="ta-card-h">Kết quả</div>
+            <div class="ta-results">
+                <label class="ta-opt"><input type="radio" name="ta_result" value=""><span><b>Lưu nháp</b><i>Chưa quyết định</i></span></label>
+                <label class="ta-opt"><input type="radio" name="ta_result" value="reject"><span><b>Reject</b><i>Loại ứng viên</i></span></label>
+                <label class="ta-opt"><input type="radio" name="ta_result" value="hold"><span><b>Hold / Keep in touch</b><i>Tạm giữ hồ sơ</i></span></label>
+                <label class="ta-opt"><input type="radio" name="ta_result" value="send_hm"><span><b>Gửi HM đánh giá chuyên môn</b><i>Giữ ở Screening</i></span></label>
+                <label class="ta-opt"><input type="radio" name="ta_result" value="interview"><span><b>Interview</b><i>Chuyển bước Phỏng vấn</i></span></label>
+            </div>
+            <div class="ta-sla">⏱ SLA: ≤ 48 giờ từ khi nhận CV</div>
+        </section>
     </div>
     <div class="ta-foot">
         <button class="rc-btn ghost" onclick="closeTAReview()">Đóng</button>
