@@ -399,7 +399,7 @@ function hrm_seeds(mysqli $conn): void
     // Pipeline stages (9-step SOP).
     $stages = [
         ['SOURCED',    'Nguồn / Mới',        1, 'standard',  0],
-        ['SCREENING',  'Sàng lọc CV',        2, 'standard', 48],
+        ['SCREENING',  'Screening',          2, 'standard', 48],
         ['TEST',       'Test đầu vào',       3, 'standard',  0],
         ['INTERVIEW',  'Phỏng vấn',          4, 'standard',  0],
         ['REFERENCE',  'Reference check',    5, 'standard',  0],

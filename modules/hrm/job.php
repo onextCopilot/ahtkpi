@@ -305,8 +305,17 @@ $startD = $job['source_start'] ?: $job['created_at'];
             <div class="rc-field"><label>Họ tên *</label><input name="full_name" required></div>
             <div class="rc-field"><label>Email</label><input name="email" type="email"></div>
             <div class="rc-field"><label>Điện thoại</label><input name="phone"></div>
-            <div class="rc-field"><label>Nguồn</label><select name="source_id"><option value="0">-</option>
-                <?php foreach ($sources as $s): ?><option value="<?= $s['id'] ?>"><?= h($s['name']) ?></option><?php endforeach; ?></select></div>
+            <div class="rc-field"><label>Nguồn</label>
+                <div class="srcbox">
+                    <input type="hidden" name="source_id" id="srcId" value="0">
+                    <input type="text" id="srcSearch" autocomplete="off" placeholder="- Chọn / tìm nguồn -"
+                        onfocus="srcOpen()" oninput="srcFilter()">
+                    <div id="srcList" class="srclist">
+                        <div class="srcopt" data-id="0" data-name="" onclick="srcPick(this)">-</div>
+                        <?php foreach ($sources as $s): ?><div class="srcopt" data-id="<?= $s['id'] ?>" data-name="<?= h($s['name']) ?>" onclick="srcPick(this)"><?= h($s['name']) ?></div><?php endforeach; ?>
+                    </div>
+                </div>
+            </div>
             <div style="display:flex;gap:8px;justify-content:flex-end">
                 <button class="rc-btn ghost" onclick="document.getElementById('addCand').style.display='none'">Hủy</button>
                 <button class="rc-btn" onclick="addCand()">Thêm</button>
@@ -316,6 +325,11 @@ $startD = $job['source_start'] ?: $job['created_at'];
 </div>
 
 <style>
+.srcbox{position:relative}
+.srcbox #srcSearch{width:100%;padding:8px 12px;border:1px solid var(--bd);border-radius:8px;font-size:13px;box-sizing:border-box}
+.srclist{display:none;position:absolute;left:0;right:0;top:100%;margin-top:4px;max-height:220px;overflow-y:auto;background:#fff;border:1px solid var(--bd);border-radius:8px;box-shadow:0 6px 20px rgba(0,0,0,.12);z-index:1000}
+.srclist .srcopt{padding:8px 12px;font-size:13px;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.srclist .srcopt:hover{background:#f0f4fb}
 .kb-board{display:flex;align-items:stretch;overflow-x:auto;overflow-y:hidden;padding:6px 0 0;gap:0;scrollbar-width:none;-ms-overflow-style:none}
 .kb-board::-webkit-scrollbar{display:none;height:0}
 .kb-col{min-width:252px;width:252px;flex-shrink:0;display:flex;flex-direction:column}
@@ -383,6 +397,23 @@ function addCand(){
     const fd=new FormData(f);fd.append('action','add_candidate');
     fetch('/hrm/api',{method:'POST',body:fd}).then(r=>r.json()).then(j=>{j.ok?location.reload():alert(j.error||'Lỗi');});
 }
+function srcOpen(){document.getElementById('srcList').style.display='block';srcFilter();}
+function srcFilter(){
+    const q=(document.getElementById('srcSearch').value||'').trim().toLowerCase();
+    document.querySelectorAll('#srcList .srcopt').forEach(o=>{
+        const n=(o.dataset.name||'').toLowerCase();
+        o.style.display=(!q||n.indexOf(q)>-1||o.dataset.id==='0')?'block':'none';
+    });
+}
+function srcPick(el){
+    document.getElementById('srcId').value=el.dataset.id;
+    document.getElementById('srcSearch').value=el.dataset.name;
+    document.getElementById('srcList').style.display='none';
+}
+document.addEventListener('click',function(e){
+    const box=document.querySelector('.srcbox');
+    if(box&&!box.contains(e.target)){document.getElementById('srcList').style.display='none';}
+});
 function syncWebsite(e){
     const btn = e.target; const old = btn.textContent;
     btn.textContent = 'Đang đồng bộ...'; btn.disabled = true;
