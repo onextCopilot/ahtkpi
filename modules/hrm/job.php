@@ -424,31 +424,44 @@ $startD = $job['source_start'] ?: $job['created_at'];
 .ta-panel{position:fixed;top:0;right:0;height:100vh;width:50vw;min-width:440px;max-width:94vw;background:#fff;z-index:1101;
     box-shadow:-8px 0 30px rgba(0,0,0,.18);display:flex;flex-direction:column;transform:translateX(100%);transition:transform .25s ease}
 .ta-panel.open{transform:translateX(0)}
-.ta-head{display:flex;align-items:flex-start;justify-content:space-between;padding:18px 20px;border-bottom:1px solid #eceef1}
-.ta-head h3{font-size:17px;font-weight:700;color:#1d1d1f;margin:2px 0 0}
-.ta-step{font-size:11px;font-weight:700;letter-spacing:.4px;color:#1b96ff}
-.ta-x{background:none;border:none;font-size:16px;color:#86868b;cursor:pointer;padding:4px}
-.ta-body{flex:1;overflow-y:auto;padding:16px 20px}
-.ta-sec{font-size:13px;font-weight:700;color:#1d1d1f;margin:16px 0 8px;padding-bottom:6px;border-bottom:1px solid #f0f0f2}
-.ta-sec:first-child{margin-top:0}
-.ta-lbl{display:block;font-size:12px;color:#6e6e73;margin:8px 0 4px;font-weight:600}
-.ta-body textarea,.ta-body input[type=text],.ta-body select{width:100%;box-sizing:border-box;padding:8px 10px;border:1px solid var(--bd);border-radius:8px;font-size:13px;font-family:inherit;resize:vertical;background:#fff}
-.ta-row{display:flex;gap:10px}.ta-row>div{flex:1}
+.ta-head{display:flex;align-items:flex-start;justify-content:space-between;padding:18px 22px;border-bottom:1px solid #eceef1}
+.ta-head h3{font-size:18px;font-weight:700;color:#1d1d1f;margin:3px 0 0;letter-spacing:-.01em}
+.ta-step{font-size:11px;font-weight:700;letter-spacing:.5px;color:#1b96ff}
+.ta-x{background:none;border:none;font-size:16px;color:#86868b;cursor:pointer;padding:4px;line-height:1}
+.ta-x:hover{color:#1d1d1f}
+.ta-body{flex:1;overflow-y:auto;padding:18px 22px;background:#f7f8fa}
+.ta-card{background:#fff;border:1px solid #eceef1;border-radius:12px;padding:16px 18px;margin-bottom:14px}
+.ta-card:last-child{margin-bottom:0}
+.ta-card-h{font-size:13px;font-weight:700;color:#1d1d1f;margin-bottom:14px;display:flex;align-items:center;gap:8px}
+.ta-tag{font-size:10.5px;font-weight:600;color:#6e6e73;background:#f0f1f3;padding:2px 9px;border-radius:980px;letter-spacing:.2px}
+.ta-hint{font-weight:400;color:#9a9aa0;font-size:11.5px}
+.ta-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px 14px}
+.ta-fld{display:flex;flex-direction:column;min-width:0}
+.ta-fld.full{grid-column:1 / -1}
+.ta-fld label{font-size:11.5px;color:#6e6e73;font-weight:600;margin-bottom:5px}
+.ta-body textarea,.ta-body input[type=text],.ta-body select{width:100%;box-sizing:border-box;padding:9px 11px;border:1px solid #dcdfe4;border-radius:8px;font-size:13px;font-family:inherit;resize:vertical;background:#fff;color:#1d1d1f;transition:border-color .15s,box-shadow .15s}
+.ta-body textarea:focus,.ta-body input[type=text]:focus,.ta-body select:focus{outline:none;border-color:#1b96ff;box-shadow:0 0 0 3px rgba(27,150,255,.12)}
 .ta-results{display:flex;flex-direction:column;gap:8px}
-.ta-results label{display:flex;align-items:center;gap:8px;font-size:13px;color:#1d1d1f;cursor:pointer}
-.ta-sla{margin-top:14px;font-size:12px;color:#b25e00;background:#fff4e5;padding:8px 12px;border-radius:8px}
+.ta-opt{display:flex;align-items:center;gap:11px;padding:11px 13px;border:1px solid #dcdfe4;border-radius:10px;cursor:pointer;transition:border-color .15s,background .15s}
+.ta-opt:hover{border-color:#b9c0c9;background:#fafbfc}
+.ta-opt input{margin:0;flex-shrink:0}
+.ta-opt span{display:flex;flex-direction:column;line-height:1.35}
+.ta-opt b{font-size:13px;font-weight:600;color:#1d1d1f}
+.ta-opt i{font-size:11.5px;color:#86868b;font-style:normal}
+.ta-opt:has(input:checked){border-color:#1b96ff;background:#eef6ff}
+.ta-sla{margin-top:14px;font-size:12px;font-weight:600;color:#b25e00;background:#fff4e5;padding:9px 13px;border-radius:8px}
 .ta-note{font-size:12px;color:#86868b}
-.ta-hist{display:flex;flex-direction:column;gap:8px}
-.ta-cv{font-size:12.5px}
+.ta-hist{display:flex;flex-direction:column;gap:9px}
+.ta-cv{font-size:12.5px;color:#1d1d1f}
 .ta-cv a{color:#0071e3;text-decoration:none;font-weight:600}.ta-cv a:hover{text-decoration:underline}
-.ta-hrow{display:flex;align-items:center;gap:10px;padding:9px 11px;border:1px solid #eceef1;border-radius:9px;font-size:12.5px}
-.ta-hrow.cur{background:#eaf3ff;border-color:#cfe4ff}
+.ta-hrow{display:flex;align-items:center;gap:10px;padding:10px 12px;border:1px solid #eceef1;border-radius:10px;font-size:12.5px;background:#fafbfc}
+.ta-hrow.cur{background:#eef6ff;border-color:#cfe4ff}
 .ta-hrow .j{flex:1;min-width:0}
 .ta-hrow .jt{font-weight:600;color:#1d1d1f;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .ta-hrow .js{color:#86868b;font-size:11.5px;margin-top:2px}
-.ta-badge{font-size:10.5px;font-weight:700;padding:2px 8px;border-radius:980px;white-space:nowrap}
-.ta-empty{font-size:12.5px;color:#16a34a}
-.ta-foot{display:flex;justify-content:flex-end;gap:8px;padding:14px 20px;border-top:1px solid #eceef1}
+.ta-badge{font-size:10.5px;font-weight:700;padding:3px 9px;border-radius:980px;white-space:nowrap}
+.ta-empty{font-size:12.5px;color:#16a34a;font-weight:500}
+.ta-foot{display:flex;justify-content:flex-end;gap:8px;padding:14px 22px;border-top:1px solid #eceef1;background:#fff}
 </style>
 
 <!-- Add candidate modal -->
