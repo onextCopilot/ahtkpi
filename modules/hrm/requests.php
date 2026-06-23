@@ -36,7 +36,8 @@ if ($new || $edit) {
     hrm_header($edit ? ('Sửa HRF ' . $req['code']) : 'Tạo yêu cầu tuyển dụng', 'HRF - Hiring Request Form', 'requests');
     ?>
     <div class="rc-toolbar"><a href="<?= $edit ? '/hrm/requests?id='.$id : '/hrm/requests' ?>" class="rc-tab">← Quay lại</a></div>
-    <div class="rc-card" style="max-width:760px">
+    <div class="hrf-layout">
+    <div class="rc-card hrf-formcard">
         <form id="hrfForm" onsubmit="return false">
             <input type="hidden" name="id" value="<?= $id ?>">
             <div class="rc-field"><label>Tên vị trí *</label><input name="title" required placeholder="VD: Senior PHP Developer" value="<?= h($r['title']) ?>"></div>
@@ -79,7 +80,82 @@ if ($new || $edit) {
             </div>
         </form>
     </div>
+    <aside class="hrf-example">
+        <div class="ex-h">📋 JD mẫu chi tiết (tham khảo)</div>
+        <div class="ex-note">Viết JD đầy đủ các mục dưới đây để bộ phận tuyển dụng dùng trực tiếp khi đăng tin. Bấm nút để chèn khung mẫu vào ô "Mô tả công việc".</div>
+        <button type="button" class="rc-btn ghost ex-btn" onclick="insertJDTemplate()">⬇ Chèn khung mẫu vào ô JD</button>
+        <div class="ex-doc">
+            <h4>Senior PHP Developer (Backend)</h4>
+            <p><i>Phòng Kỹ thuật · Full-time · Hà Nội</i></p>
+
+            <div class="ex-sec">1. Giới thiệu</div>
+            <p>Giới thiệu ngắn về công ty / đội nhóm, quy mô team, sản phẩm hoặc dự án mà ứng viên sẽ tham gia (1-2 câu).</p>
+
+            <div class="ex-sec">2. Mô tả công việc (Trách nhiệm chính)</div>
+            <ul>
+                <li>Thiết kế, phát triển và bảo trì API/dịch vụ backend bằng PHP (Laravel / Symfony).</li>
+                <li>Tham gia phân tích yêu cầu, thiết kế cơ sở dữ liệu và giải pháp kỹ thuật.</li>
+                <li>Tối ưu hiệu năng, bảo mật và khả năng mở rộng của hệ thống.</li>
+                <li>Review code, hướng dẫn (mentor) thành viên junior.</li>
+                <li>Phối hợp với Frontend, QA, PM theo quy trình Agile / Scrum.</li>
+            </ul>
+
+            <div class="ex-sec">3. Yêu cầu bắt buộc (Must-have)</div>
+            <ul>
+                <li><b>Học vấn:</b> Tốt nghiệp CĐ/ĐH chuyên ngành CNTT hoặc tương đương.</li>
+                <li><b>Kinh nghiệm:</b> ≥ 3 năm PHP, thành thạo ít nhất 1 framework.</li>
+                <li><b>Chuyên môn:</b> OOP, MVC, RESTful API, MySQL/PostgreSQL, Git.</li>
+                <li><b>Hiểu biết:</b> tối ưu query, caching (Redis), queue, unit test.</li>
+                <li><b>Ngoại ngữ:</b> đọc hiểu tài liệu tiếng Anh; giao tiếp cơ bản.</li>
+                <li><b>Kỹ năng mềm:</b> tư duy logic, làm việc nhóm, tự quản lý công việc.</li>
+            </ul>
+
+            <div class="ex-sec">4. Ưu tiên (Nice-to-have)</div>
+            <ul>
+                <li>Kinh nghiệm Docker / CI-CD, cloud (AWS / GCP).</li>
+                <li>Từng làm dự án outsourcing / khách nước ngoài.</li>
+                <li>Kiến thức microservices, kiến trúc hệ thống lớn.</li>
+            </ul>
+
+            <div class="ex-sec">5. Quyền lợi</div>
+            <ul>
+                <li>Lương thỏa thuận theo năng lực + thưởng dự án, thưởng hiệu suất.</li>
+                <li>Review lương 1-2 lần/năm; thưởng lễ tết, lương tháng 13.</li>
+                <li>BHXH/BHYT full lương; khám sức khỏe định kỳ.</li>
+                <li>12+ ngày phép/năm; làm việc Thứ 2-Thứ 6.</li>
+                <li>Trang bị laptop/màn hình; hỗ trợ đào tạo, chứng chỉ.</li>
+                <li>Môi trường trẻ, lộ trình thăng tiến rõ ràng.</li>
+            </ul>
+
+            <div class="ex-sec">6. Thời gian & địa điểm làm việc</div>
+            <ul>
+                <li>Giờ làm: 8h30-17h30, Thứ 2-Thứ 6.</li>
+                <li>Địa điểm: văn phòng cụ thể / Hybrid / Remote.</li>
+            </ul>
+
+            <div class="ex-sec">7. Quy trình tuyển dụng</div>
+            <ul>
+                <li>Vòng 1: Sàng lọc CV + phỏng vấn TA (điện thoại).</li>
+                <li>Vòng 2: Test chuyên môn / bài tập.</li>
+                <li>Vòng 3: Phỏng vấn kỹ thuật với Hiring Manager.</li>
+                <li>Vòng 4: Offer & thương lượng.</li>
+            </ul>
+        </div>
+    </aside>
+    </div>
     <style>
+    .hrf-layout{display:flex;gap:20px;align-items:flex-start;flex-wrap:wrap}
+    .hrf-formcard{flex:1 1 560px;max-width:760px}
+    .hrf-example{flex:1 1 360px;position:sticky;top:16px;background:#fff;border:1px solid #eceef1;border-radius:14px;padding:18px 20px;max-height:calc(100vh - 90px);overflow-y:auto;box-shadow:0 1px 2px rgba(0,0,0,.04),0 0 0 1px rgba(0,0,0,.03)}
+    .ex-h{font-size:14px;font-weight:700;color:#1d1d1f}
+    .ex-note{font-size:12px;color:#86868b;margin:4px 0 12px;line-height:1.5}
+    .ex-btn{font-size:12px;padding:6px 12px;margin-bottom:14px}
+    .ex-doc{font-size:12.5px;line-height:1.55;color:#1d1d1f;border-top:1px solid #f0f0f2;padding-top:12px}
+    .ex-doc h4{font-size:14px;margin:0 0 2px;color:#1d1d1f}
+    .ex-doc>p{margin:0 0 8px;color:#86868b}
+    .ex-doc .ex-sec{font-weight:700;color:#0071e3;margin:12px 0 5px;font-size:12.5px}
+    .ex-doc ul{margin:0 0 8px;padding-left:18px}
+    .ex-doc li{margin-bottom:3px}
     #hrfForm .rc-field.has-err input,#hrfForm .rc-field.has-err select{border-color:#dc2626;box-shadow:0 0 0 3px rgba(220,38,38,.1)}
     #hrfForm .rc-err{color:#dc2626;font-size:12px;margin-top:4px}
     .rc-formerr{color:#dc2626;font-size:13px;background:#fef2f2;border:1px solid #fecaca;border-radius:8px;padding:9px 12px;margin-top:12px}
@@ -91,6 +167,17 @@ if ($new || $edit) {
         modules:{toolbar:[[{header:[2,3,false]}],['bold','italic','underline'],[{list:'ordered'},{list:'bullet'}],['link'],['clean']]}});
     jdQuill.root.innerHTML = <?= json_encode($r['jd'] ?: '', JSON_UNESCAPED_UNICODE) ?>;
     var IS_EDIT = <?= $edit ? 'true' : 'false' ?>;
+    function insertJDTemplate(){
+        if(jdQuill.getText().trim() && !confirm('Ô JD đang có nội dung. Thay bằng khung mẫu?'))return;
+        jdQuill.root.innerHTML =
+            '<h3>1. Giới thiệu</h3><p><br></p>'+
+            '<h3>2. Mô tả công việc</h3><ul><li>Trách nhiệm chính 1</li><li>Trách nhiệm chính 2</li></ul>'+
+            '<h3>3. Yêu cầu bắt buộc</h3><ul><li>Học vấn</li><li>Kinh nghiệm</li><li>Kỹ năng chuyên môn</li><li>Ngoại ngữ</li><li>Kỹ năng mềm</li></ul>'+
+            '<h3>4. Ưu tiên</h3><ul><li><br></li></ul>'+
+            '<h3>5. Quyền lợi</h3><ul><li>Lương, thưởng</li><li>Phúc lợi, bảo hiểm, nghỉ phép</li><li>Đào tạo, thiết bị</li></ul>'+
+            '<h3>6. Thời gian & địa điểm làm việc</h3><ul><li><br></li></ul>'+
+            '<h3>7. Quy trình tuyển dụng</h3><ul><li><br></li></ul>';
+    }
     function hrfClearErr(){
         document.querySelectorAll('#hrfForm .rc-field.has-err').forEach(d=>{d.classList.remove('has-err');const e=d.querySelector('.rc-err');if(e)e.remove();});
         const g=document.getElementById('hrfErr');g.style.display='none';g.textContent='';
@@ -312,7 +399,11 @@ hrm_header('Yêu cầu tuyển dụng', 'HRF - Hiring Request Form', 'requests')
 <?php if (!$rows): ?>
     <div class="rc-empty">Chưa có yêu cầu tuyển dụng nào.</div>
 <?php else: ?>
-<table class="rc-table">
+<style>
+.rc-zebra tbody tr:nth-child(even) td{background:#f7f8fa}
+.rc-zebra tbody tr:hover td{background:#eef4ff}
+</style>
+<table class="rc-table rc-zebra">
     <thead><tr><th>Mã</th><th>Vị trí</th><th>Phòng ban</th><th>Loại</th><th>SL</th><th>Cần onboard</th><th>Trạng thái</th><th>Người duyệt</th><th>Duyệt lúc</th><th>Người tạo</th><th>Tạo lúc</th></tr></thead>
     <tbody>
     <?php foreach ($rows as $r): $ai = $apprInfo($r); ?>
