@@ -189,18 +189,28 @@ function saveTest(){act('save_test',{application_id:<?= $id ?>,test_type:documen
 function schedIv(){act('schedule_interview',{application_id:<?= $id ?>,round:document.getElementById('iv_round').value,interview_type:document.getElementById('iv_type').value,scheduled_at:document.getElementById('iv_at').value,interviewer_id:document.getElementById('iv_by').value,location:document.getElementById('iv_loc').value});}
 function saveEval(){act('save_evaluation',{application_id:<?= $id ?>,total_score:document.getElementById('e_score').value,recommendation:document.getElementById('e_rec').value,comment:document.getElementById('e_cmt').value});}
 function createOffer(){act('create_offer',{application_id:<?= $id ?>,salary:document.getElementById('o_salary').value,start_date:document.getElementById('o_start').value});}
+function topMsg(msg,ok){
+    let b=document.getElementById('topMsg');
+    if(!b){b=document.createElement('div');b.id='topMsg';
+        b.style.cssText='position:fixed;top:0;left:0;right:0;z-index:3000;padding:13px 18px;text-align:center;font-size:14px;font-weight:600;color:#fff;box-shadow:0 2px 10px rgba(0,0,0,.15)';
+        document.body.appendChild(b);}
+    b.style.background=ok?'#16a34a':'#dc2626';
+    b.textContent=msg;b.style.display='block';
+    clearTimeout(window.__topMsgT);
+    window.__topMsgT=setTimeout(function(){b.style.display='none';},5000);
+}
 function sendCandEmail(){
     const sel=document.getElementById('mailTpl');const k=sel.value;
-    if(!k){alert('Chọn mẫu email');return;}
+    if(!k){topMsg('Hãy chọn mẫu email',false);return;}
     if(!confirm('Gửi email "'+sel.options[sel.selectedIndex].text+'" cho ứng viên?'))return;
-    post('send_candidate_email',{application_id:<?= $id ?>,event_key:k}).then(j=>{alert(j.ok?('Đã gửi email tới '+(j.to||'ứng viên')):(j.error||'Lỗi'));});
+    post('send_candidate_email',{application_id:<?= $id ?>,event_key:k}).then(j=>{topMsg(j.ok?('Đã gửi email tới '+(j.to||'ứng viên')):(j.error||'Lỗi'),!!j.ok);});
 }
 function sendCandEmailKey(k,btn){
     if(!confirm('Gửi mẫu email này cho ứng viên?'))return;
     if(btn){btn.disabled=true;}
     post('send_candidate_email',{application_id:<?= $id ?>,event_key:k}).then(j=>{
         if(btn){btn.disabled=false;}
-        alert(j.ok?('Đã gửi email tới '+(j.to||'ứng viên')):(j.error||'Lỗi'));
+        topMsg(j.ok?('Đã gửi email tới '+(j.to||'ứng viên')):(j.error||'Lỗi'),!!j.ok);
     });
 }
 </script>
