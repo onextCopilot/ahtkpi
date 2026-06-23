@@ -241,6 +241,7 @@ $routes = [
     '/hrm/kpi' => 'modules/hrm/kpi.php',
     '/hrm/settings' => 'modules/hrm/settings.php',
     '/hrm/api' => 'modules/hrm/api.php',
+    '/hrm/linkedin-oauth' => 'modules/hrm/linkedin_oauth.php',
     '/hrm/webhook.php' => 'modules/hrm/webhook.php',
     '/hrm/webhook' => 'modules/hrm/webhook.php',
     '/presale' => 'modules/presale/index.php',

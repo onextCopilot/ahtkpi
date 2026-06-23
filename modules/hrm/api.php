@@ -174,6 +174,116 @@ switch ($action) {
         jout(true);
     }
 
+    /* ── Settings: kênh đăng tin (Facebook / LinkedIn / Webhook) ──────── */
+    case 'save_channel':
+    case 'update_channel': {
+        if (($_SESSION['role'] ?? '') !== 'admin') { jout(false, ['error' => 'Chỉ admin']); }
+        hrm_ensure_channels_schema($conn);
+        $cid  = (int)($_POST['id'] ?? 0);
+        $name = trim($_POST['name'] ?? '');
+        if ($name === '') { jout(false, ['error' => 'Thiếu tên kênh']); }
+        $type = $_POST['type'] ?? 'webhook';
+        if (!array_key_exists($type, hrm_channel_types())) { $type = 'webhook'; }
+        $icon   = trim($_POST['icon'] ?? '');
+        $url    = '';
+        $secret = '';
+        $config = null;
+        if ($type === 'facebook') {
+            $config = json_encode([
+                'page_id'      => trim($_POST['page_id'] ?? ''),
+                'access_token' => trim($_POST['access_token'] ?? ''),
+                'api_version'  => trim($_POST['api_version'] ?? '') ?: 'v25.0',
+            ], JSON_UNESCAPED_UNICODE);
+        } elseif ($type === 'linkedin') {
+            // Giữ lại token OAuth đã có khi sửa kênh (không ghi đè bằng form).
+            $existing = [];
+            if ($cid) {
+                $er = $conn->query('SELECT config FROM hrm_channels WHERE id=' . (int)$cid)->fetch_assoc();
+                $tmp = json_decode($er['config'] ?? '', true);
+                if (is_array($tmp)) { $existing = $tmp; }
+            }
+            $cfgArr = [
+                'org_id'        => trim($_POST['org_id'] ?? ''),
+                'client_id'     => trim($_POST['client_id'] ?? ''),
+                'client_secret' => trim($_POST['client_secret'] ?? ''),
+                'api_version'   => trim($_POST['api_version'] ?? '') ?: '202606',
+            ];
+            // Bảo toàn token (OAuth tự lấy). Nếu admin nhập access_token thủ công thì ưu tiên cái mới.
+            foreach (['access_token', 'refresh_token', 'token_expires_at', 'refresh_expires_at'] as $kk) {
+                if (isset($existing[$kk])) { $cfgArr[$kk] = $existing[$kk]; }
+            }
+            $manualToken = trim($_POST['access_token'] ?? '');
+            if ($manualToken !== '') { $cfgArr['access_token'] = $manualToken; }
+            $config = json_encode($cfgArr, JSON_UNESCAPED_UNICODE);
+        } else {
+            $url    = trim($_POST['webhook_url'] ?? '');
+            $secret = trim($_POST['secret'] ?? '');
+        }
+
+        if ($action === 'update_channel') {
+            if (!$cid) { jout(false, ['error' => 'Thiếu dữ liệu']); }
+            $st = $conn->prepare('UPDATE hrm_channels SET name=?, type=?, icon=?, webhook_url=?, secret=?, config=? WHERE id=?');
+            $st->bind_param('ssssssi', $name, $type, $icon, $url, $secret, $config, $cid);
+            $st->execute();
+            jout(true);
+        }
+        $st = $conn->prepare('INSERT INTO hrm_channels (name,type,icon,webhook_url,secret,config,enabled) VALUES (?,?,?,?,?,?,1)');
+        $st->bind_param('ssssss', $name, $type, $icon, $url, $secret, $config);
+        if (!$st->execute()) { jout(false, ['error' => $conn->error]); }
+        hrm_audit($conn, $uid, 'channel_add', 'channel', $st->insert_id, $name);
+        jout(true, ['id' => $st->insert_id]);
+    }
+    case 'toggle_channel': {
+        if (($_SESSION['role'] ?? '') !== 'admin') { jout(false, ['error' => 'Chỉ admin']); }
+        hrm_ensure_channels_schema($conn);
+        $cid = (int)($_POST['id'] ?? 0);
+        $on  = !empty($_POST['enabled']) ? 1 : 0;
+        $st = $conn->prepare('UPDATE hrm_channels SET enabled=? WHERE id=?');
+        $st->bind_param('ii', $on, $cid);
+        $st->execute();
+        jout(true);
+    }
+    case 'remove_channel': {
+        if (($_SESSION['role'] ?? '') !== 'admin') { jout(false, ['error' => 'Chỉ admin']); }
+        hrm_ensure_channels_schema($conn);
+        $cid = (int)($_POST['id'] ?? 0);
+        $conn->query('DELETE FROM hrm_channels WHERE id = ' . $cid);
+        $conn->query('DELETE FROM hrm_job_channel_posts WHERE channel_id = ' . $cid);
+        jout(true);
+    }
+
+    /* Đổi token Facebook ngắn hạn → Page token dài hạn (không lưu App Secret). */
+    case 'fb_exchange_token': {
+        if (($_SESSION['role'] ?? '') !== 'admin') { jout(false, ['error' => 'Chỉ admin']); }
+        $appId      = trim($_POST['app_id'] ?? '');
+        $appSecret  = trim($_POST['app_secret'] ?? '');
+        $shortToken = trim($_POST['short_token'] ?? '');
+        $pageId     = trim($_POST['page_id'] ?? '');
+        $ver        = trim($_POST['api_version'] ?? '') ?: 'v25.0';
+        if ($appId === '' || $appSecret === '' || $shortToken === '') {
+            jout(false, ['error' => 'Cần nhập App ID, App Secret và token hiện tại.']);
+        }
+        $r = hrm_fb_long_lived_page_token($appId, $appSecret, $shortToken, $pageId, $ver);
+        if (empty($r['ok'])) { jout(false, ['error' => $r['error'] ?? 'Lỗi đổi token']); }
+        if (!empty($r['need_pick'])) { jout(true, ['need_pick' => true, 'pages' => $r['pages']]); }
+        jout(true, ['page_token' => $r['page_token'], 'page_id' => $r['page_id'], 'page_name' => $r['page_name']]);
+    }
+
+    /* Đăng 1 tin lên nhiều kênh đã chọn. */
+    case 'post_job_channels': {
+        $jid = (int)($_POST['job_id'] ?? 0);
+        $ids = array_filter(array_map('intval', explode(',', $_POST['channel_ids'] ?? '')));
+        if (!$jid || !$ids) { jout(false, ['error' => 'Chọn ít nhất 1 kênh']); }
+        $results = []; $okCount = 0;
+        foreach ($ids as $cid) {
+            $r = hrm_post_job_to_channel($conn, $jid, $cid, $uid);
+            if (!empty($r['ok'])) { $okCount++; }
+            $results[$cid] = $r;
+        }
+        hrm_audit($conn, $uid, 'job_post_channels', 'job', $jid, implode(',', $ids));
+        jout(true, ['posted' => $okCount, 'total' => count($ids), 'results' => $results]);
+    }
+
     /* ── Settings: per-department stage owners (BC / TA) ──────────────── */
     case 'save_stage_owner': {
         if (($_SESSION['role'] ?? '') !== 'admin') { jout(false, ['error' => 'Chỉ admin']); }

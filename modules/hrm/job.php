@@ -147,6 +147,12 @@ $hrm_avatar = function (string $name) use ($avatarPalette) {
     return [$ini, $color];
 };
 
+// Kênh đăng tin + trạng thái đã đăng cho tin này.
+$pubChannels = hrm_channels($conn, true);
+$chPosts = [];
+$pr = $conn->query('SELECT channel_id, status, post_url, posted_at FROM hrm_job_channel_posts WHERE job_id = ' . $id);
+while ($x = $pr->fetch_assoc()) { $chPosts[(int)$x['channel_id']] = $x; }
+
 hrm_header('Tin tuyển dụng', '', 'jobs');
 ?>
 <div class="rc-toolbar">
@@ -157,8 +163,43 @@ hrm_header('Tin tuyển dụng', '', 'jobs');
         <?php else: ?>
             <button class="rc-btn ghost" onclick="syncWebsite(event)">Publish tin tuyển dụng</button>
         <?php endif; ?>
+        <button class="rc-btn ghost" onclick="document.getElementById('postChModal').style.display='flex'">Đăng lên kênh</button>
         <button class="rc-btn" onclick="document.getElementById('addCand').style.display='flex'">+ Thêm ứng viên</button>
         <a href="/hrm/job?id=<?= $id ?>&edit=1" class="rc-btn ghost">Sửa tin</a>
+    </div>
+</div>
+
+<!-- Modal: đăng tin lên kênh -->
+<div id="postChModal" class="rc-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:1000;align-items:center;justify-content:center">
+    <div style="background:#fff;border-radius:14px;padding:22px;width:480px;max-width:92vw;max-height:86vh;overflow:auto;box-shadow:0 10px 40px rgba(0,0,0,.2)">
+        <h3 style="font-size:16px;margin:0 0 4px">Đăng tin lên kênh</h3>
+        <p style="font-size:12px;color:#86868b;margin:0 0 16px">Chọn kênh để đăng tin tuyển dụng này (Facebook / LinkedIn / Webhook).</p>
+        <?php if (!$pubChannels): ?>
+            <div style="font-size:13px;color:#6e6e73;padding:10px 0">
+                Chưa có kênh nào đang bật. Vào <a href="/hrm/settings?tab=channels_cfg" style="color:#0071e3">Cấu hình → Kênh đăng tin</a> để thêm.
+            </div>
+        <?php else: ?>
+            <div style="display:flex;flex-direction:column;gap:6px;margin-bottom:16px">
+            <?php foreach ($pubChannels as $c): $p = $chPosts[(int)$c['id']] ?? null; ?>
+                <label style="display:flex;align-items:center;gap:10px;padding:10px 12px;border:1px solid #e8e8ed;border-radius:10px;font-size:13px;cursor:pointer">
+                    <input type="checkbox" class="pc-ch" value="<?= (int)$c['id'] ?>">
+                    <span style="flex:1"><?= h($c['icon']) ?> <b><?= h($c['name']) ?></b></span>
+                    <?php if ($p): ?>
+                        <?php if ($p['status'] === 'success'): ?>
+                            <span style="font-size:11px;color:#16a34a">✓ Đã đăng <?= date('d/m H:i', strtotime($p['posted_at'])) ?><?php if (!empty($p['post_url'])): ?> · <a href="<?= h($p['post_url']) ?>" target="_blank" style="color:#0071e3">xem</a><?php endif; ?></span>
+                        <?php else: ?>
+                            <span style="font-size:11px;color:#dc2626">✕ Lỗi lần trước</span>
+                        <?php endif; ?>
+                    <?php endif; ?>
+                </label>
+            <?php endforeach; ?>
+            </div>
+            <div id="pcResult" style="font-size:12px;margin-bottom:12px"></div>
+        <?php endif; ?>
+        <div style="display:flex;justify-content:flex-end;gap:8px">
+            <button class="rc-btn ghost" onclick="document.getElementById('postChModal').style.display='none'">Đóng</button>
+            <?php if ($pubChannels): ?><button class="rc-btn" id="pcBtn" onclick="postChannels(<?= $id ?>)">Đăng tin</button><?php endif; ?>
+        </div>
     </div>
 </div>
 
@@ -350,6 +391,25 @@ function syncWebsite(e){
         if(!j.ok) { showToast(j.error||'Lỗi đồng bộ', 'error'); btn.textContent = old; btn.disabled = false; }
         else { localStorage.setItem('job_toast', JSON.stringify({msg: 'Đã đẩy tin lên Website thành công!', type: 'success'})); location.reload(); }
     }).catch(()=>{ showToast('Lỗi mạng', 'error'); btn.textContent = old; btn.disabled = false; });
+}
+function postChannels(jobId){
+    const ids = Array.from(document.querySelectorAll('.pc-ch:checked')).map(c=>c.value);
+    const res = document.getElementById('pcResult');
+    if(!ids.length){ res.innerHTML = '<span style="color:#dc2626">Chọn ít nhất 1 kênh.</span>'; return; }
+    const btn = document.getElementById('pcBtn'); btn.disabled = true; btn.textContent = 'Đang đăng...';
+    const fd = new FormData(); fd.append('action','post_job_channels'); fd.append('job_id',jobId); fd.append('channel_ids',ids.join(','));
+    fetch('/hrm/api',{method:'POST',body:fd}).then(r=>r.json()).then(j=>{
+        btn.disabled = false; btn.textContent = 'Đăng tin';
+        if(!j.ok){ res.innerHTML = '<span style="color:#dc2626">'+(j.error||'Lỗi')+'</span>'; return; }
+        if(j.posted === j.total){
+            localStorage.setItem('job_toast', JSON.stringify({msg:'Đã đăng tin lên '+j.posted+'/'+j.total+' kênh!', type:'success'}));
+            location.reload();
+        } else {
+            let html = '<span style="color:#d97706">Đăng '+j.posted+'/'+j.total+' kênh. Lỗi: </span>';
+            for(const k in j.results){ if(!j.results[k].ok){ html += '<div style="color:#dc2626">• '+(j.results[k].error||'lỗi')+'</div>'; } }
+            res.innerHTML = html;
+        }
+    }).catch(()=>{ btn.disabled=false; btn.textContent='Đăng tin'; res.innerHTML='<span style="color:#dc2626">Lỗi mạng</span>'; });
 }
 var HRM_USERS = <?= json_encode($usersJs, JSON_UNESCAPED_UNICODE) ?>;
 var HRM_PAL = ['#0071e3','#34c759','#ff9500','#af52de','#ff2d55','#5ac8fa','#ffcc00','#ff3b30','#30b0c7','#a2845e'];

@@ -19,7 +19,7 @@ foreach ($assignments as $a) { $byRole[$a['rec_role']][] = $a; }
 $templates = $conn->query("SELECT * FROM hrm_email_templates ORDER BY audience, event_key")->fetch_all(MYSQLI_ASSOC);
 $offices = $conn->query("SELECT id, name, address, active FROM hrm_offices ORDER BY sort_order, name")->fetch_all(MYSQLI_ASSOC);
 
-$titles = ['offices' => 'Văn phòng', 'pipeline' => 'Giai đoạn & SLA', 'owners' => 'Phụ trách giai đoạn', 'roles' => 'Vai trò tuyển dụng', 'email' => 'Email template', 'channels' => 'Kênh thông báo'];
+$titles = ['offices' => 'Văn phòng', 'pipeline' => 'Giai đoạn & SLA', 'owners' => 'Phụ trách giai đoạn', 'roles' => 'Vai trò tuyển dụng', 'email' => 'Email template', 'channels' => 'Kênh thông báo', 'channels_cfg' => 'Kênh đăng tin'];
 $stages = $conn->query("SELECT id,code,name,sla_hours,sort_order FROM hrm_pipeline_stages ORDER BY sort_order")->fetch_all(MYSQLI_ASSOC);
 $deptList = $conn->query("SELECT id,name FROM departments ORDER BY sort_order, name")->fetch_all(MYSQLI_ASSOC);
 $ownerDept = (int)($_GET['dept'] ?? ($deptList[0]['id'] ?? 0));
@@ -230,6 +230,227 @@ function saveTpl(id,card){
     if(card.querySelector('input[type=checkbox]').checked)fd.append('enabled','1');
     fetch('/hrm/api',{method:'POST',body:fd}).then(r=>r.json()).then(j=>{if(!j.ok)alert(j.error||'Lỗi');});
 }
+</script>
+
+<?php elseif ($tab === 'channels_cfg'):
+    $channels = hrm_channels($conn);
+    $chTypes  = hrm_channel_types();
+    // Dữ liệu kênh cho JS (để nút "Sửa" nạp lại form). Chỉ admin xem trang này.
+    $chJs = [];
+    foreach ($channels as $c) {
+        $cfg = json_decode($c['config'] ?? '', true); if (!is_array($cfg)) { $cfg = []; }
+        $chJs[(int)$c['id']] = [
+            'name' => $c['name'], 'type' => $c['type'], 'icon' => $c['icon'],
+            'webhook_url' => $c['webhook_url'], 'secret' => $c['secret'], 'config' => $cfg,
+        ];
+    }
+    $liRedirect = hrm_linkedin_redirect_uri();
+?>
+<?php if (isset($_GET['li_ok'])): ?><div class="rc-card" style="max-width:680px;margin-bottom:12px;border-left:3px solid #16a34a;color:#15803d;font-size:13px"><?= h($_GET['li_ok']) ?></div><?php endif; ?>
+<?php if (isset($_GET['li_err'])): ?><div class="rc-card" style="max-width:680px;margin-bottom:12px;border-left:3px solid #dc2626;color:#b91c1c;font-size:13px"><?= h($_GET['li_err']) ?></div><?php endif; ?>
+<div class="rc-card" style="max-width:680px">
+    <h3 style="font-size:14px;margin-bottom:4px" id="chFormTitle">Thêm kênh đăng tin</h3>
+    <p class="rc-muted" style="font-size:12px;margin-bottom:10px;line-height:1.5">
+        Đăng tin tuyển dụng <b>trực tiếp qua API</b> của nền tảng (miễn phí — chỉ cần tạo app developer & access token).
+        Facebook dùng Graph API <code>/feed</code>; LinkedIn dùng Posts API <code>/rest/posts</code> (cần quyền admin Company Page).
+    </p>
+
+    <details class="ch-guide" style="margin-bottom:14px">
+        <summary style="cursor:pointer;font-size:13px;font-weight:600;color:#0071e3">📖 Hướng dẫn lấy thông tin cấu hình (bấm để mở)</summary>
+        <div style="font-size:12px;line-height:1.6;color:#3a3a3c;padding:10px 2px 2px">
+            <b>🔷 Facebook Page</b> (dễ nhất)
+            <ol style="margin:4px 0 10px 18px;padding:0">
+                <li>Tạo App tại <i>developers.facebook.com/apps</i> (loại Business).</li>
+                <li>Vào <i>Graph API Explorer</i> → chọn app → <b>Get Page Access Token</b> → chọn Page → cấp quyền <code>pages_manage_posts</code>, <code>pages_read_engagement</code>.</li>
+                <li>Gọi <code>GET me/accounts</code> để lấy <b>Page ID</b> và <b>access_token</b> của Page.</li>
+                <li>Nên đổi sang <b>token dài hạn</b> (token Page gần như không hết hạn) — xem chi tiết trong file hướng dẫn.</li>
+                <li>Điền: Page ID + Page Access Token, version để <code>v25.0</code>.</li>
+            </ol>
+            <b>🔷 LinkedIn (Company Page)</b> — cần app được LinkedIn duyệt <i>Community Management API</i> (mất thời gian, có thể bị từ chối)
+            <ol style="margin:4px 0 10px 18px;padding:0">
+                <li>Tạo app tại <i>linkedin.com/developers/apps</i>, gắn với Company Page và xác minh.</li>
+                <li>Tab Products → request <b>Community Management API</b>; scope <code>w_organization_social</code>.</li>
+                <li>Chạy OAuth 2.0 để lấy <b>Access Token</b> (admin Company Page cấp quyền).</li>
+                <li>Lấy <b>Organization ID</b> từ URL trang quản trị <code>/company/{ID}/admin/</code> hoặc API <code>organizationAcls</code>.</li>
+                <li>Điền: Organization ID + Access Token, version để <code>202606</code>.</li>
+            </ol>
+            <b>🔷 Webhook</b>: dán URL nhận dữ liệu (POST JSON), Secret tùy chọn (header <code>X-Webhook-Secret</code>).
+            <div style="margin-top:8px">📄 Hướng dẫn đầy đủ kèm lệnh API: <code>docs/huong-dan-kenh-dang-tin.md</code> trong mã nguồn.</div>
+        </div>
+    </details>
+
+    <input type="hidden" id="chId" value="">
+    <div class="rc-field" style="margin-bottom:8px"><label>Loại kênh</label>
+        <select id="chType" onchange="chToggleFields()">
+            <?php foreach ($chTypes as $k => $lbl): ?><option value="<?= $k ?>"><?= h($lbl) ?></option><?php endforeach; ?>
+        </select>
+    </div>
+    <div class="rc-field" style="margin-bottom:8px"><label>Tên kênh</label><input id="chName" placeholder="VD: Facebook ArrowHiTech"></div>
+    <div class="rc-field" style="margin-bottom:8px"><label>Icon (emoji, tùy chọn)</label><input id="chIcon" placeholder="VD: 📘 hoặc 💼" style="max-width:140px"></div>
+
+    <!-- Facebook -->
+    <div class="ch-fields" data-type="facebook" style="display:none">
+        <div class="rc-field" style="margin-bottom:8px"><label>Facebook Page ID</label><input id="fbPage" placeholder="VD: 1234567890"></div>
+        <div class="rc-field" style="margin-bottom:8px"><label>Page Access Token</label><input id="fbToken" placeholder="EAAB... (dán token rồi đổi sang dài hạn bên dưới)"></div>
+        <div class="rc-field" style="margin-bottom:8px"><label>Graph API version</label><input id="fbVer" placeholder="v25.0" value="v25.0" style="max-width:160px"></div>
+        <p class="rc-muted" style="font-size:11px;line-height:1.5">Cần quyền <code>pages_manage_posts</code>, <code>pages_read_engagement</code>, <code>pages_show_list</code>. Lấy token tại Graph API Explorer.</p>
+
+        <div style="border:1px dashed #c7c7cc;border-radius:10px;padding:12px;margin-top:6px;background:#fbfbfd">
+            <div style="font-size:12px;font-weight:600;margin-bottom:8px">🔁 Đổi sang token dài hạn (không hết hạn)</div>
+            <div class="rc-field" style="margin-bottom:8px"><label>App ID</label><input id="fbAppId" placeholder="App ID (Settings → Basic)"></div>
+            <div class="rc-field" style="margin-bottom:8px"><label>App Secret</label><input id="fbAppSecret" placeholder="App Secret — KHÔNG được lưu lại"></div>
+            <button type="button" class="rc-btn ghost" id="fbExBtn" onclick="fbExchange()">Đổi token dài hạn</button>
+            <div id="fbExResult" style="font-size:12px;margin-top:8px"></div>
+            <p class="rc-muted" style="font-size:11px;line-height:1.5;margin-top:6px">Hệ thống dùng token hiện tại + App ID/Secret để lấy <b>Page token dài hạn</b> rồi tự điền vào ô trên. App Secret chỉ dùng tạm thời, không lưu.</p>
+            <div style="font-size:11px;line-height:1.6;background:#fff7ed;border:1px solid #fed7aa;border-radius:8px;padding:8px 10px;margin-top:8px;color:#9a3412">
+                ⚠️ <b>Lỗi "access token does not belong to application …"?</b><br>
+                Token và App ID/Secret phải <b>cùng một app</b>. Token của bạn đang được tạo bởi app khác (thường là app mặc định của Graph API Explorer).<br>
+                Cách sửa: mở <i>Graph API Explorer</i> → góc trên phải chọn đúng <b>Meta App</b> (đúng App ID ở trên) → <b>Get Page Access Token</b> → chọn Page → cấp lại quyền → <b>Generate Access Token</b> → copy token mới dán vào ô Page Access Token, rồi bấm "Đổi token dài hạn" lại.
+            </div>
+        </div>
+    </div>
+    <!-- LinkedIn -->
+    <div class="ch-fields" data-type="linkedin" style="display:none">
+        <div class="rc-field" style="margin-bottom:8px"><label>Organization ID (Company Page)</label><input id="liOrg" placeholder="VD: 5515715 (hoặc urn:li:organization:5515715)"></div>
+        <div class="rc-field" style="margin-bottom:8px"><label>Client ID</label><input id="liClientId" placeholder="Client ID của app LinkedIn"></div>
+        <div class="rc-field" style="margin-bottom:8px"><label>Client Secret</label><input id="liClientSecret" placeholder="Primary Client Secret"></div>
+        <div class="rc-field" style="margin-bottom:8px"><label>LinkedIn-Version (YYYYMM)</label><input id="liVer" placeholder="202606" value="202606" style="max-width:160px"></div>
+
+        <div style="border:1px dashed #c7c7cc;border-radius:10px;padding:12px;margin-top:6px;background:#fbfbfd">
+            <div style="font-size:12px;font-weight:600;margin-bottom:6px">🔗 Kết nối bằng OAuth (token tự lấy & tự làm mới)</div>
+            <div style="font-size:11px;line-height:1.6;color:#3a3a3c">
+                1) Mở app LinkedIn → tab <b>Auth</b> → thêm <b>Authorized redirect URL</b> đúng giá trị sau:
+                <div style="display:flex;gap:6px;margin:6px 0">
+                    <input id="liRedirect" readonly value="<?= h($liRedirect) ?>" style="font-size:11px;background:#f1f5f9">
+                    <button type="button" class="rc-btn ghost" onclick="navigator.clipboard.writeText(document.getElementById('liRedirect').value)">Copy</button>
+                </div>
+                2) Nhập Org ID + Client ID + Client Secret ở trên → bấm <b>Lưu/Thêm kênh</b>.<br>
+                3) Bấm <b>Kết nối LinkedIn</b> ở dòng kênh trong danh sách bên dưới → đăng nhập admin Company Page → xong.
+            </div>
+            <div id="liManualWrap" style="margin-top:8px">
+                <div class="rc-field"><label style="font-size:11px;color:#86868b">Hoặc dán Access Token thủ công (tùy chọn — sẽ hết hạn sau ~2 tháng)</label><input id="liToken" placeholder="Để trống nếu dùng nút Kết nối OAuth"></div>
+            </div>
+            <p class="rc-muted" style="font-size:11px;line-height:1.5;margin-top:6px">Cần app được duyệt <b>Community Management API</b> (scope <code>w_organization_social</code>) và bạn là Admin Company Page.</p>
+        </div>
+    </div>
+    <!-- Webhook -->
+    <div class="ch-fields" data-type="webhook" style="display:none">
+        <div class="rc-field" style="margin-bottom:8px"><label>Webhook URL</label><input id="chUrl" placeholder="https://...."></div>
+        <div class="rc-field" style="margin-bottom:8px"><label>Secret (tùy chọn — header X-Webhook-Secret)</label><input id="chSecret" placeholder="Để trống nếu không cần"></div>
+    </div>
+
+    <button class="rc-btn" id="chSubmit" onclick="submitChannel()">+ Thêm kênh</button>
+    <button class="rc-btn ghost" id="chCancel" style="display:none" onclick="resetChForm()">Hủy</button>
+</div>
+
+<div class="rc-card" style="max-width:680px;margin-top:16px">
+    <h3 style="font-size:14px;margin-bottom:10px">Danh sách kênh <span class="rc-muted">(<?= count($channels) ?>)</span></h3>
+    <?php if (!$channels): ?>
+        <div class="rc-muted" style="font-size:13px">Chưa có kênh nào. Thêm kênh đầu tiên ở trên.</div>
+    <?php else: ?>
+    <table class="rc-table"><thead><tr><th>Kênh</th><th>Loại</th><th>Thông tin</th><th style="width:70px">Bật</th><th style="width:100px"></th></tr></thead><tbody>
+    <?php foreach ($channels as $c):
+        $cfg = json_decode($c['config'] ?? '', true); if (!is_array($cfg)) { $cfg = []; }
+        $info = ''; $liConnect = false;
+        if ($c['type'] === 'facebook')      { $info = 'Page ' . h($cfg['page_id'] ?? '') . (!empty($cfg['access_token']) ? ' · có token' : ' · ⚠ thiếu token'); }
+        elseif ($c['type'] === 'linkedin')  {
+            $info = 'Org ' . h($cfg['org_id'] ?? '');
+            if (!empty($cfg['access_token'])) {
+                $exp = (int)($cfg['token_expires_at'] ?? 0);
+                if ($exp && $exp < time())      { $info .= ' · <span style="color:#dc2626">token hết hạn</span>'; }
+                elseif ($exp)                   { $info .= ' · <span style="color:#16a34a">đã kết nối</span> (hết hạn ' . date('d/m/Y', $exp) . ')'; }
+                else                            { $info .= ' · có token'; }
+            } else {
+                $info .= ' · <span style="color:#d97706">chưa kết nối</span>';
+            }
+            $liConnect = !empty($cfg['client_id']) && !empty($cfg['client_secret']);
+        }
+        else                                { $info = h($c['webhook_url']); }
+    ?>
+        <tr>
+            <td><b><?= h($c['icon']) ?> <?= h($c['name']) ?></b></td>
+            <td style="font-size:12px"><?= h($chTypes[$c['type']] ?? $c['type']) ?></td>
+            <td style="word-break:break-all;font-size:12px"><?= $info ?></td>
+            <td><label class="rc-switch"><input type="checkbox" <?= (int)$c['enabled'] ? 'checked' : '' ?> onchange="toggleChannel(<?= (int)$c['id'] ?>,this.checked)"></label></td>
+            <td style="text-align:right;white-space:nowrap">
+                <?php if ($c['type'] === 'linkedin' && $liConnect): ?>
+                    <a href="/hrm/linkedin-oauth?channel=<?= (int)$c['id'] ?>" class="ch-act" style="color:#0a66c2">Kết nối</a>
+                <?php endif; ?>
+                <a href="javascript:" class="ch-act" onclick="editChannel(<?= (int)$c['id'] ?>)">Sửa</a>
+                <a href="javascript:" class="ch-act" style="color:#dc2626" onclick="rmChannel(<?= (int)$c['id'] ?>)">Xóa</a>
+            </td>
+        </tr>
+    <?php endforeach; ?>
+    </tbody></table>
+    <?php endif; ?>
+</div>
+<style>
+.rc-card input,.rc-card select{width:100%;padding:8px 11px;border:1px solid var(--bd);border-radius:8px;font-size:13px}
+.ch-act{font-size:12px;font-weight:600;color:#0071e3;text-decoration:none;margin-left:10px}
+.rc-switch input{width:auto}
+.rc-card code{background:#f1f5f9;padding:1px 5px;border-radius:4px;font-size:11px}
+</style>
+<script>
+var CH_DATA = <?= json_encode($chJs, JSON_UNESCAPED_UNICODE) ?>;
+function post(a,d){const fd=new FormData();fd.append('action',a);for(const k in d)fd.append(k,d[k]);return fetch('/hrm/api',{method:'POST',body:fd}).then(r=>r.json());}
+function $v(id){return (document.getElementById(id).value||'').trim();}
+function chToggleFields(){
+    const t=document.getElementById('chType').value;
+    document.querySelectorAll('.ch-fields').forEach(e=>e.style.display=(e.dataset.type===t?'block':'none'));
+}
+function submitChannel(){
+    const name=$v('chName'); if(!name){alert('Nhập tên kênh');return;}
+    const id=$v('chId'); const type=document.getElementById('chType').value;
+    const d={name:name,icon:$v('chIcon'),type:type};
+    if(type==='facebook'){ d.page_id=$v('fbPage'); d.access_token=$v('fbToken'); d.api_version=$v('fbVer'); }
+    else if(type==='linkedin'){ d.org_id=$v('liOrg'); d.client_id=$v('liClientId'); d.client_secret=$v('liClientSecret'); d.access_token=$v('liToken'); d.api_version=$v('liVer'); }
+    else { d.webhook_url=$v('chUrl'); d.secret=$v('chSecret'); }
+    if(id){ d.id=id; }
+    post(id?'update_channel':'save_channel',d).then(j=>{j.ok?location.reload():alert(j.error||'Lỗi');});
+}
+function editChannel(id){
+    const c=CH_DATA[id]; if(!c)return; const cfg=c.config||{};
+    document.getElementById('chId').value=id;
+    document.getElementById('chType').value=c.type; chToggleFields();
+    document.getElementById('chName').value=c.name||''; document.getElementById('chIcon').value=c.icon||'';
+    if(c.type==='facebook'){ document.getElementById('fbPage').value=cfg.page_id||''; document.getElementById('fbToken').value=cfg.access_token||''; document.getElementById('fbVer').value=cfg.api_version||'v25.0'; }
+    else if(c.type==='linkedin'){ document.getElementById('liOrg').value=cfg.org_id||''; document.getElementById('liClientId').value=cfg.client_id||''; document.getElementById('liClientSecret').value=cfg.client_secret||''; document.getElementById('liToken').value=''; document.getElementById('liVer').value=cfg.api_version||'202606'; }
+    else { document.getElementById('chUrl').value=c.webhook_url||''; document.getElementById('chSecret').value=c.secret||''; }
+    document.getElementById('chFormTitle').textContent='Sửa kênh: '+(c.name||'');
+    document.getElementById('chSubmit').textContent='Lưu thay đổi';
+    document.getElementById('chCancel').style.display='';
+    window.scrollTo({top:0,behavior:'smooth'});
+}
+function resetChForm(){
+    document.getElementById('chId').value=''; document.getElementById('chName').value=''; document.getElementById('chIcon').value='';
+    ['fbPage','fbToken','liOrg','liClientId','liClientSecret','liToken','chUrl','chSecret'].forEach(i=>{const e=document.getElementById(i);if(e)e.value='';});
+    document.getElementById('fbVer').value='v25.0'; document.getElementById('liVer').value='202606';
+    document.getElementById('chFormTitle').textContent='Thêm kênh đăng tin';
+    document.getElementById('chSubmit').textContent='+ Thêm kênh';
+    document.getElementById('chCancel').style.display='none';
+}
+function toggleChannel(id,on){post('toggle_channel',{id:id,enabled:on?1:''}).then(j=>{if(!j.ok)alert(j.error||'Lỗi');});}
+function rmChannel(id){if(confirm('Xóa kênh này?'))post('remove_channel',{id:id}).then(j=>{j.ok?location.reload():alert(j.error||'Lỗi');});}
+function fbExchange(){
+    const res=document.getElementById('fbExResult');
+    const appId=$v('fbAppId'), secret=$v('fbAppSecret'), token=$v('fbToken');
+    if(!appId||!secret||!token){ res.innerHTML='<span style="color:#dc2626">Nhập App ID, App Secret và Page Access Token (token hiện tại) trước.</span>'; return; }
+    const btn=document.getElementById('fbExBtn'); btn.disabled=true; const old=btn.textContent; btn.textContent='Đang đổi...';
+    post('fb_exchange_token',{app_id:appId,app_secret:secret,short_token:token,page_id:$v('fbPage'),api_version:$v('fbVer')}).then(j=>{
+        btn.disabled=false; btn.textContent=old;
+        if(!j.ok){ res.innerHTML='<span style="color:#dc2626">'+(j.error||'Lỗi')+'</span>'; return; }
+        if(j.need_pick){
+            let h='<span style="color:#d97706">Bạn quản trị nhiều Page — nhập <b>Page ID</b> vào ô trên rồi bấm lại:</span><ul style="margin:6px 0 0 16px">';
+            j.pages.forEach(p=>{h+='<li>'+p.name+' — ID: <code>'+p.id+'</code></li>';}); h+='</ul>';
+            res.innerHTML=h; return;
+        }
+        document.getElementById('fbToken').value=j.page_token;
+        if(j.page_id) document.getElementById('fbPage').value=j.page_id;
+        document.getElementById('fbAppSecret').value='';
+        res.innerHTML='<span style="color:#16a34a">✓ Đã lấy token dài hạn cho Page <b>'+(j.page_name||j.page_id)+'</b>. Bấm "'+document.getElementById('chSubmit').textContent.trim()+'" để lưu kênh.</span>';
+    }).catch(()=>{ btn.disabled=false; btn.textContent=old; res.innerHTML='<span style="color:#dc2626">Lỗi mạng</span>'; });
+}
+chToggleFields();
 </script>
 
 <?php else: ?>

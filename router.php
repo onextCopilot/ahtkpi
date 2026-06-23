@@ -116,6 +116,7 @@ $routes = [
     '/hrm/kpi' => 'modules/hrm/kpi.php',
     '/hrm/settings' => 'modules/hrm/settings.php',
     '/hrm/api' => 'modules/hrm/api.php',
+    '/hrm/linkedin-oauth' => 'modules/hrm/linkedin_oauth.php',
     '/presale' => 'modules/presale/index.php',
     '/presale/ajax-handler' => 'modules/presale/ajax_handler.php',
     '/tai-lieu-quy-trinh' => 'modules/documents/tai_lieu_quy_trinh.php',
