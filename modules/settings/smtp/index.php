@@ -40,7 +40,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $sender = EmailSenders::find($conn, (int)$_POST['id']);
         $to = trim($_POST['test_to'] ?? '');
         if ($sender && $to) {
-            $r = EmailSenders::send($conn, $sender, $to, 'Test email - AHT', '<p>Đây là email kiểm tra gửi từ <b>' . htmlspecialchars($sender['from_email']) . '</b> qua AHT system.</p>');
+            $opts = [
+                'reply_to' => trim($_POST['test_reply_to'] ?? ''),
+                'cc'       => trim($_POST['test_cc'] ?? ''),
+                'bcc'      => trim($_POST['test_bcc'] ?? ''),
+            ];
+            $r = EmailSenders::send($conn, $sender, $to, 'Test email - AHT', '<p>Đây là email kiểm tra gửi từ <b>' . htmlspecialchars($sender['from_email']) . '</b> qua AHT system.</p>', $opts);
             header("Location: /settings/smtp?" . ($r['ok'] ? 'ok=' : 'err=') . urlencode($r['ok'] ? "Đã gửi email test tới $to" : ('Gửi thất bại: ' . $r['error']))); exit();
         }
         header("Location: /settings/smtp?err=" . urlencode('Thiếu thông tin gửi test.')); exit();
@@ -129,6 +134,13 @@ function ev($v) { return htmlspecialchars((string)$v); }
                             <?php if (!$s['active']): ?><span class="badge b-off">Tắt</span><?php endif; ?>
                         </div>
                         <div class="s-mail" style="margin-top:.3rem"><?= ev($s['smtp_host']) ?>:<?= (int)$s['smtp_port'] ?> · <?= ev(strtoupper($s['smtp_encryption'])) ?> · user <span class="code"><?= ev($s['smtp_user']) ?></span></div>
+                        <?php if (!empty($s['reply_to']) || !empty($s['cc']) || !empty($s['bcc'])): ?>
+                        <div class="s-mail" style="margin-top:.2rem">
+                            <?= !empty($s['reply_to']) ? 'Reply-To: ' . ev($s['reply_to']) . ' · ' : '' ?>
+                            <?= !empty($s['cc']) ? 'CC: ' . ev($s['cc']) . ' · ' : '' ?>
+                            <?= !empty($s['bcc']) ? 'BCC: ' . ev($s['bcc']) : '' ?>
+                        </div>
+                        <?php endif; ?>
                         <div class="s-actions">
                             <a href="/settings/smtp?edit=<?= (int)$s['id'] ?>" class="btn-ghost">Sửa</a>
                             <?php if (!$s['is_default']): ?>
@@ -136,14 +148,18 @@ function ev($v) { return htmlspecialchars((string)$v); }
                             <?php endif; ?>
                             <form method="POST"><input type="hidden" name="action" value="toggle_active"><input type="hidden" name="id" value="<?= (int)$s['id'] ?>"><input type="hidden" name="active" value="<?= $s['active'] ? 0 : 1 ?>"><button class="btn-ghost" type="submit"><?= $s['active'] ? 'Tắt' : 'Bật' ?></button></form>
                             <form method="POST" onsubmit="return confirm('Xóa sender này?')"><input type="hidden" name="action" value="delete_sender"><input type="hidden" name="id" value="<?= (int)$s['id'] ?>"><button class="btn-ghost" type="submit" style="color:#dc2626">Xóa</button></form>
-                            <?php if ($configured): ?>
-                            <form method="POST" class="test-inline" style="display:flex;gap:.4rem;align-items:center;margin-left:auto">
-                                <input type="hidden" name="action" value="test_send"><input type="hidden" name="id" value="<?= (int)$s['id'] ?>">
-                                <input type="email" name="test_to" placeholder="email nhận test" required>
-                                <button class="btn-ghost" type="submit">Gửi thử</button>
-                            </form>
-                            <?php endif; ?>
                         </div>
+                        <?php if ($configured): ?>
+                        <form method="POST" class="test-inline" style="display:flex;gap:.5rem;align-items:center;flex-wrap:wrap;margin-top:.7rem;padding-top:.7rem;border-top:1px dashed var(--border-color)">
+                            <input type="hidden" name="action" value="test_send"><input type="hidden" name="id" value="<?= (int)$s['id'] ?>">
+                            <span style="font-size:.8rem;color:var(--text-secondary)">Gửi thử:</span>
+                            <input type="email" name="test_to" placeholder="To (email nhận) *" required style="min-width:180px">
+                            <input type="text" name="test_reply_to" placeholder="Reply-To (tùy chọn)" style="min-width:160px">
+                            <input type="text" name="test_cc" placeholder="CC (cách nhau dấu phẩy)" style="min-width:180px">
+                            <input type="text" name="test_bcc" placeholder="BCC" style="min-width:140px">
+                            <button class="btn-ghost" type="submit">Gửi</button>
+                        </form>
+                        <?php endif; ?>
                     </div>
                 <?php endforeach; ?>
             </div>
@@ -178,6 +194,17 @@ function ev($v) { return htmlspecialchars((string)$v); }
                     </div>
                     <div class="form-group"><label>Password / API Key <?= $e['id'] ? '(để trống nếu không đổi)' : '*' ?></label>
                         <input name="smtp_pass" type="password" <?= $e['id'] ? '' : 'required' ?> placeholder="SG.xxxxx (SendGrid API Key)"></div>
+
+                    <div class="form-group" style="border-top:1px solid var(--border-light);padding-top:1rem">
+                        <label>Reply-To (mặc định)</label>
+                        <input name="reply_to" value="<?= ev($e['reply_to']) ?>" placeholder="hr@arrowhitech.com">
+                        <p class="input-hint">Địa chỉ nhận khi người ta bấm "Reply". Để trống = trả về From Email.</p></div>
+                    <div class="grid2">
+                        <div class="form-group"><label>CC (mặc định)</label><input name="cc" value="<?= ev($e['cc']) ?>" placeholder="a@x.com, b@y.com"></div>
+                        <div class="form-group"><label>BCC (mặc định)</label><input name="bcc" value="<?= ev($e['bcc']) ?>" placeholder="archive@arrowhitech.com"></div>
+                    </div>
+                    <p class="input-hint" style="margin:-.6rem 0 1rem">CC/BCC nhiều địa chỉ ngăn cách bởi dấu phẩy. Áp dụng cho mọi email gửi từ sender này.</p>
+
                     <div style="display:flex;justify-content:flex-end;gap:1rem;margin-top:.5rem">
                         <a href="/settings/smtp" class="btn-ghost">Hủy</a>
                         <button type="submit" class="btn-save">Lưu sender</button>
