@@ -268,7 +268,18 @@ function rmRole(id){if(confirm('Gỡ vai trò này?'))post('remove_role',{id:id}
         <div class="rc-field"><label>Mã (event_key) - để trống sẽ tự tạo</label><input id="nt_key" placeholder="vd: invite_test (hệ thống thêm tiền tố custom_)"></div>
         <div class="rc-field"><label>Tiêu đề</label><input id="nt_subject" placeholder="Dùng {{biến}} hoặc {biến}"></div>
         <div class="rc-field"><label>Nội dung</label>
-            <div class="qwrap"><input type="hidden" class="qsrc" value=""><div class="qed" id="nt_body_ed" style="background:#fff;min-height:120px"></div></div>
+            <div class="rtwrap">
+                <div class="rtbar">
+                    <button type="button" onmousedown="event.preventDefault()" onclick="rtc(this,'bold')"><b>B</b></button>
+                    <button type="button" onmousedown="event.preventDefault()" onclick="rtc(this,'italic')"><i>I</i></button>
+                    <button type="button" onmousedown="event.preventDefault()" onclick="rtc(this,'underline')"><u>U</u></button>
+                    <button type="button" onmousedown="event.preventDefault()" onclick="rtc(this,'insertUnorderedList')">&#8226; List</button>
+                    <button type="button" onmousedown="event.preventDefault()" onclick="rtc(this,'insertOrderedList')">1. List</button>
+                    <button type="button" onmousedown="event.preventDefault()" onclick="rtc(this,'createLink')">&#128279;</button>
+                    <button type="button" onmousedown="event.preventDefault()" onclick="rtc(this,'removeFormat')">&#10006;</button>
+                </div>
+                <div class="rted" contenteditable="true"></div>
+            </div>
         </div>
         <label style="font-size:12px;display:block;margin-bottom:8px"><input type="checkbox" id="nt_enabled" checked> Bật ngay</label>
         <button class="rc-btn" onclick="createTpl()">Tạo template</button>
@@ -287,27 +298,41 @@ function rmRole(id){if(confirm('Gỡ vai trò này?'))post('remove_role',{id:id}
     <div class="rc-field"><label>Tên template</label><input data-f="name" value="<?= h($t['name']) ?>"></div>
     <div class="rc-field"><label>Tiêu đề (subject)</label><input data-f="subject" value="<?= h($t['subject']) ?>"></div>
     <div class="rc-field"><label>Nội dung (dùng {{biến}} hoặc {biến})</label>
-        <div class="qwrap"><input type="hidden" class="qsrc" value="<?= h($t['body_html']) ?>"><div class="qed" style="background:#fff;min-height:120px"></div></div>
+        <div class="rtwrap">
+            <div class="rtbar">
+                <button type="button" onmousedown="event.preventDefault()" onclick="rtc(this,'bold')" title="Đậm"><b>B</b></button>
+                <button type="button" onmousedown="event.preventDefault()" onclick="rtc(this,'italic')" title="Nghiêng"><i>I</i></button>
+                <button type="button" onmousedown="event.preventDefault()" onclick="rtc(this,'underline')" title="Gạch chân"><u>U</u></button>
+                <button type="button" onmousedown="event.preventDefault()" onclick="rtc(this,'insertUnorderedList')" title="Bullet">&#8226; List</button>
+                <button type="button" onmousedown="event.preventDefault()" onclick="rtc(this,'insertOrderedList')" title="Số">1. List</button>
+                <button type="button" onmousedown="event.preventDefault()" onclick="rtc(this,'createLink')" title="Link">&#128279;</button>
+                <button type="button" onmousedown="event.preventDefault()" onclick="rtc(this,'removeFormat')" title="Xóa định dạng">&#10006;</button>
+            </div>
+            <div class="rted" contenteditable="true"><?= $t['body_html'] ?></div>
+        </div>
     </div>
     <button class="rc-btn ghost" onclick="saveTpl(<?= $t['id'] ?>,this.closest('.rc-card'))">Lưu</button>
 </div>
 <?php endforeach; ?>
-<link href="https://cdn.quilljs.com/1.3.6/quill.snow.css" rel="stylesheet">
-<script src="https://cdn.quilljs.com/1.3.6/quill.js"></script>
+<style>
+.rtwrap{border:1px solid var(--bd);border-radius:8px;overflow:hidden;background:#fff}
+.rtwrap:focus-within{border-color:#1b96ff;box-shadow:0 0 0 3px rgba(27,150,255,.12)}
+.rtbar{display:flex;flex-wrap:wrap;gap:2px;padding:5px 6px;border-bottom:1px solid #eceef1;background:#fafbfc}
+.rtbar button{min-width:28px;height:26px;padding:0 8px;border:none;background:none;border-radius:6px;cursor:pointer;font-size:12px;color:#42474e}
+.rtbar button:hover{background:#e9edf2}
+.rted{min-height:140px;max-height:340px;overflow-y:auto;padding:10px 12px;font-size:13px;line-height:1.55;outline:none}
+.rted ul,.rted ol{margin:4px 0;padding-left:22px}
+.rted p{margin:0 0 8px}
+.rted a{color:#0071e3}
+</style>
 <script>
-// Gắn rich editor (Quill) cho mọi ô nội dung template -> xuất HTML chuẩn.
-function initQuills(){
-    if(typeof Quill==='undefined')return;
-    document.querySelectorAll('.qwrap').forEach(function(w){
-        if(w.__quill)return;
-        const q=new Quill(w.querySelector('.qed'),{theme:'snow',
-            modules:{toolbar:[[{header:[2,3,false]}],['bold','italic','underline'],[{list:'ordered'},{list:'bullet'}],['link'],['clean']]}});
-        q.root.innerHTML=w.querySelector('.qsrc').value||'';
-        w.__quill=q;
-    });
+// Rich editor contenteditable (không phụ thuộc CDN) -> xuất HTML.
+function rtc(btn,cmd){
+    const ed=btn.closest('.rtwrap').querySelector('.rted');ed.focus();
+    if(cmd==='createLink'){const u=prompt('Nhập URL:');if(u)document.execCommand('createLink',false,u);return;}
+    document.execCommand(cmd,false,null);
 }
-function bodyHtmlOf(scope){const w=scope.querySelector('.qwrap');return w&&w.__quill?w.__quill.root.innerHTML:'';}
-initQuills();
+function bodyHtmlOf(scope){const ed=scope.querySelector('.rted');return ed?ed.innerHTML:'';}
 function saveTpl(id,card){
     const fd=new FormData();fd.append('action','save_email_template');fd.append('id',id);
     const nameEl=card.querySelector('[data-f=name]');if(nameEl)fd.append('name',nameEl.value);
