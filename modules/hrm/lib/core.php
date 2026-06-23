@@ -136,6 +136,8 @@ function hrm_user(mysqli $conn, int $userId): array
     $st = $conn->prepare('SELECT id, full_name, email FROM users WHERE id = ?');
     $st->bind_param('i', $userId);
     $st->execute();
+    $row = $st->get_result()->fetch_assoc();
+    return $row ?: ['id' => $userId, 'full_name' => '', 'email' => ''];
 }
 
 /**
