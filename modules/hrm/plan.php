@@ -146,8 +146,15 @@ table.plan .dept-del:hover{background:#fee2e2;color:#dc2626}
 .plan-readd .chip{display:inline-flex;align-items:center;gap:6px;background:#fff;border:1px dashed #cbd5e1;border-radius:8px;padding:5px 10px;cursor:pointer;color:#334155;font-weight:600}
 .plan-readd .chip:hover{border-color:var(--rc2);color:var(--rc2)}
 table.plan thead .col-dept{z-index:4;background:#f8fafc}
-table.plan tbody tr:hover td{background:#fafcff}
-table.plan tbody tr:hover .col-dept{background:#fafcff}
+/* Zebra (chẵn/lẻ) - áp cho cả ô phòng ban dính trái */
+table.plan tbody tr.odd td,table.plan tbody tr.odd .col-dept{background:#ffffff}
+table.plan tbody tr.even td,table.plan tbody tr.even .col-dept{background:#f5f7fa}
+/* Hover */
+table.plan tbody tr.odd:hover td,table.plan tbody tr.odd:hover .col-dept,
+table.plan tbody tr.even:hover td,table.plan tbody tr.even:hover .col-dept{background:#eef4ff}
+/* Đang chọn (click để bật/tắt) - thắng cả zebra & hover nên đặt sau cùng */
+table.plan tbody tr.sel td,table.plan tbody tr.sel .col-dept,
+table.plan tbody tr.sel:hover td,table.plan tbody tr.sel:hover .col-dept{background:#fde9c8}
 table.plan .total td{background:#fffaf0;font-weight:700;color:#0f172a;border-bottom:2px solid #e2e8f0}
 table.plan .total .col-dept{background:#fffaf0}
 table.plan input{width:34px;border:1px solid transparent;border-radius:5px;padding:2px 1px;text-align:center;font-size:11px;font-family:inherit;background:transparent;color:#0f172a;outline:none;-moz-appearance:textfield}
@@ -216,8 +223,8 @@ function pin($f, $val, $m = null) {  // editable input
                 <td data-t="prop" data-m="<?= $i ?>"><?= $T['prop'][$i] ?></td>
             <?php endfor; ?>
         </tr>
-        <?php foreach ($rows as $deptId => $row): $v = $row['v']; ?>
-        <tr data-dept="<?= $deptId ?>" data-appr="<?= $v['all'] ?>">
+        <?php $ri = 0; foreach ($rows as $deptId => $row): $v = $row['v']; $ri++; ?>
+        <tr data-dept="<?= $deptId ?>" data-appr="<?= $v['all'] ?>" class="<?= $ri % 2 ? 'odd' : 'even' ?>">
             <td class="col-dept"><span class="dept-name"><?= h($row['name']) ?></span><button type="button" class="dept-del" title="Xóa phòng ban khỏi bảng" onclick="removeDept(<?= $deptId ?>, this)">×</button></td>
             <td><?= pin('chot', $v['chot']) ?></td>
             <td><?= pin('ns', $v['ns']) ?></td>
@@ -348,6 +355,13 @@ document.querySelector('table.plan').addEventListener('input', function(e){
     recalcRow(tr); recalcTotals();
     clearTimeout(saveTimers[tr.dataset.dept]);
     saveTimers[tr.dataset.dept] = setTimeout(function(){ saveRow(tr); }, 700);
+});
+
+// Click vào dòng phòng ban -> bật/tắt nền chọn (bỏ qua khi bấm ô nhập / nút xóa).
+document.querySelector('table.plan').addEventListener('click', function(e){
+    if (e.target.closest('input, button')) return;
+    var tr = e.target.closest('tr[data-dept]'); if(!tr) return;
+    tr.classList.toggle('sel');
 });
 </script>
 <?php
