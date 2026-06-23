@@ -5,6 +5,7 @@
  */
 require_once __DIR__ . '/lib/core.php';
 require_once __DIR__ . '/lib/approval.php';
+require_once __DIR__ . '/lib/history.php';
 require_once __DIR__ . '/lib/shell.php';
 hrm_require_login();
 
@@ -176,6 +177,15 @@ hrm_header($app['full_name'], $app['job_title'] . ' · ' . ($app['stage_name'] ?
             <?php if ($offer['status']==='sent'): ?><span class="rc-muted">Offer đã gửi tới ứng viên.</span><?php endif; ?>
         </div>
     <?php endif; ?>
+</div>
+
+<!-- LỊCH SỬ HOẠT ĐỘNG -->
+<div class="rc-card">
+    <h3 style="font-size:14px;margin-bottom:10px">Lịch sử hoạt động</h3>
+    <?php
+    $offerIds = $offer ? [(int)$offer['id']] : [];
+    hrm_render_history(hrm_history_events($conn, [$id], (int)$app['candidate_id'], $offerIds));
+    ?>
 </div>
 
 <script>

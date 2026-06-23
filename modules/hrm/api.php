@@ -655,6 +655,40 @@ switch ($action) {
         jout(true, ['to' => $row['email']]);
     }
 
+    /* ── Sửa thông tin ứng viên (ghi audit thay đổi) ─────────────────── */
+    case 'update_candidate': {
+        $cid = (int)($_POST['candidate_id'] ?? 0);
+        if (!$cid) { jout(false, ['error' => 'Thiếu ứng viên']); }
+        $old = $conn->query("SELECT * FROM hrm_candidates WHERE id=$cid")->fetch_assoc();
+        if (!$old) { jout(false, ['error' => 'Không tìm thấy ứng viên']); }
+        $name = trim($_POST['full_name'] ?? '');
+        if ($name === '') { jout(false, ['error' => 'Thiếu họ tên']); }
+        $email = trim($_POST['email'] ?? '');
+        $phone = trim($_POST['phone'] ?? '');
+        $pos   = trim($_POST['current_position'] ?? '');
+        $gender= trim($_POST['gender'] ?? '');
+        $dob   = trim($_POST['dob'] ?? '');
+        $score = (float)($_POST['score'] ?? 0);
+        $src   = (int)($_POST['source_id'] ?? 0);
+
+        // Diff để ghi audit.
+        $labels = ['full_name'=>'Họ tên','email'=>'Email','phone'=>'SĐT','current_position'=>'Vị trí','gender'=>'Giới tính','dob'=>'Ngày sinh'];
+        $newvals = ['full_name'=>$name,'email'=>$email,'phone'=>$phone,'current_position'=>$pos,'gender'=>$gender,'dob'=>$dob];
+        $changes = [];
+        foreach ($labels as $f => $lbl) {
+            if ((string)($old[$f] ?? '') !== (string)$newvals[$f]) { $changes[] = $lbl . ': "' . ($old[$f] ?? '') . '" → "' . $newvals[$f] . '"'; }
+        }
+        if ((float)$old['score'] !== $score) { $changes[] = 'Điểm: ' . (float)$old['score'] . ' → ' . $score; }
+        if ((int)$old['source_id'] !== $src) { $changes[] = 'Đổi nguồn'; }
+
+        $st = $conn->prepare('UPDATE hrm_candidates SET full_name=?, email=?, phone=?, current_position=?, gender=?, dob=?, score=?, source_id=? WHERE id=?');
+        $st->bind_param('ssssssdii', $name, $email, $phone, $pos, $gender, $dob, $score, $src, $cid);
+        if (!$st->execute()) { jout(false, ['error' => $conn->error]); }
+
+        if ($changes) { hrm_audit($conn, $uid, 'candidate_update', 'candidate', $cid, implode(' · ', $changes)); }
+        jout(true);
+    }
+
     case 'save_test': {
         $aid = (int)($_POST['application_id'] ?? 0);
         $type = trim($_POST['test_type'] ?? ''); $score = (float)($_POST['score'] ?? 0);
