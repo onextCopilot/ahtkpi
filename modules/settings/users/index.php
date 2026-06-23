@@ -303,46 +303,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             $user_to_mail = $u_stmt->get_result()->fetch_assoc();
 
                             if ($user_to_mail) {
-                                $mail = new PHPMailer(true);
-                                // FETCH SMTP CONFIG
-                                $res = $conn->query("SELECT setting_key, setting_value FROM system_settings WHERE setting_key LIKE 'smtp_%'");
-                                $settings = [];
-                                if ($res) {
-                                    while ($r = $res->fetch_assoc())
-                                        $settings[$r['setting_key']] = $r['setting_value'];
-                                }
-
-                                if (!empty($settings['smtp_host'])) {
-                                    $mail->isSMTP();
-                                    $mail->Host = $settings['smtp_host'];
-                                    $mail->SMTPAuth = true;
-                                    $mail->Username = $settings['smtp_user'];
-                                    $mail->Password = $settings['smtp_pass'];
-                                    $mail->SMTPSecure = ($settings['smtp_encryption'] == 'ssl') ? PHPMailer::ENCRYPTION_SMTPS : (($settings['smtp_encryption'] == 'tls') ? PHPMailer::ENCRYPTION_STARTTLS : '');
-                                    $mail->Port = $settings['smtp_port'];
-                                    $mail->CharSet = 'UTF-8';
-
-                                    $from_email = !empty($settings['smtp_from_email']) ? $settings['smtp_from_email'] : 'no-reply@system.com';
-                                    $from_name = !empty($settings['smtp_from_name']) ? $settings['smtp_from_name'] : 'System Admin';
-
-                                    $mail->setFrom($from_email, $from_name);
-                                    $mail->addAddress($user_to_mail['email'], $user_to_mail['full_name']);
-
-                                    $mail->isHTML(true);
-                                    $mail->Subject = 'Your Account Password has been updated';
-                                    $mail->Body = "
+                                // Gửi qua hệ thống Email Senders (sender mặc định, fallback SMTP cũ).
+                                require_once __DIR__ . '/../../../includes/Mailer.php';
+                                $body = "
                                         <h2>Password Update Notification</h2>
                                         <p>Hello <b>" . htmlspecialchars($user_to_mail['full_name']) . "</b>,</p>
                                         <p>Your password has been updated by the administrator.</p>
                                         <p>New Password: <strong style='font-size:16px; background:#eee; padding:5px 10px; border-radius:4px;'>$new_pass</strong></p>
                                         <p>Please change your password immediately after logging in.</p>
                                         <br>
-                                        <p>Regards,<br>$from_name</p>
+                                        <p>Regards,<br>AHT System</p>
                                     ";
-                                    $mail->send();
+                                $sent = Mailer::send($conn, $user_to_mail['email'], 'Your Account Password has been updated', $body);
+                                if ($sent) {
                                     $success_message .= " (Email sent successfully)";
                                 } else {
-                                    $error_message = "SMTP settings not configured. Email could not be sent.";
+                                    $error_message = "Email could not be sent. Hãy cấu hình Email Senders tại /settings/smtp.";
                                 }
                             }
                         }
