@@ -323,6 +323,21 @@ $startD = $job['source_start'] ?: $job['created_at'];
 <?php endforeach; ?>
 </div>
 
+<?php
+// Rich text editor nhẹ (contenteditable + execCommand) - không phụ thuộc thư viện.
+$rtEditor = function (string $id, string $ph = '') {
+    ?><div class="rt">
+        <div class="rt-bar">
+            <button type="button" onmousedown="event.preventDefault()" onclick="rtCmd(this,'bold')" title="Đậm"><b>B</b></button>
+            <button type="button" onmousedown="event.preventDefault()" onclick="rtCmd(this,'italic')" title="Nghiêng"><i>I</i></button>
+            <button type="button" onmousedown="event.preventDefault()" onclick="rtCmd(this,'underline')" title="Gạch chân"><u>U</u></button>
+            <button type="button" onmousedown="event.preventDefault()" onclick="rtCmd(this,'insertUnorderedList')" title="Danh sách">&#8226; List</button>
+            <button type="button" onmousedown="event.preventDefault()" onclick="rtCmd(this,'removeFormat')" title="Xóa định dạng">&#10006;</button>
+        </div>
+        <div class="rt-ed" id="<?= $id ?>" contenteditable="true" data-ph="<?= h($ph) ?>"></div>
+    </div><?php
+};
+?>
 <!-- TA Review sidebar (BƯỚC 4: SCREENING) -->
 <div id="taOverlay" class="ta-overlay" onclick="closeTAReview()"></div>
 <aside id="taPanel" class="ta-panel">
@@ -345,8 +360,8 @@ $startD = $job['source_start'] ?: $job['created_at'];
         <section class="ta-card">
             <div class="ta-card-h">TA đánh giá <span class="ta-tag">Text / Phone call</span></div>
             <div class="ta-grid">
-                <div class="ta-fld full"><label>Background</label><textarea id="ta_background" rows="2"></textarea></div>
-                <div class="ta-fld full"><label>Kinh nghiệm <span class="ta-hint">(Kỹ năng, Domain, Dự án)</span></label><textarea id="ta_experience" rows="3"></textarea></div>
+                <div class="ta-fld full"><label>Background</label><?php $rtEditor('ta_background', 'Thông tin nền của ứng viên...'); ?></div>
+                <div class="ta-fld full"><label>Kinh nghiệm <span class="ta-hint">(Kỹ năng, Domain, Dự án)</span></label><?php $rtEditor('ta_experience', 'Kỹ năng, domain, dự án nổi bật...'); ?></div>
                 <div class="ta-fld"><label>Mức lương <span class="ta-hint">(hiện tại, kỳ vọng)</span></label><input id="ta_salary" type="text" placeholder="VD: 15tr → 20tr"></div>
                 <div class="ta-fld"><label>Notice Period</label>
                     <select id="ta_notice_period">
@@ -362,7 +377,7 @@ $startD = $job['source_start'] ?: $job['created_at'];
                         <option>Trên 2 tháng</option>
                         <option>Đang thương lượng / Chưa rõ</option>
                     </select></div>
-                <div class="ta-fld full"><label>Định hướng</label><textarea id="ta_orientation" rows="2"></textarea></div>
+                <div class="ta-fld full"><label>Định hướng</label><?php $rtEditor('ta_orientation', 'Định hướng nghề nghiệp của ứng viên...'); ?></div>
                 <div class="ta-fld"><label>Ngoại ngữ</label>
                     <select id="ta_lang">
                         <option value="">- Chọn -</option>
@@ -389,12 +404,12 @@ $startD = $job['source_start'] ?: $job['created_at'];
 
         <section class="ta-card">
             <div class="ta-card-h">Check reference <span class="ta-hint">(không bắt buộc · Senior / quản lý)</span></div>
-            <textarea id="ta_reference_check" rows="2" placeholder="Nội dung check reference (nếu có)"></textarea>
+            <?php $rtEditor('ta_reference_check', 'Nội dung check reference (nếu có)...'); ?>
         </section>
 
         <section class="ta-card">
             <div class="ta-card-h">Ghi chú</div>
-            <textarea id="ta_note" rows="2" placeholder="Ghi chú thêm / lý do khi Reject"></textarea>
+            <?php $rtEditor('ta_note', 'Ghi chú thêm / lý do khi Reject...'); ?>
         </section>
 
         <section class="ta-card">
@@ -441,6 +456,15 @@ $startD = $job['source_start'] ?: $job['created_at'];
 .ta-fld label{font-size:11.5px;color:#6e6e73;font-weight:600;margin-bottom:5px}
 .ta-body textarea,.ta-body input[type=text],.ta-body select{width:100%;box-sizing:border-box;padding:9px 11px;border:1px solid #dcdfe4;border-radius:8px;font-size:13px;font-family:inherit;resize:vertical;background:#fff;color:#1d1d1f;transition:border-color .15s,box-shadow .15s}
 .ta-body textarea:focus,.ta-body input[type=text]:focus,.ta-body select:focus{outline:none;border-color:#1b96ff;box-shadow:0 0 0 3px rgba(27,150,255,.12)}
+.rt{border:1px solid #dcdfe4;border-radius:8px;overflow:hidden;background:#fff;transition:border-color .15s,box-shadow .15s}
+.rt:focus-within{border-color:#1b96ff;box-shadow:0 0 0 3px rgba(27,150,255,.12)}
+.rt-bar{display:flex;gap:2px;padding:5px 6px;border-bottom:1px solid #eceef1;background:#fafbfc}
+.rt-bar button{min-width:28px;height:26px;padding:0 7px;border:none;background:none;border-radius:6px;cursor:pointer;font-size:12px;color:#42474e;display:flex;align-items:center;justify-content:center}
+.rt-bar button:hover{background:#e9edf2}
+.rt-ed{min-height:52px;max-height:220px;overflow-y:auto;padding:9px 11px;font-size:13px;line-height:1.5;color:#1d1d1f;outline:none}
+.rt-ed:empty:before{content:attr(data-ph);color:#b0b3b8;pointer-events:none}
+.rt-ed ul{margin:4px 0;padding-left:20px}
+.rt-ed p{margin:0 0 6px}
 .ta-results{display:flex;flex-direction:column;gap:8px}
 .ta-opt{display:flex;align-items:center;gap:11px;padding:11px 13px;border:1px solid #dcdfe4;border-radius:10px;cursor:pointer;transition:border-color .15s,background .15s}
 .ta-opt:hover{border-color:#b9c0c9;background:#fafbfc}
@@ -583,12 +607,15 @@ document.addEventListener('click',function(e){
     if(box&&!box.contains(e.target)){document.getElementById('srcList').style.display='none';}
 });
 /* ── TA Review sidebar ─────────────────────────────────────────────── */
-const TA_FIELDS=['background','experience','salary','orientation','notice_period','reference_check','note'];
+const TA_RICH=['background','experience','orientation','reference_check','note'];
+const TA_VAL=['salary','notice_period'];
+function rtCmd(btn,cmd){const ed=btn.closest('.rt').querySelector('.rt-ed');ed.focus();document.execCommand(cmd,false,null);}
 function setSel(id,val){const el=document.getElementById(id);if(!el)return;el.value=val||'';if(el.value!==(val||''))el.value='';}
 function openTAReview(appId,name){
     document.getElementById('taAppId').value=appId;
     document.getElementById('taName').textContent=name||'TA đánh giá';
-    TA_FIELDS.forEach(f=>{const el=document.getElementById('ta_'+f);if(el)el.value='';});
+    TA_RICH.forEach(f=>{const el=document.getElementById('ta_'+f);if(el)el.innerHTML='';});
+    TA_VAL.forEach(f=>{const el=document.getElementById('ta_'+f);if(el)el.value='';});
     document.getElementById('ta_lang').value='';document.getElementById('ta_lang_level').value='';
     document.querySelectorAll('input[name=ta_result]').forEach(r=>r.checked=(r.value===''));
     document.getElementById('taMeta').textContent='';
@@ -599,7 +626,8 @@ function openTAReview(appId,name){
     fetch('/hrm/api',{method:'POST',body:fd}).then(r=>r.json()).then(j=>{
         if(j.ok&&j.review){
             const v=j.review;
-            TA_FIELDS.forEach(f=>{const el=document.getElementById('ta_'+f);if(el&&v[f]!=null)el.value=v[f];});
+            TA_RICH.forEach(f=>{const el=document.getElementById('ta_'+f);if(el)el.innerHTML=(v[f]!=null?v[f]:'');});
+            TA_VAL.forEach(f=>{const el=document.getElementById('ta_'+f);if(el&&v[f]!=null)el.value=v[f];});
             const lp=(v.languages||'').split(' · ');setSel('ta_lang',lp[0]||'');setSel('ta_lang_level',lp[1]||'');
             const rr=document.querySelector('input[name=ta_result][value="'+(v.result||'')+'"]');if(rr)rr.checked=true;
             if(v.reviewer&&v.reviewed_at){document.getElementById('taMeta').textContent='Lần đánh giá gần nhất: '+v.reviewer+' · '+v.reviewed_at;}
@@ -641,7 +669,8 @@ function saveTAReview(){
     const btn=document.getElementById('taSaveBtn');const old=btn.textContent;btn.disabled=true;btn.textContent='Đang lưu...';
     const fd=new FormData();fd.append('action','ta_review_save');
     fd.append('application_id',document.getElementById('taAppId').value);
-    TA_FIELDS.forEach(f=>{const el=document.getElementById('ta_'+f);fd.append(f,el?el.value:'');});
+    TA_RICH.forEach(f=>{const el=document.getElementById('ta_'+f);fd.append(f,el?el.innerHTML:'');});
+    TA_VAL.forEach(f=>{const el=document.getElementById('ta_'+f);fd.append(f,el?el.value:'');});
     const lang=document.getElementById('ta_lang').value,lvl=document.getElementById('ta_lang_level').value;
     fd.append('languages',lang?(lang+(lvl?' · '+lvl:'')):'');
     const r=document.querySelector('input[name=ta_result]:checked');fd.append('result',r?r.value:'');

@@ -487,14 +487,16 @@ switch ($action) {
         $aid = (int)($_POST['application_id'] ?? 0);
         if (!$aid) { jout(false, ['error' => 'Thiếu ứng viên']); }
         hrm_ensure_screening_table($conn);
-        $background = trim($_POST['background'] ?? '');
-        $experience = trim($_POST['experience'] ?? '');
+        // Field rich text: chỉ giữ thẻ định dạng cơ bản, loại bỏ script/handler.
+        $rt = fn($s) => trim(strip_tags($s ?? '', '<b><strong><i><em><u><ul><ol><li><br><p><div><span>'));
+        $background = $rt($_POST['background'] ?? '');
+        $experience = $rt($_POST['experience'] ?? '');
         $salary     = trim($_POST['salary'] ?? '');
-        $orientation= trim($_POST['orientation'] ?? '');
+        $orientation= $rt($_POST['orientation'] ?? '');
         $notice     = trim($_POST['notice_period'] ?? '');
         $languages  = trim($_POST['languages'] ?? '');
-        $reference  = trim($_POST['reference_check'] ?? '');
-        $note       = trim($_POST['note'] ?? '');
+        $reference  = $rt($_POST['reference_check'] ?? '');
+        $note       = $rt($_POST['note'] ?? '');
         $result     = $_POST['result'] ?? '';
         $allowed    = ['', 'reject', 'hold', 'send_hm', 'interview'];
         if (!in_array($result, $allowed, true)) { $result = ''; }
@@ -512,8 +514,9 @@ switch ($action) {
 
         // Side-effect theo kết quả TA Review.
         if ($result === 'reject') {
+            $plainNote = trim(strip_tags($note));
             $rj = $conn->prepare('UPDATE hrm_applications SET status="rejected", reject_reason=? WHERE id=?');
-            $rj->bind_param('si', $note, $aid); $rj->execute();
+            $rj->bind_param('si', $plainNote, $aid); $rj->execute();
         } elseif ($result === 'hold') {
             $conn->query("UPDATE hrm_applications SET status='hold' WHERE id=$aid");
         } elseif ($result === 'interview') {
