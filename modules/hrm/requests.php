@@ -72,12 +72,18 @@ if ($new || $edit) {
                 <input type="hidden" name="jd" id="jdInput">
                 <div id="jdEditor" style="height:280px;background:#fff"></div>
             </div>
+            <div id="hrfErr" class="rc-formerr" style="display:none"></div>
             <div style="display:flex;gap:10px;margin-top:8px">
                 <button class="rc-btn" onclick="saveHrf(true)"><?= $edit ? 'Lưu & gửi duyệt' : 'Gửi duyệt' ?></button>
                 <button class="rc-btn ghost" onclick="saveHrf(false)"><?= $edit ? 'Lưu' : 'Lưu nháp' ?></button>
             </div>
         </form>
     </div>
+    <style>
+    #hrfForm .rc-field.has-err input,#hrfForm .rc-field.has-err select{border-color:#dc2626;box-shadow:0 0 0 3px rgba(220,38,38,.1)}
+    #hrfForm .rc-err{color:#dc2626;font-size:12px;margin-top:4px}
+    .rc-formerr{color:#dc2626;font-size:13px;background:#fef2f2;border:1px solid #fecaca;border-radius:8px;padding:9px 12px;margin-top:12px}
+    </style>
     <link href="https://cdn.quilljs.com/1.3.6/quill.snow.css" rel="stylesheet">
     <script src="https://cdn.quilljs.com/1.3.6/quill.js"></script>
     <script>
@@ -85,19 +91,33 @@ if ($new || $edit) {
         modules:{toolbar:[[{header:[2,3,false]}],['bold','italic','underline'],[{list:'ordered'},{list:'bullet'}],['link'],['clean']]}});
     jdQuill.root.innerHTML = <?= json_encode($r['jd'] ?: '', JSON_UNESCAPED_UNICODE) ?>;
     var IS_EDIT = <?= $edit ? 'true' : 'false' ?>;
+    function hrfClearErr(){
+        document.querySelectorAll('#hrfForm .rc-field.has-err').forEach(d=>{d.classList.remove('has-err');const e=d.querySelector('.rc-err');if(e)e.remove();});
+        const g=document.getElementById('hrfErr');g.style.display='none';g.textContent='';
+    }
+    function hrfSetErr(input,msg){
+        const fld=input.closest('.rc-field');if(!fld)return;
+        fld.classList.add('has-err');
+        let e=fld.querySelector('.rc-err');if(!e){e=document.createElement('div');e.className='rc-err';fld.appendChild(e);}
+        e.textContent=msg;
+    }
+    function hrfFormErr(msg){const g=document.getElementById('hrfErr');g.textContent=msg;g.style.display='block';}
     function saveHrf(submit){
         const f=document.getElementById('hrfForm');
-        if(!f.title.value.trim()){alert('Nhập tên vị trí');f.title.focus();return;}
-        if(!f.department_id.value||f.department_id.value==='0'){alert('Chọn bộ phận');f.department_id.focus();return;}
-        if(!f.level.value.trim()){alert('Nhập Level');f.level.focus();return;}
-        if(!f.quantity.value||parseInt(f.quantity.value,10)<1){alert('Nhập số lượng (>= 1)');f.quantity.focus();return;}
-        if(!f.need_by_date.value){alert('Chọn ngày cần onboard');f.need_by_date.focus();return;}
-        if(!f.employment_type.value){alert('Chọn hình thức làm việc');f.employment_type.focus();return;}
+        hrfClearErr();
+        const errs=[];
+        if(!f.title.value.trim())errs.push([f.title,'Nhập tên vị trí']);
+        if(!f.department_id.value||f.department_id.value==='0')errs.push([f.department_id,'Chọn bộ phận']);
+        if(!f.level.value.trim())errs.push([f.level,'Nhập Level']);
+        if(!f.quantity.value||parseInt(f.quantity.value,10)<1)errs.push([f.quantity,'Nhập số lượng (>= 1)']);
+        if(!f.need_by_date.value)errs.push([f.need_by_date,'Chọn ngày cần onboard']);
+        if(!f.employment_type.value)errs.push([f.employment_type,'Chọn hình thức làm việc']);
+        if(errs.length){errs.forEach(e=>hrfSetErr(e[0],e[1]));errs[0][0].focus();return;}
         document.getElementById('jdInput').value = jdQuill.getText().trim() ? jdQuill.root.innerHTML : '';
         const fd=new FormData(f); fd.append('action', IS_EDIT?'update_request':'save_request'); if(submit)fd.append('submit','1');
         fetch('/hrm/api',{method:'POST',body:fd}).then(r=>r.json()).then(j=>{
-            if(j.ok){location.href='/hrm/requests?id='+(j.id||<?= $id ?>);}else alert(j.error||'Lỗi');
-        });
+            if(j.ok){location.href='/hrm/requests?id='+(j.id||<?= $id ?>);}else hrfFormErr(j.error||'Có lỗi xảy ra, vui lòng thử lại.');
+        }).catch(()=>hrfFormErr('Lỗi mạng, vui lòng thử lại.'));
     }
     </script>
     <?php
