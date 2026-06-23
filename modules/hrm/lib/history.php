@@ -82,7 +82,37 @@ function hrm_history_events(mysqli $conn, array $appIds, int $candidateId = 0, a
     return $events;
 }
 
-/** Xuất HTML timeline (đặt trong .rc-card). */
+/** Sidebar trượt phải 50% chứa timeline. Page chỉ cần thêm nút onclick="openHistory()". */
+function hrm_history_sidebar(array $events): void
+{
+    ?>
+    <div id="hsbOverlay" class="hsb-overlay" onclick="closeHistory()"></div>
+    <aside id="hsbPanel" class="hsb-panel">
+        <div class="hsb-head"><h3>Lịch sử hoạt động</h3><button class="hsb-x" onclick="closeHistory()">✕</button></div>
+        <div class="hsb-body"><?php hrm_render_history($events); ?></div>
+    </aside>
+    <style>
+    .hsb-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.35);z-index:1100}
+    .hsb-panel{position:fixed;top:0;right:0;height:100vh;width:50vw;min-width:420px;max-width:94vw;background:#fff;z-index:1101;
+        box-shadow:-8px 0 30px rgba(0,0,0,.18);display:flex;flex-direction:column;transform:translateX(100%);transition:transform .25s ease}
+    .hsb-panel.open{transform:translateX(0)}
+    .hsb-head{display:flex;align-items:center;justify-content:space-between;padding:14px 20px;border-bottom:1px solid #eceef1}
+    .hsb-head h3{font-size:15px;margin:0;font-weight:700}
+    .hsb-x{background:none;border:none;font-size:15px;cursor:pointer;color:#86868b;line-height:1}
+    .hsb-body{flex:1;overflow-y:auto;padding:6px 18px 18px}
+    .hsb-body .rc-step{padding:9px 0;gap:10px}
+    .hsb-body .rc-step-dot{width:22px;height:22px;font-size:11px}
+    .hsb-body .rc-step b{font-size:12.5px}
+    .hsb-body .rc-muted{font-size:11px;line-height:1.45}
+    </style>
+    <script>
+    function openHistory(){document.getElementById('hsbOverlay').style.display='block';document.getElementById('hsbPanel').classList.add('open');}
+    function closeHistory(){document.getElementById('hsbPanel').classList.remove('open');document.getElementById('hsbOverlay').style.display='none';}
+    </script>
+    <?php
+}
+
+/** Xuất HTML timeline (đặt trong .rc-card hoặc sidebar). */
 function hrm_render_history(array $events): void
 {
     if (!$events) { echo '<div class="rc-muted">Chưa có hoạt động nào.</div>'; return; }

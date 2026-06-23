@@ -23,7 +23,10 @@ hrm_header($c['full_name'], $c['current_position'] ?: 'Ứng viên', 'candidates
 ?>
 <div class="rc-toolbar">
     <a href="/hrm/candidates" class="rc-tab">← Kho ứng viên</a>
-    <button class="rc-btn ghost" onclick="document.getElementById('editCandModal').style.display='flex'">Sửa thông tin</button>
+    <div style="display:flex;gap:8px">
+        <button class="rc-btn ghost" onclick="openHistory()">Lịch sử</button>
+        <button class="rc-btn ghost" onclick="document.getElementById('editCandModal').style.display='flex'">Sửa thông tin</button>
+    </div>
 </div>
 
 <div class="rc-card">
@@ -68,19 +71,15 @@ hrm_header($c['full_name'], $c['current_position'] ?: 'Ứng viên', 'candidates
     </div>
 </div>
 
-<!-- LỊCH SỬ HOẠT ĐỘNG -->
-<div class="rc-card">
-    <h3 style="font-size:14px;margin-bottom:10px">Lịch sử hoạt động</h3>
-    <?php
-    $appIds = array_map(fn($a) => (int)$a['id'], $apps);
-    $offerIds = [];
-    if ($appIds) {
-        $or = $conn->query("SELECT id FROM hrm_offers WHERE application_id IN (" . implode(',', $appIds) . ")");
-        while ($or && ($x = $or->fetch_assoc())) { $offerIds[] = (int)$x['id']; }
-    }
-    hrm_render_history(hrm_history_events($conn, $appIds, $id, $offerIds));
-    ?>
-</div>
+<?php
+$appIds = array_map(fn($a) => (int)$a['id'], $apps);
+$offerIds = [];
+if ($appIds) {
+    $or = $conn->query("SELECT id FROM hrm_offers WHERE application_id IN (" . implode(',', $appIds) . ")");
+    while ($or && ($x = $or->fetch_assoc())) { $offerIds[] = (int)$x['id']; }
+}
+hrm_history_sidebar(hrm_history_events($conn, $appIds, $id, $offerIds));
+?>
 
 <!-- Modal sửa thông tin ứng viên -->
 <div id="editCandModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:999;align-items:center;justify-content:center">

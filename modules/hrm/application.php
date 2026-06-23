@@ -40,6 +40,7 @@ hrm_header($app['full_name'], $app['job_title'] . ' · ' . ($app['stage_name'] ?
 <div class="rc-toolbar">
     <a href="/hrm/job?id=<?= (int)$app['job_id'] ?>" class="rc-tab">← Pipeline</a>
     <div style="display:flex;gap:8px;align-items:center">
+        <button class="rc-btn ghost" onclick="openHistory()">Lịch sử</button>
         <?php if ($app['status']==='active'): ?>
             <select id="moveSel" class="rc-tab" style="padding:7px 10px">
                 <?php foreach ($stages as $s): ?><option value="<?= $s['id'] ?>" <?= $s['id']==$app['stage_id']?'selected':'' ?>><?= h($s['name']) ?></option><?php endforeach; ?>
@@ -179,14 +180,10 @@ hrm_header($app['full_name'], $app['job_title'] . ' · ' . ($app['stage_name'] ?
     <?php endif; ?>
 </div>
 
-<!-- LỊCH SỬ HOẠT ĐỘNG -->
-<div class="rc-card">
-    <h3 style="font-size:14px;margin-bottom:10px">Lịch sử hoạt động</h3>
-    <?php
-    $offerIds = $offer ? [(int)$offer['id']] : [];
-    hrm_render_history(hrm_history_events($conn, [$id], (int)$app['candidate_id'], $offerIds));
-    ?>
-</div>
+<?php
+$offerIds = $offer ? [(int)$offer['id']] : [];
+hrm_history_sidebar(hrm_history_events($conn, [$id], (int)$app['candidate_id'], $offerIds));
+?>
 
 <script>
 function post(a,d){const fd=new FormData();fd.append('action',a);for(const k in d)fd.append(k,d[k]);return fetch('/hrm/api',{method:'POST',body:fd}).then(r=>r.json());}
