@@ -267,7 +267,9 @@ function rmRole(id){if(confirm('Gỡ vai trò này?'))post('remove_role',{id:id}
         </div>
         <div class="rc-field"><label>Mã (event_key) - để trống sẽ tự tạo</label><input id="nt_key" placeholder="vd: invite_test (hệ thống thêm tiền tố custom_)"></div>
         <div class="rc-field"><label>Tiêu đề</label><input id="nt_subject" placeholder="Dùng {{biến}} hoặc {biến}"></div>
-        <div class="rc-field"><label>Nội dung (HTML)</label><textarea id="nt_body" rows="5"></textarea></div>
+        <div class="rc-field"><label>Nội dung</label>
+            <div class="qwrap"><input type="hidden" class="qsrc" value=""><div class="qed" id="nt_body_ed" style="background:#fff;min-height:120px"></div></div>
+        </div>
         <label style="font-size:12px;display:block;margin-bottom:8px"><input type="checkbox" id="nt_enabled" checked> Bật ngay</label>
         <button class="rc-btn" onclick="createTpl()">Tạo template</button>
     </div>
@@ -284,18 +286,35 @@ function rmRole(id){if(confirm('Gỡ vai trò này?'))post('remove_role',{id:id}
     </div>
     <div class="rc-field"><label>Tên template</label><input data-f="name" value="<?= h($t['name']) ?>"></div>
     <div class="rc-field"><label>Tiêu đề (subject)</label><input data-f="subject" value="<?= h($t['subject']) ?>"></div>
-    <div class="rc-field"><label>Nội dung (HTML, dùng {{biến}})</label><textarea data-f="body" rows="5"><?= h($t['body_html']) ?></textarea></div>
+    <div class="rc-field"><label>Nội dung (dùng {{biến}} hoặc {biến})</label>
+        <div class="qwrap"><input type="hidden" class="qsrc" value="<?= h($t['body_html']) ?>"><div class="qed" style="background:#fff;min-height:120px"></div></div>
+    </div>
     <button class="rc-btn ghost" onclick="saveTpl(<?= $t['id'] ?>,this.closest('.rc-card'))">Lưu</button>
 </div>
 <?php endforeach; ?>
+<link href="https://cdn.quilljs.com/1.3.6/quill.snow.css" rel="stylesheet">
+<script src="https://cdn.quilljs.com/1.3.6/quill.js"></script>
 <script>
+// Gắn rich editor (Quill) cho mọi ô nội dung template -> xuất HTML chuẩn.
+function initQuills(){
+    if(typeof Quill==='undefined')return;
+    document.querySelectorAll('.qwrap').forEach(function(w){
+        if(w.__quill)return;
+        const q=new Quill(w.querySelector('.qed'),{theme:'snow',
+            modules:{toolbar:[[{header:[2,3,false]}],['bold','italic','underline'],[{list:'ordered'},{list:'bullet'}],['link'],['clean']]}});
+        q.root.innerHTML=w.querySelector('.qsrc').value||'';
+        w.__quill=q;
+    });
+}
+function bodyHtmlOf(scope){const w=scope.querySelector('.qwrap');return w&&w.__quill?w.__quill.root.innerHTML:'';}
+initQuills();
 function saveTpl(id,card){
     const fd=new FormData();fd.append('action','save_email_template');fd.append('id',id);
     const nameEl=card.querySelector('[data-f=name]');if(nameEl)fd.append('name',nameEl.value);
     fd.append('subject',card.querySelector('[data-f=subject]').value);
-    fd.append('body_html',card.querySelector('[data-f=body]').value);
+    fd.append('body_html',bodyHtmlOf(card));
     if(card.querySelector('input[type=checkbox]').checked)fd.append('enabled','1');
-    fetch('/hrm/api',{method:'POST',body:fd}).then(r=>r.json()).then(j=>{if(!j.ok)alert(j.error||'Lỗi');});
+    fetch('/hrm/api',{method:'POST',body:fd}).then(r=>r.json()).then(j=>{alert(j.ok?'Đã lưu template':(j.error||'Lỗi'));});
 }
 function createTpl(){
     const name=document.getElementById('nt_name').value.trim();
@@ -305,7 +324,7 @@ function createTpl(){
     fd.append('audience',document.getElementById('nt_audience').value);
     fd.append('event_key',document.getElementById('nt_key').value);
     fd.append('subject',document.getElementById('nt_subject').value);
-    fd.append('body_html',document.getElementById('nt_body').value);
+    fd.append('body_html',bodyHtmlOf(document.getElementById('newTplBox')));
     if(document.getElementById('nt_enabled').checked)fd.append('enabled','1');
     fetch('/hrm/api',{method:'POST',body:fd}).then(r=>r.json()).then(j=>{j.ok?location.reload():alert(j.error||'Lỗi');});
 }
