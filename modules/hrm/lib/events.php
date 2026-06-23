@@ -47,7 +47,7 @@ function hrm_send_email(mysqli $conn, string $eventKey, string $to, array $vars,
 {
     if (hrm_setting($conn, 'email_enabled', '1') !== '1' || $to === '') { return false; }
 
-    $st = $conn->prepare('SELECT subject, body_html, enabled FROM hrm_email_templates WHERE event_key = ?');
+    $st = $conn->prepare('SELECT subject, body_html, enabled, audience FROM hrm_email_templates WHERE event_key = ?');
     $st->bind_param('s', $eventKey);
     $st->execute();
     $tpl = $st->get_result()->fetch_assoc();
@@ -56,9 +56,16 @@ function hrm_send_email(mysqli $conn, string $eventKey, string $to, array $vars,
     $subject = hrm_merge($tpl['subject'], $vars);
     $body    = hrm_merge($tpl['body_html'], $vars);
 
+    // Sender theo loại email: ứng viên / nội bộ; fallback sender chung của HRM rồi mặc định hệ thống.
+    $aud = $tpl['audience'] ?? '';
+    $key = $aud === 'candidate' ? 'hrm_email_sender_candidate' : ($aud === 'internal' ? 'hrm_email_sender_internal' : '');
+    $senderRef = $key ? hrm_setting($conn, $key, '') : '';
+    if ($senderRef === '') { $senderRef = hrm_setting($conn, 'hrm_email_sender', ''); }
+
     $ok = false; $err = '';
-    try { $ok = Mailer::sendSystem($conn, $to, $subject, $body); }
-    catch (Throwable $e) { $err = $e->getMessage(); }
+    try {
+        $ok = Mailer::send($conn, $to, $subject, $body, $senderRef !== '' ? ['sender' => $senderRef] : []);
+    } catch (Throwable $e) { $err = $e->getMessage(); }
 
     $status = $ok ? 'sent' : 'failed';
     $lg = $conn->prepare('INSERT INTO hrm_email_log (event_key,to_email,subject,entity_type,entity_id,status,error) VALUES (?,?,?,?,?,?,?)');

@@ -17,6 +17,20 @@ $assignments = $conn->query("SELECT ra.id, ra.user_id, ra.rec_role, u.full_name 
 $byRole = [];
 foreach ($assignments as $a) { $byRole[$a['rec_role']][] = $a; }
 $templates = $conn->query("SELECT * FROM hrm_email_templates ORDER BY audience, event_key")->fetch_all(MYSQLI_ASSOC);
+require_once __DIR__ . '/../../includes/EmailSenders.php';
+$emailSenders = EmailSenders::all($conn);
+$hrmSenderSel  = hrm_setting($conn, 'hrm_email_sender', '');
+$hrmSenderCand = hrm_setting($conn, 'hrm_email_sender_candidate', '');
+$hrmSenderInt  = hrm_setting($conn, 'hrm_email_sender_internal', '');
+// Render options cho 1 dropdown sender.
+$senderOpts = function ($sel, $emptyLabel) use ($emailSenders) {
+    $h = '<option value="">' . $emptyLabel . '</option>';
+    foreach ($emailSenders as $s) {
+        $lbl = h($s['name'] . ' · ' . $s['from_email']) . (empty($s['smtp_pass']) ? ' (chưa cấu hình)' : '');
+        $h .= '<option value="' . (int)$s['id'] . '"' . ((string)$sel === (string)$s['id'] ? ' selected' : '') . '>' . $lbl . '</option>';
+    }
+    return $h;
+};
 $offices = $conn->query("SELECT id, name, address, active FROM hrm_offices ORDER BY sort_order, name")->fetch_all(MYSQLI_ASSOC);
 
 $titles = ['offices' => 'Văn phòng', 'pipeline' => 'Giai đoạn & SLA', 'owners' => 'Phụ trách giai đoạn', 'roles' => 'Vai trò tuyển dụng', 'email' => 'Email template', 'channels' => 'Kênh thông báo', 'channels_cfg' => 'Kênh đăng tin'];
@@ -464,6 +478,21 @@ chToggleFields();
     <?php endforeach; ?>
     <div class="rc-field" style="margin-top:10px"><label>Lưu trữ dữ liệu (tháng)</label>
         <input id="ret" type="number" value="<?= h(hrm_setting($conn,'retention_months','24')) ?>" onblur="setSetting('retention_months',this.value)"></div>
+</div>
+<div class="rc-card" style="max-width:560px;margin-top:16px">
+    <h3 style="font-size:14px;margin-bottom:6px">Email sender cho HRM</h3>
+    <div class="rc-muted" style="margin-bottom:12px">Gán người gửi theo từng loại email tuyển dụng. Danh sách lấy từ <a href="/settings/smtp" style="color:var(--rc2)">Email Senders chung</a>.</div>
+
+    <div class="rc-field"><label>Email ứng viên (CV received, offer letter, từ chối...)</label>
+        <select onchange="setSetting('hrm_email_sender_candidate',this.value)"><?= $senderOpts($hrmSenderCand, '— Theo sender chung HRM —') ?></select></div>
+
+    <div class="rc-field"><label>Email nội bộ (phê duyệt HRF / offer, thông báo...)</label>
+        <select onchange="setSetting('hrm_email_sender_internal',this.value)"><?= $senderOpts($hrmSenderInt, '— Theo sender chung HRM —') ?></select></div>
+
+    <div class="rc-field" style="border-top:1px solid var(--bd);padding-top:12px"><label>Sender chung HRM (fallback khi 2 mục trên để trống)</label>
+        <select onchange="setSetting('hrm_email_sender',this.value)"><?= $senderOpts($hrmSenderSel, '— Dùng sender mặc định hệ thống —') ?></select></div>
+
+    <?php if (!$emailSenders): ?><div class="rc-muted">Chưa có sender nào. <a href="/settings/smtp" style="color:var(--rc2)">Thêm tại đây</a>.</div><?php endif; ?>
 </div>
 <div class="rc-card" style="max-width:560px;margin-top:16px">
     <h3 style="font-size:14px;margin-bottom:10px">Cấu hình API Kênh Tuyển Dụng (AHT Talent)</h3>
