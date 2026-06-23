@@ -116,6 +116,22 @@ if ($appIds) {
     while ($r = $res->fetch_assoc()) { $assignMap[(int)$r['application_id']][(int)$r['stage_id']] = ['id' => (int)$r['user_id'], 'name' => $r['full_name'], 'avatar' => $r['avatar']]; }
 }
 
+// TA Review (BƯỚC 4: SCREENING) - kết quả đã lưu, để hiện trạng thái trên thẻ.
+hrm_ensure_screening_table($conn);
+$reviewMap = [];
+if ($appIds) {
+    $res = $conn->query("SELECT application_id, result FROM hrm_screening_reviews WHERE application_id IN (" . implode(',', $appIds) . ")");
+    while ($r = $res->fetch_assoc()) { $reviewMap[(int)$r['application_id']] = $r['result']; }
+}
+// Nhãn + màu trạng thái cho nút TA Review.
+$taReviewMeta = [
+    'reject'    => ['Reject', '#ba0517', '#fff1f0'],
+    'hold'      => ['Hold / Keep in touch', '#b25e00', '#fff4e5'],
+    'send_hm'   => ['Gửi HM đánh giá', '#0071e3', '#eaf3ff'],
+    'interview' => ['Interview', '#2e844a', '#e3f6e9'],
+    ''          => ['Đã lưu nháp', '#6e6e73', '#f0f0f2'],
+];
+
 // Stage-entry time per application: latest SLA event matching each stage's code.
 // We recompute the deadline from the CURRENT stage SLA setting (not the stored due_at),
 // so changing SLA in settings updates the cards immediately.
@@ -289,12 +305,99 @@ $startD = $job['source_start'] ?: $job['created_at'];
                         <?php foreach ($pickUsers as $pu): ?><option value="<?= $pu['id'] ?>"<?= $selVal===(int)$pu['id']?' selected':'' ?>><?= h($pu['full_name']) ?></option><?php endforeach; ?>
                     </select>
                 </div>
+                <?php if (strtoupper($s['code']) === 'SCREENING'): ?>
+                <?php $rv = $reviewMap[$a['id']] ?? null; $rvm = $rv !== null ? ($taReviewMeta[$rv] ?? null) : null; ?>
+                <div class="kb-acts" onclick="event.stopPropagation()">
+                    <button class="kb-act" onclick="location.href='/hrm/application?id=<?= $a['id'] ?>'">📄 View CV</button>
+                    <button class="kb-act ta<?= $rvm ? ' done' : '' ?>"
+                        <?= $rvm ? 'style="background:' . $rvm[2] . ';color:' . $rvm[1] . ';border-color:' . $rvm[2] . '"' : '' ?>
+                        onclick="openTAReview(<?= $a['id'] ?>,'<?= h(addslashes($a['full_name'])) ?>')">
+                        <?= $rvm ? h($rvm[0]) : 'TA Review' ?>
+                    </button>
+                </div>
+                <?php endif; ?>
             </div>
         <?php endforeach; ?>
         </div>
     </div>
 <?php endforeach; ?>
 </div>
+
+<!-- TA Review sidebar (BƯỚC 4: SCREENING) -->
+<div id="taOverlay" class="ta-overlay" onclick="closeTAReview()"></div>
+<aside id="taPanel" class="ta-panel">
+    <div class="ta-head">
+        <div>
+            <div class="ta-step">BƯỚC 4 · SCREENING</div>
+            <h3 id="taName">TA đánh giá</h3>
+        </div>
+        <button class="ta-x" onclick="closeTAReview()">✕</button>
+    </div>
+    <div class="ta-body">
+        <input type="hidden" id="taAppId" value="0">
+        <div class="ta-note" id="taMeta"></div>
+
+        <div class="ta-sec">TA đánh giá (Text/Phone call)</div>
+        <label class="ta-lbl">Background</label>
+        <textarea id="ta_background" rows="2"></textarea>
+        <label class="ta-lbl">Kinh nghiệm (Kỹ năng, Domain, Dự án)</label>
+        <textarea id="ta_experience" rows="3"></textarea>
+        <label class="ta-lbl">Mức lương (hiện tại, kỳ vọng)</label>
+        <input id="ta_salary" type="text">
+        <label class="ta-lbl">Định hướng</label>
+        <textarea id="ta_orientation" rows="2"></textarea>
+        <div class="ta-row">
+            <div><label class="ta-lbl">Notice Period</label><input id="ta_notice_period" type="text"></div>
+            <div><label class="ta-lbl">Ngoại ngữ</label><input id="ta_languages" type="text"></div>
+        </div>
+
+        <div class="ta-sec">Check reference (optional)</div>
+        <textarea id="ta_reference_check" rows="2" placeholder="Áp dụng: Senior trở lên / Vị trí quản lý"></textarea>
+
+        <div class="ta-sec">Ghi chú</div>
+        <textarea id="ta_note" rows="2"></textarea>
+
+        <div class="ta-sec">Kết quả</div>
+        <div class="ta-results">
+            <label><input type="radio" name="ta_result" value=""> Lưu nháp (chưa quyết định)</label>
+            <label><input type="radio" name="ta_result" value="reject"> Reject</label>
+            <label><input type="radio" name="ta_result" value="hold"> Hold / Keep in touch</label>
+            <label><input type="radio" name="ta_result" value="send_hm"> Gửi HM đánh giá chuyên môn</label>
+            <label><input type="radio" name="ta_result" value="interview"> Interview (chuyển bước Phỏng vấn)</label>
+        </div>
+        <div class="ta-sla">⏱ SLA: ≤ 48 giờ từ khi nhận CV</div>
+    </div>
+    <div class="ta-foot">
+        <button class="rc-btn ghost" onclick="closeTAReview()">Đóng</button>
+        <button class="rc-btn" id="taSaveBtn" onclick="saveTAReview()">Lưu đánh giá</button>
+    </div>
+</aside>
+<style>
+.kb-acts{display:flex;gap:6px;margin-top:10px}
+.kb-act{flex:1;font-size:11.5px;font-weight:600;padding:6px 8px;border:1px solid #e3e6ea;border-radius:7px;background:#fff;color:#1d1d1f;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.kb-act:hover{background:#f5f7fa}
+.kb-act.ta{background:#1b96ff;border-color:#1b96ff;color:#fff}
+.kb-act.ta:hover{filter:brightness(.95)}
+.ta-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.35);z-index:1100}
+.ta-panel{position:fixed;top:0;right:0;height:100vh;width:440px;max-width:94vw;background:#fff;z-index:1101;
+    box-shadow:-8px 0 30px rgba(0,0,0,.18);display:flex;flex-direction:column;transform:translateX(100%);transition:transform .25s ease}
+.ta-panel.open{transform:translateX(0)}
+.ta-head{display:flex;align-items:flex-start;justify-content:space-between;padding:18px 20px;border-bottom:1px solid #eceef1}
+.ta-head h3{font-size:17px;font-weight:700;color:#1d1d1f;margin:2px 0 0}
+.ta-step{font-size:11px;font-weight:700;letter-spacing:.4px;color:#1b96ff}
+.ta-x{background:none;border:none;font-size:16px;color:#86868b;cursor:pointer;padding:4px}
+.ta-body{flex:1;overflow-y:auto;padding:16px 20px}
+.ta-sec{font-size:13px;font-weight:700;color:#1d1d1f;margin:16px 0 8px;padding-bottom:6px;border-bottom:1px solid #f0f0f2}
+.ta-sec:first-child{margin-top:0}
+.ta-lbl{display:block;font-size:12px;color:#6e6e73;margin:8px 0 4px;font-weight:600}
+.ta-body textarea,.ta-body input[type=text]{width:100%;box-sizing:border-box;padding:8px 10px;border:1px solid var(--bd);border-radius:8px;font-size:13px;font-family:inherit;resize:vertical}
+.ta-row{display:flex;gap:10px}.ta-row>div{flex:1}
+.ta-results{display:flex;flex-direction:column;gap:8px}
+.ta-results label{display:flex;align-items:center;gap:8px;font-size:13px;color:#1d1d1f;cursor:pointer}
+.ta-sla{margin-top:14px;font-size:12px;color:#b25e00;background:#fff4e5;padding:8px 12px;border-radius:8px}
+.ta-note{font-size:12px;color:#86868b}
+.ta-foot{display:flex;justify-content:flex-end;gap:8px;padding:14px 20px;border-top:1px solid #eceef1}
+</style>
 
 <!-- Add candidate modal -->
 <div id="addCand" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:999;align-items:center;justify-content:center">
@@ -414,6 +517,41 @@ document.addEventListener('click',function(e){
     const box=document.querySelector('.srcbox');
     if(box&&!box.contains(e.target)){document.getElementById('srcList').style.display='none';}
 });
+/* ── TA Review sidebar ─────────────────────────────────────────────── */
+const TA_FIELDS=['background','experience','salary','orientation','notice_period','languages','reference_check','note'];
+function openTAReview(appId,name){
+    document.getElementById('taAppId').value=appId;
+    document.getElementById('taName').textContent=name||'TA đánh giá';
+    TA_FIELDS.forEach(f=>{const el=document.getElementById('ta_'+f);if(el)el.value='';});
+    document.querySelectorAll('input[name=ta_result]').forEach(r=>r.checked=(r.value===''));
+    document.getElementById('taMeta').textContent='';
+    document.getElementById('taOverlay').style.display='block';
+    const p=document.getElementById('taPanel');p.classList.add('open');
+    const fd=new FormData();fd.append('action','ta_review_get');fd.append('application_id',appId);
+    fetch('/hrm/api',{method:'POST',body:fd}).then(r=>r.json()).then(j=>{
+        if(j.ok&&j.review){
+            const v=j.review;
+            TA_FIELDS.forEach(f=>{const el=document.getElementById('ta_'+f);if(el&&v[f]!=null)el.value=v[f];});
+            const rr=document.querySelector('input[name=ta_result][value="'+(v.result||'')+'"]');if(rr)rr.checked=true;
+            if(v.reviewer&&v.reviewed_at){document.getElementById('taMeta').textContent='Lần đánh giá gần nhất: '+v.reviewer+' · '+v.reviewed_at;}
+        }
+    });
+}
+function closeTAReview(){
+    document.getElementById('taPanel').classList.remove('open');
+    document.getElementById('taOverlay').style.display='none';
+}
+function saveTAReview(){
+    const btn=document.getElementById('taSaveBtn');const old=btn.textContent;btn.disabled=true;btn.textContent='Đang lưu...';
+    const fd=new FormData();fd.append('action','ta_review_save');
+    fd.append('application_id',document.getElementById('taAppId').value);
+    TA_FIELDS.forEach(f=>{const el=document.getElementById('ta_'+f);fd.append(f,el?el.value:'');});
+    const r=document.querySelector('input[name=ta_result]:checked');fd.append('result',r?r.value:'');
+    fetch('/hrm/api',{method:'POST',body:fd}).then(x=>x.json()).then(j=>{
+        if(!j.ok){alert(j.error||'Lỗi');btn.disabled=false;btn.textContent=old;return;}
+        location.reload();
+    }).catch(()=>{alert('Lỗi mạng');btn.disabled=false;btn.textContent=old;});
+}
 function syncWebsite(e){
     const btn = e.target; const old = btn.textContent;
     btn.textContent = 'Đang đồng bộ...'; btn.disabled = true;

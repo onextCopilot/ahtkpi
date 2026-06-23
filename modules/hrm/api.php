@@ -438,6 +438,67 @@ switch ($action) {
         jout(true);
     }
 
+    /* ── TA Review (BƯỚC 4: SCREENING) ────────────────────────────────── */
+    case 'ta_review_get': {
+        $aid = (int)($_POST['application_id'] ?? $_GET['application_id'] ?? 0);
+        if (!$aid) { jout(false, ['error' => 'Thiếu ứng viên']); }
+        hrm_ensure_screening_table($conn);
+        $st = $conn->prepare('SELECT r.*, u.full_name AS reviewer FROM hrm_screening_reviews r LEFT JOIN users u ON u.id=r.reviewed_by WHERE r.application_id=?');
+        $st->bind_param('i', $aid);
+        $st->execute();
+        $row = $st->get_result()->fetch_assoc();
+        jout(true, ['review' => $row ?: null]);
+    }
+
+    case 'ta_review_save': {
+        $aid = (int)($_POST['application_id'] ?? 0);
+        if (!$aid) { jout(false, ['error' => 'Thiếu ứng viên']); }
+        hrm_ensure_screening_table($conn);
+        $background = trim($_POST['background'] ?? '');
+        $experience = trim($_POST['experience'] ?? '');
+        $salary     = trim($_POST['salary'] ?? '');
+        $orientation= trim($_POST['orientation'] ?? '');
+        $notice     = trim($_POST['notice_period'] ?? '');
+        $languages  = trim($_POST['languages'] ?? '');
+        $reference  = trim($_POST['reference_check'] ?? '');
+        $note       = trim($_POST['note'] ?? '');
+        $result     = $_POST['result'] ?? '';
+        $allowed    = ['', 'reject', 'hold', 'send_hm', 'interview'];
+        if (!in_array($result, $allowed, true)) { $result = ''; }
+
+        $st = $conn->prepare('INSERT INTO hrm_screening_reviews
+            (application_id,background,experience,salary,orientation,notice_period,languages,reference_check,result,note,reviewed_by,reviewed_at)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,NOW())
+            ON DUPLICATE KEY UPDATE
+            background=VALUES(background),experience=VALUES(experience),salary=VALUES(salary),
+            orientation=VALUES(orientation),notice_period=VALUES(notice_period),languages=VALUES(languages),
+            reference_check=VALUES(reference_check),result=VALUES(result),note=VALUES(note),
+            reviewed_by=VALUES(reviewed_by),reviewed_at=NOW()');
+        $st->bind_param('isssssssssi', $aid, $background, $experience, $salary, $orientation, $notice, $languages, $reference, $result, $note, $uid);
+        if (!$st->execute()) { jout(false, ['error' => $conn->error]); }
+
+        // Side-effect theo kết quả TA Review.
+        if ($result === 'reject') {
+            $rj = $conn->prepare('UPDATE hrm_applications SET status="rejected", reject_reason=? WHERE id=?');
+            $rj->bind_param('si', $note, $aid); $rj->execute();
+        } elseif ($result === 'hold') {
+            $conn->query("UPDATE hrm_applications SET status='hold' WHERE id=$aid");
+        } elseif ($result === 'interview') {
+            $stage = $conn->query("SELECT id,code,sla_hours FROM hrm_pipeline_stages WHERE code='INTERVIEW'")->fetch_assoc();
+            if ($stage) {
+                $sid = (int)$stage['id'];
+                $conn->query("UPDATE hrm_applications SET stage_id=$sid, status='active' WHERE id=$aid");
+                if (!empty($stage['sla_hours'])) {
+                    hrm_sla_open($conn, 'application', $aid, strtolower($stage['code']), date('Y-m-d H:i:s', strtotime('+' . (int)$stage['sla_hours'] . ' hours')));
+                }
+            }
+        }
+        // send_hm và '' (lưu nháp): giữ nguyên ở Screening.
+
+        hrm_audit($conn, $uid, 'ta_review', 'application', $aid, $result);
+        jout(true, ['result' => $result]);
+    }
+
     case 'set_application_owner': {
         $aid = (int)($_POST['application_id'] ?? 0);
         $sid = (int)($_POST['stage_id'] ?? 0);

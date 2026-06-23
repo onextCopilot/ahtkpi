@@ -202,6 +202,24 @@ function hrm_schema(): array
         UNIQUE KEY uq_app_stage (application_id, stage_id)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4";
 
+    // TA screening review (BƯỚC 4: SCREENING - TA đánh giá Text/Phone call).
+    $t['hrm_screening_reviews'] = "CREATE TABLE hrm_screening_reviews (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        application_id INT NOT NULL,
+        background TEXT,
+        experience TEXT,
+        salary TEXT,
+        orientation TEXT,
+        notice_period VARCHAR(150) DEFAULT '',
+        languages VARCHAR(255) DEFAULT '',
+        reference_check TEXT,
+        result VARCHAR(20) DEFAULT '',
+        note TEXT,
+        reviewed_by INT DEFAULT 0,
+        reviewed_at DATETIME NULL,
+        UNIQUE KEY uq_app (application_id)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4";
+
     /* ── B5 test · B6 interview · B7 evaluation · B8 offer ──────────── */
     $t['hrm_tests'] = "CREATE TABLE hrm_tests (
         id INT AUTO_INCREMENT PRIMARY KEY,

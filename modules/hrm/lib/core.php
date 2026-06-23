@@ -130,6 +130,27 @@ function hrm_next_code(mysqli $conn, string $prefix, string $table): string
     return sprintf('%s-%s-%04d', $prefix, $year, $seq);
 }
 
+/** Ensure the TA screening review table exists (live installs may predate it). */
+function hrm_ensure_screening_table(mysqli $conn): void
+{
+    $conn->query("CREATE TABLE IF NOT EXISTS hrm_screening_reviews (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        application_id INT NOT NULL,
+        background TEXT,
+        experience TEXT,
+        salary TEXT,
+        orientation TEXT,
+        notice_period VARCHAR(150) DEFAULT '',
+        languages VARCHAR(255) DEFAULT '',
+        reference_check TEXT,
+        result VARCHAR(20) DEFAULT '',
+        note TEXT,
+        reviewed_by INT DEFAULT 0,
+        reviewed_at DATETIME NULL,
+        UNIQUE KEY uq_app (application_id)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+}
+
 /** Look up a user's display name + email. */
 function hrm_user(mysqli $conn, int $userId): array
 {
