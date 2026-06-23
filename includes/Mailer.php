@@ -30,10 +30,41 @@ class Mailer
     }
 
     /**
-     * Send one email using the configured SMTP. Returns true on success.
-     * Never throws — logs and returns false so callers/cron keep running.
+     * Send one email. Ưu tiên dùng "email sender" (Outlook OAuth) đã cấu hình;
+     * nếu chưa có sender nào kết nối thì fallback về SMTP cũ (system_settings).
+     *
+     * @param array $opts  ['sender' => id|from_email, 'from_name' => '...']
+     */
+    public static function send($conn, string $to, string $subject, string $htmlBody, array $opts = []): bool
+    {
+        if (empty($to)) return false;
+        try {
+            require_once __DIR__ . '/EmailSenders.php';
+            $sender = EmailSenders::resolve($conn, $opts['sender'] ?? null);
+            if ($sender) {
+                $r = EmailSenders::send($conn, $sender, $to, $subject, $htmlBody, $opts['from_name'] ?? '');
+                if ($r['ok']) return true;
+            }
+        } catch (\Throwable $e) {
+            error_log('Mailer::send sender path failed: ' . $e->getMessage());
+        }
+        return self::sendLegacy($conn, $to, $subject, $htmlBody);
+    }
+
+    /**
+     * Backward-compatible entry point. Mọi caller cũ tự động dùng email sender
+     * (Outlook OAuth) khi đã cấu hình, nếu không thì fallback SMTP cũ.
      */
     public static function sendSystem($conn, string $to, string $subject, string $htmlBody): bool
+    {
+        return self::send($conn, $to, $subject, $htmlBody);
+    }
+
+    /**
+     * Gửi qua SMTP cũ trong system_settings (fallback). Trả true nếu thành công.
+     * Never throws — logs and returns false so callers/cron keep running.
+     */
+    public static function sendLegacy($conn, string $to, string $subject, string $htmlBody): bool
     {
         if (empty($to)) return false;
         $s = self::smtpConfig($conn);
