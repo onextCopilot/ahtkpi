@@ -66,13 +66,31 @@ $offices = [
     [17, 'Văn phòng Đối tác – Nguyễn Phong Sắc, Hà Nội', 'Văn phòng Đối tác – Nguyễn Phong Sắc, Hà Nội', 3],
 ];
 
-// 3) Upsert theo id - chạy lại an toan, khong mat du lieu khac
-$sql = 'INSERT INTO `hrm_offices` (`id`, `name`, `address`, `created_at`, `sort_order`)
-        VALUES (?, ?, ?, ?, ?)
-        ON DUPLICATE KEY UPDATE
-            `name` = VALUES(`name`),
-            `address` = VALUES(`address`),
-            `sort_order` = VALUES(`sort_order`)';
+// 3) Do cac cot thuc co tren live (schema giua cac moi truong khac nhau)
+$cols = [];
+$res = $conn->query("SHOW COLUMNS FROM `hrm_offices`");
+while ($res && ($row = $res->fetch_assoc())) {
+    $cols[$row['Field']] = true;
+}
+$hasCreatedAt = isset($cols['created_at']);
+
+// Upsert theo id - chạy lại an toan, khong mat du lieu khac.
+// Chi them cot created_at neu bang co cot do.
+if ($hasCreatedAt) {
+    $sql = 'INSERT INTO `hrm_offices` (`id`, `name`, `address`, `created_at`, `sort_order`)
+            VALUES (?, ?, ?, ?, ?)
+            ON DUPLICATE KEY UPDATE
+                `name` = VALUES(`name`),
+                `address` = VALUES(`address`),
+                `sort_order` = VALUES(`sort_order`)';
+} else {
+    $sql = 'INSERT INTO `hrm_offices` (`id`, `name`, `address`, `sort_order`)
+            VALUES (?, ?, ?, ?)
+            ON DUPLICATE KEY UPDATE
+                `name` = VALUES(`name`),
+                `address` = VALUES(`address`),
+                `sort_order` = VALUES(`sort_order`)';
+}
 
 $stmt = $conn->prepare($sql);
 if (!$stmt) {
@@ -82,7 +100,11 @@ if (!$stmt) {
 $ok = 0;
 $fail = 0;
 foreach ($offices as $o) {
-    $stmt->bind_param('isssi', $o[0], $o[1], $o[2], $createdAt, $o[3]);
+    if ($hasCreatedAt) {
+        $stmt->bind_param('isssi', $o[0], $o[1], $o[2], $createdAt, $o[3]);
+    } else {
+        $stmt->bind_param('issi', $o[0], $o[1], $o[2], $o[3]);
+    }
     if ($stmt->execute()) {
         $ok++;
         echo 'OK  #' . $o[0] . ' - ' . $o[1] . $nl;
