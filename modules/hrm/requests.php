@@ -217,6 +217,49 @@ if ($tab === 'mine') {
     $rows = $conn->query('SELECT * FROM hrm_requests ORDER BY id DESC LIMIT 200')->fetch_all(MYSQLI_ASSOC);
 }
 
+// Thông tin phê duyệt cho danh sách HRF (gom 1 lượt, tránh N+1).
+$reqIds = array_map(fn($r) => (int)$r['id'], $rows);
+$apprMap = [];   // entity_id => các bước duyệt
+$userName = [];  // id => full_name
+if ($reqIds) {
+    $in = implode(',', $reqIds);
+    $ar = $conn->query("SELECT entity_id, step_order, approver_role, approver_user_id, status, acted_by, acted_at, due_at
+        FROM hrm_approvals WHERE entity_type='hrf' AND entity_id IN ($in) ORDER BY entity_id, step_order");
+    while ($x = $ar->fetch_assoc()) { $apprMap[(int)$x['entity_id']][] = $x; }
+    $uids = [];
+    foreach ($rows as $r) { if ((int)$r['created_by']) { $uids[(int)$r['created_by']] = 1; } }
+    foreach ($apprMap as $list) { foreach ($list as $s) {
+        if ((int)$s['acted_by']) { $uids[(int)$s['acted_by']] = 1; }
+        if ((int)$s['approver_user_id']) { $uids[(int)$s['approver_user_id']] = 1; }
+    } }
+    if ($uids) {
+        $uin = implode(',', array_map('intval', array_keys($uids)));
+        $ur = $conn->query("SELECT id, full_name FROM users WHERE id IN ($uin)");
+        while ($u = $ur->fetch_assoc()) { $userName[(int)$u['id']] = $u['full_name']; }
+    }
+}
+// Trả về người duyệt/từ chối + thời điểm, hoặc người đang chờ duyệt.
+$apprInfo = function (array $r) use ($apprMap, $userName) {
+    $steps = $apprMap[(int)$r['id']] ?? [];
+    if ($r['status'] === 'approved') {
+        $last = null;
+        foreach ($steps as $s) { if ($s['status'] === 'approved') { $last = $s; } }
+        if ($last) { return ['who' => ($userName[(int)$last['acted_by']] ?? '-'), 'at' => $last['acted_at'], 'kind' => 'approved']; }
+    } elseif ($r['status'] === 'rejected') {
+        foreach ($steps as $s) { if ($s['status'] === 'rejected') { return ['who' => ($userName[(int)$s['acted_by']] ?? '-'), 'at' => $s['acted_at'], 'kind' => 'rejected']; } }
+    } elseif ($r['status'] === 'pending') {
+        foreach ($steps as $s) { if ($s['status'] === 'pending') {
+            $who = ((int)$s['approver_user_id'] && isset($userName[(int)$s['approver_user_id']]))
+                ? $userName[(int)$s['approver_user_id']] : hrm_role_label($s['approver_role']);
+            return ['who' => $who, 'at' => $s['due_at'], 'kind' => 'pending'];
+        } }
+    }
+    return null;
+};
+
+$deptName = [];
+foreach ($departments as $d) { $deptName[(int)$d['id']] = $d['name']; }
+
 hrm_header('Yêu cầu tuyển dụng', 'HRF - Hiring Request Form', 'requests');
 ?>
 <div class="rc-toolbar">
@@ -232,17 +275,30 @@ hrm_header('Yêu cầu tuyển dụng', 'HRF - Hiring Request Form', 'requests')
     <div class="rc-empty">Chưa có yêu cầu tuyển dụng nào.</div>
 <?php else: ?>
 <table class="rc-table">
-    <thead><tr><th>Mã</th><th>Vị trí</th><th>Loại</th><th>SL</th><th>Cần onboard</th><th>Trạng thái</th><th>Tạo lúc</th></tr></thead>
+    <thead><tr><th>Mã</th><th>Vị trí</th><th>Phòng ban</th><th>Loại</th><th>SL</th><th>Cần onboard</th><th>Trạng thái</th><th>Người duyệt</th><th>Duyệt lúc</th><th>Người tạo</th><th>Tạo lúc</th></tr></thead>
     <tbody>
-    <?php foreach ($rows as $r): ?>
+    <?php foreach ($rows as $r): $ai = $apprInfo($r); ?>
         <tr onclick="location.href='/hrm/requests?id=<?= $r['id'] ?>'" style="cursor:pointer">
             <td><b><?= h($r['code']) ?></b></td>
             <td><?= h($r['title']) ?></td>
+            <td><?= h($deptName[(int)$r['department_id']] ?? '-') ?></td>
             <td><?= $r['request_type']==='new_hc'?'Tuyển mới':'Thay thế' ?></td>
             <td><?= (int)$r['quantity'] ?></td>
             <td><?= $r['need_by_date'] ? date('d/m/Y', strtotime($r['need_by_date'])) : '-' ?></td>
             <td><?= hrm_badge($r['status']) ?></td>
-            <td class="rc-muted"><?= date('d/m/Y', strtotime($r['created_at'])) ?></td>
+            <td>
+                <?php if ($ai): ?>
+                    <?php if ($ai['kind']==='pending'): ?><span class="rc-muted">Chờ: <?= h($ai['who']) ?></span>
+                    <?php elseif ($ai['kind']==='rejected'): ?><?= h($ai['who']) ?> <span style="color:#dc2626">(từ chối)</span>
+                    <?php else: ?><?= h($ai['who']) ?><?php endif; ?>
+                <?php else: ?><span class="rc-muted">-</span><?php endif; ?>
+            </td>
+            <td class="rc-muted"><?php
+                if ($ai && $ai['at']) { echo ($ai['kind']==='pending' ? 'Hạn ' : '') . date('d/m/Y' . ($ai['kind']==='pending' ? '' : ' H:i'), strtotime($ai['at'])); }
+                else { echo '-'; }
+            ?></td>
+            <td><?= h($userName[(int)$r['created_by']] ?? '-') ?></td>
+            <td class="rc-muted"><?= date('d/m/Y H:i', strtotime($r['created_at'])) ?></td>
         </tr>
     <?php endforeach; ?>
     </tbody>
