@@ -276,13 +276,14 @@ function rmRole(id){if(confirm('Gỡ vai trò này?'))post('remove_role',{id:id}
 <?php foreach ($templates as $t): $isCustom = strpos($t['event_key'], 'custom_') === 0; ?>
 <div class="rc-card">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
-        <div><b><?= h($t['name']) ?></b> <span class="rc-muted"><?= h($t['event_key']) ?> · <?= h($t['audience']) ?></span></div>
+        <div class="rc-muted" style="font-size:11.5px"><?= h($t['event_key']) ?> · <?= h($t['audience']) ?></div>
         <div style="display:flex;align-items:center;gap:12px">
             <label style="font-size:12px"><input type="checkbox" <?= $t['enabled']?'checked':'' ?> onchange="saveTpl(<?= $t['id'] ?>,this.closest('.rc-card'))"> Bật</label>
             <?php if ($isCustom): ?><button class="rc-btn ghost" style="padding:4px 10px;color:#dc2626" onclick="delTpl(<?= $t['id'] ?>)">Xóa</button><?php endif; ?>
         </div>
     </div>
-    <div class="rc-field"><label>Tiêu đề</label><input data-f="subject" value="<?= h($t['subject']) ?>"></div>
+    <div class="rc-field"><label>Tên template</label><input data-f="name" value="<?= h($t['name']) ?>"></div>
+    <div class="rc-field"><label>Tiêu đề (subject)</label><input data-f="subject" value="<?= h($t['subject']) ?>"></div>
     <div class="rc-field"><label>Nội dung (HTML, dùng {{biến}})</label><textarea data-f="body" rows="5"><?= h($t['body_html']) ?></textarea></div>
     <button class="rc-btn ghost" onclick="saveTpl(<?= $t['id'] ?>,this.closest('.rc-card'))">Lưu</button>
 </div>
@@ -290,6 +291,7 @@ function rmRole(id){if(confirm('Gỡ vai trò này?'))post('remove_role',{id:id}
 <script>
 function saveTpl(id,card){
     const fd=new FormData();fd.append('action','save_email_template');fd.append('id',id);
+    const nameEl=card.querySelector('[data-f=name]');if(nameEl)fd.append('name',nameEl.value);
     fd.append('subject',card.querySelector('[data-f=subject]').value);
     fd.append('body_html',card.querySelector('[data-f=body]').value);
     if(card.querySelector('input[type=checkbox]').checked)fd.append('enabled','1');

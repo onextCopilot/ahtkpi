@@ -181,8 +181,15 @@ switch ($action) {
         $subject = trim($_POST['subject'] ?? '');
         $body = $_POST['body_html'] ?? '';
         $enabled = !empty($_POST['enabled']) ? 1 : 0;
-        $st = $conn->prepare('UPDATE hrm_email_templates SET subject = ?, body_html = ?, enabled = ? WHERE id = ?');
-        $st->bind_param('ssii', $subject, $body, $enabled, $id);
+        if (isset($_POST['name'])) {
+            $name = trim($_POST['name']);
+            if ($name === '') { jout(false, ['error' => 'Tên template không được trống']); }
+            $st = $conn->prepare('UPDATE hrm_email_templates SET name = ?, subject = ?, body_html = ?, enabled = ? WHERE id = ?');
+            $st->bind_param('sssii', $name, $subject, $body, $enabled, $id);
+        } else {
+            $st = $conn->prepare('UPDATE hrm_email_templates SET subject = ?, body_html = ?, enabled = ? WHERE id = ?');
+            $st->bind_param('ssii', $subject, $body, $enabled, $id);
+        }
         $st->execute();
         jout(true);
     }
