@@ -165,8 +165,9 @@ table.plan thead .col-dept{z-index:4;background:#f8fafc}
 /* Khối cột đóng băng bên trái: Định biên đã chốt · Nhân sự · Đề xuất (đầu năm). left set bằng JS. */
 table.plan .col-chot,table.plan .col-ns,table.plan .col-canp,table.plan .col-dau{position:sticky;z-index:2}
 table.plan thead .col-chot,table.plan thead .col-ns,table.plan thead .col-canp,table.plan thead .col-dau{z-index:4}
-table.plan .col-chot{left:170px;min-width:56px;max-width:62px;white-space:normal}
-table.plan .col-ns,table.plan .col-canp{min-width:48px;white-space:normal}
+/* Bề rộng cố định (min=max) cho các cột đóng băng -> không co lại, không cụt chữ, offset ổn định. */
+table.plan .col-chot{left:170px;min-width:74px;max-width:74px;width:74px;white-space:normal}
+table.plan .col-ns,table.plan .col-canp{min-width:52px;max-width:52px;width:52px;white-space:normal}
 /* đường phân cách mép phải của khối đóng băng */
 table.plan .col-canp,table.plan .col-dau{box-shadow:2px 0 0 #e2e8f0}
 /* Zebra (chẵn/lẻ) - áp cho cả ô phòng ban dính trái */
