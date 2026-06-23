@@ -221,13 +221,12 @@ function pcell($val) {
     <thead>
         <tr>
             <th rowspan="2" class="col-dept">Vị trí công việc</th>
-            <th rowspan="2" class="col-chot">Định biên đã chốt</th>
-            <th colspan="2" class="grp grp-mo col-dau">Đầu năm</th>
+            <th colspan="3" class="grp grp-mo col-dau">Đầu năm</th>
             <th colspan="3" class="grp grp-mo">Đề xuất đã duyệt</th>
             <?php foreach ($months as $mo): ?><th colspan="4" class="grp grp-mo"><?= h($mo) ?></th><?php endforeach; ?>
         </tr>
         <tr>
-            <th class="grp-mo col-ns">Nhân sự</th><th class="col-canp">Đề xuất</th>
+            <th class="grp-mo col-chot">Định biên đã chốt</th><th class="col-ns">Nhân sự</th><th class="col-canp">Đề xuất</th>
             <th class="grp-mo">Tất cả</th><th>Tuyển mới</th><th>Tuyển TT</th>
             <?php for ($i=0;$i<12;$i++): ?>
                 <th class="grp-mo">Định biên</th><th>Thực tế</th><th>Cần tuyển</th><th>Đề xuất</th>
@@ -397,9 +396,8 @@ document.querySelector('table.plan').addEventListener('click', function(e){
     tr.classList.toggle('sel');
 });
 
-// Sticky chính xác bằng cách đo kích thước thật:
-//  - dòng sub-header dính ngay dưới dòng nhóm (top = chiều cao dòng nhóm)
-//  - cột "Định biên đã chốt" đóng băng ngay sau cột phòng ban (left = bề rộng cột phòng ban)
+// Đóng băng 4 cột đầu (Vị trí công việc · Định biên đã chốt · Nhân sự · Đề xuất) + header 2 dòng.
+// Đo bề rộng thật rồi gán left cộng dồn nên luôn khớp; chạy lại khi layout/font đổi.
 (function(){
     function syncSticky(){
         var t = document.querySelector('table.plan'); if(!t || !t.tHead) return;
@@ -408,23 +406,27 @@ document.querySelector('table.plan').addEventListener('click', function(e){
             var h = Math.round(r1.getBoundingClientRect().height);
             for (var i=0;i<r2.cells.length;i++){ r2.cells[i].style.top = h + 'px'; }
         }
-        // Khối cột đóng băng: tính left cộng dồn từ bề rộng thật của 3 cột đầu (phòng ban, chốt, nhân sự).
+        // left cộng dồn từ bề rộng thật của 3 cột đầu (phòng ban, định biên chốt, nhân sự).
         var ref = t.querySelector('tbody tr.total') || t.querySelector('tbody tr[data-dept]');
-        if (ref) {
+        if (ref && ref.children.length >= 4) {
             var c = ref.children;
             var w0 = c[0].getBoundingClientRect().width;
             var w1 = c[1].getBoundingClientRect().width;
             var w2 = c[2].getBoundingClientRect().width;
             var Lchot = Math.round(w0), Lns = Math.round(w0 + w1), Lcanp = Math.round(w0 + w1 + w2);
             function setL(sel, px){ t.querySelectorAll(sel).forEach(function(el){ el.style.left = px + 'px'; }); }
+            setL('.col-dept', 0);
             setL('.col-chot', Lchot);
             setL('.col-ns', Lns);
             setL('.col-canp', Lcanp);
-            setL('.col-dau', Lns);   // header nhóm "Đầu năm" bắt đầu ở cột Nhân sự
+            setL('.col-dau', Lchot);   // header nhóm "Đầu năm" bắt đầu ở cột Định biên đã chốt
         }
     }
-    syncSticky();
-    window.addEventListener('resize', syncSticky);
+    function run(){ requestAnimationFrame(syncSticky); }
+    run();
+    window.addEventListener('resize', run);
+    window.addEventListener('load', run);
+    if (document.fonts && document.fonts.ready) { document.fonts.ready.then(run); }
 })();
 </script>
 <?php
