@@ -641,20 +641,18 @@ function esc(s){return (s==null?'':String(s)).replace(/&/g,'&amp;').replace(/</g
 function renderTAHistory(cand,hist,curId){
     const box=document.getElementById('taHistory');
     if(!cand){box.innerHTML='<div class="ta-note">Không có dữ liệu ứng viên.</div>';return;}
-    let html='';
-    const cv=cand.cv_path?('<a href="'+esc(cand.cv_path)+'" target="_blank" rel="noopener">Xem CV</a>'):'<span class="ta-note">Chưa có CV đính kèm</span>';
-    html+='<div class="ta-cv">📎 CV: '+cv+'</div>';
     const others=hist.filter(h=>String(h.id)!==String(curId));
-    if(!hist.length){
-        html+='<div class="ta-empty">✓ Ứng viên mới - chưa từng ứng tuyển vị trí nào khác.</div>';
+    const cv=cand.cv_path?('<a href="'+esc(cand.cv_path)+'" target="_blank" rel="noopener">Xem CV</a>'):'<span class="ta-note">Chưa có CV</span>';
+    let html='<div class="ta-cv">📎 CV: '+cv+'</div>';
+    if(!others.length){
+        html+='<div class="ta-empty">✓ Không trùng job khác</div>';
     }else{
-        if(others.length){html+='<div class="ta-note">Đã/đang ứng tuyển '+hist.length+' vị trí (gồm cả hiện tại):</div>';}
-        else{html+='<div class="ta-empty">✓ Chỉ ứng tuyển vị trí hiện tại, không trùng job khác.</div>';}
-        hist.forEach(h=>{
+        html+='<div class="ta-note" style="margin-top:2px">Còn ứng tuyển '+others.length+' vị trí khác:</div>';
+        others.forEach(h=>{
             const st=TA_STATUS[h.status]||[h.status,'#6e6e73','#f0f0f2'];
             const d=h.applied_at?String(h.applied_at).substring(0,10):'-';
-            html+='<div class="ta-hrow'+(h.is_current?' cur':'')+'">'
-                +'<div class="j"><div class="jt"><a href="/hrm/job?id='+esc(h.job_id)+'" style="color:inherit;text-decoration:none">'+esc(h.job_title||('#'+h.job_id))+'</a>'+(h.is_current?' (hiện tại)':'')+'</div>'
+            html+='<div class="ta-hrow">'
+                +'<div class="j"><div class="jt"><a href="/hrm/job?id='+esc(h.job_id)+'" style="color:inherit;text-decoration:none">'+esc(h.job_title||('#'+h.job_id))+'</a></div>'
                 +'<div class="js">'+esc(h.stage_name||'-')+' · '+d+'</div></div>'
                 +'<span class="ta-badge" style="background:'+st[2]+';color:'+st[1]+'">'+esc(st[0])+'</span></div>';
         });
