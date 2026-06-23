@@ -131,24 +131,44 @@ foreach ($departments as $d) {
 .plan-pill .x{opacity:.7;font-weight:700}
 .plan-add{font-size:13px;font-weight:600;color:var(--rc2);background:#fff;border:1px dashed #cbd5e1;border-radius:8px;padding:7px 12px;cursor:pointer}
 .plan-scroll{overflow:auto;border:1px solid var(--bd);border-radius:12px;background:#fff;max-height:calc(100vh - 220px)}
-table.plan{border-collapse:separate;border-spacing:0;font-size:11px;white-space:nowrap}
-table.plan th,table.plan td{border-right:1px solid #eef1f5;border-bottom:1px solid #eef1f5;padding:3px 5px;text-align:center}
+table.plan{border-collapse:separate;border-spacing:0;font-size:12px;white-space:nowrap}
+table.plan th,table.plan td{border-right:1px solid #eef1f5;border-bottom:1px solid #eef1f5;padding:4px 6px;text-align:center}
 table.plan tbody td{min-width:42px}
-table.plan thead th{position:sticky;top:0;z-index:3;background:#f8fafc;color:var(--mut);font-size:9.5px;font-weight:700;text-transform:uppercase;letter-spacing:.2px;line-height:1.25;white-space:normal}
+table.plan thead th{position:sticky;top:0;z-index:3;background:#f8fafc;color:var(--mut);font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.2px;line-height:1.25;white-space:normal}
 table.plan thead tr:nth-child(2) th{top:19px;min-width:42px}
 table.plan .grp{background:#f1f5f9;color:#334155;border-bottom:1px solid #e2e8f0}
-table.plan .col-dept{position:sticky;left:0;z-index:2;background:#fff;text-align:left;min-width:170px;max-width:170px;white-space:normal;font-weight:600;color:#0f172a;box-shadow:1px 0 0 #e2e8f0;line-height:1.3}
+table.plan .col-dept{position:sticky;left:0;z-index:2;background:#fff;text-align:left;min-width:170px;max-width:170px;white-space:normal;font-weight:600;color:#0f172a;line-height:1.3}
 table.plan .col-dept{display:flex;align-items:center;gap:6px;justify-content:space-between}
-table.plan .dept-del{flex:none;width:18px;height:18px;line-height:1;border:none;border-radius:50%;background:#f1f5f9;color:#94a3b8;font-size:14px;cursor:pointer;opacity:0;transition:.15s;padding:0}
-table.plan tbody tr:hover .dept-del{opacity:1}
+table.plan .dept-acts{flex:none;display:flex;gap:4px}
+table.plan .dept-del,table.plan .dept-edit{width:20px;height:20px;line-height:1;border:none;border-radius:50%;background:#f1f5f9;color:#94a3b8;font-size:13px;cursor:pointer;opacity:0;transition:.15s;padding:0}
+table.plan tbody tr:hover .dept-del,table.plan tbody tr:hover .dept-edit{opacity:1}
 table.plan .dept-del:hover{background:#fee2e2;color:#dc2626}
+table.plan .dept-edit:hover{background:#dbeafe;color:#2563eb}
+/* Modal "Thêm/Sửa định biên" */
+.pm-overlay{position:fixed;inset:0;background:rgba(15,23,42,.45);z-index:9998;display:none;align-items:flex-start;justify-content:center;padding:40px 16px;overflow:auto}
+.pm-box{background:#fff;width:520px;max-width:100%;border-radius:12px;box-shadow:0 20px 60px rgba(0,0,0,.3);overflow:hidden}
+.pm-head{display:flex;align-items:center;justify-content:space-between;padding:14px 18px;border-bottom:1px solid var(--bd);font-weight:700;font-size:15px;color:#0f172a;background:#f8fafc}
+.pm-x{border:none;background:none;font-size:20px;cursor:pointer;color:#94a3b8;line-height:1}
+.pm-body{padding:18px;max-height:70vh;overflow:auto}
+.pm-grid2{display:grid;grid-template-columns:1fr 1fr;gap:0 14px}
+.pm-sec{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:#16a34a;margin:16px 0 10px;border-top:1px solid #f1f5f9;padding-top:14px}
+.pm-months{display:grid;grid-template-columns:repeat(3,1fr);gap:10px 12px}
+.pm-months .m label{display:block;font-size:11px;font-weight:600;color:#475569;margin-bottom:4px}
+.pm-months .m input{width:100%;padding:7px 10px;border:1px solid var(--bd);border-radius:8px;font-size:13px;font-family:inherit;outline:none}
+.pm-months .m input:focus{border-color:var(--rc2)}
+.pm-foot{display:flex;justify-content:flex-end;gap:10px;padding:14px 18px;border-top:1px solid var(--bd);background:#fafbfc}
+.pm-box .rc-field input[readonly]{background:#f1f5f9;color:#64748b}
 .plan-readd{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:12px;font-size:12.5px;color:var(--mut)}
 .plan-readd .chip{display:inline-flex;align-items:center;gap:6px;background:#fff;border:1px dashed #cbd5e1;border-radius:8px;padding:5px 10px;cursor:pointer;color:#334155;font-weight:600}
 .plan-readd .chip:hover{border-color:var(--rc2);color:var(--rc2)}
 table.plan thead .col-dept{z-index:4;background:#f8fafc}
-/* Cột "Định biên đã chốt" đóng băng bên trái, ngay sau cột phòng ban (left set bằng JS). */
-table.plan .col-chot{position:sticky;left:170px;z-index:2;min-width:56px;max-width:62px;white-space:normal;box-shadow:1px 0 0 #e2e8f0}
-table.plan thead .col-chot{z-index:4}
+/* Khối cột đóng băng bên trái: Định biên đã chốt · Nhân sự · Đề xuất (đầu năm). left set bằng JS. */
+table.plan .col-chot,table.plan .col-ns,table.plan .col-canp,table.plan .col-dau{position:sticky;z-index:2}
+table.plan thead .col-chot,table.plan thead .col-ns,table.plan thead .col-canp,table.plan thead .col-dau{z-index:4}
+table.plan .col-chot{left:170px;min-width:56px;max-width:62px;white-space:normal}
+table.plan .col-ns,table.plan .col-canp{min-width:48px;white-space:normal}
+/* đường phân cách mép phải của khối đóng băng */
+table.plan .col-canp,table.plan .col-dau{box-shadow:2px 0 0 #e2e8f0}
 /* Zebra (chẵn/lẻ) - áp cho cả ô phòng ban dính trái */
 table.plan tbody tr.odd td,table.plan tbody tr.odd .col-dept{background:#ffffff}
 table.plan tbody tr.even td,table.plan tbody tr.even .col-dept{background:#f5f7fa}
@@ -190,10 +210,10 @@ table.plan td.grp-mo,table.plan th.grp-mo{border-left:2px solid #e2e8f0}
 </div>
 <?php endif; ?>
 <?php
-// Helper render ô nhập / ô tính.
-function pin($f, $val, $m = null) {  // editable input
-    $ma = $m === null ? '' : ' data-m="' . (int)$m . '"';
-    return '<input type="number" min="0" data-f="' . $f . '"' . $ma . ' value="' . (int)$val . '">';
+// Hiển thị giá trị định biên (read-only); số 0 làm mờ cho đỡ rối.
+function pcell($val) {
+    $n = (int)$val;
+    return $n ? (string)$n : '<span class="mut">0</span>';
 }
 ?>
 <div class="plan-scroll">
@@ -202,12 +222,12 @@ function pin($f, $val, $m = null) {  // editable input
         <tr>
             <th rowspan="2" class="col-dept">Vị trí công việc</th>
             <th rowspan="2" class="col-chot">Định biên đã chốt</th>
-            <th colspan="2" class="grp grp-mo">Đầu năm</th>
+            <th colspan="2" class="grp grp-mo col-dau">Đầu năm</th>
             <th colspan="3" class="grp grp-mo">Đề xuất đã duyệt</th>
             <?php foreach ($months as $mo): ?><th colspan="4" class="grp grp-mo"><?= h($mo) ?></th><?php endforeach; ?>
         </tr>
         <tr>
-            <th class="grp-mo">Nhân sự</th><th>Đề xuất</th>
+            <th class="grp-mo col-ns">Nhân sự</th><th class="col-canp">Đề xuất</th>
             <th class="grp-mo">Tất cả</th><th>Tuyển mới</th><th>Tuyển TT</th>
             <?php for ($i=0;$i<12;$i++): ?>
                 <th class="grp-mo">Định biên</th><th>Thực tế</th><th>Cần tuyển</th><th>Đề xuất</th>
@@ -218,7 +238,7 @@ function pin($f, $val, $m = null) {  // editable input
         <!-- Tổng số -->
         <tr class="total">
             <td class="col-dept">Tổng số</td>
-            <td class="col-chot" data-t="chot"><?= $T['chot'] ?></td><td data-t="ns"><?= $T['ns'] ?></td><td data-t="canp"><?= $T['canp'] ?></td>
+            <td class="col-chot" data-t="chot"><?= $T['chot'] ?></td><td class="col-ns" data-t="ns"><?= $T['ns'] ?></td><td class="col-canp" data-t="canp"><?= $T['canp'] ?></td>
             <td class="grp-mo" data-t="all"><?= $T['all'] ?></td><td data-t="new"><?= $T['new'] ?></td><td data-t="rep"><?= $T['rep'] ?></td>
             <?php for ($i=0;$i<12;$i++): ?>
                 <td class="grp-mo" data-t="plan" data-m="<?= $i ?>"><?= $T['plan'][$i] ?></td>
@@ -229,16 +249,16 @@ function pin($f, $val, $m = null) {  // editable input
         </tr>
         <?php $ri = 0; foreach ($rows as $deptId => $row): $v = $row['v']; $ri++; ?>
         <tr data-dept="<?= $deptId ?>" data-appr="<?= $v['all'] ?>" class="<?= $ri % 2 ? 'odd' : 'even' ?>">
-            <td class="col-dept"><span class="dept-name"><?= h($row['name']) ?></span><button type="button" class="dept-del" title="Xóa phòng ban khỏi bảng" onclick="removeDept(<?= $deptId ?>, this)">×</button></td>
-            <td class="col-chot"><?= pin('chot', $v['chot']) ?></td>
-            <td><?= pin('ns', $v['ns']) ?></td>
-            <td class="calc" data-c="canp"><?= $v['canp'] ?></td>
+            <td class="col-dept"><span class="dept-name"><?= h($row['name']) ?></span><span class="dept-acts"><button type="button" class="dept-edit" title="Sửa định biên" onclick="openPlanModal(<?= $deptId ?>)">✎</button><button type="button" class="dept-del" title="Xóa phòng ban khỏi bảng" onclick="removeDept(<?= $deptId ?>, this)">×</button></span></td>
+            <td class="col-chot"><?= pcell($v['chot']) ?></td>
+            <td class="col-ns"><?= pcell($v['ns']) ?></td>
+            <td class="calc col-canp" data-c="canp"><?= $v['canp'] ?></td>
             <td class="grp-mo <?= $v['all'] ? '' : 'mut' ?>"><?= $v['all'] ?></td>
             <td class="<?= $v['new'] ? '' : 'mut' ?>"><?= $v['new'] ?></td>
             <td class="<?= $v['rep'] ? '' : 'mut' ?>"><?= $v['rep'] ?></td>
             <?php for ($i=0;$i<12;$i++): ?>
-                <td class="grp-mo"><?= pin('plan', $v['plan'][$i], $i) ?></td>
-                <td><?= pin('actual', $v['actual'][$i], $i) ?></td>
+                <td class="grp-mo"><?= pcell($v['plan'][$i]) ?></td>
+                <td><?= pcell($v['actual'][$i]) ?></td>
                 <td class="calc" data-c="need" data-m="<?= $i ?>"><?= $v['need'][$i] ?></td>
                 <td class="calc" data-c="prop" data-m="<?= $i ?>"><?= $v['prop'][$i] ?></td>
             <?php endfor; ?>
@@ -250,11 +270,46 @@ function pin($f, $val, $m = null) {  // editable input
 
 <div class="rc-muted" style="margin-top:10px">
     "Đề xuất đã duyệt" lấy từ Yêu cầu tuyển dụng (HRF) đã duyệt trong năm <?= (int)$cycle['year'] ?>.
-    Ô nền trắng có thể nhập trực tiếp; "Đề xuất / Cần tuyển" tự tính.
+    Bấm ✎ trên mỗi phòng ban để nhập định biên; "Đề xuất / Cần tuyển" tự tính.
+</div>
+
+<!-- Modal nhập định biên theo phòng ban -->
+<div id="planModal" class="pm-overlay">
+    <div class="pm-box">
+        <div class="pm-head"><span id="pmTitle">Định biên</span><button class="pm-x" onclick="closePlanModal()">×</button></div>
+        <div class="pm-body">
+            <div class="pm-grid2">
+                <div class="rc-field"><label>Chu kỳ</label><input id="pmCycle" readonly></div>
+                <div class="rc-field"><label>Phòng ban</label><input id="pmDept" readonly></div>
+            </div>
+            <div class="pm-grid2">
+                <div class="rc-field"><label>Định biên đã chốt</label><input type="number" min="0" id="pmChot"></div>
+                <div class="rc-field"><label>Nhân sự (đầu năm)</label><input type="number" min="0" id="pmNs"></div>
+            </div>
+            <div class="pm-sec">Định biên theo tháng</div>
+            <div class="pm-months" id="pmPlan"></div>
+            <div class="pm-sec">Thực tế theo tháng</div>
+            <div class="pm-months" id="pmActual"></div>
+        </div>
+        <div class="pm-foot">
+            <button class="rc-btn ghost" onclick="closePlanModal()">Hủy</button>
+            <button class="rc-btn" onclick="savePlanModal()">Lưu</button>
+        </div>
+    </div>
 </div>
 
 <script>
 var CYCLE = <?= $cid ?>;
+var CYCLE_NAME = <?= json_encode($cycle['name'], JSON_UNESCAPED_UNICODE) ?>;
+var PLAN = <?php
+    $planJs = [];
+    foreach ($rows as $deptId => $row) {
+        $v = $row['v'];
+        $planJs[$deptId] = ['name' => $row['name'], 'chot' => $v['chot'], 'ns' => $v['ns'],
+            'plan' => array_values($v['plan']), 'actual' => array_values($v['actual'])];
+    }
+    echo json_encode($planJs, JSON_UNESCAPED_UNICODE);
+?>;
 
 function addCycle(){
     var y = prompt('Năm của chu kỳ (vd 2026):', '<?= (int)date('Y') ?>');
@@ -289,81 +344,55 @@ function restoreDept(deptId){
     }).catch(function(){ showToast('Lỗi mạng', 'error'); });
 }
 
-// Tính lại 1 dòng phòng ban + cập nhật dòng Tổng số.
-function num(el){ var n = parseInt(el.value, 10); return isNaN(n) || n < 0 ? 0 : n; }
+// ── Nhập định biên qua form (modal), không inline ─────────────────────────
+function gv(id){ var n = parseInt(document.getElementById(id).value, 10); return isNaN(n) || n < 0 ? 0 : n; }
 
-function recalcRow(tr){
-    var appr = parseInt(tr.dataset.appr, 10) || 0;
-    var chot = num(tr.querySelector('input[data-f="chot"]'));
-    var ns   = num(tr.querySelector('input[data-f="ns"]'));
-    tr.querySelector('[data-c="canp"]').textContent = Math.max(0, chot - ns);
-    for (var m=0;m<12;m++){
-        var plan = num(tr.querySelector('input[data-f="plan"][data-m="'+m+'"]'));
-        var act  = num(tr.querySelector('input[data-f="actual"][data-m="'+m+'"]'));
-        var need = Math.max(0, plan - act);
-        tr.querySelector('[data-c="need"][data-m="'+m+'"]').textContent = need;
-        tr.querySelector('[data-c="prop"][data-m="'+m+'"]').textContent = Math.max(0, need - appr);
-    }
+function buildMonths(container, prefix){
+    var html = '';
+    for (var m=0;m<12;m++){ html += '<div class="m"><label>Tháng '+(m+1)+'</label><input type="number" min="0" id="'+prefix+m+'"></div>'; }
+    container.innerHTML = html;
 }
 
-function recalcTotals(){
-    var rows = document.querySelectorAll('table.plan tbody tr[data-dept]');
-    var t = {chot:0,ns:0,canp:0,all:0,new:0,rep:0,
-             plan:Array(12).fill(0),actual:Array(12).fill(0),need:Array(12).fill(0),prop:Array(12).fill(0)};
-    rows.forEach(function(tr){
-        t.chot += num(tr.querySelector('input[data-f="chot"]'));
-        t.ns   += num(tr.querySelector('input[data-f="ns"]'));
-        t.canp += parseInt(tr.querySelector('[data-c="canp"]').textContent,10)||0;
-        var tds = tr.children;
-        t.all += parseInt(tds[4].textContent,10)||0;
-        t.new += parseInt(tds[5].textContent,10)||0;
-        t.rep += parseInt(tds[6].textContent,10)||0;
-        for (var m=0;m<12;m++){
-            t.plan[m]   += num(tr.querySelector('input[data-f="plan"][data-m="'+m+'"]'));
-            t.actual[m] += num(tr.querySelector('input[data-f="actual"][data-m="'+m+'"]'));
-            t.need[m]   += parseInt(tr.querySelector('[data-c="need"][data-m="'+m+'"]').textContent,10)||0;
-            t.prop[m]   += parseInt(tr.querySelector('[data-c="prop"][data-m="'+m+'"]').textContent,10)||0;
-        }
-    });
-    var tot = document.querySelector('table.plan tbody tr.total');
-    ['chot','ns','canp','all','new','rep'].forEach(function(k){ tot.querySelector('[data-t="'+k+'"]').textContent = t[k]; });
-    ['plan','actual','need','prop'].forEach(function(k){
-        for (var m=0;m<12;m++){ tot.querySelector('[data-t="'+k+'"][data-m="'+m+'"]').textContent = t[k][m]; }
-    });
+function openPlanModal(deptId){
+    var d = PLAN[deptId]; if(!d) return;
+    document.getElementById('pmTitle').textContent = 'Định biên · ' + d.name;
+    document.getElementById('pmCycle').value = CYCLE_NAME;
+    document.getElementById('pmDept').value  = d.name;
+    document.getElementById('pmChot').value  = d.chot;
+    document.getElementById('pmNs').value    = d.ns;
+    buildMonths(document.getElementById('pmPlan'), 'pmP');
+    buildMonths(document.getElementById('pmActual'), 'pmA');
+    for (var m=0;m<12;m++){ document.getElementById('pmP'+m).value = d.plan[m]; document.getElementById('pmA'+m).value = d.actual[m]; }
+    var box = document.getElementById('planModal');
+    box.dataset.dept = deptId;
+    box.style.display = 'flex';
 }
+function closePlanModal(){ document.getElementById('planModal').style.display = 'none'; }
 
-var saveTimers = {};
-function saveRow(tr){
-    var dept = tr.dataset.dept;
+function savePlanModal(){
+    var dept = document.getElementById('planModal').dataset.dept;
     var plan = [], actual = [];
-    for (var m=0;m<12;m++){
-        plan.push(num(tr.querySelector('input[data-f="plan"][data-m="'+m+'"]')));
-        actual.push(num(tr.querySelector('input[data-f="actual"][data-m="'+m+'"]')));
-    }
+    for (var m=0;m<12;m++){ plan.push(gv('pmP'+m)); actual.push(gv('pmA'+m)); }
     var fd = new FormData();
     fd.append('action','save_plan_line');
     fd.append('cycle_id', CYCLE);
     fd.append('department_id', dept);
-    fd.append('dinh_bien_chot', num(tr.querySelector('input[data-f="chot"]')));
-    fd.append('nhan_su', num(tr.querySelector('input[data-f="ns"]')));
+    fd.append('dinh_bien_chot', gv('pmChot'));
+    fd.append('nhan_su', gv('pmNs'));
     fd.append('months_plan', JSON.stringify(plan));
     fd.append('months_actual', JSON.stringify(actual));
     fetch('/hrm/api',{method:'POST',body:fd}).then(r=>r.json()).then(function(j){
-        if(j.ok){ showToast('Đã lưu định biên'); } else showToast(j.error||'Lỗi lưu', 'error');
+        if(j.ok){ localStorage.setItem('job_toast', JSON.stringify({msg:'Đã lưu định biên', type:'success'})); location.reload(); }
+        else showToast(j.error||'Lỗi lưu', 'error');
     }).catch(function(){ showToast('Lỗi mạng', 'error'); });
 }
 
-document.querySelector('table.plan').addEventListener('input', function(e){
-    var inp = e.target.closest('input[data-f]'); if(!inp) return;
-    var tr = inp.closest('tr[data-dept]'); if(!tr) return;
-    recalcRow(tr); recalcTotals();
-    clearTimeout(saveTimers[tr.dataset.dept]);
-    saveTimers[tr.dataset.dept] = setTimeout(function(){ saveRow(tr); }, 700);
-});
+// Đóng modal khi bấm ra nền tối.
+document.getElementById('planModal').addEventListener('click', function(e){ if (e.target === this) closePlanModal(); });
 
-// Click vào dòng phòng ban -> bật/tắt nền chọn (bỏ qua khi bấm ô nhập / nút xóa).
+// Click vào dòng phòng ban -> bật/tắt nền chọn (bỏ qua khi bấm nút).
 document.querySelector('table.plan').addEventListener('click', function(e){
-    if (e.target.closest('input, button')) return;
+    if (e.target.closest('button')) return;
     var tr = e.target.closest('tr[data-dept]'); if(!tr) return;
     tr.classList.toggle('sel');
 });
@@ -379,10 +408,19 @@ document.querySelector('table.plan').addEventListener('click', function(e){
             var h = Math.round(r1.getBoundingClientRect().height);
             for (var i=0;i<r2.cells.length;i++){ r2.cells[i].style.top = h + 'px'; }
         }
-        var dept = t.querySelector('tbody .col-dept') || t.querySelector('thead .col-dept');
-        if (dept) {
-            var w = Math.round(dept.getBoundingClientRect().width);
-            t.querySelectorAll('.col-chot').forEach(function(c){ c.style.left = w + 'px'; });
+        // Khối cột đóng băng: tính left cộng dồn từ bề rộng thật của 3 cột đầu (phòng ban, chốt, nhân sự).
+        var ref = t.querySelector('tbody tr.total') || t.querySelector('tbody tr[data-dept]');
+        if (ref) {
+            var c = ref.children;
+            var w0 = c[0].getBoundingClientRect().width;
+            var w1 = c[1].getBoundingClientRect().width;
+            var w2 = c[2].getBoundingClientRect().width;
+            var Lchot = Math.round(w0), Lns = Math.round(w0 + w1), Lcanp = Math.round(w0 + w1 + w2);
+            function setL(sel, px){ t.querySelectorAll(sel).forEach(function(el){ el.style.left = px + 'px'; }); }
+            setL('.col-chot', Lchot);
+            setL('.col-ns', Lns);
+            setL('.col-canp', Lcanp);
+            setL('.col-dau', Lns);   // header nhóm "Đầu năm" bắt đầu ở cột Nhân sự
         }
     }
     syncSticky();
