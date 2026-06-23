@@ -168,6 +168,34 @@ function hrm_ensure_screening_table(mysqli $conn): void
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
 }
 
+/**
+ * Ensure the recruitment-plan tables exist (Kế hoạch tuyển dụng).
+ *  - hrm_plan_cycles: yearly planning cycles ("Năm 2024", ...)
+ *  - hrm_plan_lines:  per-department headcount plan inside a cycle
+ *      months_plan / months_actual = JSON array of 12 ints (ĐỊNH BIÊN / THỰC TẾ per month)
+ */
+function hrm_ensure_plan_tables(mysqli $conn): void
+{
+    $conn->query("CREATE TABLE IF NOT EXISTS hrm_plan_cycles (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        name VARCHAR(64) NOT NULL,
+        year INT NOT NULL,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+
+    $conn->query("CREATE TABLE IF NOT EXISTS hrm_plan_lines (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        cycle_id INT NOT NULL,
+        department_id INT NOT NULL,
+        dinh_bien_chot INT DEFAULT 0,
+        nhan_su INT DEFAULT 0,
+        months_plan TEXT,
+        months_actual TEXT,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        UNIQUE KEY uq_cycle_dept (cycle_id, department_id)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+}
+
 /** Look up a user's display name + email. */
 function hrm_user(mysqli $conn, int $userId): array
 {

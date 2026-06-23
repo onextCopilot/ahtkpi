@@ -103,6 +103,28 @@ function hrm_schema(): array
         KEY idx_pending (status, approver_role)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4";
 
+    /* ── Kế hoạch tuyển dụng (headcount planning) ──────────────────── */
+    $t['hrm_plan_cycles'] = "CREATE TABLE hrm_plan_cycles (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        name VARCHAR(64) NOT NULL,
+        year INT NOT NULL,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4";
+
+    // Per-department headcount plan within a cycle.
+    // months_plan / months_actual = JSON array of 12 ints (ĐỊNH BIÊN / THỰC TẾ per month).
+    $t['hrm_plan_lines'] = "CREATE TABLE hrm_plan_lines (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        cycle_id INT NOT NULL,
+        department_id INT NOT NULL,
+        dinh_bien_chot INT DEFAULT 0,
+        nhan_su INT DEFAULT 0,
+        months_plan TEXT,
+        months_actual TEXT,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        UNIQUE KEY uq_cycle_dept (cycle_id, department_id)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4";
+
     // Per-department, per-stage owners (BC + TA). owner_type: 'bc' | 'ta'.
     $t['hrm_stage_owners'] = "CREATE TABLE hrm_stage_owners (
         id INT AUTO_INCREMENT PRIMARY KEY,

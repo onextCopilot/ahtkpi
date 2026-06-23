@@ -1092,6 +1092,62 @@ switch ($action) {
         jout(true, ['inserted' => $ins, 'updated' => $upd, 'skipped' => $skip]);
     }
 
+    /* ── Kế hoạch tuyển dụng: thêm chu kỳ ─────────────────────────────── */
+    case 'add_plan_cycle': {
+        hrm_ensure_plan_tables($conn);
+        $year = (int)($_POST['year'] ?? 0);
+        if ($year < 2000 || $year > 2100) { jout(false, ['error' => 'Năm không hợp lệ']); }
+        $name = trim($_POST['name'] ?? '') ?: ('Năm ' . $year);
+        $exists = $conn->query("SELECT id FROM hrm_plan_cycles WHERE year=" . $year)->fetch_assoc();
+        if ($exists) { jout(true, ['id' => (int)$exists['id']]); }
+        $st = $conn->prepare('INSERT INTO hrm_plan_cycles (name, year) VALUES (?, ?)');
+        $st->bind_param('si', $name, $year);
+        if (!$st->execute()) { jout(false, ['error' => $conn->error]); }
+        $id = $st->insert_id;
+        hrm_audit($conn, $uid, 'plan_cycle_add', 'plan', $id, $name);
+        jout(true, ['id' => $id]);
+    }
+
+    /* ── Kế hoạch tuyển dụng: xóa chu kỳ ──────────────────────────────── */
+    case 'del_plan_cycle': {
+        hrm_ensure_plan_tables($conn);
+        $cid = (int)($_POST['cycle_id'] ?? 0);
+        if ($cid <= 0) { jout(false, ['error' => 'Thiếu chu kỳ']); }
+        $conn->query("DELETE FROM hrm_plan_lines WHERE cycle_id=" . $cid);
+        $conn->query("DELETE FROM hrm_plan_cycles WHERE id=" . $cid);
+        hrm_audit($conn, $uid, 'plan_cycle_del', 'plan', $cid, '');
+        jout(true);
+    }
+
+    /* ── Kế hoạch tuyển dụng: lưu định biên 1 phòng ban trong chu kỳ ──── */
+    case 'save_plan_line': {
+        hrm_ensure_plan_tables($conn);
+        $cid  = (int)($_POST['cycle_id'] ?? 0);
+        $dept = (int)($_POST['department_id'] ?? 0);
+        if ($cid <= 0 || $dept <= 0) { jout(false, ['error' => 'Thiếu chu kỳ hoặc phòng ban']); }
+
+        $chot   = max(0, (int)($_POST['dinh_bien_chot'] ?? 0));
+        $nhansu = max(0, (int)($_POST['nhan_su'] ?? 0));
+        // Chuẩn hóa 12 giá trị tháng (>=0) cho cả định biên & thực tế.
+        $norm = function ($raw) {
+            $arr = json_decode((string)$raw, true);
+            if (!is_array($arr)) { $arr = []; }
+            $out = [];
+            for ($i = 0; $i < 12; $i++) { $out[$i] = max(0, (int)($arr[$i] ?? 0)); }
+            return $out;
+        };
+        $plan   = json_encode($norm($_POST['months_plan'] ?? ''),   JSON_UNESCAPED_UNICODE);
+        $actual = json_encode($norm($_POST['months_actual'] ?? ''), JSON_UNESCAPED_UNICODE);
+
+        $st = $conn->prepare('INSERT INTO hrm_plan_lines (cycle_id, department_id, dinh_bien_chot, nhan_su, months_plan, months_actual)
+            VALUES (?,?,?,?,?,?)
+            ON DUPLICATE KEY UPDATE dinh_bien_chot=VALUES(dinh_bien_chot), nhan_su=VALUES(nhan_su),
+                months_plan=VALUES(months_plan), months_actual=VALUES(months_actual)');
+        $st->bind_param('iiiiss', $cid, $dept, $chot, $nhansu, $plan, $actual);
+        if (!$st->execute()) { jout(false, ['error' => $conn->error]); }
+        jout(true);
+    }
+
     default:
         jout(false, ['error' => 'Unknown action: ' . $action]);
 }
