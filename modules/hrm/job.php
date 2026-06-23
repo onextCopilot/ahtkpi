@@ -349,9 +349,42 @@ $startD = $job['source_start'] ?: $job['created_at'];
         <input id="ta_salary" type="text">
         <label class="ta-lbl">Định hướng</label>
         <textarea id="ta_orientation" rows="2"></textarea>
+        <label class="ta-lbl">Notice Period</label>
+        <select id="ta_notice_period">
+            <option value="">- Chọn -</option>
+            <option>Sẵn sàng đi làm ngay</option>
+            <option>Dưới 1 tuần</option>
+            <option>1 tuần</option>
+            <option>2 tuần</option>
+            <option>3 tuần</option>
+            <option>1 tháng</option>
+            <option>1.5 tháng</option>
+            <option>2 tháng</option>
+            <option>Trên 2 tháng</option>
+            <option>Đang thương lượng / Chưa rõ</option>
+        </select>
         <div class="ta-row">
-            <div><label class="ta-lbl">Notice Period</label><input id="ta_notice_period" type="text"></div>
-            <div><label class="ta-lbl">Ngoại ngữ</label><input id="ta_languages" type="text"></div>
+            <div><label class="ta-lbl">Ngoại ngữ</label>
+                <select id="ta_lang">
+                    <option value="">- Chọn -</option>
+                    <option>Tiếng Anh</option>
+                    <option>Tiếng Nhật</option>
+                    <option>Tiếng Trung</option>
+                    <option>Tiếng Hàn</option>
+                    <option>Tiếng Pháp</option>
+                    <option>Tiếng Đức</option>
+                    <option>Khác</option>
+                    <option>Không có</option>
+                </select></div>
+            <div><label class="ta-lbl">Trình độ</label>
+                <select id="ta_lang_level">
+                    <option value="">- Chọn -</option>
+                    <option>Cơ bản</option>
+                    <option>Giao tiếp</option>
+                    <option>Khá</option>
+                    <option>Thành thạo</option>
+                    <option>Bản ngữ / song ngữ</option>
+                </select></div>
         </div>
 
         <div class="ta-sec">Check reference (optional)</div>
@@ -393,7 +426,7 @@ $startD = $job['source_start'] ?: $job['created_at'];
 .ta-sec{font-size:13px;font-weight:700;color:#1d1d1f;margin:16px 0 8px;padding-bottom:6px;border-bottom:1px solid #f0f0f2}
 .ta-sec:first-child{margin-top:0}
 .ta-lbl{display:block;font-size:12px;color:#6e6e73;margin:8px 0 4px;font-weight:600}
-.ta-body textarea,.ta-body input[type=text]{width:100%;box-sizing:border-box;padding:8px 10px;border:1px solid var(--bd);border-radius:8px;font-size:13px;font-family:inherit;resize:vertical}
+.ta-body textarea,.ta-body input[type=text],.ta-body select{width:100%;box-sizing:border-box;padding:8px 10px;border:1px solid var(--bd);border-radius:8px;font-size:13px;font-family:inherit;resize:vertical;background:#fff}
 .ta-row{display:flex;gap:10px}.ta-row>div{flex:1}
 .ta-results{display:flex;flex-direction:column;gap:8px}
 .ta-results label{display:flex;align-items:center;gap:8px;font-size:13px;color:#1d1d1f;cursor:pointer}
@@ -531,11 +564,13 @@ document.addEventListener('click',function(e){
     if(box&&!box.contains(e.target)){document.getElementById('srcList').style.display='none';}
 });
 /* ── TA Review sidebar ─────────────────────────────────────────────── */
-const TA_FIELDS=['background','experience','salary','orientation','notice_period','languages','reference_check','note'];
+const TA_FIELDS=['background','experience','salary','orientation','notice_period','reference_check','note'];
+function setSel(id,val){const el=document.getElementById(id);if(!el)return;el.value=val||'';if(el.value!==(val||''))el.value='';}
 function openTAReview(appId,name){
     document.getElementById('taAppId').value=appId;
     document.getElementById('taName').textContent=name||'TA đánh giá';
     TA_FIELDS.forEach(f=>{const el=document.getElementById('ta_'+f);if(el)el.value='';});
+    document.getElementById('ta_lang').value='';document.getElementById('ta_lang_level').value='';
     document.querySelectorAll('input[name=ta_result]').forEach(r=>r.checked=(r.value===''));
     document.getElementById('taMeta').textContent='';
     document.getElementById('taHistory').innerHTML='<div class="ta-note">Đang kiểm tra...</div>';
@@ -546,6 +581,7 @@ function openTAReview(appId,name){
         if(j.ok&&j.review){
             const v=j.review;
             TA_FIELDS.forEach(f=>{const el=document.getElementById('ta_'+f);if(el&&v[f]!=null)el.value=v[f];});
+            const lp=(v.languages||'').split(' · ');setSel('ta_lang',lp[0]||'');setSel('ta_lang_level',lp[1]||'');
             const rr=document.querySelector('input[name=ta_result][value="'+(v.result||'')+'"]');if(rr)rr.checked=true;
             if(v.reviewer&&v.reviewed_at){document.getElementById('taMeta').textContent='Lần đánh giá gần nhất: '+v.reviewer+' · '+v.reviewed_at;}
         }
@@ -587,6 +623,8 @@ function saveTAReview(){
     const fd=new FormData();fd.append('action','ta_review_save');
     fd.append('application_id',document.getElementById('taAppId').value);
     TA_FIELDS.forEach(f=>{const el=document.getElementById('ta_'+f);fd.append(f,el?el.value:'');});
+    const lang=document.getElementById('ta_lang').value,lvl=document.getElementById('ta_lang_level').value;
+    fd.append('languages',lang?(lang+(lvl?' · '+lvl:'')):'');
     const r=document.querySelector('input[name=ta_result]:checked');fd.append('result',r?r.value:'');
     fetch('/hrm/api',{method:'POST',body:fd}).then(x=>x.json()).then(j=>{
         if(!j.ok){alert(j.error||'Lỗi');btn.disabled=false;btn.textContent=old;return;}
