@@ -10,6 +10,7 @@ hrm_require_login();
 
 $uid     = (int)$_SESSION['user_id'];
 $isAdmin = ($_SESSION['role'] ?? '') === 'admin';
+hrm_ensure_request_columns($conn);   // bổ sung cột mới trên live nếu chưa có
 $myRoles = hrm_roles_of($conn, $uid);
 $roleLabels = hrm_roles();
 $departments = $conn->query('SELECT id,name FROM departments ORDER BY sort_order, name')->fetch_all(MYSQLI_ASSOC);
@@ -22,7 +23,8 @@ $edit = isset($_GET['edit']) && $id;
 /* ─────────────────────────── CREATE / EDIT FORM ─────────────────────── */
 if ($new || $edit) {
     $r = ['title'=>'','request_type'=>'replacement','level'=>'','department_id'=>0,'office_id'=>0,
-          'quantity'=>1,'need_by_date'=>'','salary_min'=>0,'salary_max'=>0,'reason'=>'','jd'=>''];
+          'quantity'=>1,'need_by_date'=>'','salary_min'=>0,'salary_max'=>0,'reason'=>'','jd'=>'',
+          'employment_type'=>'','experience_required'=>'','priority'=>'Trung bình'];
     if ($edit) {
         $req = $conn->query('SELECT * FROM hrm_requests WHERE id = ' . $id)->fetch_assoc();
         if (!$req) { hrm_header('Không tìm thấy', '', 'requests'); echo '<div class="rc-empty">HRF không tồn tại.</div>'; hrm_footer(); exit; }
@@ -41,15 +43,23 @@ if ($new || $edit) {
             <div class="rc-grid2">
                 <div class="rc-field"><label>Loại yêu cầu</label>
                     <select name="request_type"><option value="replacement"<?= $sel($r['request_type'],'replacement') ?>>Thay thế (Replacement)</option><option value="new_hc"<?= $sel($r['request_type'],'new_hc') ?>>Tuyển mới (New Headcount)</option></select></div>
-                <div class="rc-field"><label>Level</label><input name="level" placeholder="Junior / Middle / Senior / Lead" value="<?= h($r['level']) ?>"></div>
-                <div class="rc-field"><label>Bộ phận</label><select name="department_id"><option value="0">-</option>
+                <div class="rc-field"><label>Level *</label><input name="level" placeholder="Junior / Middle / Senior / Lead" value="<?= h($r['level']) ?>"></div>
+                <div class="rc-field"><label>Bộ phận *</label><select name="department_id"><option value="0">-</option>
                     <?php foreach ($departments as $d): ?><option value="<?= $d['id'] ?>"<?= $sel($r['department_id'],$d['id']) ?>><?= h($d['name']) ?></option><?php endforeach; ?></select></div>
                 <div class="rc-field"><label>Văn phòng</label><select name="office_id"><option value="0">-</option>
                     <?php foreach ($offices as $o): ?><option value="<?= $o['id'] ?>"<?= $sel($r['office_id'],$o['id']) ?>><?= h($o['name']) ?></option><?php endforeach; ?></select></div>
-                <div class="rc-field"><label>Số lượng</label><input type="number" name="quantity" value="<?= (int)$r['quantity'] ?>" min="1"></div>
-                <div class="rc-field"><label>Ngày cần onboard</label><input type="date" name="need_by_date" value="<?= h($r['need_by_date']) ?>"></div>
+                <div class="rc-field"><label>Số lượng *</label><input type="number" name="quantity" value="<?= (int)$r['quantity'] ?>" min="1"></div>
+                <div class="rc-field"><label>Ngày cần onboard *</label><input type="date" name="need_by_date" value="<?= h($r['need_by_date']) ?>"></div>
                 <div class="rc-field"><label>Lương tối thiểu (VND)</label><input type="number" name="salary_min" value="<?= (int)$r['salary_min'] ?>"></div>
                 <div class="rc-field"><label>Lương tối đa (VND)</label><input type="number" name="salary_max" value="<?= (int)$r['salary_max'] ?>"></div>
+                <div class="rc-field"><label>Hình thức làm việc *</label>
+                    <select name="employment_type"><option value="">-</option>
+                        <?php foreach (['Full-time','Part-time','Contract','Thực tập','Remote / Hybrid'] as $opt): ?><option value="<?= $opt ?>"<?= $sel($r['employment_type'],$opt) ?>><?= $opt ?></option><?php endforeach; ?></select></div>
+                <div class="rc-field"><label>Kinh nghiệm yêu cầu</label>
+                    <select name="experience_required"><option value="">-</option>
+                        <?php foreach (['Không yêu cầu','Dưới 1 năm','1-2 năm','2-3 năm','3-5 năm','Trên 5 năm'] as $opt): ?><option value="<?= $opt ?>"<?= $sel($r['experience_required'],$opt) ?>><?= $opt ?></option><?php endforeach; ?></select></div>
+                <div class="rc-field"><label>Mức độ ưu tiên</label>
+                    <select name="priority"><?php foreach (['Cao','Trung bình','Thấp'] as $opt): ?><option value="<?= $opt ?>"<?= $sel($r['priority'],$opt) ?>><?= $opt ?></option><?php endforeach; ?></select></div>
             </div>
             <div class="rc-field"><label>Lý do tuyển</label>
                 <select name="reason">
@@ -77,7 +87,12 @@ if ($new || $edit) {
     var IS_EDIT = <?= $edit ? 'true' : 'false' ?>;
     function saveHrf(submit){
         const f=document.getElementById('hrfForm');
-        if(!f.title.value.trim()){alert('Nhập tên vị trí');return;}
+        if(!f.title.value.trim()){alert('Nhập tên vị trí');f.title.focus();return;}
+        if(!f.department_id.value||f.department_id.value==='0'){alert('Chọn bộ phận');f.department_id.focus();return;}
+        if(!f.level.value.trim()){alert('Nhập Level');f.level.focus();return;}
+        if(!f.quantity.value||parseInt(f.quantity.value,10)<1){alert('Nhập số lượng (>= 1)');f.quantity.focus();return;}
+        if(!f.need_by_date.value){alert('Chọn ngày cần onboard');f.need_by_date.focus();return;}
+        if(!f.employment_type.value){alert('Chọn hình thức làm việc');f.employment_type.focus();return;}
         document.getElementById('jdInput').value = jdQuill.getText().trim() ? jdQuill.root.innerHTML : '';
         const fd=new FormData(f); fd.append('action', IS_EDIT?'update_request':'save_request'); if(submit)fd.append('submit','1');
         fetch('/hrm/api',{method:'POST',body:fd}).then(r=>r.json()).then(j=>{
@@ -128,6 +143,9 @@ if ($id) {
             <div><div class="rc-muted">Số lượng</div><div><?= (int)$req['quantity'] ?></div></div>
             <div><div class="rc-muted">Khoảng lương</div><div><?= number_format($req['salary_min']) ?> - <?= number_format($req['salary_max']) ?> <?= h($req['currency']) ?></div></div>
             <div><div class="rc-muted">Cần onboard</div><div><?= $req['need_by_date'] ? date('d/m/Y', strtotime($req['need_by_date'])) : '-' ?></div></div>
+            <div><div class="rc-muted">Hình thức làm việc</div><div><?= h($req['employment_type'] ?: '-') ?></div></div>
+            <div><div class="rc-muted">Kinh nghiệm yêu cầu</div><div><?= h($req['experience_required'] ?: '-') ?></div></div>
+            <div><div class="rc-muted">Mức độ ưu tiên</div><div><?= h($req['priority'] ?: '-') ?></div></div>
         </div>
         <div style="margin-top:12px"><div class="rc-muted">Lý do</div><div><?= nl2br(h($req['reason'] ?: '-')) ?></div></div>
         <?php if (!empty($req['jd'])): ?><div style="margin-top:12px"><div class="rc-muted">Mô tả công việc (JD)</div><div class="rc-rich"><?= $req['jd'] ?></div></div><?php endif; ?>

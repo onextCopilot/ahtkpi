@@ -130,6 +130,23 @@ function hrm_next_code(mysqli $conn, string $prefix, string $table): string
     return sprintf('%s-%s-%04d', $prefix, $year, $seq);
 }
 
+/** Add a column if it doesn't exist yet (portable across MySQL/MariaDB). */
+function hrm_ensure_column(mysqli $conn, string $table, string $col, string $definition): void
+{
+    $res = $conn->query("SHOW COLUMNS FROM `$table` LIKE '" . $conn->real_escape_string($col) . "'");
+    if ($res && $res->num_rows === 0) {
+        $conn->query("ALTER TABLE `$table` ADD COLUMN `$col` $definition");
+    }
+}
+
+/** Ensure HRF extra columns exist (live installs may predate them). */
+function hrm_ensure_request_columns(mysqli $conn): void
+{
+    hrm_ensure_column($conn, 'hrm_requests', 'employment_type', "VARCHAR(32) DEFAULT ''");
+    hrm_ensure_column($conn, 'hrm_requests', 'experience_required', "VARCHAR(50) DEFAULT ''");
+    hrm_ensure_column($conn, 'hrm_requests', 'priority', "VARCHAR(16) DEFAULT 'Trung bình'");
+}
+
 /** Ensure the TA screening review table exists (live installs may predate it). */
 function hrm_ensure_screening_table(mysqli $conn): void
 {

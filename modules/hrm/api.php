@@ -32,10 +32,19 @@ switch ($action) {
         $reason      = trim($_POST['reason'] ?? '');
         $jd          = trim($_POST['jd'] ?? '');
         $type        = ($_POST['request_type'] ?? 'replacement') === 'new_hc' ? 'new_hc' : 'replacement';
+        $emp         = trim($_POST['employment_type'] ?? '');
+        $expr        = trim($_POST['experience_required'] ?? '');
+        $prio        = trim($_POST['priority'] ?? '') ?: 'Trung bình';
         $submit      = !empty($_POST['submit']);
 
-        $st = $conn->prepare('INSERT INTO hrm_requests (code,title,department_id,office_id,level,quantity,salary_min,salary_max,need_by_date,reason,jd,request_type,status,created_by) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,"draft",?)');
-        $st->bind_param('ssiisiddssssi', $code, $title, $dept, $office, $level, $qty, $smin, $smax, $needBy, $reason, $jd, $type, $uid);
+        if ($dept <= 0)       { jout(false, ['error' => 'Chọn bộ phận']); }
+        if ($level === '')    { jout(false, ['error' => 'Nhập Level']); }
+        if (!$needBy)         { jout(false, ['error' => 'Chọn ngày cần onboard']); }
+        if ($emp === '')      { jout(false, ['error' => 'Chọn hình thức làm việc']); }
+
+        hrm_ensure_request_columns($conn);
+        $st = $conn->prepare('INSERT INTO hrm_requests (code,title,department_id,office_id,level,quantity,salary_min,salary_max,need_by_date,reason,jd,request_type,employment_type,experience_required,priority,status,created_by) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,"draft",?)');
+        $st->bind_param('ssiisiddsssssssi', $code, $title, $dept, $office, $level, $qty, $smin, $smax, $needBy, $reason, $jd, $type, $emp, $expr, $prio, $uid);
         if (!$st->execute()) { jout(false, ['error' => $conn->error]); }
         $id = $st->insert_id;
         hrm_audit($conn, $uid, 'hrf_create', 'hrf', $id, $code);
@@ -64,10 +73,19 @@ switch ($action) {
         $needBy = ($_POST['need_by_date'] ?? '') ?: null;
         $reason = trim($_POST['reason'] ?? ''); $jd = trim($_POST['jd'] ?? '');
         $type = ($_POST['request_type'] ?? 'replacement') === 'new_hc' ? 'new_hc' : 'replacement';
+        $emp = trim($_POST['employment_type'] ?? '');
+        $expr = trim($_POST['experience_required'] ?? '');
+        $prio = trim($_POST['priority'] ?? '') ?: 'Trung bình';
         $submit = !empty($_POST['submit']);
 
-        $st = $conn->prepare('UPDATE hrm_requests SET title=?,department_id=?,office_id=?,level=?,quantity=?,salary_min=?,salary_max=?,need_by_date=?,reason=?,jd=?,request_type=? WHERE id=?');
-        $st->bind_param('siisiddssssi', $title, $dept, $office, $level, $qty, $smin, $smax, $needBy, $reason, $jd, $type, $id);
+        if ($dept <= 0)    { jout(false, ['error' => 'Chọn bộ phận']); }
+        if ($level === '') { jout(false, ['error' => 'Nhập Level']); }
+        if (!$needBy)      { jout(false, ['error' => 'Chọn ngày cần onboard']); }
+        if ($emp === '')   { jout(false, ['error' => 'Chọn hình thức làm việc']); }
+
+        hrm_ensure_request_columns($conn);
+        $st = $conn->prepare('UPDATE hrm_requests SET title=?,department_id=?,office_id=?,level=?,quantity=?,salary_min=?,salary_max=?,need_by_date=?,reason=?,jd=?,request_type=?,employment_type=?,experience_required=?,priority=? WHERE id=?');
+        $st->bind_param('siisiddsssssssi', $title, $dept, $office, $level, $qty, $smin, $smax, $needBy, $reason, $jd, $type, $emp, $expr, $prio, $id);
         $st->execute();
         hrm_audit($conn, $uid, 'hrf_update', 'hrf', $id, '');
 
