@@ -342,20 +342,16 @@ $rtEditor = function (string $id, string $ph = '') {
 <div id="taOverlay" class="ta-overlay" onclick="closeTAReview()"></div>
 <aside id="taPanel" class="ta-panel">
     <div class="ta-head">
-        <div>
+        <div style="min-width:0;flex:1">
             <div class="ta-step">BƯỚC 4 · SCREENING</div>
             <h3 id="taName">TA đánh giá</h3>
+            <div id="taHistory" class="ta-hist"><span class="ta-note">Đang kiểm tra...</span></div>
         </div>
         <button class="ta-x" onclick="closeTAReview()">✕</button>
     </div>
     <div class="ta-body">
         <input type="hidden" id="taAppId" value="0">
         <div class="ta-note" id="taMeta"></div>
-
-        <section class="ta-card">
-            <div class="ta-card-h">Lịch sử &amp; hồ sơ ứng viên</div>
-            <div id="taHistory" class="ta-hist"><div class="ta-note">Đang kiểm tra...</div></div>
-        </section>
 
         <section class="ta-card">
             <div class="ta-card-h">TA đánh giá <span class="ta-tag">Text / Phone call</span></div>
@@ -461,7 +457,7 @@ $rtEditor = function (string $id, string $ph = '') {
 .rt-bar{display:flex;gap:2px;padding:5px 6px;border-bottom:1px solid #eceef1;background:#fafbfc}
 .rt-bar button{min-width:28px;height:26px;padding:0 7px;border:none;background:none;border-radius:6px;cursor:pointer;font-size:12px;color:#42474e;display:flex;align-items:center;justify-content:center}
 .rt-bar button:hover{background:#e9edf2}
-.rt-ed{min-height:52px;max-height:220px;overflow-y:auto;padding:9px 11px;font-size:13px;line-height:1.5;color:#1d1d1f;outline:none}
+.rt-ed{min-height:96px;max-height:300px;overflow-y:auto;padding:10px 12px;font-size:13px;line-height:1.55;color:#1d1d1f;outline:none}
 .rt-ed:empty:before{content:attr(data-ph);color:#b0b3b8;pointer-events:none}
 .rt-ed ul{margin:4px 0;padding-left:20px}
 .rt-ed p{margin:0 0 6px}
@@ -475,16 +471,10 @@ $rtEditor = function (string $id, string $ph = '') {
 .ta-opt:has(input:checked){border-color:#1b96ff;background:#eef6ff}
 .ta-sla{margin-top:14px;font-size:12px;font-weight:600;color:#b25e00;background:#fff4e5;padding:9px 13px;border-radius:8px}
 .ta-note{font-size:12px;color:#86868b}
-.ta-hist{display:flex;flex-direction:column;gap:9px}
-.ta-cv{font-size:12.5px;color:#1d1d1f}
+.ta-hist{display:flex;flex-wrap:wrap;align-items:center;gap:6px 14px;margin-top:8px;font-size:12.5px}
 .ta-cv a{color:#0071e3;text-decoration:none;font-weight:600}.ta-cv a:hover{text-decoration:underline}
-.ta-hrow{display:flex;align-items:center;gap:10px;padding:10px 12px;border:1px solid #eceef1;border-radius:10px;font-size:12.5px;background:#fafbfc}
-.ta-hrow.cur{background:#eef6ff;border-color:#cfe4ff}
-.ta-hrow .j{flex:1;min-width:0}
-.ta-hrow .jt{font-weight:600;color:#1d1d1f;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.ta-hrow .js{color:#86868b;font-size:11.5px;margin-top:2px}
-.ta-badge{font-size:10.5px;font-weight:700;padding:3px 9px;border-radius:980px;white-space:nowrap}
-.ta-empty{font-size:12.5px;color:#16a34a;font-weight:500}
+.ta-empty{color:#16a34a;font-weight:500}
+.ta-chip{display:inline-flex;align-items:center;font-size:11px;font-weight:700;padding:3px 10px;border-radius:980px;text-decoration:none;max-width:200px;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
 .ta-foot{display:flex;justify-content:flex-end;gap:8px;padding:14px 22px;border-top:1px solid #eceef1;background:#fff}
 </style>
 
@@ -619,7 +609,7 @@ function openTAReview(appId,name){
     document.getElementById('ta_lang').value='';document.getElementById('ta_lang_level').value='';
     document.querySelectorAll('input[name=ta_result]').forEach(r=>r.checked=(r.value===''));
     document.getElementById('taMeta').textContent='';
-    document.getElementById('taHistory').innerHTML='<div class="ta-note">Đang kiểm tra...</div>';
+    document.getElementById('taHistory').innerHTML='<span class="ta-note">Đang kiểm tra...</span>';
     document.getElementById('taOverlay').style.display='block';
     const p=document.getElementById('taPanel');p.classList.add('open');
     const fd=new FormData();fd.append('action','ta_review_get');fd.append('application_id',appId);
@@ -642,19 +632,14 @@ function renderTAHistory(cand,hist,curId){
     const box=document.getElementById('taHistory');
     if(!cand){box.innerHTML='<div class="ta-note">Không có dữ liệu ứng viên.</div>';return;}
     const others=hist.filter(h=>String(h.id)!==String(curId));
-    const cv=cand.cv_path?('<a href="'+esc(cand.cv_path)+'" target="_blank" rel="noopener">Xem CV</a>'):'<span class="ta-note">Chưa có CV</span>';
-    let html='<div class="ta-cv">📎 CV: '+cv+'</div>';
+    const cv=cand.cv_path?('<a href="'+esc(cand.cv_path)+'" target="_blank" rel="noopener">📎 Xem CV</a>'):'<span class="ta-note">📎 Chưa có CV</span>';
+    let html='<span class="ta-cv">'+cv+'</span>';
     if(!others.length){
-        html+='<div class="ta-empty">✓ Không trùng job khác</div>';
+        html+='<span class="ta-empty">✓ Không trùng job khác</span>';
     }else{
-        html+='<div class="ta-note" style="margin-top:2px">Còn ứng tuyển '+others.length+' vị trí khác:</div>';
         others.forEach(h=>{
             const st=TA_STATUS[h.status]||[h.status,'#6e6e73','#f0f0f2'];
-            const d=h.applied_at?String(h.applied_at).substring(0,10):'-';
-            html+='<div class="ta-hrow">'
-                +'<div class="j"><div class="jt"><a href="/hrm/job?id='+esc(h.job_id)+'" style="color:inherit;text-decoration:none">'+esc(h.job_title||('#'+h.job_id))+'</a></div>'
-                +'<div class="js">'+esc(h.stage_name||'-')+' · '+d+'</div></div>'
-                +'<span class="ta-badge" style="background:'+st[2]+';color:'+st[1]+'">'+esc(st[0])+'</span></div>';
+            html+='<a class="ta-chip" href="/hrm/job?id='+esc(h.job_id)+'" title="'+esc(h.stage_name||'')+'" style="background:'+st[2]+';color:'+st[1]+'">⚠ '+esc(h.job_title||('#'+h.job_id))+'</a>';
         });
     }
     box.innerHTML=html;
