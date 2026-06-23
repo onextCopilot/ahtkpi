@@ -13,7 +13,10 @@ $sources = $conn->query('SELECT id,name FROM hrm_candidate_sources WHERE active=
 $where = []; $params = []; $types = '';
 if ($q !== '')  { $where[] = '(c.full_name LIKE ? OR c.email LIKE ? OR c.phone LIKE ?)'; $like = "%$q%"; array_push($params, $like, $like, $like); $types .= 'sss'; }
 if ($src > 0)   { $where[] = 'c.source_id = ?'; $params[] = $src; $types .= 'i'; }
-$sql = "SELECT c.*, s.name AS source_name FROM hrm_candidates c LEFT JOIN hrm_candidate_sources s ON s.id=c.source_id"
+$sql = "SELECT c.*, s.name AS source_name,
+        (SELECT j.title FROM hrm_applications a JOIN hrm_jobs j ON j.id=a.job_id WHERE a.candidate_id=c.id ORDER BY a.id DESC LIMIT 1) AS app_job,
+        (SELECT ps.name FROM hrm_applications a LEFT JOIN hrm_pipeline_stages ps ON ps.id=a.stage_id WHERE a.candidate_id=c.id ORDER BY a.id DESC LIMIT 1) AS app_stage
+        FROM hrm_candidates c LEFT JOIN hrm_candidate_sources s ON s.id=c.source_id"
      . ($where ? ' WHERE ' . implode(' AND ', $where) : '') . ' ORDER BY c.id DESC LIMIT 500';
 $st = $conn->prepare($sql);
 if ($types) { $st->bind_param($types, ...$params); }
@@ -63,8 +66,9 @@ $avatar = function ($name) use ($pal) {
             </div></td>
             <td><?= h($c['email'] ?: '-') ?><?php if ($c['phone']): ?><div class="cd-sub"><?= h($c['phone']) ?></div><?php endif; ?></td>
             <td><?= h($c['classification'] ?: '-') ?></td>
-            <td><?= h($c['applied_job'] ?: '-') ?></td>
-            <td><?= $c['applied_stage'] ? '<span class="cd-badge">' . h($c['applied_stage']) . '</span>' : '-' ?></td>
+            <td><?= h($c['app_job'] ?: ($c['applied_job'] ?: '-')) ?></td>
+            <?php $stg = $c['app_stage'] ?: $c['applied_stage']; ?>
+            <td><?= $stg ? '<span class="cd-badge">' . h($stg) . '</span>' : '-' ?></td>
             <td><?= h($c['reject_reason'] ?: '-') ?></td>
             <td><?= h($c['source_name'] ?: '-') ?></td>
             <td><?= h($c['campaign'] ?: '-') ?></td>

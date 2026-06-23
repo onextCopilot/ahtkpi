@@ -50,6 +50,19 @@ $st->bind_param($pt, ...$pp);
 $st->execute();
 $rows = $st->get_result()->fetch_all(MYSQLI_ASSOC);
 
+// Phụ trách mặc định: lấy BC + TA của giai đoạn đầu (sort_order nhỏ nhất)
+// theo quy luật assign trong cài đặt (hrm_stage_owners, áp dụng theo phòng ban).
+$firstStageId = (int)($conn->query('SELECT id FROM hrm_pipeline_stages ORDER BY sort_order, id LIMIT 1')->fetch_row()[0] ?? 0);
+$deptOwners = [];   // department_id => ['bc' => name, 'ta' => name]
+if ($firstStageId) {
+    $ores = $conn->query("SELECT so.department_id, so.owner_type, u.full_name
+        FROM hrm_stage_owners so JOIN users u ON u.id = so.user_id
+        WHERE so.stage_id = $firstStageId");
+    while ($o = $ores->fetch_assoc()) {
+        $deptOwners[(int)$o['department_id']][$o['owner_type']] = $o['full_name'];
+    }
+}
+
 $statusMeta = [
     'open'    => ['Đang tuyển', '#16a34a'],
     'draft'   => ['Bản nháp', '#94a3b8'],
@@ -157,7 +170,14 @@ hrm_header('Tin tuyển dụng', 'Danh sách tin tuyển dụng', 'jobs');
             <td class="jb-stat"><b><?= (int)$j['interviewed'] ?></b> phỏng vấn</td>
             <td style="max-width:160px"><?= h($j['managers'] ?: '-') ?></td>
             <td><?= h($j['poster'] ?: ($j['creator'] ?: '-')) ?></td>
-            <td><span class="rc-muted">-</span></td>
+            <td style="max-width:180px"><?php
+                $ow = $deptOwners[(int)$j['department_id']] ?? [];
+                $bc = $ow['bc'] ?? ''; $ta = $ow['ta'] ?? '';
+                if ($bc || $ta): ?>
+                    <?php if ($ta): ?><div><span class="jb-tag t">TA</span> <?= h($ta) ?></div><?php endif; ?>
+                    <?php if ($bc): ?><div style="margin-top:4px"><span class="jb-tag t">BC</span> <?= h($bc) ?></div><?php endif; ?>
+                <?php else: ?><span class="rc-muted">-</span><?php endif; ?>
+            </td>
             <td style="white-space:nowrap"><?= date('d/m/Y', strtotime($j['source_created'] ?: $j['created_at'])) ?></td>
             <td style="white-space:nowrap"><?= $j['source_start'] ? date('d/m/Y', strtotime($j['source_start'])) : '-' ?></td>
             <td style="white-space:nowrap"><?= $j['deadline'] ? date('d/m/Y', strtotime($j['deadline'])) : '-' ?></td>
