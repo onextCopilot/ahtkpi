@@ -447,7 +447,40 @@ switch ($action) {
         $st->bind_param('i', $aid);
         $st->execute();
         $row = $st->get_result()->fetch_assoc();
-        jout(true, ['review' => $row ?: null]);
+
+        // Thông tin ứng viên + lịch sử ứng tuyển (kiểm tra trùng / đã apply job nào).
+        $cand = null; $history = [];
+        $ast = $conn->prepare('SELECT c.id, c.full_name, c.email, c.phone, c.cv_path FROM hrm_applications a JOIN hrm_candidates c ON c.id=a.candidate_id WHERE a.id=?');
+        $ast->bind_param('i', $aid);
+        $ast->execute();
+        $cand = $ast->get_result()->fetch_assoc();
+        if ($cand) {
+            // Gom các bản ghi ứng viên cùng người (trùng email/SĐT) để bắt trường hợp apply lại bằng hồ sơ khác.
+            $ids = [(int)$cand['id']];
+            $email = trim($cand['email'] ?? ''); $phone = trim($cand['phone'] ?? '');
+            if ($email !== '' || $phone !== '') {
+                $ds = $conn->prepare('SELECT id FROM hrm_candidates WHERE (email<>"" AND email=?) OR (phone<>"" AND phone=?)');
+                $ds->bind_param('ss', $email, $phone);
+                $ds->execute();
+                $dr = $ds->get_result();
+                while ($x = $dr->fetch_assoc()) { $ids[] = (int)$x['id']; }
+            }
+            $ids = array_values(array_unique($ids));
+            $in = implode(',', array_map('intval', $ids));
+            $hr = $conn->query("SELECT a.id, a.job_id, a.status, a.applied_at, j.title AS job_title,
+                    ps.name AS stage_name, c.cv_path
+                FROM hrm_applications a
+                JOIN hrm_jobs j ON j.id=a.job_id
+                LEFT JOIN hrm_pipeline_stages ps ON ps.id=a.stage_id
+                JOIN hrm_candidates c ON c.id=a.candidate_id
+                WHERE a.candidate_id IN ($in)
+                ORDER BY a.applied_at DESC");
+            while ($x = $hr->fetch_assoc()) {
+                $x['is_current'] = ((int)$x['id'] === $aid);
+                $history[] = $x;
+            }
+        }
+        jout(true, ['review' => $row ?: null, 'candidate' => $cand, 'history' => $history]);
     }
 
     case 'ta_review_save': {
