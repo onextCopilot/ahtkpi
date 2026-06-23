@@ -22,9 +22,12 @@ $dateLine = 'HÀ NỘI, ' . $session . ' ' . $weekdays[(int)date('w')] . ', ' . 
 
 // tile: [label, subtitle, href|null, gradient, svg-path, badge|null]
 $tiles = [
+    ['Kế hoạch tuyển dụng', 'Recruitment Plan', '/hrm/plan', 'linear-gradient(135deg,#6366f1,#4338ca)',
+        '<path d="M9 2h6a1 1 0 0 1 1 1v1h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2V3a1 1 0 0 1 1-1z"/><path d="M9 4h6"/><path d="m9 13 2 2 4-4"/>',
+        $pendingHrf ?: null],
     ['Tuyển dụng', 'E-Hiring', '/hrm/recruitment', 'linear-gradient(135deg,#0e9f6e,#057a55)',
         '<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>',
-        $pendingHrf ?: null],
+        null],
     ['Onboarding', 'Hội nhập 60 ngày', '/hrm/onboarding', 'linear-gradient(135deg,#3b82f6,#1d4ed8)',
         '<path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/>', null],
     ['Đánh giá thử việc', 'Probation review', '/hrm/probation', 'linear-gradient(135deg,#f59e0b,#b45309)',

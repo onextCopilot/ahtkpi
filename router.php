@@ -104,6 +104,7 @@ $routes = [
     // ── HRM / Recruitment (rebuilt 2026, SOP-driven) ──────────────────
     '/hrm' => 'modules/hrm/index.php',
     '/hrm/recruitment' => 'modules/hrm/recruitment.php',
+    '/hrm/plan' => 'modules/hrm/plan.php',
     '/hrm/requests' => 'modules/hrm/requests.php',
     '/hrm/jobs' => 'modules/hrm/jobs.php',
     '/hrm/job' => 'modules/hrm/job.php',
