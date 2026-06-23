@@ -137,7 +137,7 @@ table.plan tbody td{min-width:42px}
 table.plan thead th{position:sticky;top:0;z-index:3;background:#f8fafc;color:var(--mut);font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.2px;line-height:1.25;white-space:normal}
 table.plan thead tr:nth-child(2) th{top:19px;min-width:42px}
 table.plan .grp{background:#f1f5f9;color:#334155;border-bottom:1px solid #e2e8f0}
-table.plan .col-dept{position:sticky;left:0;z-index:2;background:#fff;text-align:left;min-width:170px;max-width:170px;white-space:normal;font-weight:600;color:#0f172a;line-height:1.3}
+table.plan .col-dept{position:sticky;left:0;z-index:2;box-sizing:border-box;background:#fff;text-align:left;width:180px;min-width:180px;max-width:180px;white-space:normal;font-weight:600;color:#0f172a;line-height:1.3}
 table.plan .col-dept{display:flex;align-items:center;gap:6px;justify-content:space-between}
 table.plan .dept-acts{flex:none;display:flex;gap:4px}
 table.plan .dept-del,table.plan .dept-edit{width:20px;height:20px;line-height:1;border:none;border-radius:50%;background:#f1f5f9;color:#94a3b8;font-size:13px;cursor:pointer;opacity:0;transition:.15s;padding:0}
@@ -162,12 +162,14 @@ table.plan .dept-edit:hover{background:#dbeafe;color:#2563eb}
 .plan-readd .chip{display:inline-flex;align-items:center;gap:6px;background:#fff;border:1px dashed #cbd5e1;border-radius:8px;padding:5px 10px;cursor:pointer;color:#334155;font-weight:600}
 .plan-readd .chip:hover{border-color:var(--rc2);color:var(--rc2)}
 table.plan thead .col-dept{z-index:4;background:#f8fafc}
-/* Khối cột đóng băng bên trái: Định biên đã chốt · Nhân sự · Đề xuất (đầu năm). left set bằng JS. */
-table.plan .col-chot,table.plan .col-ns,table.plan .col-canp,table.plan .col-dau{position:sticky;z-index:2}
+/* Khối 4 cột đầu đóng băng: width cố định (border-box) + left cộng dồn cố định -> sticky chuẩn, không phụ thuộc JS.
+   Cộng dồn: dept 180 | chốt 84 | nhân sự 56 | đề xuất 56  => left 0 / 180 / 264 / 320 */
+table.plan .col-chot,table.plan .col-ns,table.plan .col-canp,table.plan .col-dau{position:sticky;z-index:2;box-sizing:border-box;white-space:normal}
 table.plan thead .col-chot,table.plan thead .col-ns,table.plan thead .col-canp,table.plan thead .col-dau{z-index:4}
-/* Bề rộng cố định (min=max) cho các cột đóng băng -> không co lại, không cụt chữ, offset ổn định. */
-table.plan .col-chot{left:170px;min-width:74px;max-width:74px;width:74px;white-space:normal}
-table.plan .col-ns,table.plan .col-canp{min-width:52px;max-width:52px;width:52px;white-space:normal}
+table.plan .col-chot{left:180px;width:84px;min-width:84px;max-width:84px}
+table.plan .col-ns{left:264px;width:56px;min-width:56px;max-width:56px}
+table.plan .col-canp{left:320px;width:56px;min-width:56px;max-width:56px}
+table.plan thead .col-dau{left:180px}
 /* đường phân cách mép phải của khối đóng băng */
 table.plan .col-canp,table.plan .col-dau{box-shadow:2px 0 0 #e2e8f0}
 /* Zebra (chẵn/lẻ) - áp cho cả ô phòng ban dính trái */
@@ -397,33 +399,16 @@ document.querySelector('table.plan').addEventListener('click', function(e){
     tr.classList.toggle('sel');
 });
 
-// Đóng băng 4 cột đầu (Vị trí công việc · Định biên đã chốt · Nhân sự · Đề xuất) + header 2 dòng.
-// Đo bề rộng thật rồi gán left cộng dồn nên luôn khớp; chạy lại khi layout/font đổi.
+// Đóng băng ngang 4 cột đầu = thuần CSS (left cố định). JS chỉ canh dòng sub-header
+// dính ngay dưới dòng nhóm (top = chiều cao dòng nhóm), chạy lại khi layout/font đổi.
 (function(){
-    function syncSticky(){
+    function syncHead(){
         var t = document.querySelector('table.plan'); if(!t || !t.tHead) return;
-        var r1 = t.tHead.rows[0], r2 = t.tHead.rows[1];
-        if (r2) {
-            var h = Math.round(r1.getBoundingClientRect().height);
-            for (var i=0;i<r2.cells.length;i++){ r2.cells[i].style.top = h + 'px'; }
-        }
-        // left cộng dồn từ bề rộng thật của 3 cột đầu (phòng ban, định biên chốt, nhân sự).
-        var ref = t.querySelector('tbody tr.total') || t.querySelector('tbody tr[data-dept]');
-        if (ref && ref.children.length >= 4) {
-            var c = ref.children;
-            var w0 = c[0].getBoundingClientRect().width;
-            var w1 = c[1].getBoundingClientRect().width;
-            var w2 = c[2].getBoundingClientRect().width;
-            var Lchot = Math.round(w0), Lns = Math.round(w0 + w1), Lcanp = Math.round(w0 + w1 + w2);
-            function setL(sel, px){ t.querySelectorAll(sel).forEach(function(el){ el.style.left = px + 'px'; }); }
-            setL('.col-dept', 0);
-            setL('.col-chot', Lchot);
-            setL('.col-ns', Lns);
-            setL('.col-canp', Lcanp);
-            setL('.col-dau', Lchot);   // header nhóm "Đầu năm" bắt đầu ở cột Định biên đã chốt
-        }
+        var r1 = t.tHead.rows[0], r2 = t.tHead.rows[1]; if(!r2) return;
+        var h = Math.round(r1.getBoundingClientRect().height);
+        for (var i=0;i<r2.cells.length;i++){ r2.cells[i].style.top = h + 'px'; }
     }
-    function run(){ requestAnimationFrame(syncSticky); }
+    function run(){ requestAnimationFrame(syncHead); }
     run();
     window.addEventListener('resize', run);
     window.addEventListener('load', run);
