@@ -131,12 +131,13 @@ foreach ($departments as $d) {
 .plan-pill .x{opacity:.7;font-weight:700}
 .plan-add{font-size:13px;font-weight:600;color:var(--rc2);background:#fff;border:1px dashed #cbd5e1;border-radius:8px;padding:7px 12px;cursor:pointer}
 .plan-scroll{overflow:auto;border:1px solid var(--bd);border-radius:12px;background:#fff;max-height:calc(100vh - 220px)}
-table.plan{border-collapse:separate;border-spacing:0;font-size:12px;white-space:nowrap}
-table.plan th,table.plan td{border-right:1px solid #eef1f5;border-bottom:1px solid #eef1f5;padding:6px 8px;text-align:center}
-table.plan thead th{position:sticky;top:0;z-index:3;background:#f8fafc;color:var(--mut);font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.3px}
-table.plan thead tr:nth-child(2) th{top:31px}
+table.plan{border-collapse:separate;border-spacing:0;font-size:11px;white-space:nowrap}
+table.plan th,table.plan td{border-right:1px solid #eef1f5;border-bottom:1px solid #eef1f5;padding:3px 5px;text-align:center}
+table.plan tbody td{min-width:42px}
+table.plan thead th{position:sticky;top:0;z-index:3;background:#f8fafc;color:var(--mut);font-size:9.5px;font-weight:700;text-transform:uppercase;letter-spacing:.2px;line-height:1.25;white-space:normal}
+table.plan thead tr:nth-child(2) th{top:19px;min-width:42px}
 table.plan .grp{background:#f1f5f9;color:#334155;border-bottom:1px solid #e2e8f0}
-table.plan .col-dept{position:sticky;left:0;z-index:2;background:#fff;text-align:left;min-width:210px;max-width:210px;white-space:normal;font-weight:600;color:#0f172a;box-shadow:1px 0 0 #e2e8f0}
+table.plan .col-dept{position:sticky;left:0;z-index:2;background:#fff;text-align:left;min-width:170px;max-width:170px;white-space:normal;font-weight:600;color:#0f172a;box-shadow:1px 0 0 #e2e8f0;line-height:1.3}
 table.plan .col-dept{display:flex;align-items:center;gap:6px;justify-content:space-between}
 table.plan .dept-del{flex:none;width:18px;height:18px;line-height:1;border:none;border-radius:50%;background:#f1f5f9;color:#94a3b8;font-size:14px;cursor:pointer;opacity:0;transition:.15s;padding:0}
 table.plan tbody tr:hover .dept-del{opacity:1}
@@ -149,7 +150,8 @@ table.plan tbody tr:hover td{background:#fafcff}
 table.plan tbody tr:hover .col-dept{background:#fafcff}
 table.plan .total td{background:#fffaf0;font-weight:700;color:#0f172a;border-bottom:2px solid #e2e8f0}
 table.plan .total .col-dept{background:#fffaf0}
-table.plan input{width:46px;border:1px solid transparent;border-radius:6px;padding:4px 2px;text-align:center;font-size:12px;font-family:inherit;background:transparent;color:#0f172a;outline:none}
+table.plan input{width:34px;border:1px solid transparent;border-radius:5px;padding:2px 1px;text-align:center;font-size:11px;font-family:inherit;background:transparent;color:#0f172a;outline:none;-moz-appearance:textfield}
+table.plan input::-webkit-outer-spin-button,table.plan input::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
 table.plan input:hover{border-color:#e2e8f0;background:#fff}
 table.plan input:focus{border-color:var(--rc2);background:#fff;box-shadow:0 0 0 3px rgba(14,107,92,.1)}
 table.plan .calc{color:#2563eb;font-weight:600}
