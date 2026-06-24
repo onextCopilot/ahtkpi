@@ -206,6 +206,8 @@ function hrm_ensure_candidate_module(mysqli $conn): void
     hrm_ensure_column($conn, 'hrm_candidates', 'consent_at', 'DATETIME NULL');
     hrm_ensure_column($conn, 'hrm_candidates', 'retention_until', 'DATE NULL');
     hrm_ensure_column($conn, 'hrm_candidates', 'dedup_key', "VARCHAR(190) DEFAULT ''");
+    hrm_ensure_column($conn, 'hrm_candidates', 'reject_note', "VARCHAR(255) DEFAULT ''"); // "Thông tin từ chối"
+    hrm_ensure_column($conn, 'hrm_candidates', 'rejected_by', 'INT DEFAULT 0');            // "Từ chối bởi" -> user id
     try {
         $idx = $conn->query("SHOW INDEX FROM hrm_candidates WHERE Key_name='idx_dedup'");
         if ($idx && $idx->num_rows === 0) { $conn->query("CREATE INDEX idx_dedup ON hrm_candidates (dedup_key)"); }
