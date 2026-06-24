@@ -157,7 +157,7 @@ hrm_header('Tin tuyển dụng', 'Danh sách tin tuyển dụng', 'jobs');
             </td>
             <td><?= h($deptName[(int)$j['department_id']] ?? 'Chưa chọn') ?></td>
             <td style="max-width:220px">
-                <?php if ($off): ?><div style="font-weight:600"><?= h($off['name']) ?></div><?php if ($off['address']): ?><div class="jb-sub"><?= h($off['address']) ?></div><?php endif; ?>
+                <?php if ($off): ?><div style="font-weight:600;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden" title="<?= h($off['name']) ?>"><?= h($off['name']) ?></div>
                 <?php else: ?><span class="rc-muted">-</span><?php endif; ?>
             </td>
             <td style="white-space:nowrap"><span class="jb-dot" style="background:<?= $sm[1] ?>"></span><?= h($sm[0]) ?>
