@@ -1,41 +1,61 @@
 <?php
 /**
- * Candidate pool - list / search + Excel import (Base E-Hiring export format).
+ * Kho ứng viên - danh sách + lọc nâng cao + thao tác hàng loạt + xuất + thêm thủ công.
  */
 require_once __DIR__ . '/lib/core.php';
+require_once __DIR__ . '/lib/candidates.php';
 require_once __DIR__ . '/lib/shell.php';
 hrm_require_login();
+hrm_ensure_candidate_module($conn);
 
-$q   = trim($_GET['q'] ?? '');
-$src = (int)($_GET['source'] ?? 0);
-$sources = $conn->query('SELECT id,name FROM hrm_candidate_sources WHERE active=1 ORDER BY name')->fetch_all(MYSQLI_ASSOC);
-
-$where = []; $params = []; $types = '';
-if ($q !== '')  { $where[] = '(c.full_name LIKE ? OR c.email LIKE ? OR c.phone LIKE ?)'; $like = "%$q%"; array_push($params, $like, $like, $like); $types .= 'sss'; }
-if ($src > 0)   { $where[] = 'c.source_id = ?'; $params[] = $src; $types .= 'i'; }
-$sql = "SELECT c.*, s.name AS source_name,
-        (SELECT j.title FROM hrm_applications a JOIN hrm_jobs j ON j.id=a.job_id WHERE a.candidate_id=c.id ORDER BY a.id DESC LIMIT 1) AS app_job,
-        (SELECT ps.name FROM hrm_applications a LEFT JOIN hrm_pipeline_stages ps ON ps.id=a.stage_id WHERE a.candidate_id=c.id ORDER BY a.id DESC LIMIT 1) AS app_stage
-        FROM hrm_candidates c LEFT JOIN hrm_candidate_sources s ON s.id=c.source_id"
-     . ($where ? ' WHERE ' . implode(' AND ', $where) : '') . ' ORDER BY c.id DESC LIMIT 500';
-$st = $conn->prepare($sql);
-if ($types) { $st->bind_param($types, ...$params); }
-$st->execute();
-$rows = $st->get_result()->fetch_all(MYSQLI_ASSOC);
-$total = (int)($conn->query('SELECT COUNT(*) c FROM hrm_candidates')->fetch_assoc()['c'] ?? 0);
+$f    = hrm_candidate_filters();
+$opts = hrm_candidate_filter_options($conn);
+$rows = hrm_candidate_query($conn, $f, 500);
+$statuses = hrm_candidate_statuses();
+$total = (int)($conn->query("SELECT COUNT(*) c FROM hrm_candidates WHERE status<>'archived'")->fetch_assoc()['c'] ?? 0);
+$qs = http_build_query(array_filter($f, fn($v) => $v !== '' && $v !== 0 && $v !== -1));
 
 hrm_header('Ứng viên', 'Kho ứng viên (' . $total . ')', 'candidates');
 ?>
-<div class="rc-toolbar">
-    <form class="rc-tabs" method="get" style="gap:8px">
-        <input name="q" value="<?= h($q) ?>" placeholder="Tìm tên / email / SĐT" style="padding:8px 12px;border:1px solid var(--bd);border-radius:8px;font-size:13px;min-width:220px">
-        <select name="source" style="padding:8px 12px;border:1px solid var(--bd);border-radius:8px;font-size:13px">
-            <option value="0">Tất cả nguồn</option>
-            <?php foreach ($sources as $s): ?><option value="<?= $s['id'] ?>"<?= $src===(int)$s['id']?' selected':'' ?>><?= h($s['name']) ?></option><?php endforeach; ?>
-        </select>
-        <button class="rc-btn ghost">Lọc</button>
-    </form>
-    <button class="rc-btn" onclick="document.getElementById('impModal').style.display='flex'">Import Excel</button>
+<form class="cd-filters" method="get" id="filterForm">
+    <input name="q" value="<?= h($f['q']) ?>" placeholder="Tìm tên / email / SĐT / vị trí" class="cd-in" style="min-width:240px">
+    <select name="source" class="cd-in"><option value="0">Tất cả nguồn</option>
+        <?php foreach ($opts['sources'] as $s): ?><option value="<?= $s['id'] ?>"<?= $f['source']===(int)$s['id']?' selected':'' ?>><?= h($s['name']) ?></option><?php endforeach; ?></select>
+    <select name="event" class="cd-in"><option value="0">Tất cả sự kiện</option>
+        <?php foreach ($opts['events'] as $e): ?><option value="<?= $e['id'] ?>"<?= $f['event']===(int)$e['id']?' selected':'' ?>><?= h($e['name']) ?></option><?php endforeach; ?></select>
+    <select name="status" class="cd-in"><option value="">Mọi trạng thái</option>
+        <?php foreach ($statuses as $k=>$lbl): ?><option value="<?= $k ?>"<?= $f['status']===$k?' selected':'' ?>><?= h($lbl) ?></option><?php endforeach; ?></select>
+    <select name="owner" class="cd-in"><option value="0">Mọi người phụ trách</option>
+        <?php foreach ($opts['owners'] as $o): ?><option value="<?= $o['id'] ?>"<?= $f['owner']===(int)$o['id']?' selected':'' ?>><?= h($o['full_name']) ?></option><?php endforeach; ?></select>
+    <input name="skill" value="<?= h($f['skill']) ?>" placeholder="Kỹ năng" class="cd-in" style="width:130px">
+    <input name="tag" value="<?= h($f['tag']) ?>" placeholder="Thẻ" class="cd-in" style="width:110px">
+    <select name="pool" class="cd-in"><option value="">Pool: tất cả</option>
+        <option value="1"<?= $f['pool']===1?' selected':'' ?>>Trong pool</option>
+        <option value="0"<?= $f['pool']===0?' selected':'' ?>>Ngoài pool</option></select>
+    <select name="has_cv" class="cd-in"><option value="">CV: tất cả</option>
+        <option value="1"<?= $f['has_cv']==='1'?' selected':'' ?>>Có CV</option>
+        <option value="0"<?= $f['has_cv']==='0'?' selected':'' ?>>Chưa có CV</option></select>
+    <input type="date" name="from" value="<?= h($f['from']) ?>" class="cd-in" title="Tạo từ ngày">
+    <input type="date" name="to" value="<?= h($f['to']) ?>" class="cd-in" title="Đến ngày">
+    <button class="rc-btn ghost">Lọc</button>
+    <a href="/hrm/candidates" class="rc-btn ghost">Xóa lọc</a>
+    <div style="flex:1"></div>
+    <a class="rc-btn ghost" href="/hrm/candidates/export?fmt=xls&<?= h($qs) ?>">Xuất Excel</a>
+    <a class="rc-btn ghost" href="/hrm/candidates/export?fmt=csv&<?= h($qs) ?>">CSV</a>
+    <button type="button" class="rc-btn" onclick="document.getElementById('addModal').style.display='flex'">+ Thêm ứng viên</button>
+    <button type="button" class="rc-btn ghost" onclick="document.getElementById('impModal').style.display='flex'">Import Excel</button>
+</form>
+
+<!-- Thanh thao tác hàng loạt -->
+<div id="bulkBar" style="display:none" class="cd-bulk">
+    <span><b id="bulkCount">0</b> đã chọn</span>
+    <input id="bulkTag" class="cd-in" placeholder="Thêm thẻ..." style="width:140px">
+    <button class="rc-btn ghost" onclick="bulk('tag', document.getElementById('bulkTag').value)">Gắn thẻ</button>
+    <select id="bulkStatus" class="cd-in"><option value="">Đổi trạng thái...</option>
+        <?php foreach ($statuses as $k=>$lbl): ?><option value="<?= $k ?>"><?= h($lbl) ?></option><?php endforeach; ?></select>
+    <button class="rc-btn ghost" onclick="bulk('status', document.getElementById('bulkStatus').value)">Áp dụng</button>
+    <button class="rc-btn ghost" onclick="bulk('pool','')">+ Talent pool</button>
+    <button class="rc-btn ghost" style="color:#dc2626" onclick="if(confirm('Lưu trữ các ứng viên đã chọn?'))bulk('delete','')">Lưu trữ</button>
 </div>
 
 <?php
@@ -45,72 +65,94 @@ $avatar = function ($name) use ($pal) {
     $ini = mb_strtoupper(mb_substr(end($p) ?: $name, 0, 1) . (count($p) > 1 ? mb_substr($p[0], 0, 1) : ''));
     return [$ini, $pal[abs(crc32($name)) % count($pal)]];
 };
+$stCol = ['new'=>'#0071e3','active'=>'#b45309','pooled'=>'#7c3aed','hired'=>'#16a34a','blacklist'=>'#dc2626','archived'=>'#64748b'];
 ?>
 <?php if (!$rows): ?>
-    <div class="rc-empty"><?= $total ? 'Không có ứng viên khớp bộ lọc.' : 'Chưa có ứng viên. Bấm "Import Excel" để nhập từ file Base E-Hiring.' ?></div>
+    <div class="rc-empty"><?= $total ? 'Không có ứng viên khớp bộ lọc.' : 'Chưa có ứng viên. Bấm "+ Thêm ứng viên" hoặc "Import Excel".' ?></div>
 <?php else: ?>
 <div class="cd-scroll">
 <table class="cd-table">
     <thead><tr>
-        <th>Họ và tên</th><th>Thông tin liên hệ</th><th>Phân loại</th><th>Vị trí ứng tuyển</th><th>Giai đoạn</th>
-        <th>Lý do từ chối</th><th>Nguồn</th><th>Medium</th><th>Văn phòng</th><th>Thẻ</th><th>Điểm</th>
-        <th>Giới tính</th><th>Ngày sinh</th><th>Ngày ứng tuyển</th><th>Ngày phỏng vấn</th><th>Cập nhật cuối</th><th>CV</th>
+        <th style="width:34px"><input type="checkbox" id="checkAll" onclick="toggleAll(this)"></th>
+        <th>Họ và tên</th><th>Trạng thái</th><th>Liên hệ</th><th>Kỹ năng</th><th>Thẻ</th>
+        <th>Nguồn</th><th>Sự kiện</th><th>Phụ trách</th><th>Vị trí ứng tuyển</th><th>Giai đoạn</th>
+        <th>Đánh giá</th><th>Ngày tạo</th><th>CV</th>
     </tr></thead>
     <tbody>
     <?php foreach ($rows as $c): [$ini, $col] = $avatar($c['full_name']); ?>
-        <tr onclick="location.href='/hrm/candidate?id=<?= $c['id'] ?>'">
-            <td><div class="cd-name-cell">
+        <tr data-id="<?= $c['id'] ?>">
+            <td onclick="event.stopPropagation()"><input type="checkbox" class="rowChk" value="<?= $c['id'] ?>" onclick="onCheck()"></td>
+            <td onclick="location.href='/hrm/candidate?id=<?= $c['id'] ?>'"><div class="cd-name-cell">
                 <span class="cd-av" style="background:<?= $col ?>"><?= h($ini) ?></span>
                 <div style="min-width:0"><div class="cd-nm"><?= h($c['full_name']) ?></div>
                     <div class="cd-sub"><?= h($c['current_position'] ?: 'Không có chức danh') ?></div></div>
             </div></td>
-            <td><?= h($c['email'] ?: '-') ?><?php if ($c['phone']): ?><div class="cd-sub"><?= h($c['phone']) ?></div><?php endif; ?></td>
-            <td><?= h($c['classification'] ?: '-') ?></td>
-            <td><?= h($c['app_job'] ?: ($c['applied_job'] ?: '-')) ?></td>
-            <?php $stg = $c['app_stage'] ?: $c['applied_stage']; ?>
-            <td><?= $stg ? '<span class="cd-badge">' . h($stg) . '</span>' : '-' ?></td>
-            <td><?= h($c['reject_reason'] ?: '-') ?></td>
+            <td><span class="cd-badge" style="background:<?= ($stCol[$c['status']]??'#64748b') ?>1a;color:<?= $stCol[$c['status']]??'#64748b' ?>"><?= h($statuses[$c['status']] ?? $c['status']) ?></span><?= $c['talent_pool'] ? ' <span class="cd-badge" style="background:#f3e8ff;color:#7c3aed">Pool</span>' : '' ?></td>
+            <td onclick="location.href='/hrm/candidate?id=<?= $c['id'] ?>'"><?= h($c['email'] ?: '-') ?><?php if ($c['phone']): ?><div class="cd-sub"><?= h($c['phone']) ?></div><?php endif; ?></td>
+            <td class="cd-sub" style="max-width:200px;white-space:normal"><?= h($c['skill_list'] ?: '-') ?></td>
+            <td><?= $c['tag_list'] ? implode(' ', array_map(fn($t)=>'<span class="cd-badge">'.h($t).'</span>', explode(',', $c['tag_list']))) : '-' ?></td>
             <td><?= h($c['source_name'] ?: '-') ?></td>
-            <td><?= h($c['campaign'] ?: '-') ?></td>
-            <td><?= h($c['office_text'] ?: '-') ?></td>
-            <td><?= $c['tags'] ? '<span class="cd-badge">' . h($c['tags']) . '</span>' : '-' ?></td>
-            <td><?= (float)$c['score'] > 0 ? (float)$c['score'] : '-' ?></td>
-            <td><?= h($c['gender'] ?: '-') ?></td>
-            <td><?= h($c['dob'] ?: '-') ?></td>
-            <td class="cd-sub"><?= $c['applied_date'] ? date('d/m/Y', strtotime($c['applied_date'])) : '-' ?></td>
-            <td class="cd-sub"><?= h($c['interview_date'] ?: '-') ?></td>
-            <td class="cd-sub"><?= h($c['updated_src'] ?: '-') ?></td>
-            <td><?= $c['cv_path'] ? '<a href="' . h($c['cv_path']) . '" target="_blank" rel="noopener" onclick="event.stopPropagation()" class="cd-cv">Xem CV</a>' : '-' ?></td>
+            <td><?= h($c['event_name'] ?: '-') ?></td>
+            <td><?= h($c['owner_name'] ?: '-') ?></td>
+            <td><?= h($c['app_job'] ?: ($c['applied_job'] ?: '-')) ?></td>
+            <td><?php $stg=$c['app_stage'] ?: $c['applied_stage']; echo $stg ? '<span class="cd-badge">'.h($stg).'</span>' : '-'; ?></td>
+            <td><?= (int)$c['rating'] ? str_repeat('★', (int)$c['rating']) : '-' ?></td>
+            <td class="cd-sub"><?= $c['created_at'] ? date('d/m/Y', strtotime($c['created_at'])) : '-' ?></td>
+            <td><?= $c['cv_path'] ? '<a href="'.h($c['cv_path']).'" target="_blank" rel="noopener" onclick="event.stopPropagation()" class="cd-cv">Xem CV</a>' : '-' ?></td>
         </tr>
     <?php endforeach; ?>
     </tbody>
 </table>
 </div>
-<style>
-.cd-scroll{background:#fff;border-radius:14px;box-shadow:0 1px 2px rgba(0,0,0,.04),0 0 0 1px rgba(0,0,0,.04);overflow-x:auto;scrollbar-width:none}
-.cd-scroll::-webkit-scrollbar{display:none}
-.cd-table{width:100%;border-collapse:collapse;font-family:-apple-system,BlinkMacSystemFont,'SF Pro Text','Segoe UI',sans-serif;font-size:13px;color:#1d1d1f}
-.cd-table th{background:#fbfbfd;text-align:left;font-size:11px;font-weight:600;letter-spacing:.2px;color:#86868b;padding:13px 16px;border-bottom:1px solid #f0f0f2;white-space:nowrap}
-.cd-table td{padding:12px 16px;border-bottom:1px solid #f5f5f7;vertical-align:middle;white-space:nowrap}
-.cd-table tr{cursor:pointer}
-.cd-table tbody tr:hover td{background:#f7faff}
-.cd-table th:first-child,.cd-table td:first-child{position:sticky;left:0;background:#fff;z-index:2;box-shadow:1px 0 0 #f0f0f2;min-width:240px}
-.cd-table th:first-child{background:#fbfbfd;z-index:3}
-.cd-table tbody tr:hover td:first-child{background:#f7faff}
-.cd-name-cell{display:flex;align-items:center;gap:10px}
-.cd-av{width:34px;height:34px;border-radius:50%;flex-shrink:0;display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700;font-size:12px}
-.cd-nm{font-weight:600;color:#0071e3;font-size:13.5px;letter-spacing:-.01em}
-.cd-sub{font-size:12px;color:#86868b;margin-top:2px}
-.cd-badge{font-size:11px;font-weight:600;padding:3px 9px;border-radius:980px;background:#eef6ff;color:#0071e3}
-.cd-cv{color:#0071e3;font-weight:600;text-decoration:none}.cd-cv:hover{text-decoration:underline}
-</style>
 <?php endif; ?>
 
+<style>
+.cd-filters{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:12px}
+.cd-in{padding:8px 11px;border:1px solid var(--bd);border-radius:8px;font-size:13px;background:#fff}
+.cd-bulk{display:flex;flex-wrap:wrap;gap:8px;align-items:center;background:#eef6ff;border:1px solid #bfdbfe;border-radius:10px;padding:10px 14px;margin-bottom:12px;font-size:13px}
+.cd-scroll{background:#fff;border-radius:14px;box-shadow:0 1px 2px rgba(0,0,0,.04),0 0 0 1px rgba(0,0,0,.04);overflow-x:auto;scrollbar-width:none}
+.cd-scroll::-webkit-scrollbar{display:none}
+.cd-table{width:100%;border-collapse:collapse;font-size:13px;color:#1d1d1f}
+.cd-table th{background:#fbfbfd;text-align:left;font-size:11px;font-weight:600;color:#86868b;padding:13px 16px;border-bottom:1px solid #f0f0f2;white-space:nowrap}
+.cd-table td{padding:12px 16px;border-bottom:1px solid #f5f5f7;vertical-align:middle;white-space:nowrap;cursor:pointer}
+.cd-table tbody tr:hover td{background:#f7faff}
+.cd-name-cell{display:flex;align-items:center;gap:10px}
+.cd-av{width:34px;height:34px;border-radius:50%;flex-shrink:0;display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700;font-size:12px}
+.cd-nm{font-weight:600;color:#0071e3;font-size:13.5px}
+.cd-sub{font-size:12px;color:#86868b;margin-top:2px}
+.cd-badge{display:inline-block;font-size:11px;font-weight:600;padding:3px 9px;border-radius:980px;background:#eef6ff;color:#0071e3;margin:1px}
+.cd-cv{color:#0071e3;font-weight:600;text-decoration:none}.cd-cv:hover{text-decoration:underline}
+</style>
+
+<!-- Modal thêm ứng viên -->
+<div id="addModal" class="cd-modal">
+    <div class="rc-card" style="width:520px;max-width:94vw">
+        <h3 style="font-size:15px;margin-bottom:12px">Thêm ứng viên vào kho</h3>
+        <form id="addForm" onsubmit="return false">
+            <div class="rc-grid2">
+                <div class="rc-field"><label>Họ tên *</label><input name="full_name" required></div>
+                <div class="rc-field"><label>Email</label><input name="email" type="email"></div>
+                <div class="rc-field"><label>Điện thoại</label><input name="phone"></div>
+                <div class="rc-field"><label>Vị trí gần nhất</label><input name="current_position"></div>
+                <div class="rc-field"><label>Nguồn</label><select name="source_id"><option value="0">-</option>
+                    <?php foreach ($opts['sources'] as $s): ?><option value="<?= $s['id'] ?>"><?= h($s['name']) ?></option><?php endforeach; ?></select></div>
+                <div class="rc-field"><label>Sự kiện</label><select name="event_id"><option value="0">-</option>
+                    <?php foreach ($opts['events'] as $e): ?><option value="<?= $e['id'] ?>"><?= h($e['name']) ?></option><?php endforeach; ?></select></div>
+            </div>
+            <div id="addErr" class="rc-muted" style="color:#dc2626;margin:6px 0"></div>
+            <div style="display:flex;justify-content:flex-end;gap:8px">
+                <button type="button" class="rc-btn ghost" onclick="document.getElementById('addModal').style.display='none'">Hủy</button>
+                <button type="button" class="rc-btn" id="addBtn" onclick="addCand(false)">Lưu</button>
+            </div>
+        </form>
+    </div>
+</div>
+
 <!-- Import modal -->
-<div id="impModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:999;align-items:center;justify-content:center">
+<div id="impModal" class="cd-modal">
     <div class="rc-card" style="width:480px;max-width:92vw">
         <h3 style="font-size:15px;margin-bottom:8px">Import ứng viên từ Excel</h3>
-        <div class="rc-muted" style="margin-bottom:12px">Chọn file .xlsx xuất từ Base E-Hiring (Danh sách ứng viên). Hệ thống tự nhận diện cột và chống trùng theo ID/Email.</div>
+        <div class="rc-muted" style="margin-bottom:12px">Chọn file .xlsx (Base E-Hiring hoặc template chuẩn). Tự nhận diện cột & chống trùng theo email/SĐT.</div>
         <form id="impForm" onsubmit="return false">
             <div class="rc-field"><input type="file" name="file" accept=".xlsx" required></div>
             <div id="impResult" class="rc-muted" style="margin-bottom:10px"></div>
@@ -121,17 +163,37 @@ $avatar = function ($name) use ($pal) {
         </form>
     </div>
 </div>
+
+<style>.cd-modal{display:none;position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:999;align-items:center;justify-content:center}</style>
 <script>
+function selectedIds(){return Array.from(document.querySelectorAll('.rowChk:checked')).map(c=>c.value);}
+function onCheck(){const n=selectedIds().length;document.getElementById('bulkCount').textContent=n;document.getElementById('bulkBar').style.display=n?'flex':'none';}
+function toggleAll(cb){document.querySelectorAll('.rowChk').forEach(c=>c.checked=cb.checked);onCheck();}
+function bulk(op,value){
+    const ids=selectedIds();if(!ids.length){alert('Chưa chọn ứng viên');return;}
+    if((op==='tag'||op==='status')&&!value){alert('Nhập/chọn giá trị');return;}
+    const fd=new FormData();fd.append('action','cand_bulk');fd.append('op',op);fd.append('value',value);fd.append('ids',ids.join(','));
+    fetch('/hrm/api',{method:'POST',body:fd}).then(r=>r.json()).then(j=>{j.ok?location.reload():alert(j.error||'Lỗi');});
+}
+function addCand(force){
+    const f=document.getElementById('addForm');if(!f.full_name.value.trim()){alert('Nhập họ tên');return;}
+    const fd=new FormData(f);fd.append('action','cand_create');if(force)fd.append('force','1');
+    document.getElementById('addBtn').disabled=true;document.getElementById('addErr').textContent='';
+    fetch('/hrm/api',{method:'POST',body:fd}).then(r=>r.json()).then(j=>{
+        document.getElementById('addBtn').disabled=false;
+        if(j.ok){location.href='/hrm/candidate?id='+j.id;return;}
+        if(j.dup_id){document.getElementById('addErr').innerHTML=j.error+' <a href="/hrm/candidate?id='+j.dup_id+'">Mở hồ sơ</a> · <a href="#" onclick="addCand(true);return false;">Vẫn tạo</a>';}
+        else document.getElementById('addErr').textContent=j.error||'Lỗi';
+    }).catch(()=>{document.getElementById('addBtn').disabled=false;document.getElementById('addErr').textContent='Lỗi kết nối';});
+}
 function doImport(){
-    const f=document.getElementById('impForm');
-    if(!f.file.files.length){alert('Chọn file');return;}
+    const f=document.getElementById('impForm');if(!f.file.files.length){alert('Chọn file');return;}
     const fd=new FormData(f);fd.append('action','import_candidates');
-    document.getElementById('impBtn').disabled=true;
-    document.getElementById('impResult').textContent='Đang import...';
+    document.getElementById('impBtn').disabled=true;document.getElementById('impResult').textContent='Đang import...';
     fetch('/hrm/api',{method:'POST',body:fd}).then(r=>r.json()).then(j=>{
         document.getElementById('impBtn').disabled=false;
         if(j.ok){document.getElementById('impResult').innerHTML='✓ Thêm mới: <b>'+j.inserted+'</b> · Cập nhật: <b>'+j.updated+'</b> · Bỏ qua: '+j.skipped;setTimeout(()=>location.reload(),900);}
-        else{document.getElementById('impResult').textContent='Lỗi: '+(j.error||'');}
+        else document.getElementById('impResult').textContent='Lỗi: '+(j.error||'');
     }).catch(()=>{document.getElementById('impBtn').disabled=false;document.getElementById('impResult').textContent='Lỗi kết nối';});
 }
 </script>
