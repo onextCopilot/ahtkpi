@@ -53,7 +53,21 @@ function hrm_header(string $title, string $subtitle = '', ?string $nav = null): 
         .rc-rich h2{font-size:16px;margin:8px 0 4px}.rc-rich h3{font-size:14px;margin:8px 0 4px}
         .rc-rich ul,.rc-rich ol{margin:4px 0 4px 22px}.rc-rich p{margin:4px 0}
         .rc-rich a{color:var(--rc2)}
-        /* Secondary in-page sidebar (modern) */
+        /* Thanh điều hướng phụ NGANG trên đầu (thay sidebar trái) */
+        .rc-topnav{display:flex;align-items:center;gap:4px;margin-bottom:18px;border-bottom:1px solid #e5e9ef;padding-bottom:2px;flex-wrap:wrap}
+        .rc-tnav-back{display:inline-flex;align-items:center;justify-content:center;width:34px;height:34px;border-radius:8px;color:#64748b;flex-shrink:0}
+        .rc-tnav-back:hover{background:#f1f5f9;color:#0f172a}
+        .rc-tnav-back svg{width:17px;height:17px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+        .rc-tnav-logo{display:inline-flex;align-items:center;justify-content:center;width:30px;height:30px;border-radius:7px;background:linear-gradient(135deg,#0c3138,#0a252a);flex-shrink:0;margin-left:2px}
+        .rc-tnav-logo svg{width:16px;height:16px;fill:none;stroke:#fff;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+        .rc-tnav-title{font-size:14px;font-weight:700;color:#0f172a;margin:0 4px 0 6px;white-space:nowrap}
+        .rc-tnav-sep{width:1px;height:20px;background:#e2e8f0;margin:0 6px}
+        .rc-tnav-item{display:inline-flex;align-items:center;gap:7px;padding:9px 14px;font-size:13.5px;font-weight:600;color:#64748b;text-decoration:none;border-bottom:2px solid transparent;margin-bottom:-3px;white-space:nowrap}
+        .rc-tnav-item:hover{color:#0f172a}
+        .rc-tnav-item svg{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;opacity:.75}
+        .rc-tnav-item.active{color:#0e9f6e;border-bottom-color:#0e9f6e}
+        .rc-tnav-item.active svg{opacity:1}
+        /* Secondary in-page sidebar (legacy - giữ class cũ) */
         .rc-layout{display:flex;gap:26px;align-items:flex-start}
         .rc-main{flex:1;min-width:0}
         .rc-sub{width:236px;flex:0 0 236px;position:sticky;top:16px;
@@ -93,19 +107,12 @@ function hrm_header(string $title, string $subtitle = '', ?string $nav = null): 
             <div class="rc-wrap" style="padding:22px 2rem 48px">
 <?php
     if ($nav !== null) {
-        $GLOBALS['hrm_has_subnav'] = true;
-        echo '<div class="rc-layout">';
-        hrm_subnav($nav, ($_SESSION['role'] ?? '') === 'admin');
-        echo '<div class="rc-main">';
+        hrm_subnav($nav, ($_SESSION['role'] ?? '') === 'admin'); // thanh nav ngang trên đầu
     }
 }
 
 function hrm_footer(): void
 {
-    if (!empty($GLOBALS['hrm_has_subnav'])) {
-        echo '</div></div>';            // close .rc-main + .rc-layout
-        $GLOBALS['hrm_has_subnav'] = false;
-    }
     ?>
             </div>
         </main>
@@ -221,16 +228,7 @@ function hrm_subnav(string $active, bool $isAdmin): void
 
     if (isset($simple[$active])) {
         [$logo, $title, $subtitle, $items] = $simple[$active];
-        echo '<nav class="rc-sub">';
-        echo '<div class="rc-sub-head"><div class="rc-sub-logo"><svg viewBox="0 0 24 24">' . $logo . '</svg></div>'
-            . '<div><b>' . h($title) . '</b><small>' . h($subtitle) . '</small></div></div>';
-        echo '<a class="rc-sub-back" href="/hrm"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>Tất cả ứng dụng</a>';
-        echo '<div class="rc-sub-label">Điều hướng</div><div class="rc-sub-nav">';
-        foreach ($items as $it) {
-            $cls = $it[0] === $active ? ' class="active"' : '';
-            echo '<a href="' . $it[2] . '"' . $cls . '><svg viewBox="0 0 24 24">' . $it[3] . '</svg>' . h($it[1]) . '</a>';
-        }
-        echo '</div></nav>';
+        hrm_subnav_render($active, $logo, $title, $items);
         return;
     }
 
@@ -263,17 +261,22 @@ function hrm_subnav(string $active, bool $isAdmin): void
         ];
     }
 
-    echo '<nav class="rc-sub">';
-    echo '<div class="rc-sub-head"><div class="rc-sub-logo"><svg viewBox="0 0 24 24">' . $logo . '</svg></div>'
-        . '<div><b>' . h($title) . '</b><small>' . h($subtitle) . '</small></div></div>';
-    echo '<a class="rc-sub-back" href="/hrm"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>Tất cả ứng dụng</a>';
-    echo '<div class="rc-sub-label">' . ($isSettings ? 'Thiết lập' : 'Điều hướng') . '</div>';
-    echo '<div class="rc-sub-nav">';
+    hrm_subnav_render($active, $logo, $title, $items);
+}
+
+/** Render thanh điều hướng NGANG trên đầu (thay sidebar trái cho rộng). */
+function hrm_subnav_render(string $active, string $logo, string $title, array $items): void
+{
+    echo '<div class="rc-topnav">';
+    echo '<a class="rc-tnav-back" href="/hrm" title="Tất cả ứng dụng"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg></a>';
+    echo '<span class="rc-tnav-logo"><svg viewBox="0 0 24 24">' . $logo . '</svg></span>';
+    echo '<span class="rc-tnav-title">' . h($title) . '</span>';
+    echo '<span class="rc-tnav-sep"></span>';
     foreach ($items as $it) {
-        $cls = $it[0] === $active ? ' class="active"' : '';
-        echo '<a href="' . $it[2] . '"' . $cls . '><svg viewBox="0 0 24 24">' . $it[3] . '</svg>' . h($it[1]) . '</a>';
+        $cls = $it[0] === $active ? ' active' : '';
+        echo '<a class="rc-tnav-item' . $cls . '" href="' . $it[2] . '"><svg viewBox="0 0 24 24">' . $it[3] . '</svg>' . h($it[1]) . '</a>';
     }
-    echo '</div></nav>';
+    echo '</div>';
 }
 
 /** Render a status badge. */
