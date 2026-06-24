@@ -70,6 +70,14 @@ hrm_header($c['full_name'], ($c['current_position'] ?: 'Ứng viên') . ' · ' .
             <div><div class="rc-muted">Đánh giá</div><div><?= (int)$c['rating'] ? str_repeat('★', (int)$c['rating']) : '-' ?></div></div>
             <div><div class="rc-muted">LinkedIn</div><div><?= $c['linkedin_url'] ? '<a href="'.h($c['linkedin_url']).'" target="_blank" rel="noopener">Hồ sơ</a>' : '-' ?></div></div>
             <div><div class="rc-muted">Portfolio</div><div><?= $c['portfolio_url'] ? '<a href="'.h($c['portfolio_url']).'" target="_blank" rel="noopener">Link</a>' : '-' ?></div></div>
+            <div><div class="rc-muted">Số CMND/CCCD</div><div><?= h($c['id_card'] ?: '-') ?></div></div>
+            <div><div class="rc-muted">Phân loại</div><div><?= h($c['classification'] ?: '-') ?></div></div>
+            <div><div class="rc-muted">Chiến dịch</div><div><?= h($c['campaign'] ?: '-') ?></div></div>
+            <div><div class="rc-muted">Ngày ứng tuyển</div><div><?= $c['applied_date'] ? date('d/m/Y', strtotime($c['applied_date'])) : '-' ?></div></div>
+            <div><div class="rc-muted">Vị trí ứng tuyển (gốc)</div><div><?= h($c['applied_job'] ?: '-') ?></div></div>
+            <div><div class="rc-muted">Giai đoạn (gốc)</div><div><?= h($c['applied_stage'] ?: '-') ?></div></div>
+            <?php if (!empty($c['reject_reason'])): ?><div><div class="rc-muted">Lý do từ chối</div><div><?= h($c['reject_reason']) ?></div></div><?php endif; ?>
+            <?php if (!empty($c['office_text'])): ?><div><div class="rc-muted">Văn phòng (text)</div><div><?= h($c['office_text']) ?></div></div><?php endif; ?>
         </div>
         <div style="margin-top:14px"><div class="rc-muted" style="margin-bottom:6px">Thẻ (tags)</div>
             <div id="tagBox">

@@ -13,17 +13,29 @@ $events  = $conn->query("SELECT id,name FROM hrm_events WHERE active=1 ORDER BY 
 
 // Các field đích + từ khóa để auto-đoán mapping.
 $fields = [
-    'full_name'        => ['Họ tên *', ['họ tên','ho ten','full name','name','ứng viên','candidate']],
+    'full_name'        => ['Họ tên *', ['tên','họ tên','ho ten','full name','name','ứng viên','candidate']],
     'email'            => ['Email', ['email','e-mail','thư']],
-    'phone'            => ['Điện thoại', ['điện thoại','dien thoai','phone','sđt','sdt','mobile']],
-    'current_position' => ['Vị trí gần nhất', ['vị trí','chức danh','position','title','job']],
+    'phone'            => ['Điện thoại', ['số điện thoại','điện thoại','dien thoai','phone','sđt','sdt','mobile']],
+    'current_position' => ['Vị trí gần nhất', ['công việc gần nhất','vị trí gần nhất','chức danh','position','title']],
     'skills'           => ['Kỹ năng', ['kỹ năng','ky nang','skill']],
     'years_exp'        => ['Số năm KN', ['năm kinh nghiệm','kinh nghiệm','experience','years','exp']],
     'location'         => ['Khu vực', ['khu vực','địa điểm','location','city','tỉnh']],
     'expected_salary'  => ['Lương kỳ vọng', ['lương','salary','mong muốn']],
     'languages'        => ['Ngôn ngữ', ['ngôn ngữ','language','ngoại ngữ']],
-    'dob'              => ['Ngày sinh', ['ngày sinh','dob','birth']],
+    'dob'              => ['Ngày sinh', ['ngày tháng năm sinh','ngày sinh','dob','birth']],
     'gender'           => ['Giới tính', ['giới tính','gender','sex']],
+    'id_card'          => ['Số CMND/CCCD', ['số cmt','cmt','cccd','cmnd','id card','căn cước']],
+    'score'            => ['Điểm', ['điểm','score']],
+    'classification'   => ['Phân loại', ['phân loại','classification']],
+    'campaign'         => ['Chiến dịch', ['chiến dịch','campaign','medium']],
+    'tags'             => ['Thẻ', ['thẻ','tag']],
+    'applied_job'      => ['Vị trí ứng tuyển (gốc)', ['tên tin tuyển dụng','vị trí ứng tuyển','applied job']],
+    'applied_stage'    => ['Giai đoạn (gốc)', ['giai đoạn','stage']],
+    'applied_date'     => ['Ngày ứng tuyển', ['ngày ứng tuyển','applied date']],
+    'office_text'      => ['Văn phòng', ['văn phòng','office']],
+    'reject_reason'    => ['Lý do từ chối', ['lý do từ chối','thông tin từ chối','reject reason','reject']],
+    'cv_path'          => ['Đường dẫn CV', ['đường dẫn cv','link cv','cv url','cv link','đường dẫn']],
+    'external_id'      => ['ID ngoài (Base)', ['id']],
     'linkedin_url'     => ['LinkedIn', ['linkedin']],
     'notes'            => ['Ghi chú', ['ghi chú','note','mô tả']],
 ];
@@ -104,7 +116,11 @@ function parseFile(){
 }
 function guess(field){
     const kws=FIELDS[field][1];
-    for(let i=0;i<HEADERS.length;i++){const h=(HEADERS[i]||'').toLowerCase();for(const k of kws){if(h.indexOf(k)>-1)return i;}}
+    const H=HEADERS.map(h=>(h||'').toLowerCase().trim());
+    // Ưu tiên khớp CHÍNH XÁC tiêu đề (vd "Tên" != "Tên tin tuyển dụng").
+    for(const k of kws){const i=H.indexOf(k);if(i>-1)return i;}
+    // Sau đó mới khớp chứa.
+    for(let i=0;i<H.length;i++){for(const k of kws){if(H[i].indexOf(k)>-1)return i;}}
     return '';
 }
 function buildMapping(){

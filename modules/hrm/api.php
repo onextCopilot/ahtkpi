@@ -935,21 +935,37 @@ switch ($action) {
             $i = (int)$map[$field];
             return trim((string)($row[$i] ?? ''));
         };
+        // dd/mm/yyyy -> Y-m-d (Base export); rỗng / 0/0/0 -> null.
+        $toDate = function ($v) {
+            $v = trim($v);
+            if ($v === '' || strpos($v, '0/0/0') !== false) return null;
+            $d = DateTime::createFromFormat('d/m/Y', $v);
+            return $d ? $d->format('Y-m-d') : null;
+        };
+        // Cột chuỗi map trực tiếp (key wizard == tên cột DB).
+        $strCols = ['current_position','location','expected_salary','languages','dob','gender','linkedin_url',
+                    'notes','classification','campaign','id_card','applied_job','applied_stage','tags',
+                    'office_text','reject_reason','cv_path','external_id','interview_date'];
+
         $ins = $upd = $skip = 0;
         foreach ($rows as $row) {
             $name = $col($row, 'full_name');
             if ($name === '') { $skip++; continue; }
             $email = $col($row, 'email'); $phone = $col($row, 'phone');
             $dedup = hrm_candidate_dedup_key($email, $phone);
-            $fields = [
-                'current_position' => $col($row, 'current_position'),
-                'location' => $col($row, 'location'),
-                'expected_salary' => $col($row, 'expected_salary'),
-                'languages' => $col($row, 'languages'),
-                'dob' => $col($row, 'dob'), 'gender' => $col($row, 'gender'),
-                'linkedin_url' => $col($row, 'linkedin_url'), 'notes' => $col($row, 'notes'),
-            ];
             $years = (float)$col($row, 'years_exp');
+            $score = (float)str_replace(',', '.', $col($row, 'score'));
+            $appliedDate = $toDate($col($row, 'applied_date'));
+
+            // Dựng cặp cột=>giá trị động (chỉ field được map & có dữ liệu).
+            $set = []; // col => [value, type]
+            foreach ($strCols as $cn) { $v = $col($row, $cn); if ($v !== '') { $set[$cn] = [$v, 's']; } }
+            if ($years > 0) { $set['years_exp'] = [$years, 'd']; }
+            if ($score > 0) { $set['score'] = [$score, 'd']; }
+            if ($appliedDate) { $set['applied_date'] = [$appliedDate, 's']; }
+            if ($defSource) { $set['source_id'] = [$defSource, 'i']; }
+            if ($defEvent)  { $set['event_id']  = [$defEvent, 'i']; }
+
             $existing = null;
             if ($dedup !== '') {
                 $d = $conn->prepare('SELECT id FROM hrm_candidates WHERE dedup_key=? LIMIT 1');
@@ -959,17 +975,19 @@ switch ($action) {
             if ($existing && $mode === 'update') {
                 $cid = (int)$existing['id'];
                 $sets = ['full_name=?']; $vals = [$name]; $types = 's';
-                foreach ($fields as $k => $v) { if ($v !== '') { $sets[] = "$k=?"; $vals[] = $v; $types .= 's'; } }
-                if ($years > 0) { $sets[] = 'years_exp=?'; $vals[] = $years; $types .= 'd'; }
-                if ($defSource) { $sets[] = 'source_id=?'; $vals[] = $defSource; $types .= 'i'; }
-                if ($defEvent)  { $sets[] = 'event_id=?';  $vals[] = $defEvent;  $types .= 'i'; }
+                foreach ($set as $cn => [$v, $t]) { $sets[] = "$cn=?"; $vals[] = $v; $types .= $t; }
                 $vals[] = $cid; $types .= 'i';
                 $st = $conn->prepare('UPDATE hrm_candidates SET ' . implode(',', $sets) . ' WHERE id=?');
                 $st->bind_param($types, ...$vals); $st->execute(); $upd++;
             } else {
-                $st = $conn->prepare("INSERT INTO hrm_candidates (full_name,email,phone,current_position,location,expected_salary,languages,dob,gender,linkedin_url,notes,years_exp,source_id,event_id,status,dedup_key,created_by,last_activity_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?, 'new', ?, ?, NOW())");
-                $st->bind_param('sssssssssssdiisi', $name,$email,$phone,$fields['current_position'],$fields['location'],$fields['expected_salary'],$fields['languages'],$fields['dob'],$fields['gender'],$fields['linkedin_url'],$fields['notes'],$years,$defSource,$defEvent,$dedup,$uid);
-                $st->execute(); $cid = $st->insert_id; $ins++;
+                $cols = ['full_name', 'email', 'phone']; $vals = [$name, $email, $phone]; $types = 'sss';
+                foreach ($set as $cn => [$v, $t]) { if (in_array($cn, ['email','phone'], true)) continue; $cols[] = $cn; $vals[] = $v; $types .= $t; }
+                $cols[] = 'status';    $vals[] = 'new';   $types .= 's';
+                $cols[] = 'dedup_key'; $vals[] = $dedup;  $types .= 's';
+                $cols[] = 'created_by';$vals[] = $uid;    $types .= 'i';
+                $ph = implode(',', array_fill(0, count($cols), '?'));
+                $st = $conn->prepare('INSERT INTO hrm_candidates (' . implode(',', $cols) . ', last_activity_at) VALUES (' . $ph . ', NOW())');
+                $st->bind_param($types, ...$vals); $st->execute(); $cid = $st->insert_id; $ins++;
             }
             // Kỹ năng (tách ; hoặc ,).
             $sk = $col($row, 'skills');
