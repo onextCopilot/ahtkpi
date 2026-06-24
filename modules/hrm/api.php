@@ -878,6 +878,11 @@ switch ($action) {
             $conn->query("UPDATE hrm_candidates SET status='" . $conn->real_escape_string($v) . "' WHERE id IN ($in)");
         } elseif ($op === 'pool') {
             $conn->query("UPDATE hrm_candidates SET talent_pool=1, status=IF(status='new','pooled',status) WHERE id IN ($in)");
+        } elseif ($op === 'add_pool') {
+            $pid = (int)($_POST['value'] ?? 0); if (!$pid) { jout(false, ['error' => 'Chọn pool']); }
+            $stmt = $conn->prepare('INSERT IGNORE INTO hrm_candidate_pools (candidate_id,pool_id,added_by) VALUES (?,?,?)');
+            foreach ($ids as $cid) { $stmt->bind_param('iii', $cid, $pid, $uid); $stmt->execute(); }
+            $conn->query("UPDATE hrm_candidates SET talent_pool=1, status=IF(status='new','pooled',status) WHERE id IN ($in)");
         } elseif ($op === 'owner') {
             $v = (int)($_POST['value'] ?? 0);
             $conn->query("UPDATE hrm_candidates SET owner_id=$v WHERE id IN ($in)");
@@ -929,6 +934,43 @@ switch ($action) {
     case 'source_del': {
         $sid = (int)($_POST['id'] ?? 0);
         $conn->query("UPDATE hrm_candidate_sources SET active=0 WHERE id=$sid"); // ẩn, giữ liên kết ứng viên
+        jout(true);
+    }
+
+    /* ── Talent pools ───────────────────────────────────────────────────── */
+    case 'pool_save': {
+        hrm_ensure_candidate_module($conn);
+        $pid = (int)($_POST['id'] ?? 0); $name = trim($_POST['name'] ?? '');
+        if ($name === '') { jout(false, ['error' => 'Thiếu tên pool']); }
+        $desc = trim($_POST['description'] ?? '');
+        $color = preg_match('/^#[0-9a-fA-F]{6}$/', $_POST['color'] ?? '') ? $_POST['color'] : '#7c3aed';
+        if ($pid > 0) { $st = $conn->prepare('UPDATE hrm_pools SET name=?, description=?, color=? WHERE id=?'); $st->bind_param('sssi', $name, $desc, $color, $pid); $st->execute(); }
+        else { $st = $conn->prepare('INSERT INTO hrm_pools (name,description,color) VALUES (?,?,?)'); $st->bind_param('sss', $name, $desc, $color); $st->execute(); $pid = $st->insert_id; }
+        hrm_audit($conn, $uid, 'pool_save', 'pool', $pid, $name);
+        jout(true, ['id' => $pid]);
+    }
+    case 'pool_del': {
+        $pid = (int)($_POST['id'] ?? 0);
+        $conn->query("UPDATE hrm_pools SET active=0 WHERE id=$pid"); // ẩn, giữ membership
+        jout(true);
+    }
+    case 'cand_pool_add': {
+        hrm_ensure_candidate_module($conn);
+        $cid = (int)($_POST['candidate_id'] ?? 0); $pid = (int)($_POST['pool_id'] ?? 0);
+        if (!$cid || !$pid) { jout(false, ['error' => 'Thiếu dữ liệu']); }
+        $st = $conn->prepare('INSERT IGNORE INTO hrm_candidate_pools (candidate_id,pool_id,added_by) VALUES (?,?,?)');
+        $st->bind_param('iii', $cid, $pid, $uid); $st->execute();
+        $conn->query("UPDATE hrm_candidates SET talent_pool=1, status=IF(status='new','pooled',status) WHERE id=$cid");
+        $pn = $conn->query("SELECT name FROM hrm_pools WHERE id=$pid")->fetch_assoc();
+        hrm_cand_activity($conn, $cid, 'note', 'Thêm vào pool: ' . ($pn['name'] ?? ''), $uid);
+        jout(true);
+    }
+    case 'cand_pool_del': {
+        $cid = (int)($_POST['candidate_id'] ?? 0); $pid = (int)($_POST['pool_id'] ?? 0);
+        $conn->query("DELETE FROM hrm_candidate_pools WHERE candidate_id=$cid AND pool_id=$pid");
+        // Hết pool -> bỏ cờ talent_pool.
+        $n = (int)($conn->query("SELECT COUNT(*) c FROM hrm_candidate_pools WHERE candidate_id=$cid")->fetch_assoc()['c'] ?? 0);
+        if ($n === 0) { $conn->query("UPDATE hrm_candidates SET talent_pool=0 WHERE id=$cid"); }
         jout(true);
     }
 

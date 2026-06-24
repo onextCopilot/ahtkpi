@@ -211,10 +211,12 @@ function hrm_subnav(string $active, bool $isAdmin): void
         'Ứng viên', 'Kho ứng viên',
         [
             ['candidates', 'Kho ứng viên', '/hrm/candidates', '<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><circle cx="18" cy="9" r="3"/><path d="m21.5 21-1.5-1.5"/>'],
+            ['pools', 'Talent pools', '/hrm/pools', '<path d="M3 7h18"/><path d="M3 12h18"/><path d="M3 17h18"/>'],
             ['events', 'Sự kiện', '/hrm/events', '<rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>'],
         ],
     ];
     $simple['candidates'] = $candGroup;
+    $simple['pools']      = $candGroup;
     $simple['events']     = $candGroup;
 
     if (isset($simple[$active])) {

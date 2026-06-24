@@ -23,6 +23,9 @@ $edus     = $conn->query("SELECT * FROM hrm_candidate_education WHERE candidate_
 $attach   = $conn->query("SELECT * FROM hrm_candidate_attachments WHERE candidate_id=$id ORDER BY id DESC")->fetch_all(MYSQLI_ASSOC);
 $acts     = $conn->query("SELECT a.*, u.full_name AS actor FROM hrm_candidate_activities a LEFT JOIN users u ON u.id=a.actor_id WHERE a.candidate_id=$id ORDER BY a.id DESC LIMIT 100")->fetch_all(MYSQLI_ASSOC);
 $reminders= $conn->query("SELECT r.*, u.full_name AS owner FROM hrm_candidate_reminders r LEFT JOIN users u ON u.id=r.owner_id WHERE r.candidate_id=$id AND r.done=0 ORDER BY r.due_at")->fetch_all(MYSQLI_ASSOC);
+$allPools = $conn->query("SELECT id,name,color FROM hrm_pools WHERE active=1 ORDER BY name")->fetch_all(MYSQLI_ASSOC);
+$candPools = $conn->query("SELECT p.id,p.name,p.color FROM hrm_candidate_pools cp JOIN hrm_pools p ON p.id=cp.pool_id WHERE cp.candidate_id=$id AND p.active=1 ORDER BY p.name")->fetch_all(MYSQLI_ASSOC);
+$candPoolIds = array_column($candPools, 'id');
 $apps = $conn->query("SELECT a.id, a.status, a.applied_at, j.title AS job_title, st.name AS stage_name
         FROM hrm_applications a JOIN hrm_jobs j ON j.id=a.job_id LEFT JOIN hrm_pipeline_stages st ON st.id=a.stage_id
         WHERE a.candidate_id = $id ORDER BY a.id DESC")->fetch_all(MYSQLI_ASSOC);
@@ -84,6 +87,18 @@ hrm_header($c['full_name'], ($c['current_position'] ?: 'Ứng viên') . ' · ' .
                 <?php foreach ($tags as $t): ?><span class="cd-tag"><?= h($t) ?> <a href="#" onclick="delTag('<?= h(addslashes($t)) ?>');return false">×</a></span><?php endforeach; ?>
             </div>
             <div style="margin-top:8px;display:flex;gap:8px"><input id="newTag" class="cd-in" placeholder="Thêm thẻ..." style="width:160px"><button class="rc-btn ghost" onclick="addTag()">Thêm thẻ</button></div>
+        </div>
+        <div style="margin-top:14px"><div class="rc-muted" style="margin-bottom:6px">Talent pools <a href="/hrm/pools" style="font-size:11px;margin-left:6px">Quản lý</a></div>
+            <div id="poolBox">
+                <?php foreach ($candPools as $p): ?><span class="cd-tag" style="background:<?= h($p['color']) ?>1a;color:<?= h($p['color']) ?>"><?= h($p['name']) ?> <a href="#" style="color:inherit" onclick="delPool(<?= (int)$p['id'] ?>);return false">×</a></span><?php endforeach; ?>
+                <?php if (!$candPools): ?><span class="rc-muted" style="font-size:12px">Chưa thuộc pool nào.</span><?php endif; ?>
+            </div>
+            <div style="margin-top:8px;display:flex;gap:8px">
+                <select id="poolSel" class="cd-in" style="width:200px"><option value="">+ Thêm vào pool...</option>
+                    <?php foreach ($allPools as $p): if (in_array((int)$p['id'], $candPoolIds, true)) continue; ?><option value="<?= $p['id'] ?>"><?= h($p['name']) ?></option><?php endforeach; ?>
+                </select>
+                <button class="rc-btn ghost" onclick="addPool()">Thêm</button>
+            </div>
         </div>
         <?php if ($c['notes']): ?><div style="margin-top:14px"><div class="rc-muted">Ghi chú</div><div><?= nl2br(h($c['notes'])) ?></div></div><?php endif; ?>
     </div>
@@ -248,6 +263,8 @@ function saveCand(){const f=document.getElementById('editForm');if(!f.full_name.
     const fd=new FormData(f);fd.append('action','update_candidate');fd.append('candidate_id',CID);
     fetch('/hrm/api',{method:'POST',body:fd}).then(r=>r.json()).then(j=>{j.ok?location.reload():alert(j.error||'Lỗi');});}
 function addTag(){const v=document.getElementById('newTag').value.trim();if(!v)return;post({action:'cand_tag_add',candidate_id:CID,tag:v});}
+function addPool(){const v=document.getElementById('poolSel').value;if(!v){alert('Chọn pool');return;}post({action:'cand_pool_add',candidate_id:CID,pool_id:v});}
+function delPool(pid){post({action:'cand_pool_del',candidate_id:CID,pool_id:pid});}
 function delTag(t){post({action:'cand_tag_del',candidate_id:CID,tag:t});}
 function addSkill(){const n=document.getElementById('skName').value.trim();if(!n)return;post({action:'cand_skill_add',candidate_id:CID,skill:n,level:document.getElementById('skLevel').value.trim()});}
 function delSkill(id){post({action:'cand_skill_del',id:id});}

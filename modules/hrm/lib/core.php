@@ -240,6 +240,12 @@ function hrm_ensure_candidate_module(mysqli $conn): void
         "CREATE TABLE IF NOT EXISTS hrm_candidate_tags (
             candidate_id INT NOT NULL, tag VARCHAR(60) NOT NULL,
             PRIMARY KEY (candidate_id, tag), KEY idx_tag (tag)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4",
+        "CREATE TABLE IF NOT EXISTS hrm_pools (
+            id INT AUTO_INCREMENT PRIMARY KEY, name VARCHAR(120) NOT NULL, description VARCHAR(255) DEFAULT '',
+            color VARCHAR(16) DEFAULT '#7c3aed', active TINYINT DEFAULT 1, created_at DATETIME DEFAULT CURRENT_TIMESTAMP) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4",
+        "CREATE TABLE IF NOT EXISTS hrm_candidate_pools (
+            candidate_id INT NOT NULL, pool_id INT NOT NULL, added_by INT DEFAULT 0, added_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (candidate_id, pool_id), KEY idx_pool (pool_id)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4",
         "CREATE TABLE IF NOT EXISTS hrm_candidate_reminders (
             id INT AUTO_INCREMENT PRIMARY KEY, candidate_id INT NOT NULL,
             due_at DATETIME NOT NULL, note VARCHAR(255) DEFAULT '', owner_id INT DEFAULT 0,

@@ -57,9 +57,8 @@ hrm_header('Ứng viên', 'Kho ứng viên (' . $total . ')', 'candidates');
         <?php foreach ($opts['owners'] as $o): ?><option value="<?= $o['id'] ?>"<?= $f['owner']===(int)$o['id']?' selected':'' ?>><?= h($o['full_name']) ?></option><?php endforeach; ?></select>
     <input name="skill" value="<?= h($f['skill']) ?>" placeholder="Kỹ năng" class="cd-in" style="width:130px">
     <input name="tag" value="<?= h($f['tag']) ?>" placeholder="Thẻ" class="cd-in" style="width:110px">
-    <select name="pool" class="cd-in"><option value="">Pool: tất cả</option>
-        <option value="1"<?= $f['pool']===1?' selected':'' ?>>Trong pool</option>
-        <option value="0"<?= $f['pool']===0?' selected':'' ?>>Ngoài pool</option></select>
+    <select name="pool_id" class="cd-in"><option value="0">Mọi pool</option>
+        <?php foreach ($opts['pools'] as $p): ?><option value="<?= $p['id'] ?>"<?= $f['pool_id']===(int)$p['id']?' selected':'' ?>><?= h($p['name']) ?></option><?php endforeach; ?></select>
     <select name="has_cv" class="cd-in"><option value="">CV: tất cả</option>
         <option value="1"<?= $f['has_cv']==='1'?' selected':'' ?>>Có CV</option>
         <option value="0"<?= $f['has_cv']==='0'?' selected':'' ?>>Chưa có CV</option></select>
@@ -83,7 +82,9 @@ hrm_header('Ứng viên', 'Kho ứng viên (' . $total . ')', 'candidates');
     <select id="bulkStatus" class="cd-in"><option value="">Đổi trạng thái...</option>
         <?php foreach ($statuses as $k=>$lbl): ?><option value="<?= $k ?>"><?= h($lbl) ?></option><?php endforeach; ?></select>
     <button class="rc-btn ghost" onclick="bulk('status', document.getElementById('bulkStatus').value)">Áp dụng</button>
-    <button class="rc-btn ghost" onclick="bulk('pool','')">+ Talent pool</button>
+    <select id="bulkPool" class="cd-in"><option value="">Thêm vào pool...</option>
+        <?php foreach ($opts['pools'] as $p): ?><option value="<?= $p['id'] ?>"><?= h($p['name']) ?></option><?php endforeach; ?></select>
+    <button class="rc-btn ghost" onclick="bulk('add_pool', document.getElementById('bulkPool').value)">Thêm pool</button>
     <button class="rc-btn ghost" id="mergeBtn" style="display:none" onclick="mergeTwo()">Gộp 2 hồ sơ</button>
     <button class="rc-btn ghost" style="color:#dc2626" onclick="if(confirm('Lưu trữ các ứng viên đã chọn?'))bulk('delete','')">Lưu trữ</button>
 </div>
@@ -125,7 +126,7 @@ $stCol = ['new'=>'#0071e3','active'=>'#b45309','pooled'=>'#7c3aed','hired'=>'#16
             <td class="cd-go"><?= h($c['classification'] ?: 'Ứng viên') ?></td>
             <td class="cd-go cd-job"><?= h($c['app_job'] ?: ($c['applied_job'] ?: '-')) ?></td>
             <td><?= $stageCell($stg) ?></td>
-            <td><span class="cd-badge" style="background:<?= ($stCol[$c['status']]??'#64748b') ?>1a;color:<?= $stCol[$c['status']]??'#64748b' ?>"><?= h($statuses[$c['status']] ?? $c['status']) ?></span><?= $c['talent_pool'] ? ' <span class="cd-badge" style="background:#f3e8ff;color:#7c3aed">Pool</span>' : '' ?></td>
+            <td><span class="cd-badge" style="background:<?= ($stCol[$c['status']]??'#64748b') ?>1a;color:<?= $stCol[$c['status']]??'#64748b' ?>"><?= h($statuses[$c['status']] ?? $c['status']) ?></span><?php if (!empty($c['pool_list'])): foreach (explode(',', $c['pool_list']) as $pn): ?> <span class="cd-badge" style="background:#f3e8ff;color:#7c3aed"><?= h($pn) ?></span><?php endforeach; endif; ?></td>
             <td><?= h($c['source_name'] ?: '-') ?></td>
             <td><?= h($c['event_name'] ?: '-') ?></td>
             <td><?= h($c['owner_name'] ?: '-') ?></td>
@@ -219,7 +220,7 @@ function linkPipeline(){
 function toggleAll(cb){document.querySelectorAll('.rowChk').forEach(c=>c.checked=cb.checked);onCheck();}
 function bulk(op,value){
     const ids=selectedIds();if(!ids.length){alert('Chưa chọn ứng viên');return;}
-    if((op==='tag'||op==='status')&&!value){alert('Nhập/chọn giá trị');return;}
+    if((op==='tag'||op==='status'||op==='add_pool')&&!value){alert('Nhập/chọn giá trị');return;}
     const fd=new FormData();fd.append('action','cand_bulk');fd.append('op',op);fd.append('value',value);fd.append('ids',ids.join(','));
     fetch('/hrm/api',{method:'POST',body:fd}).then(r=>r.json()).then(j=>{j.ok?location.reload():alert(j.error||'Lỗi');});
 }
