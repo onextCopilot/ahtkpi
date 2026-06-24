@@ -1083,7 +1083,7 @@ switch ($action) {
             return true;
         };
 
-        $ins = $upd = $skip = $cvOk = $cvFail = $linked = 0;
+        $ins = $upd = $skip = $cvOk = $cvFail = $linked = $rowErr = 0;
         foreach ($rows as $row) {
             $name = $col($row, 'full_name');
             if ($name === '') { $skip++; continue; }
@@ -1157,23 +1157,26 @@ switch ($action) {
                 if ($local !== '') { $set['cv_path'] = [$local, 's']; $cvLocal = $local; $cvOk++; }
                 else { $cvFail++; }
             }
-            if ($existing && $mode === 'update') {
-                $cid = (int)$existing['id'];
-                $sets = ['full_name=?']; $vals = [$name]; $types = 's';
-                foreach ($set as $cn => [$v, $t]) { $sets[] = "$cn=?"; $vals[] = $v; $types .= $t; }
-                $vals[] = $cid; $types .= 'i';
-                $st = $conn->prepare('UPDATE hrm_candidates SET ' . implode(',', $sets) . ' WHERE id=?');
-                $st->bind_param($types, ...$vals); $st->execute(); $upd++;
-            } else {
-                $cols = ['full_name', 'email', 'phone']; $vals = [$name, $email, $phone]; $types = 'sss';
-                foreach ($set as $cn => [$v, $t]) { if (in_array($cn, ['email','phone'], true)) continue; $cols[] = $cn; $vals[] = $v; $types .= $t; }
-                $cols[] = 'status';    $vals[] = 'new';   $types .= 's';
-                $cols[] = 'dedup_key'; $vals[] = $dedup;  $types .= 's';
-                $cols[] = 'created_by';$vals[] = $uid;    $types .= 'i';
-                $ph = implode(',', array_fill(0, count($cols), '?'));
-                $st = $conn->prepare('INSERT INTO hrm_candidates (' . implode(',', $cols) . ', last_activity_at) VALUES (' . $ph . ', NOW())');
-                $st->bind_param($types, ...$vals); $st->execute(); $cid = $st->insert_id; $ins++;
-            }
+            $cid = 0;
+            try {
+                if ($existing && $mode === 'update') {
+                    $cid = (int)$existing['id'];
+                    $sets = ['full_name=?']; $vals = [$name]; $types = 's';
+                    foreach ($set as $cn => [$v, $t]) { $sets[] = "$cn=?"; $vals[] = $v; $types .= $t; }
+                    $vals[] = $cid; $types .= 'i';
+                    $st = $conn->prepare('UPDATE hrm_candidates SET ' . implode(',', $sets) . ' WHERE id=?');
+                    $st->bind_param($types, ...$vals); $st->execute(); $upd++;
+                } else {
+                    $cols = ['full_name', 'email', 'phone']; $vals = [$name, $email, $phone]; $types = 'sss';
+                    foreach ($set as $cn => [$v, $t]) { if (in_array($cn, ['email','phone'], true)) continue; $cols[] = $cn; $vals[] = $v; $types .= $t; }
+                    $cols[] = 'status';    $vals[] = 'new';   $types .= 's';
+                    $cols[] = 'dedup_key'; $vals[] = $dedup;  $types .= 's';
+                    $cols[] = 'created_by';$vals[] = $uid;    $types .= 'i';
+                    $ph = implode(',', array_fill(0, count($cols), '?'));
+                    $st = $conn->prepare('INSERT INTO hrm_candidates (' . implode(',', $cols) . ', last_activity_at) VALUES (' . $ph . ', NOW())');
+                    $st->bind_param($types, ...$vals); $st->execute(); $cid = $st->insert_id; $ins++;
+                }
+            } catch (\Throwable $e) { $rowErr++; continue; } // 1 dòng lỗi -> bỏ qua, không sập import
             // CV tải về -> lưu thành 1 tệp đính kèm (nhãn = tên file gốc).
             if ($cvLocal !== '' && !empty($cid)) {
                 $lbl = $cvLabelOf($cvUrl ?? $cvLocal);
@@ -1188,8 +1191,8 @@ switch ($action) {
             // Gắn vào tin tuyển dụng nếu có mã tin.
             if ($linkJob((int)$cid, $col($row, 'job_code'), $col($row, 'applied_stage'))) { $linked++; }
         }
-        hrm_audit($conn, $uid, 'candidate_import', 'candidate', 0, "ins=$ins upd=$upd skip=$skip cv=$cvOk/" . ($cvOk + $cvFail) . " linked=$linked");
-        jout(true, ['inserted' => $ins, 'updated' => $upd, 'skipped' => $skip, 'cv_ok' => $cvOk, 'cv_fail' => $cvFail, 'linked' => $linked]);
+        hrm_audit($conn, $uid, 'candidate_import', 'candidate', 0, "ins=$ins upd=$upd skip=$skip cv=$cvOk/" . ($cvOk + $cvFail) . " linked=$linked err=$rowErr");
+        jout(true, ['inserted' => $ins, 'updated' => $upd, 'skipped' => $skip, 'cv_ok' => $cvOk, 'cv_fail' => $cvFail, 'linked' => $linked, 'errors' => $rowErr]);
     }
 
     /* ── Đồng bộ ứng viên (đã có applied_job) vào pipeline tin tuyển dụng ─ */

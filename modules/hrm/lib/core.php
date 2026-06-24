@@ -223,6 +223,14 @@ function hrm_ensure_candidate_module(mysqli $conn): void
         if ($idx && $idx->num_rows === 0) { $conn->query("CREATE INDEX idx_dedup ON hrm_candidates (dedup_key)"); }
     } catch (\Throwable $e) { /* index có thể đã tồn tại */ }
 
+    // Nới rộng các cột ngày/giờ (giá trị Base có thể dài / nhiều mốc) - 1 lần.
+    if (hrm_setting($conn, 'cand_cols_widen_v1', '') !== '1') {
+        foreach (['interview_date', 'applied_time', 'offer_date', 'offer_time', 'hired_date', 'hired_time', 'reject_date', 'reject_time'] as $cn) {
+            try { $conn->query("ALTER TABLE hrm_candidates MODIFY `$cn` VARCHAR(255) DEFAULT ''"); } catch (\Throwable $e) { /* bỏ qua */ }
+        }
+        hrm_set_setting($conn, 'cand_cols_widen_v1', '1');
+    }
+
     $tables = [
         "CREATE TABLE IF NOT EXISTS hrm_candidate_skills (
             id INT AUTO_INCREMENT PRIMARY KEY, candidate_id INT NOT NULL,

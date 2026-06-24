@@ -171,7 +171,7 @@ async function commit(){
     document.getElementById('commitBtn').disabled=true;
     document.getElementById('commitErr').textContent='';
     document.getElementById('progWrap').style.display='block';
-    const sum={inserted:0,updated:0,skipped:0,cv_ok:0,cv_fail:0,linked:0};
+    const sum={inserted:0,updated:0,skipped:0,cv_ok:0,cv_fail:0,linked:0,errors:0};
     for(let off=0; off<total; off+=chunk){
         const part=ROWS.slice(off,off+chunk);
         const fd=new FormData();fd.append('action','cand_import_commit');
@@ -182,7 +182,7 @@ async function commit(){
         try{ j=await (await fetch('/hrm/api',{method:'POST',body:fd})).json(); }
         catch(e){ document.getElementById('commitErr').textContent='Lỗi kết nối ở dòng '+(off+1); document.getElementById('commitBtn').disabled=false; return; }
         if(!j.ok){ document.getElementById('commitErr').textContent=j.error||'Lỗi'; document.getElementById('commitBtn').disabled=false; return; }
-        sum.inserted+=j.inserted||0; sum.updated+=j.updated||0; sum.skipped+=j.skipped||0; sum.cv_ok+=j.cv_ok||0; sum.cv_fail+=j.cv_fail||0; sum.linked+=j.linked||0;
+        sum.inserted+=j.inserted||0; sum.updated+=j.updated||0; sum.skipped+=j.skipped||0; sum.cv_ok+=j.cv_ok||0; sum.cv_fail+=j.cv_fail||0; sum.linked+=j.linked||0; sum.errors+=j.errors||0;
         const done=Math.min(off+chunk,total); const pct=Math.round(done/total*100);
         document.getElementById('progBar').style.width=pct+'%';
         document.getElementById('progPct').textContent=pct+'%';
@@ -192,6 +192,7 @@ async function commit(){
     let html='✓ Thêm mới: <b>'+sum.inserted+'</b> · Cập nhật: <b>'+sum.updated+'</b> · Bỏ qua (trùng/thiếu tên): <b>'+sum.skipped+'</b>';
     if(dlCv)html+='<br>CV tải về: <b>'+sum.cv_ok+'</b>'+(sum.cv_fail?(' · lỗi tải: <b>'+sum.cv_fail+'</b>'):'');
     if(sum.linked)html+='<br>Gắn vào tin tuyển dụng: <b>'+sum.linked+'</b>';
+    if(sum.errors)html+='<br><span style="color:#dc2626">Dòng lỗi (bỏ qua): <b>'+sum.errors+'</b></span>';
     document.getElementById('result').innerHTML=html;
 }
 function escapeHtml(s){return s.replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
