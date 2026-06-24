@@ -26,6 +26,7 @@ $fields = [
     'gender'           => ['Giới tính', ['giới tính','gender','sex']],
     'id_card'          => ['Số CMND/CCCD', ['số cmt','cmt','cccd','cmnd','id card','căn cước']],
     'source'           => ['Nguồn', ['nguồn','source','kênh']],
+    'owner'            => ['Phụ trách', ['phụ trách','người phụ trách','phu trach','owner','assignee','người tạo','recruiter']],
     'score'            => ['Điểm', ['điểm','score']],
     'classification'   => ['Phân loại', ['phân loại','classification']],
     'campaign'         => ['Chiến dịch', ['chiến dịch','campaign','medium']],

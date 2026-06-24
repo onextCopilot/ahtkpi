@@ -1021,6 +1021,19 @@ switch ($action) {
             }
             return $srcCache[$k];
         };
+        // Resolve tên/email người phụ trách -> user id (KHÔNG tạo user mới).
+        $usrCache = [];
+        $resolveUser = function ($name) use (&$usrCache, $conn) {
+            $name = trim((string)$name);
+            if ($name === '') { return 0; }
+            $k = mb_strtolower($name);
+            if (!array_key_exists($k, $usrCache)) {
+                $u = $conn->prepare('SELECT id FROM users WHERE LOWER(full_name)=? OR LOWER(email)=? OR LOWER(username)=? ORDER BY (status="active") DESC LIMIT 1');
+                $u->bind_param('sss', $k, $k, $k); $u->execute(); $r = $u->get_result()->fetch_assoc();
+                $usrCache[$k] = $r ? (int)$r['id'] : 0;
+            }
+            return $usrCache[$k];
+        };
         if (!$rows) { jout(false, ['error' => 'Không có dòng dữ liệu']); }
         if (empty($map['full_name']) && $map['full_name'] !== 0 && $map['full_name'] !== '0') { jout(false, ['error' => 'Phải gán cột Họ tên']); }
 
@@ -1087,11 +1100,13 @@ switch ($action) {
             if ($appliedDate) { $set['applied_date'] = [$appliedDate, 's']; }
             $srcId = $resolveSource($col($row, 'source')) ?: $defSource;  // ưu tiên cột Nguồn từ file
             if ($srcId) { $set['source_id'] = [$srcId, 'i']; }
+            $ownerId = $resolveUser($col($row, 'owner'));
+            if ($ownerId) { $set['owner_id'] = [$ownerId, 'i']; }
             if ($defEvent)  { $set['event_id']  = [$defEvent, 'i']; }
 
             $existing = null;
             if ($dedup !== '') {
-                $d = $conn->prepare('SELECT id, source_id, event_id, cv_path FROM hrm_candidates WHERE dedup_key=? LIMIT 1');
+                $d = $conn->prepare('SELECT id, source_id, event_id, owner_id, cv_path FROM hrm_candidates WHERE dedup_key=? LIMIT 1');
                 $d->bind_param('s', $dedup); $d->execute(); $existing = $d->get_result()->fetch_assoc();
             }
             if ($existing && $mode === 'skip') {
@@ -1099,8 +1114,9 @@ switch ($action) {
                 $cid0 = (int)$existing['id'];
                 // Bổ sung các trường còn TRỐNG cho hồ sơ cũ (không ghi đè dữ liệu đã có).
                 $bset = []; $bvals = []; $btypes = '';
-                if ((int)$existing['source_id'] === 0 && $srcId)  { $bset[] = 'source_id=?'; $bvals[] = $srcId;   $btypes .= 'i'; }
-                if ((int)$existing['event_id'] === 0 && $defEvent) { $bset[] = 'event_id=?';  $bvals[] = $defEvent; $btypes .= 'i'; }
+                if ((int)$existing['source_id'] === 0 && $srcId)   { $bset[] = 'source_id=?'; $bvals[] = $srcId;    $btypes .= 'i'; }
+                if ((int)$existing['event_id'] === 0 && $defEvent) { $bset[] = 'event_id=?';  $bvals[] = $defEvent;  $btypes .= 'i'; }
+                if ((int)$existing['owner_id'] === 0 && $ownerId)  { $bset[] = 'owner_id=?';  $bvals[] = $ownerId;   $btypes .= 'i'; }
                 if ($bset) { $bvals[] = $cid0; $btypes .= 'i'; $bu = $conn->prepare('UPDATE hrm_candidates SET ' . implode(',', $bset) . ' WHERE id=?'); $bu->bind_param($btypes, ...$bvals); $bu->execute(); }
                 // Bổ sung CV nếu hồ sơ cũ chưa có (hoặc còn link ngoài).
                 if ($downloadCv && isset($set['cv_path']) && preg_match('#^https?://#i', $set['cv_path'][0])) {
