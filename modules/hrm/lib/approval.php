@@ -157,6 +157,16 @@ function hrm_approval_dispatch_request(mysqli $conn, string $entityType, int $en
     $req = $conn->query('SELECT * FROM hrm_requests WHERE id = ' . $entityId)->fetch_assoc();
     if (!$req) { return; }
 
+    // Khoảng lương + nhãn loại tuyển dụng cho email phê duyệt.
+    $cur = $req['currency'] ?: 'VND';
+    $sMin = (float)$req['salary_min']; $sMax = (float)$req['salary_max'];
+    if ($sMin > 0 && $sMax > 0)      { $salaryRange = number_format($sMin) . ' - ' . number_format($sMax) . ' ' . $cur; }
+    elseif ($sMin > 0)               { $salaryRange = 'Từ ' . number_format($sMin) . ' ' . $cur; }
+    elseif ($sMax > 0)               { $salaryRange = 'Tối đa ' . number_format($sMax) . ' ' . $cur; }
+    else                             { $salaryRange = 'Thỏa thuận'; }
+    $typeLabel = $req['request_type'] === 'new_hc' ? 'Tuyển mới (tăng headcount)' : 'Thay thế';
+    $jdHtml = trim((string)$req['jd']) !== '' ? nl2br($req['jd']) : '(Chưa cập nhật)';
+
     $approvers = hrm_users_with_role($conn, $role);
     $emails = [];
     foreach ($approvers as $uid) {
@@ -166,6 +176,10 @@ function hrm_approval_dispatch_request(mysqli $conn, string $entityType, int $en
             'request_title' => $req['title'], 'quantity' => $req['quantity'],
             'level' => $req['level'], 'reason' => $req['reason'],
             'need_by_date' => $req['need_by_date'], 'due_at' => $dueAt,
+            'request_type' => $typeLabel, 'employment_type' => $req['employment_type'] ?: '(Chưa cập nhật)',
+            'experience_required' => $req['experience_required'] ?: '(Chưa cập nhật)',
+            'salary_range' => $salaryRange, 'priority' => $req['priority'] ?: '(Chưa cập nhật)',
+            'jd' => $jdHtml,
             'link' => '/hrm/requests?id=' . $entityId,
         ]];
     }

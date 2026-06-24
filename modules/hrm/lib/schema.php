@@ -486,8 +486,8 @@ function hrm_seeds(mysqli $conn): void
 
     // Phase-1 email templates (HRF internal). {{vars}} merged at send time.
     $tpls = [
-        ['hrf_approval_request', 'HRF chờ duyệt', 'Yêu cầu tuyển dụng {{request_code}} cần bạn phê duyệt',
-            '<p>Xin chào {{approver_name}},</p><p>Có yêu cầu tuyển dụng <b>{{request_title}}</b> ({{quantity}} vị trí, level {{level}}) cần bạn phê duyệt.</p><p>Lý do: {{reason}}<br>Ngày cần onboard: {{need_by_date}}</p><p><a href="{{link}}">Xem &amp; phê duyệt</a> - hạn xử lý: {{due_at}}.</p>', 'internal'],
+        ['hrf_approval_request', 'HRF chờ duyệt', 'Đề nghị phê duyệt yêu cầu tuyển dụng {{request_code}}',
+            '<p>Kính gửi {{approver_name}},</p><p>Phòng Tuyển dụng trân trọng đề nghị Anh/Chị xem xét và phê duyệt yêu cầu tuyển dụng với các thông tin như sau:</p><p><b>Thông tin yêu cầu</b><br>Vị trí: <b>{{request_title}}</b><br>Số lượng: {{quantity}} vị trí<br>Cấp bậc: {{level}}<br>Loại tuyển dụng: {{request_type}}<br>Hình thức làm việc: {{employment_type}}<br>Yêu cầu kinh nghiệm: {{experience_required}}<br>Khoảng lương: {{salary_range}}<br>Mức độ ưu tiên: {{priority}}<br>Lý do tuyển dụng: {{reason}}<br>Ngày cần onboard: {{need_by_date}}</p><p><b>Mô tả công việc (JD)</b></p><div style="border-left:3px solid #ddd;padding-left:12px;color:#444">{{jd}}</div><p>Kính mong Anh/Chị xem xét và cho ý kiến phê duyệt trước {{due_at}}.</p><p><a href="{{link}}">Xem chi tiết và phê duyệt</a></p><p>Trân trọng cảm ơn.</p>', 'internal'],
         ['hrf_approved', 'HRF đã được duyệt', 'Yêu cầu tuyển dụng {{request_code}} đã được duyệt',
             '<p>Xin chào {{requester_name}},</p><p>Yêu cầu tuyển dụng <b>{{request_title}}</b> đã được phê duyệt đầy đủ. Bạn có thể tạo tin tuyển dụng từ yêu cầu này.</p><p><a href="{{link}}">Mở yêu cầu</a></p>', 'internal'],
         ['hrf_rejected', 'HRF bị từ chối', 'Yêu cầu tuyển dụng {{request_code}} bị từ chối',
