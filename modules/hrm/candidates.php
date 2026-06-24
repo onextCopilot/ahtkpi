@@ -106,7 +106,7 @@ $stCol = ['new'=>'#0071e3','active'=>'#b45309','pooled'=>'#7c3aed','hired'=>'#16
     <thead><tr>
         <th style="width:34px"><input type="checkbox" id="checkAll" onclick="toggleAll(this)"></th>
         <th>Họ và tên</th><th>Thông tin liên hệ</th><th>Phân loại</th><th>Tin tuyển dụng</th><th>Giai đoạn hiện tại</th>
-        <th>Trạng thái</th><th>Nguồn</th><th>Sự kiện</th><th>Phụ trách</th><th>Đánh giá</th><th>CV</th>
+        <th>Trạng thái</th><th>Pool</th><th>Nguồn</th><th>Sự kiện</th><th>Văn phòng</th><th>Phụ trách</th><th>Đánh giá</th><th>CV</th>
     </tr></thead>
     <tbody>
     <?php foreach ($rows as $c): [$ini, $col] = $avatar($c['full_name']);
@@ -126,9 +126,11 @@ $stCol = ['new'=>'#0071e3','active'=>'#b45309','pooled'=>'#7c3aed','hired'=>'#16
             <td class="cd-go"><?= h($c['classification'] ?: 'Ứng viên') ?></td>
             <td class="cd-go cd-job"><?= h($c['app_job'] ?: ($c['applied_job'] ?: '-')) ?></td>
             <td><?= $stageCell($stg) ?></td>
-            <td><span class="cd-badge" style="background:<?= ($stCol[$c['status']]??'#64748b') ?>1a;color:<?= $stCol[$c['status']]??'#64748b' ?>"><?= h($statuses[$c['status']] ?? $c['status']) ?></span><?php if (!empty($c['pool_list'])): foreach (explode(',', $c['pool_list']) as $pn): ?> <span class="cd-badge" style="background:#f3e8ff;color:#7c3aed"><?= h($pn) ?></span><?php endforeach; endif; ?></td>
+            <td><span class="cd-badge" style="background:<?= ($stCol[$c['status']]??'#64748b') ?>1a;color:<?= $stCol[$c['status']]??'#64748b' ?>"><?= h($statuses[$c['status']] ?? $c['status']) ?></span></td>
+            <td><?php if (!empty($c['pool_list'])): foreach (explode(',', $c['pool_list']) as $pn): ?><span class="cd-badge" style="background:#f3e8ff;color:#7c3aed;margin:1px"><?= h(trim($pn)) ?></span><?php endforeach; else: ?><span class="cd-mut">-</span><?php endif; ?></td>
             <td><?= h($c['source_name'] ?: '-') ?></td>
             <td><?= h($c['event_name'] ?: '-') ?></td>
+            <td><?= h($c['office_text'] ?: '-') ?></td>
             <td><?= h($c['owner_name'] ?: '-') ?></td>
             <td><?= (int)$c['rating'] ? '<span style="color:#f59e0b">'.str_repeat('★', (int)$c['rating']).'</span>' : '<span class="cd-mut">-</span>' ?></td>
             <td><?= $c['cv_path'] ? '<a href="'.h($c['cv_path']).'" target="_blank" rel="noopener" onclick="event.stopPropagation()" class="cd-cv">Xem CV</a>' : '<span class="cd-mut">-</span>' ?></td>
