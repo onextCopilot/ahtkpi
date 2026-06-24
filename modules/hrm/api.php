@@ -880,6 +880,156 @@ switch ($action) {
         jout(true);
     }
 
+    /* ── Nguồn ứng viên ─────────────────────────────────────────────────── */
+    case 'source_save': {
+        $sid = (int)($_POST['id'] ?? 0); $name = trim($_POST['name'] ?? '');
+        if ($name === '') { jout(false, ['error' => 'Thiếu tên nguồn']); }
+        $active = isset($_POST['active']) ? (int)!!$_POST['active'] : 1;
+        if ($sid > 0) { $st = $conn->prepare('UPDATE hrm_candidate_sources SET name=?, active=? WHERE id=?'); $st->bind_param('sii', $name, $active, $sid); $st->execute(); }
+        else { $st = $conn->prepare('INSERT INTO hrm_candidate_sources (name,active) VALUES (?,1)'); $st->bind_param('s', $name); $st->execute(); $sid = $st->insert_id; }
+        jout(true, ['id' => $sid]);
+    }
+    case 'source_del': {
+        $sid = (int)($_POST['id'] ?? 0);
+        $conn->query("UPDATE hrm_candidate_sources SET active=0 WHERE id=$sid"); // ẩn, giữ liên kết ứng viên
+        jout(true);
+    }
+
+    /* ── Import wizard: bước 1 đọc file -> trả headers + rows ───────────── */
+    case 'cand_import_parse': {
+        if (empty($_FILES['file']['tmp_name'])) { jout(false, ['error' => 'Chưa chọn file']); }
+        $ext = strtolower(pathinfo($_FILES['file']['name'], PATHINFO_EXTENSION));
+        $rows = [];
+        try {
+            if ($ext === 'csv') {
+                $fh = fopen($_FILES['file']['tmp_name'], 'r');
+                while (($r = fgetcsv($fh)) !== false) { $rows[] = $r; }
+                fclose($fh);
+            } else {
+                require_once __DIR__ . '/lib/xlsx.php';
+                $rows = hrm_xlsx_rows($_FILES['file']['tmp_name']);
+            }
+        } catch (Throwable $e) { jout(false, ['error' => 'Lỗi đọc file: ' . $e->getMessage()]); }
+        // Dòng đầu không rỗng = header.
+        $hdrIdx = -1;
+        foreach ($rows as $i => $r) { if (count(array_filter($r, fn($x) => trim((string)$x) !== '')) >= 2) { $hdrIdx = $i; break; } }
+        if ($hdrIdx < 0) { jout(false, ['error' => 'File rỗng hoặc không đọc được']); }
+        $headers = array_map(fn($x) => trim((string)$x), $rows[$hdrIdx]);
+        $data = array_slice($rows, $hdrIdx + 1, 2000);
+        jout(true, ['headers' => $headers, 'rows' => $data, 'total' => count($data)]);
+    }
+
+    /* ── Import wizard: bước 2 ghi dữ liệu theo mapping + chống trùng ───── */
+    case 'cand_import_commit': {
+        hrm_ensure_candidate_module($conn);
+        $map  = json_decode($_POST['map'] ?? '[]', true) ?: [];   // field => colIndex
+        $rows = json_decode($_POST['rows'] ?? '[]', true) ?: [];
+        $mode = in_array($_POST['mode'] ?? '', ['skip','update','create'], true) ? $_POST['mode'] : 'skip';
+        $defSource = (int)($_POST['default_source'] ?? 0);
+        $defEvent  = (int)($_POST['default_event'] ?? 0);
+        if (!$rows) { jout(false, ['error' => 'Không có dòng dữ liệu']); }
+        if (empty($map['full_name']) && $map['full_name'] !== 0 && $map['full_name'] !== '0') { jout(false, ['error' => 'Phải gán cột Họ tên']); }
+
+        $col = function ($row, $field) use ($map) {
+            if (!isset($map[$field]) || $map[$field] === '') return '';
+            $i = (int)$map[$field];
+            return trim((string)($row[$i] ?? ''));
+        };
+        $ins = $upd = $skip = 0;
+        foreach ($rows as $row) {
+            $name = $col($row, 'full_name');
+            if ($name === '') { $skip++; continue; }
+            $email = $col($row, 'email'); $phone = $col($row, 'phone');
+            $dedup = hrm_candidate_dedup_key($email, $phone);
+            $fields = [
+                'current_position' => $col($row, 'current_position'),
+                'location' => $col($row, 'location'),
+                'expected_salary' => $col($row, 'expected_salary'),
+                'languages' => $col($row, 'languages'),
+                'dob' => $col($row, 'dob'), 'gender' => $col($row, 'gender'),
+                'linkedin_url' => $col($row, 'linkedin_url'), 'notes' => $col($row, 'notes'),
+            ];
+            $years = (float)$col($row, 'years_exp');
+            $existing = null;
+            if ($dedup !== '') {
+                $d = $conn->prepare('SELECT id FROM hrm_candidates WHERE dedup_key=? LIMIT 1');
+                $d->bind_param('s', $dedup); $d->execute(); $existing = $d->get_result()->fetch_assoc();
+            }
+            if ($existing && $mode === 'skip') { $skip++; continue; }
+            if ($existing && $mode === 'update') {
+                $cid = (int)$existing['id'];
+                $sets = ['full_name=?']; $vals = [$name]; $types = 's';
+                foreach ($fields as $k => $v) { if ($v !== '') { $sets[] = "$k=?"; $vals[] = $v; $types .= 's'; } }
+                if ($years > 0) { $sets[] = 'years_exp=?'; $vals[] = $years; $types .= 'd'; }
+                if ($defSource) { $sets[] = 'source_id=?'; $vals[] = $defSource; $types .= 'i'; }
+                if ($defEvent)  { $sets[] = 'event_id=?';  $vals[] = $defEvent;  $types .= 'i'; }
+                $vals[] = $cid; $types .= 'i';
+                $st = $conn->prepare('UPDATE hrm_candidates SET ' . implode(',', $sets) . ' WHERE id=?');
+                $st->bind_param($types, ...$vals); $st->execute(); $upd++;
+            } else {
+                $st = $conn->prepare("INSERT INTO hrm_candidates (full_name,email,phone,current_position,location,expected_salary,languages,dob,gender,linkedin_url,notes,years_exp,source_id,event_id,status,dedup_key,created_by,last_activity_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?, 'new', ?, ?, NOW())");
+                $st->bind_param('sssssssssssdiisi', $name,$email,$phone,$fields['current_position'],$fields['location'],$fields['expected_salary'],$fields['languages'],$fields['dob'],$fields['gender'],$fields['linkedin_url'],$fields['notes'],$years,$defSource,$defEvent,$dedup,$uid);
+                $st->execute(); $cid = $st->insert_id; $ins++;
+            }
+            // Kỹ năng (tách ; hoặc ,).
+            $sk = $col($row, 'skills');
+            if ($sk !== '' && !empty($cid)) {
+                foreach (preg_split('/[;,]/', $sk) as $s) { $s = trim($s); if ($s !== '') { $q = $conn->prepare('INSERT INTO hrm_candidate_skills (candidate_id,skill) VALUES (?,?)'); $q->bind_param('is', $cid, $s); $q->execute(); } }
+            }
+        }
+        hrm_audit($conn, $uid, 'candidate_import', 'candidate', 0, "ins=$ins upd=$upd skip=$skip");
+        jout(true, ['inserted' => $ins, 'updated' => $upd, 'skipped' => $skip]);
+    }
+
+    /* ── Gộp 2 hồ sơ trùng ──────────────────────────────────────────────── */
+    case 'cand_merge': {
+        hrm_ensure_candidate_module($conn);
+        $keep = (int)($_POST['kept_id'] ?? 0);
+        $drop = (int)($_POST['merged_id'] ?? 0);
+        if (!$keep || !$drop || $keep === $drop) { jout(false, ['error' => 'Chọn 2 hồ sơ khác nhau']); }
+        $a = $conn->query("SELECT * FROM hrm_candidates WHERE id=$keep")->fetch_assoc();
+        $b = $conn->query("SELECT * FROM hrm_candidates WHERE id=$drop")->fetch_assoc();
+        if (!$a || !$b) { jout(false, ['error' => 'Không tìm thấy hồ sơ']); }
+
+        // Cập nhật giá trị field đã chọn lên hồ sơ giữ lại.
+        $allow = ['full_name','email','phone','current_position','location','expected_salary','languages',
+                  'dob','gender','linkedin_url','portfolio_url','notes','source_id','event_id','owner_id','years_exp'];
+        $sets = []; $vals = []; $types = '';
+        foreach ($allow as $fld) {
+            if (!array_key_exists($fld, $_POST)) { continue; }
+            $sets[] = "$fld=?"; $vals[] = $_POST[$fld];
+            $types .= in_array($fld, ['source_id','event_id','owner_id'], true) ? 'i' : (in_array($fld, ['years_exp'], true) ? 'd' : 's');
+        }
+        // dedup_key tính lại theo email/phone cuối cùng.
+        $finEmail = array_key_exists('email', $_POST) ? $_POST['email'] : $a['email'];
+        $finPhone = array_key_exists('phone', $_POST) ? $_POST['phone'] : $a['phone'];
+        $sets[] = 'dedup_key=?'; $vals[] = hrm_candidate_dedup_key($finEmail, $finPhone); $types .= 's';
+        $vals[] = $keep; $types .= 'i';
+        $st = $conn->prepare('UPDATE hrm_candidates SET ' . implode(',', $sets) . ' WHERE id=?');
+        $st->bind_param($types, ...$vals); $st->execute();
+
+        // Chuyển dữ liệu con sang hồ sơ giữ.
+        $conn->query("UPDATE hrm_applications SET candidate_id=$keep WHERE candidate_id=$drop");
+        foreach (['hrm_candidate_skills','hrm_candidate_experience','hrm_candidate_education',
+                  'hrm_candidate_attachments','hrm_candidate_activities','hrm_candidate_reminders'] as $t) {
+            $conn->query("UPDATE $t SET candidate_id=$keep WHERE candidate_id=$drop");
+        }
+        $conn->query("UPDATE IGNORE hrm_candidate_tags SET candidate_id=$keep WHERE candidate_id=$drop");
+        $conn->query("DELETE FROM hrm_candidate_tags WHERE candidate_id=$drop");
+        // Lấy CV chính nếu hồ sơ giữ chưa có.
+        if (empty($a['cv_path']) && !empty($b['cv_path'])) {
+            $u = $conn->prepare('UPDATE hrm_candidates SET cv_path=? WHERE id=?'); $u->bind_param('si', $b['cv_path'], $keep); $u->execute();
+        }
+        // Lưu hồ sơ bị gộp (archived) + log.
+        $conn->query("UPDATE hrm_candidates SET status='archived', dedup_key='', notes=CONCAT(COALESCE(notes,''),'\n[Đã gộp vào #$keep]') WHERE id=$drop");
+        $payload = json_encode(['kept' => $a, 'merged' => $b], JSON_UNESCAPED_UNICODE);
+        $lg = $conn->prepare('INSERT INTO hrm_candidate_merges (kept_id,merged_id,payload,actor_id) VALUES (?,?,?,?)');
+        $lg->bind_param('iisi', $keep, $drop, $payload, $uid); $lg->execute();
+        hrm_cand_activity($conn, $keep, 'note', 'Đã gộp hồ sơ #' . $drop . ' (' . $b['full_name'] . ') vào đây', $uid);
+        hrm_audit($conn, $uid, 'candidate_merge', 'candidate', $keep, "merged #$drop");
+        jout(true, ['id' => $keep]);
+    }
+
     case 'save_test': {
         $aid = (int)($_POST['application_id'] ?? 0);
         $type = trim($_POST['test_type'] ?? ''); $score = (float)($_POST['score'] ?? 0);

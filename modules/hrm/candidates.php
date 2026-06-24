@@ -43,7 +43,7 @@ hrm_header('Ứng viên', 'Kho ứng viên (' . $total . ')', 'candidates');
     <a class="rc-btn ghost" href="/hrm/candidates/export?fmt=xls&<?= h($qs) ?>">Xuất Excel</a>
     <a class="rc-btn ghost" href="/hrm/candidates/export?fmt=csv&<?= h($qs) ?>">CSV</a>
     <button type="button" class="rc-btn" onclick="document.getElementById('addModal').style.display='flex'">+ Thêm ứng viên</button>
-    <button type="button" class="rc-btn ghost" onclick="document.getElementById('impModal').style.display='flex'">Import Excel</button>
+    <a class="rc-btn ghost" href="/hrm/candidates/import">Import Excel</a>
 </form>
 
 <!-- Thanh thao tác hàng loạt -->
@@ -55,6 +55,7 @@ hrm_header('Ứng viên', 'Kho ứng viên (' . $total . ')', 'candidates');
         <?php foreach ($statuses as $k=>$lbl): ?><option value="<?= $k ?>"><?= h($lbl) ?></option><?php endforeach; ?></select>
     <button class="rc-btn ghost" onclick="bulk('status', document.getElementById('bulkStatus').value)">Áp dụng</button>
     <button class="rc-btn ghost" onclick="bulk('pool','')">+ Talent pool</button>
+    <button class="rc-btn ghost" id="mergeBtn" style="display:none" onclick="mergeTwo()">Gộp 2 hồ sơ</button>
     <button class="rc-btn ghost" style="color:#dc2626" onclick="if(confirm('Lưu trữ các ứng viên đã chọn?'))bulk('delete','')">Lưu trữ</button>
 </div>
 
@@ -148,26 +149,11 @@ $stCol = ['new'=>'#0071e3','active'=>'#b45309','pooled'=>'#7c3aed','hired'=>'#16
     </div>
 </div>
 
-<!-- Import modal -->
-<div id="impModal" class="cd-modal">
-    <div class="rc-card" style="width:480px;max-width:92vw">
-        <h3 style="font-size:15px;margin-bottom:8px">Import ứng viên từ Excel</h3>
-        <div class="rc-muted" style="margin-bottom:12px">Chọn file .xlsx (Base E-Hiring hoặc template chuẩn). Tự nhận diện cột & chống trùng theo email/SĐT.</div>
-        <form id="impForm" onsubmit="return false">
-            <div class="rc-field"><input type="file" name="file" accept=".xlsx" required></div>
-            <div id="impResult" class="rc-muted" style="margin-bottom:10px"></div>
-            <div style="display:flex;gap:8px;justify-content:flex-end">
-                <button type="button" class="rc-btn ghost" onclick="document.getElementById('impModal').style.display='none'">Đóng</button>
-                <button type="button" class="rc-btn" id="impBtn" onclick="doImport()">Import</button>
-            </div>
-        </form>
-    </div>
-</div>
-
 <style>.cd-modal{display:none;position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:999;align-items:center;justify-content:center}</style>
 <script>
 function selectedIds(){return Array.from(document.querySelectorAll('.rowChk:checked')).map(c=>c.value);}
-function onCheck(){const n=selectedIds().length;document.getElementById('bulkCount').textContent=n;document.getElementById('bulkBar').style.display=n?'flex':'none';}
+function onCheck(){const n=selectedIds().length;document.getElementById('bulkCount').textContent=n;document.getElementById('bulkBar').style.display=n?'flex':'none';document.getElementById('mergeBtn').style.display=n===2?'inline-flex':'none';}
+function mergeTwo(){const ids=selectedIds();if(ids.length!==2){alert('Chọn đúng 2 hồ sơ để gộp');return;}location.href='/hrm/candidates/merge?a='+ids[0]+'&b='+ids[1];}
 function toggleAll(cb){document.querySelectorAll('.rowChk').forEach(c=>c.checked=cb.checked);onCheck();}
 function bulk(op,value){
     const ids=selectedIds();if(!ids.length){alert('Chưa chọn ứng viên');return;}
@@ -185,16 +171,6 @@ function addCand(force){
         if(j.dup_id){document.getElementById('addErr').innerHTML=j.error+' <a href="/hrm/candidate?id='+j.dup_id+'">Mở hồ sơ</a> · <a href="#" onclick="addCand(true);return false;">Vẫn tạo</a>';}
         else document.getElementById('addErr').textContent=j.error||'Lỗi';
     }).catch(()=>{document.getElementById('addBtn').disabled=false;document.getElementById('addErr').textContent='Lỗi kết nối';});
-}
-function doImport(){
-    const f=document.getElementById('impForm');if(!f.file.files.length){alert('Chọn file');return;}
-    const fd=new FormData(f);fd.append('action','import_candidates');
-    document.getElementById('impBtn').disabled=true;document.getElementById('impResult').textContent='Đang import...';
-    fetch('/hrm/api',{method:'POST',body:fd}).then(r=>r.json()).then(j=>{
-        document.getElementById('impBtn').disabled=false;
-        if(j.ok){document.getElementById('impResult').innerHTML='✓ Thêm mới: <b>'+j.inserted+'</b> · Cập nhật: <b>'+j.updated+'</b> · Bỏ qua: '+j.skipped;setTimeout(()=>location.reload(),900);}
-        else document.getElementById('impResult').textContent='Lỗi: '+(j.error||'');
-    }).catch(()=>{document.getElementById('impBtn').disabled=false;document.getElementById('impResult').textContent='Lỗi kết nối';});
 }
 </script>
 <?php
