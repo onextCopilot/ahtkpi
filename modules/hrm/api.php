@@ -987,13 +987,10 @@ switch ($action) {
         // Nhãn tệp = tên file CV gốc từ URL.
         $cvLabelOf = fn($url) => (basename(parse_url((string)$url, PHP_URL_PATH) ?: '') ?: 'CV');
 
-        // Map giai đoạn theo tên + tra cứu tin tuyển dụng -> gắn ứng viên vào pipeline.
-        $stages = $conn->query("SELECT id,name,code,sla_hours,sort_order FROM hrm_pipeline_stages ORDER BY sort_order")->fetch_all(MYSQLI_ASSOC);
-        $stageByName = []; foreach ($stages as $s) { $stageByName[mb_strtolower(trim($s['name']))] = $s; }
-        $defaultStage = null; foreach ($stages as $s) { if (strtoupper($s['code']) === 'SCREENING') { $defaultStage = $s; break; } }
-        if (!$defaultStage && $stages) { $defaultStage = $stages[0]; }
+        // Tra cứu tin tuyển dụng -> gắn ứng viên vào pipeline (giai đoạn map qua hrm_match_stage).
+        $stages = $conn->query("SELECT id,name,code,stage_type,sla_hours,sort_order FROM hrm_pipeline_stages ORDER BY sort_order")->fetch_all(MYSQLI_ASSOC);
         $jobCache = [];
-        $linkJob = function (int $cid, string $jobCode, string $stageText) use (&$jobCache, $conn, $uid, $stageByName, $defaultStage) {
+        $linkJob = function (int $cid, string $jobCode, string $stageText) use (&$jobCache, $conn, $uid, $stages) {
             $jobCode = trim($jobCode);
             if ($cid <= 0 || $jobCode === '') { return false; }
             if (!array_key_exists($jobCode, $jobCache)) {
@@ -1005,10 +1002,11 @@ switch ($action) {
             $jid = $jobCache[$jobCode];
             if (!$jid) { return false; }
             if ($conn->query("SELECT id FROM hrm_applications WHERE candidate_id=$cid AND job_id=$jid LIMIT 1")->fetch_assoc()) { return false; }
-            $stg = $stageByName[mb_strtolower(trim($stageText))] ?? $defaultStage;
+            $stg = hrm_match_stage($stages, $stageText);
             $sid = $stg ? (int)$stg['id'] : 0;
-            $a = $conn->prepare('INSERT INTO hrm_applications (candidate_id,job_id,stage_id,owner_id) VALUES (?,?,?,?)');
-            $a->bind_param('iiii', $cid, $jid, $sid, $uid); $a->execute(); $aid = $a->insert_id;
+            $status = ($stg && $stg['stage_type'] === 'rejected') ? 'rejected' : (($stg && $stg['stage_type'] === 'hired') ? 'hired' : 'active');
+            $a = $conn->prepare('INSERT INTO hrm_applications (candidate_id,job_id,stage_id,status,owner_id) VALUES (?,?,?,?,?)');
+            $a->bind_param('iiisi', $cid, $jid, $sid, $status, $uid); $a->execute(); $aid = $a->insert_id;
             if ($stg && !empty($stg['sla_hours'])) {
                 hrm_sla_open($conn, 'application', $aid, strtolower($stg['code']), date('Y-m-d H:i:s', strtotime('+' . (int)$stg['sla_hours'] . ' hours')));
             }
@@ -1109,14 +1107,6 @@ switch ($action) {
     case 'cand_link_pipeline': {
         hrm_ensure_candidate_module($conn);
         $stages = $conn->query("SELECT id,name,code,stage_type,sla_hours FROM hrm_pipeline_stages ORDER BY sort_order")->fetch_all(MYSQLI_ASSOC);
-        $byName = []; $rejStage = null; $defStage = null;
-        foreach ($stages as $s) {
-            $byName[mb_strtolower(trim($s['name']))] = $s;
-            if ($s['stage_type'] === 'rejected' && !$rejStage) { $rejStage = $s; }
-            if (strtoupper($s['code']) === 'SCREENING' && !$defStage) { $defStage = $s; }
-        }
-        if (!$defStage && $stages) { $defStage = $stages[0]; }
-
         $cands = $conn->query("SELECT id, applied_job, applied_stage FROM hrm_candidates
             WHERE applied_job <> '' AND status <> 'archived'")->fetch_all(MYSQLI_ASSOC);
         $jobCache = []; $linked = 0; $noJob = 0;
@@ -1132,11 +1122,9 @@ switch ($action) {
             if (!$jid) { $noJob++; continue; }
             $cid = (int)$c['id'];
             if ($conn->query("SELECT id FROM hrm_applications WHERE candidate_id=$cid AND job_id=$jid LIMIT 1")->fetch_assoc()) { continue; }
-            $stName = mb_strtolower(trim($c['applied_stage']));
-            $isRej = $stName !== '' && (strpos($stName, 'reject') !== false || strpos($stName, 'từ chối') !== false || strpos($stName, 'loại') !== false);
-            $stg = $byName[$stName] ?? ($isRej ? $rejStage : $defStage) ?? $defStage;
+            $stg = hrm_match_stage($stages, $c['applied_stage']);
             $sid = $stg ? (int)$stg['id'] : 0;
-            $status = ($stg && $stg['stage_type'] === 'rejected') ? 'rejected' : 'active';
+            $status = ($stg && $stg['stage_type'] === 'rejected') ? 'rejected' : (($stg && $stg['stage_type'] === 'hired') ? 'hired' : 'active');
             $a = $conn->prepare('INSERT INTO hrm_applications (candidate_id,job_id,stage_id,status,owner_id) VALUES (?,?,?,?,?)');
             $a->bind_param('iiisi', $cid, $jid, $sid, $status, $uid); $a->execute();
             $linked++;

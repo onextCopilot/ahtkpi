@@ -309,6 +309,45 @@ function hrm_download_cv(string $url, string $name): string
     return $rel . '/' . $safe;
 }
 
+/**
+ * Khớp tên giai đoạn (vd từ Base: "Nhận hồ sơ", "Rejected"...) vào pipeline của mình.
+ * $stages = mảng hàng hrm_pipeline_stages (có id,code,name,stage_type). Trả về 1 hàng stage (fallback SCREENING/đầu).
+ */
+function hrm_match_stage(array $stages, string $text): ?array
+{
+    $text = mb_strtolower(trim($text));
+    $byName = []; $byCode = []; $def = null;
+    foreach ($stages as $s) {
+        $byName[mb_strtolower(trim($s['name']))] = $s;
+        $byCode[strtoupper($s['code'])] = $s;
+        if (strtoupper($s['code']) === 'SCREENING' && !$def) { $def = $s; }
+    }
+    if (!$def && $stages) { $def = $stages[0]; }
+    if ($text === '') { return $def; }
+    if (isset($byName[$text])) { return $byName[$text]; }       // khớp đúng tên pipeline
+    // Bảng quy đổi tên Base -> code pipeline.
+    $alias = [
+        'nhận hồ sơ' => 'SOURCED', 'nhan ho so' => 'SOURCED', 'received' => 'SOURCED',
+        'cv mới' => 'SOURCED', 'sàng lọc' => 'SCREENING', 'screening' => 'SCREENING',
+        'mới' => 'SOURCED', 'nguồn' => 'SOURCED', 'sourced' => 'SOURCED', 'new' => 'SOURCED',
+        'test' => 'TEST', 'test đầu vào' => 'TEST', 'làm bài test' => 'TEST',
+        'phỏng vấn' => 'INTERVIEW', 'interview' => 'INTERVIEW',
+        'reference' => 'REFERENCE', 'reference check' => 'REFERENCE',
+        'đánh giá' => 'EVALUATION', 'đánh giá sau pv' => 'EVALUATION', 'evaluation' => 'EVALUATION',
+        'offer' => 'OFFER', 'offered' => 'OFFER', 'gửi offer' => 'OFFER',
+        'hired' => 'HIRED', 'đã tuyển' => 'HIRED', 'tuyển' => 'HIRED',
+        'rejected' => 'REJECTED', 'từ chối' => 'REJECTED', 'loại' => 'REJECTED', 'reject' => 'REJECTED',
+    ];
+    if (isset($alias[$text], $byCode[$alias[$text]])) { return $byCode[$alias[$text]]; }
+    // Khớp một phần (chứa từ khóa).
+    foreach (['reject' => 'REJECTED', 'từ chối' => 'REJECTED', 'loại' => 'REJECTED',
+              'hired' => 'HIRED', 'tuyển' => 'HIRED', 'phỏng vấn' => 'INTERVIEW', 'interview' => 'INTERVIEW',
+              'test' => 'TEST', 'offer' => 'OFFER'] as $kw => $code) {
+        if (strpos($text, $kw) !== false && isset($byCode[$code])) { return $byCode[$code]; }
+    }
+    return $def;
+}
+
 /** Trạng thái kho ứng viên + nhãn. */
 function hrm_candidate_statuses(): array
 {
