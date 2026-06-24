@@ -489,6 +489,12 @@ switch ($action) {
     case 'move_stage': {
         $aid = (int)($_POST['application_id'] ?? 0);
         $sid = (int)($_POST['stage_id'] ?? 0);
+        if ($aid <= 0 || $sid <= 0) { jout(false, ['error' => 'Thiếu ứng viên hoặc giai đoạn']); }
+        $cur = $conn->query('SELECT status FROM hrm_applications WHERE id=' . $aid)->fetch_assoc();
+        if (!$cur) { jout(false, ['error' => 'Không tìm thấy ứng viên']); }
+        if ($cur['status'] !== 'active') {
+            jout(false, ['error' => 'Ứng viên đang ở trạng thái "' . $cur['status'] . '" (đã loại/giữ/rút) nên không thể chuyển giai đoạn. Hãy mở hồ sơ để mở lại trước.']);
+        }
         $st = $conn->prepare('UPDATE hrm_applications SET stage_id=? WHERE id=? AND status="active"');
         $st->bind_param('ii', $sid, $aid);
         $st->execute();

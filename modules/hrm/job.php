@@ -569,9 +569,17 @@ function sizeBoard(){var b=document.querySelector('.kb-board');if(!b)return;
     b.style.height=Math.max(320,window.innerHeight-top-14)+'px';}
 window.addEventListener('resize',sizeBoard);window.addEventListener('load',sizeBoard);sizeBoard();
 var dragId=null;
-function dragCard(e,id){dragId=id;e.dataTransfer.effectAllowed='move';}
-function dropCard(e,stageId){e.preventDefault();if(!dragId)return;
-    const fd=new FormData();fd.append('action','move_stage');fd.append('application_id',dragId);fd.append('stage_id',stageId);
+function dragCard(e,id){
+    dragId=id;
+    e.dataTransfer.effectAllowed='move';
+    // Bắt buộc set dữ liệu thì Firefox mới cho kéo; Chrome cũng ổn định hơn.
+    try{e.dataTransfer.setData('text/plain',String(id));}catch(_){}
+}
+function dropCard(e,stageId){
+    e.preventDefault();
+    var id=dragId || parseInt(e.dataTransfer.getData('text/plain'),10);
+    if(!id)return;
+    const fd=new FormData();fd.append('action','move_stage');fd.append('application_id',id);fd.append('stage_id',stageId);
     fetch('/hrm/api',{method:'POST',body:fd}).then(r=>r.json()).then(j=>{j.ok?location.reload():alert(j.error||'Lỗi');});
     dragId=null;}
 function addCand(){
