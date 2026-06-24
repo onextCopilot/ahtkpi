@@ -984,8 +984,38 @@ switch ($action) {
         $strCols = ['current_position','location','expected_salary','languages','dob','gender','linkedin_url',
                     'notes','classification','campaign','id_card','applied_job','applied_stage','tags',
                     'office_text','reject_reason','cv_path','external_id','interview_date'];
+        // Nhãn tệp = tên file CV gốc từ URL.
+        $cvLabelOf = fn($url) => (basename(parse_url((string)$url, PHP_URL_PATH) ?: '') ?: 'CV');
 
-        $ins = $upd = $skip = $cvOk = $cvFail = 0;
+        // Map giai đoạn theo tên + tra cứu tin tuyển dụng -> gắn ứng viên vào pipeline.
+        $stages = $conn->query("SELECT id,name,code,sla_hours,sort_order FROM hrm_pipeline_stages ORDER BY sort_order")->fetch_all(MYSQLI_ASSOC);
+        $stageByName = []; foreach ($stages as $s) { $stageByName[mb_strtolower(trim($s['name']))] = $s; }
+        $defaultStage = null; foreach ($stages as $s) { if (strtoupper($s['code']) === 'SCREENING') { $defaultStage = $s; break; } }
+        if (!$defaultStage && $stages) { $defaultStage = $stages[0]; }
+        $jobCache = [];
+        $linkJob = function (int $cid, string $jobCode, string $stageText) use (&$jobCache, $conn, $uid, $stageByName, $defaultStage) {
+            $jobCode = trim($jobCode);
+            if ($cid <= 0 || $jobCode === '') { return false; }
+            if (!array_key_exists($jobCode, $jobCache)) {
+                $j = $conn->prepare('SELECT id FROM hrm_jobs WHERE external_id=? OR code=? LIMIT 1');
+                $j->bind_param('ss', $jobCode, $jobCode); $j->execute();
+                $r = $j->get_result()->fetch_assoc();
+                $jobCache[$jobCode] = $r ? (int)$r['id'] : 0;
+            }
+            $jid = $jobCache[$jobCode];
+            if (!$jid) { return false; }
+            if ($conn->query("SELECT id FROM hrm_applications WHERE candidate_id=$cid AND job_id=$jid LIMIT 1")->fetch_assoc()) { return false; }
+            $stg = $stageByName[mb_strtolower(trim($stageText))] ?? $defaultStage;
+            $sid = $stg ? (int)$stg['id'] : 0;
+            $a = $conn->prepare('INSERT INTO hrm_applications (candidate_id,job_id,stage_id,owner_id) VALUES (?,?,?,?)');
+            $a->bind_param('iiii', $cid, $jid, $sid, $uid); $a->execute(); $aid = $a->insert_id;
+            if ($stg && !empty($stg['sla_hours'])) {
+                hrm_sla_open($conn, 'application', $aid, strtolower($stg['code']), date('Y-m-d H:i:s', strtotime('+' . (int)$stg['sla_hours'] . ' hours')));
+            }
+            return true;
+        };
+
+        $ins = $upd = $skip = $cvOk = $cvFail = $linked = 0;
         foreach ($rows as $row) {
             $name = $col($row, 'full_name');
             if ($name === '') { $skip++; continue; }
@@ -1011,29 +1041,32 @@ switch ($action) {
             }
             if ($existing && $mode === 'skip') {
                 $skip++;
+                $cid0 = (int)$existing['id'];
                 // Vẫn BỔ SUNG CV cho hồ sơ cũ nếu nó chưa có CV (không đụng field khác).
                 if ($downloadCv && isset($set['cv_path']) && preg_match('#^https?://#i', $set['cv_path'][0])) {
-                    $cid0 = (int)$existing['id'];
                     $cur = $conn->query("SELECT cv_path FROM hrm_candidates WHERE id=$cid0")->fetch_assoc();
                     // Bổ sung khi chưa có CV, hoặc CV đang là link ngoài (chưa localize).
                     if (empty($cur['cv_path']) || preg_match('#^https?://#i', $cur['cv_path'])) {
+                        $lbl = $cvLabelOf($set['cv_path'][0]);
                         $local = hrm_download_cv($set['cv_path'][0], $name);
                         if ($local !== '') {
                             $u = $conn->prepare('UPDATE hrm_candidates SET cv_path=? WHERE id=?'); $u->bind_param('si', $local, $cid0); $u->execute();
-                            $lbl = 'CV (import)';
                             $q = $conn->prepare("INSERT INTO hrm_candidate_attachments (candidate_id,file_path,label,type,uploaded_by) VALUES (?,?,?, 'cv', ?)");
                             $q->bind_param('issi', $cid0, $local, $lbl, $uid); $q->execute();
                             $cvOk++;
                         } else { $cvFail++; }
                     }
                 }
+                // Vẫn gắn vào tin tuyển dụng (additive, không đụng field khác).
+                if ($linkJob($cid0, $col($row, 'job_code'), $col($row, 'applied_stage'))) { $linked++; }
                 continue;
             }
 
             // Tải CV từ link ngoài về server (chỉ cho dòng sẽ ghi) -> thay cv_path bằng đường dẫn nội bộ.
-            $cvLocal = '';
+            $cvLocal = ''; $cvUrl = '';
             if ($downloadCv && isset($set['cv_path']) && preg_match('#^https?://#i', $set['cv_path'][0])) {
-                $local = hrm_download_cv($set['cv_path'][0], $name);
+                $cvUrl = $set['cv_path'][0];
+                $local = hrm_download_cv($cvUrl, $name);
                 if ($local !== '') { $set['cv_path'] = [$local, 's']; $cvLocal = $local; $cvOk++; }
                 else { $cvFail++; }
             }
@@ -1054,9 +1087,9 @@ switch ($action) {
                 $st = $conn->prepare('INSERT INTO hrm_candidates (' . implode(',', $cols) . ', last_activity_at) VALUES (' . $ph . ', NOW())');
                 $st->bind_param($types, ...$vals); $st->execute(); $cid = $st->insert_id; $ins++;
             }
-            // CV tải về -> lưu thành 1 tệp đính kèm.
+            // CV tải về -> lưu thành 1 tệp đính kèm (nhãn = tên file gốc).
             if ($cvLocal !== '' && !empty($cid)) {
-                $lbl = 'CV (import)';
+                $lbl = $cvLabelOf($cvUrl ?? $cvLocal);
                 $q = $conn->prepare("INSERT INTO hrm_candidate_attachments (candidate_id,file_path,label,type,uploaded_by) VALUES (?,?,?, 'cv', ?)");
                 $q->bind_param('issi', $cid, $cvLocal, $lbl, $uid); $q->execute();
             }
@@ -1065,9 +1098,11 @@ switch ($action) {
             if ($sk !== '' && !empty($cid)) {
                 foreach (preg_split('/[;,]/', $sk) as $s) { $s = trim($s); if ($s !== '') { $q = $conn->prepare('INSERT INTO hrm_candidate_skills (candidate_id,skill) VALUES (?,?)'); $q->bind_param('is', $cid, $s); $q->execute(); } }
             }
+            // Gắn vào tin tuyển dụng nếu có mã tin.
+            if ($linkJob((int)$cid, $col($row, 'job_code'), $col($row, 'applied_stage'))) { $linked++; }
         }
-        hrm_audit($conn, $uid, 'candidate_import', 'candidate', 0, "ins=$ins upd=$upd skip=$skip cv=$cvOk/" . ($cvOk + $cvFail));
-        jout(true, ['inserted' => $ins, 'updated' => $upd, 'skipped' => $skip, 'cv_ok' => $cvOk, 'cv_fail' => $cvFail]);
+        hrm_audit($conn, $uid, 'candidate_import', 'candidate', 0, "ins=$ins upd=$upd skip=$skip cv=$cvOk/" . ($cvOk + $cvFail) . " linked=$linked");
+        jout(true, ['inserted' => $ins, 'updated' => $upd, 'skipped' => $skip, 'cv_ok' => $cvOk, 'cv_fail' => $cvFail, 'linked' => $linked]);
     }
 
     /* ── Gộp 2 hồ sơ trùng ──────────────────────────────────────────────── */
