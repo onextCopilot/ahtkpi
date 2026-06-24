@@ -34,7 +34,7 @@ $senderOpts = function ($sel, $emptyLabel) use ($emailSenders) {
 };
 $offices = $conn->query("SELECT id, name, address, active FROM hrm_offices ORDER BY sort_order, name")->fetch_all(MYSQLI_ASSOC);
 
-$titles = ['offices' => 'Văn phòng', 'pipeline' => 'Giai đoạn & SLA', 'owners' => 'Phụ trách giai đoạn', 'roles' => 'Vai trò tuyển dụng', 'email' => 'Email template', 'channels' => 'Kênh thông báo', 'channels_cfg' => 'Kênh đăng tin', 'access' => 'Phân quyền HRM'];
+$titles = ['offices' => 'Văn phòng', 'pipeline' => 'Giai đoạn & SLA', 'owners' => 'Phụ trách giai đoạn', 'roles' => 'Vai trò tuyển dụng', 'email' => 'Email template', 'channels' => 'Kênh thông báo', 'channels_cfg' => 'Kênh đăng tin', 'access' => 'Phân quyền HRM', 'storage' => 'Lưu trữ / Ổ cứng'];
 $stages = $conn->query("SELECT id,code,name,sla_hours,sort_order FROM hrm_pipeline_stages ORDER BY sort_order")->fetch_all(MYSQLI_ASSOC);
 $deptList = $conn->query("SELECT id,name FROM departments ORDER BY sort_order, name")->fetch_all(MYSQLI_ASSOC);
 $ownerDept = (int)($_GET['dept'] ?? ($deptList[0]['id'] ?? 0));
@@ -697,6 +697,54 @@ function hrmAccessRemove(uid){
 }
 </script>
 
+<?php elseif ($tab === 'storage'):
+    $root = realpath(__DIR__ . '/../../');
+    $diskTotal = @disk_total_space($root); $diskFree = @disk_free_space($root);
+    $diskUsed = ($diskTotal !== false && $diskFree !== false) ? ($diskTotal - $diskFree) : false;
+    $usedPct = ($diskTotal && $diskTotal > 0 && $diskUsed !== false) ? round($diskUsed / $diskTotal * 100) : 0;
+    $fmt = function ($b) {
+        if ($b === false || $b === null) return 'N/A';
+        $u = ['B','KB','MB','GB','TB']; $i = 0; $b = (float)$b;
+        while ($b >= 1024 && $i < 4) { $b /= 1024; $i++; }
+        return number_format($b, $i >= 2 ? 2 : 0) . ' ' . $u[$i];
+    };
+    $dirSize = function ($dir) {
+        $s = 0; $n = 0;
+        if (is_dir($dir)) {
+            try {
+                $it = new RecursiveIteratorIterator(new RecursiveDirectoryIterator($dir, FilesystemIterator::SKIP_DOTS));
+                foreach ($it as $f) { if ($f->isFile()) { $s += $f->getSize(); $n++; } }
+            } catch (\Throwable $e) { /* bỏ qua file lỗi quyền */ }
+        }
+        return [$s, $n];
+    };
+    [$upB, $upN]   = $dirSize($root . '/uploads');
+    [$hrmB, $hrmN] = $dirSize($root . '/uploads/hrm');
+    [$cvB, $cvN]   = $dirSize($root . '/uploads/hrm/cvs');
+    [$atB, $atN]   = $dirSize($root . '/uploads/hrm/attachments');
+?>
+<div class="rc-card" style="max-width:620px">
+    <h3 style="font-size:14px;margin-bottom:12px">Ổ cứng máy chủ</h3>
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:14px;text-align:center">
+        <div><div class="rc-muted">Tổng</div><div style="font-size:22px;font-weight:700"><?= $fmt($diskTotal) ?></div></div>
+        <div><div class="rc-muted">Đã dùng</div><div style="font-size:22px;font-weight:700;color:#b45309"><?= $fmt($diskUsed) ?></div></div>
+        <div><div class="rc-muted">Còn trống</div><div style="font-size:22px;font-weight:700;color:#16a34a"><?= $fmt($diskFree) ?></div></div>
+    </div>
+    <div style="height:12px;background:#eef2f6;border-radius:99px;overflow:hidden">
+        <div style="height:100%;width:<?= $usedPct ?>%;background:<?= $usedPct >= 90 ? '#dc2626' : ($usedPct >= 75 ? '#f59e0b' : '#16a34a') ?>"></div>
+    </div>
+    <div class="rc-muted" style="text-align:center;margin-top:6px">Đã dùng <?= $usedPct ?>%<?= $usedPct >= 85 ? ' · ⚠ sắp đầy' : '' ?></div>
+</div>
+<div class="rc-card" style="max-width:620px;margin-top:16px">
+    <h3 style="font-size:14px;margin-bottom:10px">Thư mục upload</h3>
+    <table class="rc-table"><thead><tr><th>Thư mục</th><th>Dung lượng</th><th>Số file</th></tr></thead><tbody>
+        <tr><td><b>uploads/</b> (tất cả)</td><td><b><?= $fmt($upB) ?></b></td><td><?= number_format($upN) ?></td></tr>
+        <tr><td>uploads/hrm/</td><td><?= $fmt($hrmB) ?></td><td><?= number_format($hrmN) ?></td></tr>
+        <tr><td>&nbsp;&nbsp;↳ cvs/ (CV tải về)</td><td><?= $fmt($cvB) ?></td><td><?= number_format($cvN) ?></td></tr>
+        <tr><td>&nbsp;&nbsp;↳ attachments/ (tệp ứng viên)</td><td><?= $fmt($atB) ?></td><td><?= number_format($atN) ?></td></tr>
+    </tbody></table>
+    <div class="rc-muted" style="margin-top:8px">Cập nhật theo thời điểm tải trang. Quét toàn bộ thư mục nên có thể chậm nếu nhiều file.</div>
+</div>
 <?php else: ?>
 <div class="rc-card" style="max-width:560px">
     <h3 style="font-size:14px;margin-bottom:10px">Bật/tắt kênh thông báo</h3>
