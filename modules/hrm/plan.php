@@ -134,7 +134,7 @@ foreach ($departments as $d) {
 table.plan{border-collapse:separate;border-spacing:0;font-size:12px;white-space:nowrap}
 table.plan th,table.plan td{border-right:1px solid #eef1f5;border-bottom:1px solid #eef1f5;padding:4px 6px;text-align:center}
 table.plan tbody td{min-width:42px}
-table.plan thead th{position:sticky;top:0;z-index:3;background:#f8fafc;color:var(--mut);font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.2px;line-height:1.25;white-space:normal}
+table.plan thead th{position:sticky;top:0;z-index:6;background:#f8fafc;color:var(--mut);font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.2px;line-height:1.25;white-space:normal}
 table.plan thead tr:nth-child(2) th{top:19px;min-width:42px}
 table.plan .grp{background:#f1f5f9;color:#334155;border-bottom:1px solid #e2e8f0}
 table.plan .col-dept{position:sticky;left:0;z-index:2;box-sizing:border-box;background:#fff;text-align:left;width:180px;min-width:180px;max-width:180px;white-space:normal;font-weight:600;color:#0f172a;line-height:1.3}
@@ -161,11 +161,11 @@ table.plan .dept-edit:hover{background:#dbeafe;color:#2563eb}
 .plan-readd{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:12px;font-size:12.5px;color:var(--mut)}
 .plan-readd .chip{display:inline-flex;align-items:center;gap:6px;background:#fff;border:1px dashed #cbd5e1;border-radius:8px;padding:5px 10px;cursor:pointer;color:#334155;font-weight:600}
 .plan-readd .chip:hover{border-color:var(--rc2);color:var(--rc2)}
-table.plan thead .col-dept{z-index:4;background:#f8fafc}
+table.plan thead .col-dept{z-index:7;background:#f8fafc}
 /* Khối 4 cột đầu đóng băng: width cố định (border-box) + left cộng dồn cố định -> sticky chuẩn, không phụ thuộc JS.
    Cộng dồn: dept 180 | chốt 84 | nhân sự 56 | đề xuất 56  => left 0 / 180 / 264 / 320 */
 table.plan .col-chot,table.plan .col-ns,table.plan .col-canp,table.plan .col-dau{position:sticky;z-index:2;box-sizing:border-box;white-space:normal}
-table.plan thead .col-chot,table.plan thead .col-ns,table.plan thead .col-canp,table.plan thead .col-dau{z-index:4}
+table.plan thead .col-chot,table.plan thead .col-ns,table.plan thead .col-canp,table.plan thead .col-dau{z-index:7}
 table.plan .col-chot{left:180px;width:84px;min-width:84px;max-width:84px}
 table.plan .col-ns{left:264px;width:56px;min-width:56px;max-width:56px}
 table.plan .col-canp{left:320px;width:56px;min-width:56px;max-width:56px}
@@ -181,8 +181,10 @@ table.plan tbody tr.even:hover td,table.plan tbody tr.even:hover .col-dept{backg
 /* Đang chọn (click để bật/tắt) - thắng cả zebra & hover nên đặt sau cùng */
 table.plan tbody tr.sel td,table.plan tbody tr.sel .col-dept,
 table.plan tbody tr.sel:hover td,table.plan tbody tr.sel:hover .col-dept{background:#fde9c8}
-table.plan .total td{background:#fffaf0;font-weight:700;color:#0f172a;border-bottom:2px solid #e2e8f0}
-table.plan .total .col-dept{background:#fffaf0}
+/* Hàng "Tổng số" ghim ngay dưới phần đầu bảng (top được JS đặt theo chiều cao thead) */
+table.plan tbody tr.total td{position:sticky;top:38px;z-index:4;background:#fffaf0;font-weight:700;color:#0f172a;border-bottom:2px solid #e2e8f0}
+table.plan tbody tr.total .col-dept,table.plan tbody tr.total .col-chot,table.plan tbody tr.total .col-ns,table.plan tbody tr.total .col-canp{z-index:5}
+table.plan tbody tr.total .col-dept{background:#fffaf0}
 table.plan input{width:34px;border:1px solid transparent;border-radius:5px;padding:2px 1px;text-align:center;font-size:11px;font-family:inherit;background:transparent;color:#0f172a;outline:none;-moz-appearance:textfield}
 table.plan input::-webkit-outer-spin-button,table.plan input::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
 table.plan input:hover{border-color:#e2e8f0;background:#fff}
@@ -407,6 +409,10 @@ document.querySelector('table.plan').addEventListener('click', function(e){
         var r1 = t.tHead.rows[0], r2 = t.tHead.rows[1]; if(!r2) return;
         var h = Math.round(r1.getBoundingClientRect().height);
         for (var i=0;i<r2.cells.length;i++){ r2.cells[i].style.top = h + 'px'; }
+        // Ghim hàng "Tổng số" ngay dưới toàn bộ phần đầu bảng (top = chiều cao thead).
+        var head = Math.round(t.tHead.getBoundingClientRect().height);
+        var total = t.querySelector('tbody tr.total');
+        if (total) { for (var j=0;j<total.cells.length;j++){ total.cells[j].style.top = head + 'px'; } }
     }
     function run(){ requestAnimationFrame(syncHead); }
     run();
