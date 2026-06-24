@@ -106,7 +106,12 @@ function hrm_email_vars(mysqli $conn, string $entityType, int $entityId, array $
             $v['onboard_date'] = $r['need_by_date'] ? date('d/m/Y', strtotime($r['need_by_date'])) : '';
         }
     }
-    return array_merge($v, $extra);
+    $all = array_merge($v, $extra);
+    // Link trong email phải tuyệt đối (mở từ hộp thư, ngoài domain) - link tương đối "/..." sẽ không bấm được.
+    if (!empty($all['link']) && $all['link'][0] === '/') {
+        $all['link'] = hrm_base_url() . $all['link'];
+    }
+    return $all;
 }
 
 /**

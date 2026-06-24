@@ -137,8 +137,10 @@ table.plan tbody td{min-width:42px}
 table.plan thead th{position:sticky;top:0;z-index:6;background:#f8fafc;color:var(--mut);font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.2px;line-height:1.25;white-space:normal}
 table.plan thead tr:nth-child(2) th{top:19px;min-width:42px}
 table.plan .grp{background:#f1f5f9;color:#334155;border-bottom:1px solid #e2e8f0}
-table.plan .col-dept{position:sticky;left:0;z-index:2;box-sizing:border-box;background:#fff;text-align:left;width:180px;min-width:180px;max-width:180px;white-space:normal;font-weight:600;color:#0f172a;line-height:1.3}
-table.plan .col-dept{display:flex;align-items:center;gap:6px;justify-content:space-between}
+table.plan .col-dept{position:sticky;left:0;z-index:2;box-sizing:border-box;background:#fff;text-align:left;width:180px;min-width:180px;max-width:180px;white-space:normal;font-weight:600;color:#0f172a;line-height:1.3;vertical-align:middle}
+/* Bố cục tên + nút thao tác để trong wrapper, KHÔNG dùng display:flex trên chính <td>
+   (flex làm ô mất tư cách table-cell -> position:sticky theo chiều dọc bị hỏng). */
+table.plan .col-dept .col-dept-inner{display:flex;align-items:center;gap:6px;justify-content:space-between}
 table.plan .dept-acts{flex:none;display:flex;gap:4px}
 table.plan .dept-del,table.plan .dept-edit{width:20px;height:20px;line-height:1;border:none;border-radius:50%;background:#f1f5f9;color:#94a3b8;font-size:13px;cursor:pointer;opacity:0;transition:.15s;padding:0}
 table.plan tbody tr:hover .dept-del,table.plan tbody tr:hover .dept-edit{opacity:1}
@@ -253,7 +255,7 @@ function pcell($val) {
         </tr>
         <?php $ri = 0; foreach ($rows as $deptId => $row): $v = $row['v']; $ri++; ?>
         <tr data-dept="<?= $deptId ?>" data-appr="<?= $v['all'] ?>" class="<?= $ri % 2 ? 'odd' : 'even' ?>">
-            <td class="col-dept"><span class="dept-name"><?= h($row['name']) ?></span><span class="dept-acts"><button type="button" class="dept-edit" title="Sửa định biên" onclick="openPlanModal(<?= $deptId ?>)">✎</button><button type="button" class="dept-del" title="Xóa phòng ban khỏi bảng" onclick="removeDept(<?= $deptId ?>, this)">×</button></span></td>
+            <td class="col-dept"><div class="col-dept-inner"><span class="dept-name"><?= h($row['name']) ?></span><span class="dept-acts"><button type="button" class="dept-edit" title="Sửa định biên" onclick="openPlanModal(<?= $deptId ?>)">✎</button><button type="button" class="dept-del" title="Xóa phòng ban khỏi bảng" onclick="removeDept(<?= $deptId ?>, this)">×</button></span></div></td>
             <td class="col-chot"><?= pcell($v['chot']) ?></td>
             <td class="col-ns"><?= pcell($v['ns']) ?></td>
             <td class="calc col-canp" data-c="canp"><?= $v['canp'] ?></td>

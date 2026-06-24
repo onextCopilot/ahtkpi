@@ -147,6 +147,23 @@ function hrm_ensure_request_columns(mysqli $conn): void
     hrm_ensure_column($conn, 'hrm_requests', 'priority', "VARCHAR(16) DEFAULT 'Trung bình'");
 }
 
+/**
+ * Áp 1 lần nội dung chuẩn cho email phê duyệt HRF lên live (bản gõ tay có thể bị lỗi link).
+ * Có cờ trong hrm_settings nên chỉ chạy một lần, không đè chỉnh sửa thủ công về sau.
+ */
+function hrm_ensure_email_templates(mysqli $conn): void
+{
+    if (hrm_setting($conn, 'tpl_hrf_approval_v2', '') === '1') { return; }
+
+    $subject = 'Đề nghị phê duyệt yêu cầu tuyển dụng {{request_code}}';
+    $body = '<p>Kính gửi {{approver_name}},</p><p>Phòng Tuyển dụng trân trọng đề nghị Anh/Chị xem xét và phê duyệt yêu cầu tuyển dụng với các thông tin như sau:</p><p><b>Thông tin yêu cầu</b><br>Vị trí: <b>{{request_title}}</b><br>Số lượng: {{quantity}} vị trí<br>Cấp bậc: {{level}}<br>Loại tuyển dụng: {{request_type}}<br>Hình thức làm việc: {{employment_type}}<br>Yêu cầu kinh nghiệm: {{experience_required}}<br>Khoảng lương: {{salary_range}}<br>Mức độ ưu tiên: {{priority}}<br>Lý do tuyển dụng: {{reason}}<br>Ngày cần onboard: {{need_by_date}}</p><p><b>Mô tả công việc (JD)</b></p><div style="border-left:3px solid #ddd;padding-left:12px;color:#444">{{jd}}</div><p>Kính mong Anh/Chị xem xét và cho ý kiến phê duyệt trước {{due_at}}.</p><p><a href="{{link}}">Xem chi tiết và phê duyệt</a></p><p>Trân trọng cảm ơn.</p>';
+
+    $st = $conn->prepare("UPDATE hrm_email_templates SET subject = ?, body_html = ? WHERE event_key = 'hrf_approval_request'");
+    $st->bind_param('ss', $subject, $body);
+    $st->execute();
+    hrm_set_setting($conn, 'tpl_hrf_approval_v2', '1');
+}
+
 /** Ensure the TA screening review table exists (live installs may predate it). */
 function hrm_ensure_screening_table(mysqli $conn): void
 {

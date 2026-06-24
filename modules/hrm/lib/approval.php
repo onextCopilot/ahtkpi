@@ -154,6 +154,7 @@ function hrm_approval_dispatch_request(mysqli $conn, string $entityType, int $en
     if ($entityType === 'offer') { hrm_offer_dispatch_request($conn, $entityId, $role, $dueAt); return; }
     if ($entityType !== 'hrf') { return; }
 
+    hrm_ensure_email_templates($conn);   // bảo đảm template chuẩn trước khi gửi (live)
     $req = $conn->query('SELECT * FROM hrm_requests WHERE id = ' . $entityId)->fetch_assoc();
     if (!$req) { return; }
 

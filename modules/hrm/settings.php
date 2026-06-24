@@ -16,6 +16,7 @@ $users = $conn->query("SELECT id, full_name, email FROM users WHERE status='acti
 $assignments = $conn->query("SELECT ra.id, ra.user_id, ra.rec_role, u.full_name FROM hrm_role_assignments ra JOIN users u ON u.id=ra.user_id ORDER BY ra.rec_role, u.full_name")->fetch_all(MYSQLI_ASSOC);
 $byRole = [];
 foreach ($assignments as $a) { $byRole[$a['rec_role']][] = $a; }
+hrm_ensure_email_templates($conn);   // áp bản chuẩn email phê duyệt HRF (1 lần) trên live
 $templates = $conn->query("SELECT * FROM hrm_email_templates ORDER BY audience, event_key")->fetch_all(MYSQLI_ASSOC);
 require_once __DIR__ . '/../../includes/EmailSenders.php';
 $emailSenders = EmailSenders::all($conn);
@@ -254,6 +255,33 @@ function rmRole(id){if(confirm('Gỡ vai trò này?'))post('remove_role',{id:id}
     <div class="rc-muted" style="margin-top:10px;font-size:11.5px">Ngoài các biến trên, <b>mọi field</b> của ứng viên/tin/HRF đều dùng được qua tiền tố: <code>{candidate_&lt;field&gt;}</code>, <code>{job_&lt;field&gt;}</code>, <code>{hrf_&lt;field&gt;}</code> (vd <code>{candidate_dob}</code>, <code>{candidate_current_position}</code>, <code>{job_deadline}</code>, <code>{job_headcount}</code>). Tên field theo cột trong DB.</div>
 </div>
 
+<?php
+// Thanh công cụ rich-text dùng chung cho ô tạo mới + ô sửa từng template.
+$rtbar = <<<'RTBAR'
+<button type="button" onmousedown="event.preventDefault()" onclick="rtc(this,'bold')" title="Đậm"><b>B</b></button>
+<button type="button" onmousedown="event.preventDefault()" onclick="rtc(this,'italic')" title="Nghiêng"><i>I</i></button>
+<button type="button" onmousedown="event.preventDefault()" onclick="rtc(this,'underline')" title="Gạch chân"><u>U</u></button>
+<button type="button" onmousedown="event.preventDefault()" onclick="rtc(this,'strikeThrough')" title="Gạch ngang"><s>S</s></button>
+<span class="rtsep"></span>
+<select class="rtsel" onchange="rtv(this,'fontName')" title="Phông chữ">
+<option value="">Phông</option><option value="Arial,Helvetica,sans-serif">Arial</option><option value="Georgia,serif">Georgia</option><option value="Tahoma,sans-serif">Tahoma</option><option value="'Times New Roman',serif">Times</option><option value="'Courier New',monospace">Courier</option><option value="Verdana,sans-serif">Verdana</option>
+</select>
+<select class="rtsel" onchange="rtv(this,'fontSize')" title="Cỡ chữ">
+<option value="">Cỡ</option><option value="1">Rất nhỏ</option><option value="2">Nhỏ</option><option value="3">Vừa</option><option value="4">Lớn</option><option value="5">Rất lớn</option><option value="6">Cực lớn</option><option value="7">Khổng lồ</option>
+</select>
+<label class="rtcolor" title="Màu chữ"><span style="text-decoration:underline">A</span><input type="color" value="#0f172a" oninput="rtv(this,'foreColor')"></label>
+<label class="rtcolor" title="Màu nền chữ"><span style="background:#ffec99;padding:0 2px;border-radius:2px">A</span><input type="color" value="#ffec99" oninput="rtv(this,'hiliteColor')"></label>
+<span class="rtsep"></span>
+<button type="button" onmousedown="event.preventDefault()" onclick="rtc(this,'justifyLeft')" title="Canh trái">&#8676;</button>
+<button type="button" onmousedown="event.preventDefault()" onclick="rtc(this,'justifyCenter')" title="Canh giữa">&#8596;</button>
+<button type="button" onmousedown="event.preventDefault()" onclick="rtc(this,'insertUnorderedList')" title="Bullet">&#8226; List</button>
+<button type="button" onmousedown="event.preventDefault()" onclick="rtc(this,'insertOrderedList')" title="Đánh số">1. List</button>
+<span class="rtsep"></span>
+<button type="button" onmousedown="event.preventDefault()" onclick="rtc(this,'createLink')" title="Chèn link">&#128279;</button>
+<button type="button" onmousedown="event.preventDefault()" onclick="rtc(this,'unlink')" title="Bỏ link">&#128683;</button>
+<button type="button" onmousedown="event.preventDefault()" onclick="rtc(this,'removeFormat')" title="Xóa định dạng">&#10006;</button>
+RTBAR;
+?>
 <div class="rc-card" style="margin-bottom:14px">
     <div style="display:flex;justify-content:space-between;align-items:center;cursor:pointer" onclick="document.getElementById('newTplBox').style.display=document.getElementById('newTplBox').style.display==='none'?'block':'none'">
         <h3 style="font-size:14px;margin:0">+ Tạo template mới</h3>
@@ -269,15 +297,7 @@ function rmRole(id){if(confirm('Gỡ vai trò này?'))post('remove_role',{id:id}
         <div class="rc-field"><label>Tiêu đề</label><input id="nt_subject" placeholder="Dùng {{biến}} hoặc {biến}"></div>
         <div class="rc-field"><label>Nội dung</label>
             <div class="rtwrap">
-                <div class="rtbar">
-                    <button type="button" onmousedown="event.preventDefault()" onclick="rtc(this,'bold')"><b>B</b></button>
-                    <button type="button" onmousedown="event.preventDefault()" onclick="rtc(this,'italic')"><i>I</i></button>
-                    <button type="button" onmousedown="event.preventDefault()" onclick="rtc(this,'underline')"><u>U</u></button>
-                    <button type="button" onmousedown="event.preventDefault()" onclick="rtc(this,'insertUnorderedList')">&#8226; List</button>
-                    <button type="button" onmousedown="event.preventDefault()" onclick="rtc(this,'insertOrderedList')">1. List</button>
-                    <button type="button" onmousedown="event.preventDefault()" onclick="rtc(this,'createLink')">&#128279;</button>
-                    <button type="button" onmousedown="event.preventDefault()" onclick="rtc(this,'removeFormat')">&#10006;</button>
-                </div>
+                <div class="rtbar"><?= $rtbar ?></div>
                 <div class="rted" contenteditable="true"></div>
             </div>
         </div>
@@ -299,15 +319,7 @@ function rmRole(id){if(confirm('Gỡ vai trò này?'))post('remove_role',{id:id}
     <div class="rc-field"><label>Tiêu đề (subject)</label><input data-f="subject" value="<?= h($t['subject']) ?>"></div>
     <div class="rc-field"><label>Nội dung (dùng {{biến}} hoặc {biến})</label>
         <div class="rtwrap">
-            <div class="rtbar">
-                <button type="button" onmousedown="event.preventDefault()" onclick="rtc(this,'bold')" title="Đậm"><b>B</b></button>
-                <button type="button" onmousedown="event.preventDefault()" onclick="rtc(this,'italic')" title="Nghiêng"><i>I</i></button>
-                <button type="button" onmousedown="event.preventDefault()" onclick="rtc(this,'underline')" title="Gạch chân"><u>U</u></button>
-                <button type="button" onmousedown="event.preventDefault()" onclick="rtc(this,'insertUnorderedList')" title="Bullet">&#8226; List</button>
-                <button type="button" onmousedown="event.preventDefault()" onclick="rtc(this,'insertOrderedList')" title="Số">1. List</button>
-                <button type="button" onmousedown="event.preventDefault()" onclick="rtc(this,'createLink')" title="Link">&#128279;</button>
-                <button type="button" onmousedown="event.preventDefault()" onclick="rtc(this,'removeFormat')" title="Xóa định dạng">&#10006;</button>
-            </div>
+            <div class="rtbar"><?= $rtbar ?></div>
             <div class="rted" contenteditable="true"><?= $t['body_html'] ?></div>
         </div>
     </div>
@@ -317,9 +329,14 @@ function rmRole(id){if(confirm('Gỡ vai trò này?'))post('remove_role',{id:id}
 <style>
 .rtwrap{border:1px solid var(--bd);border-radius:8px;overflow:hidden;background:#fff}
 .rtwrap:focus-within{border-color:#1b96ff;box-shadow:0 0 0 3px rgba(27,150,255,.12)}
-.rtbar{display:flex;flex-wrap:wrap;gap:2px;padding:5px 6px;border-bottom:1px solid #eceef1;background:#fafbfc}
+.rtbar{display:flex;flex-wrap:wrap;align-items:center;gap:2px;padding:5px 6px;border-bottom:1px solid #eceef1;background:#fafbfc}
 .rtbar button{min-width:28px;height:26px;padding:0 8px;border:none;background:none;border-radius:6px;cursor:pointer;font-size:12px;color:#42474e}
 .rtbar button:hover{background:#e9edf2}
+.rtsep{width:1px;height:18px;background:#dde1e6;margin:0 4px}
+.rtsel{height:26px;border:1px solid #dde1e6;background:#fff;border-radius:6px;font-size:12px;color:#42474e;padding:0 4px;cursor:pointer}
+.rtcolor{position:relative;display:inline-flex;align-items:center;justify-content:center;width:28px;height:26px;border-radius:6px;cursor:pointer;font-size:13px;font-weight:700;color:#42474e}
+.rtcolor:hover{background:#e9edf2}
+.rtcolor input[type=color]{position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer;border:none;padding:0}
 .rted{min-height:140px;max-height:340px;overflow-y:auto;padding:10px 12px;font-size:13px;line-height:1.55;outline:none}
 .rted ul,.rted ol{margin:4px 0;padding-left:22px}
 .rted p{margin:0 0 8px}
@@ -327,10 +344,37 @@ function rmRole(id){if(confirm('Gỡ vai trò này?'))post('remove_role',{id:id}
 </style>
 <script>
 // Rich editor contenteditable (không phụ thuộc CDN) -> xuất HTML.
+// Lưu vùng chọn cuối trong editor để select/color picker không làm mất nó.
+let _rtRange=null,_rtEd=null;
+document.addEventListener('selectionchange',function(){
+    const s=document.getSelection();if(!s||!s.rangeCount)return;
+    const a=s.anchorNode;if(!a)return;
+    const node=a.nodeType===1?a:a.parentElement;
+    const ed=node&&node.closest?node.closest('.rted'):null;
+    if(ed){_rtEd=ed;_rtRange=s.getRangeAt(0).cloneRange();}
+});
+function _rtRestore(ed){
+    if(_rtEd===ed&&_rtRange){const s=document.getSelection();s.removeAllRanges();s.addRange(_rtRange);}
+}
 function rtc(btn,cmd){
-    const ed=btn.closest('.rtwrap').querySelector('.rted');ed.focus();
+    const ed=btn.closest('.rtwrap').querySelector('.rted');ed.focus();_rtRestore(ed);
     if(cmd==='createLink'){const u=prompt('Nhập URL:');if(u)document.execCommand('createLink',false,u);return;}
     document.execCommand(cmd,false,null);
+}
+// Lệnh có tham số (font, cỡ chữ, màu) đọc value từ select/input.
+function rtv(el,cmd){
+    const ed=el.closest('.rtwrap').querySelector('.rted');const val=el.value;
+    if(!val)return;
+    ed.focus();_rtRestore(ed);
+    if(cmd==='hiliteColor'){
+        // Một số trình duyệt chỉ nhận backColor khi bật styleWithCSS.
+        document.execCommand('styleWithCSS',false,true);
+        if(!document.execCommand('hiliteColor',false,val))document.execCommand('backColor',false,val);
+        document.execCommand('styleWithCSS',false,false);
+    }else{
+        document.execCommand(cmd,false,val);
+    }
+    if(el.tagName==='SELECT')el.selectedIndex=0;
 }
 function bodyHtmlOf(scope){const ed=scope.querySelector('.rted');return ed?ed.innerHTML:'';}
 function saveTpl(id,card){
