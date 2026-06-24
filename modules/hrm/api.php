@@ -1004,9 +1004,23 @@ switch ($action) {
         $map  = json_decode($_POST['map'] ?? '[]', true) ?: [];   // field => colIndex
         $rows = json_decode($_POST['rows'] ?? '[]', true) ?: [];
         $mode = in_array($_POST['mode'] ?? '', ['skip','update','create'], true) ? $_POST['mode'] : 'skip';
-        $defSource = (int)($_POST['default_source'] ?? 0);
+        $defSource = (int)($_POST['default_source'] ?? 0); // fallback (UI không còn set)
         $defEvent  = (int)($_POST['default_event'] ?? 0);
         $downloadCv = !empty($_POST['download_cv']);
+        // Resolve tên nguồn (cột "Nguồn") -> id, tạo mới nếu chưa có.
+        $srcCache = [];
+        $resolveSource = function ($name) use (&$srcCache, $conn) {
+            $name = trim((string)$name);
+            if ($name === '') { return 0; }
+            $k = mb_strtolower($name);
+            if (!array_key_exists($k, $srcCache)) {
+                $s = $conn->prepare('SELECT id FROM hrm_candidate_sources WHERE LOWER(name)=? LIMIT 1');
+                $s->bind_param('s', $k); $s->execute(); $r = $s->get_result()->fetch_assoc();
+                if ($r) { $srcCache[$k] = (int)$r['id']; }
+                else { $i = $conn->prepare('INSERT INTO hrm_candidate_sources (name) VALUES (?)'); $i->bind_param('s', $name); $i->execute(); $srcCache[$k] = $i->insert_id; }
+            }
+            return $srcCache[$k];
+        };
         if (!$rows) { jout(false, ['error' => 'Không có dòng dữ liệu']); }
         if (empty($map['full_name']) && $map['full_name'] !== 0 && $map['full_name'] !== '0') { jout(false, ['error' => 'Phải gán cột Họ tên']); }
 
@@ -1071,7 +1085,8 @@ switch ($action) {
             if ($years > 0) { $set['years_exp'] = [$years, 'd']; }
             if ($score > 0) { $set['score'] = [$score, 'd']; }
             if ($appliedDate) { $set['applied_date'] = [$appliedDate, 's']; }
-            if ($defSource) { $set['source_id'] = [$defSource, 'i']; }
+            $srcId = $resolveSource($col($row, 'source')) ?: $defSource;  // ưu tiên cột Nguồn từ file
+            if ($srcId) { $set['source_id'] = [$srcId, 'i']; }
             if ($defEvent)  { $set['event_id']  = [$defEvent, 'i']; }
 
             $existing = null;

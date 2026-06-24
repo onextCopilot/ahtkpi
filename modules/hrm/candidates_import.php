@@ -25,6 +25,7 @@ $fields = [
     'dob'              => ['Ngày sinh', ['ngày tháng năm sinh','ngày sinh','dob','birth']],
     'gender'           => ['Giới tính', ['giới tính','gender','sex']],
     'id_card'          => ['Số CMND/CCCD', ['số cmt','cmt','cccd','cmnd','id card','căn cước']],
+    'source'           => ['Nguồn', ['nguồn','source','kênh']],
     'score'            => ['Điểm', ['điểm','score']],
     'classification'   => ['Phân loại', ['phân loại','classification']],
     'campaign'         => ['Chiến dịch', ['chiến dịch','campaign','medium']],
@@ -62,13 +63,11 @@ hrm_header('Import ứng viên', 'Nhập hàng loạt từ Excel / CSV', 'candid
     <div class="rc-muted" style="margin-bottom:12px">Hệ thống đã tự đoán; chỉnh lại nếu cần. Bắt buộc gán <b>Họ tên</b>.</div>
     <div class="imp-grid" id="mapGrid"></div>
 
-    <div class="rc-grid2" style="margin-top:16px;border-top:1px solid #f1f5f9;padding-top:14px">
-        <div class="rc-field"><label>Nguồn mặc định (áp cho mọi dòng)</label>
-            <select id="defSource"><option value="0">- Không -</option>
-                <?php foreach ($sources as $s): ?><option value="<?= $s['id'] ?>"><?= h($s['name']) ?></option><?php endforeach; ?></select></div>
-        <div class="rc-field"><label>Sự kiện mặc định</label>
-            <select id="defEvent"><option value="0">- Không -</option>
+    <div style="margin-top:16px;border-top:1px solid #f1f5f9;padding-top:14px">
+        <div class="rc-field"><label>Sự kiện mặc định (tùy chọn - áp cho mọi dòng)</label>
+            <select id="defEvent" style="max-width:340px"><option value="0">- Không -</option>
                 <?php foreach ($events as $e): ?><option value="<?= $e['id'] ?>"><?= h($e['name']) ?></option><?php endforeach; ?></select></div>
+        <div class="rc-muted" style="font-size:12px">Nguồn lấy theo cột <b>"Nguồn"</b> đã gán ở trên (tự tạo nếu nguồn chưa tồn tại). Không set mặc định.</div>
     </div>
     <div class="rc-field"><label>Khi trùng (email/SĐT đã có)</label>
         <select id="mode"><option value="skip">Bỏ qua dòng trùng</option><option value="update">Cập nhật hồ sơ đã có</option><option value="create">Vẫn tạo mới</option></select></div>
@@ -154,7 +153,6 @@ async function commit(){
     if(!('full_name' in m)){document.getElementById('commitErr').textContent='Phải gán cột Họ tên';return;}
     const dlCv=document.getElementById('dlCv').checked;
     const mode=document.getElementById('mode').value;
-    const defSource=document.getElementById('defSource').value;
     const defEvent=document.getElementById('defEvent').value;
     // Tải CV chậm -> lô nhỏ hơn để feedback mượt và tránh timeout.
     const chunk=dlCv?8:50;
@@ -167,7 +165,7 @@ async function commit(){
         const part=ROWS.slice(off,off+chunk);
         const fd=new FormData();fd.append('action','cand_import_commit');
         fd.append('map',JSON.stringify(m));fd.append('rows',JSON.stringify(part));
-        fd.append('mode',mode);fd.append('default_source',defSource);fd.append('default_event',defEvent);
+        fd.append('mode',mode);fd.append('default_event',defEvent);
         if(dlCv)fd.append('download_cv','1');
         let j;
         try{ j=await (await fetch('/hrm/api',{method:'POST',body:fd})).json(); }
