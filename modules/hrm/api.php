@@ -1100,15 +1100,21 @@ switch ($action) {
             if ($appliedDate) { $set['applied_date'] = [$appliedDate, 's']; }
             $srcId = $resolveSource($col($row, 'source')) ?: $defSource;  // ưu tiên cột Nguồn từ file
             if ($srcId) { $set['source_id'] = [$srcId, 'i']; }
-            $ownerId = $resolveUser($col($row, 'owner'));
+            // Phụ trách: handle/tên Base -> user OS (id) hoặc text nếu không có trong OS.
+            $ownerP = hrm_resolve_person($conn, $col($row, 'owner'));
+            $ownerId = $ownerP['id']; $ownerText = $ownerP['text'];
             if ($ownerId) { $set['owner_id'] = [$ownerId, 'i']; }
-            $rejById = $resolveUser(ltrim($col($row, 'rejected_by'), '@ ')); // "Từ chối bởi @handle" -> user
+            elseif ($ownerText !== '') { $set['owner_text'] = [$ownerText, 's']; }
+            // Từ chối bởi: tương tự.
+            $rejP = hrm_resolve_person($conn, $col($row, 'rejected_by'));
+            $rejById = $rejP['id']; $rejText = $rejP['text'];
             if ($rejById) { $set['rejected_by'] = [$rejById, 'i']; }
+            elseif ($rejText !== '') { $set['rejected_by_text'] = [$rejText, 's']; }
             if ($defEvent)  { $set['event_id']  = [$defEvent, 'i']; }
 
             $existing = null;
             if ($dedup !== '') {
-                $d = $conn->prepare('SELECT id, source_id, event_id, owner_id, rejected_by, reject_note, cv_path FROM hrm_candidates WHERE dedup_key=? LIMIT 1');
+                $d = $conn->prepare('SELECT id, source_id, event_id, owner_id, owner_text, rejected_by, rejected_by_text, reject_note, cv_path FROM hrm_candidates WHERE dedup_key=? LIMIT 1');
                 $d->bind_param('s', $dedup); $d->execute(); $existing = $d->get_result()->fetch_assoc();
             }
             if ($existing && $mode === 'skip') {
@@ -1118,8 +1124,15 @@ switch ($action) {
                 $bset = []; $bvals = []; $btypes = '';
                 if ((int)$existing['source_id'] === 0 && $srcId)   { $bset[] = 'source_id=?'; $bvals[] = $srcId;    $btypes .= 'i'; }
                 if ((int)$existing['event_id'] === 0 && $defEvent) { $bset[] = 'event_id=?';  $bvals[] = $defEvent;  $btypes .= 'i'; }
-                if ((int)$existing['owner_id'] === 0 && $ownerId)  { $bset[] = 'owner_id=?';  $bvals[] = $ownerId;   $btypes .= 'i'; }
-                if ((int)$existing['rejected_by'] === 0 && $rejById) { $bset[] = 'rejected_by=?'; $bvals[] = $rejById; $btypes .= 'i'; }
+                // Phụ trách: backfill id (nếu cũ trống cả id+text) hoặc text.
+                if ((int)$existing['owner_id'] === 0 && ($existing['owner_text'] ?? '') === '') {
+                    if ($ownerId) { $bset[] = 'owner_id=?'; $bvals[] = $ownerId; $btypes .= 'i'; }
+                    elseif ($ownerText !== '') { $bset[] = 'owner_text=?'; $bvals[] = $ownerText; $btypes .= 's'; }
+                }
+                if ((int)$existing['rejected_by'] === 0 && ($existing['rejected_by_text'] ?? '') === '') {
+                    if ($rejById) { $bset[] = 'rejected_by=?'; $bvals[] = $rejById; $btypes .= 'i'; }
+                    elseif ($rejText !== '') { $bset[] = 'rejected_by_text=?'; $bvals[] = $rejText; $btypes .= 's'; }
+                }
                 if (($existing['reject_note'] ?? '') === '' && isset($set['reject_note'])) { $bset[] = 'reject_note=?'; $bvals[] = $set['reject_note'][0]; $btypes .= 's'; }
                 if ($bset) { $bvals[] = $cid0; $btypes .= 'i'; $bu = $conn->prepare('UPDATE hrm_candidates SET ' . implode(',', $bset) . ' WHERE id=?'); $bu->bind_param($btypes, ...$bvals); $bu->execute(); }
                 // Bổ sung CV nếu hồ sơ cũ chưa có (hoặc còn link ngoài).

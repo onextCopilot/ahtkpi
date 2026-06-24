@@ -69,7 +69,7 @@ hrm_header($c['full_name'], ($c['current_position'] ?: 'Ứng viên') . ' · ' .
             <div><div class="rc-muted">Lương kỳ vọng</div><div><?= h($c['expected_salary'] ?: '-') ?></div></div>
             <div><div class="rc-muted">Nguồn</div><div><?= h($c['source_name'] ?: '-') ?></div></div>
             <div><div class="rc-muted">Sự kiện</div><div><?= h($c['event_name'] ?: '-') ?></div></div>
-            <div><div class="rc-muted">Người phụ trách</div><div><?= h($c['owner_name'] ?: '-') ?></div></div>
+            <div><div class="rc-muted">Người phụ trách</div><div><?= h($c['owner_name'] ?: ($c['owner_text'] ?: '-')) ?><?= (!$c['owner_name'] && $c['owner_text']) ? ' <span class="rc-muted">(ngoài OS)</span>' : '' ?></div></div>
             <div><div class="rc-muted">Đánh giá</div><div><?= (int)$c['rating'] ? str_repeat('★', (int)$c['rating']) : '-' ?></div></div>
             <div><div class="rc-muted">LinkedIn</div><div><?= $c['linkedin_url'] ? '<a href="'.h($c['linkedin_url']).'" target="_blank" rel="noopener">Hồ sơ</a>' : '-' ?></div></div>
             <div><div class="rc-muted">Portfolio</div><div><?= $c['portfolio_url'] ? '<a href="'.h($c['portfolio_url']).'" target="_blank" rel="noopener">Link</a>' : '-' ?></div></div>
@@ -81,7 +81,8 @@ hrm_header($c['full_name'], ($c['current_position'] ?: 'Ứng viên') . ' · ' .
             <div><div class="rc-muted">Giai đoạn (gốc)</div><div><?= h($c['applied_stage'] ?: '-') ?></div></div>
             <?php if (!empty($c['reject_reason'])): ?><div><div class="rc-muted">Lý do từ chối</div><div><?= h($c['reject_reason']) ?></div></div><?php endif; ?>
             <?php if (!empty($c['reject_note'])): ?><div><div class="rc-muted">Thông tin từ chối</div><div><?= h($c['reject_note']) ?></div></div><?php endif; ?>
-            <?php if (!empty($c['rejected_by'])): $rb = $conn->query("SELECT full_name FROM users WHERE id=".(int)$c['rejected_by'])->fetch_assoc(); ?><div><div class="rc-muted">Từ chối bởi</div><div><?= h($rb['full_name'] ?? ('#'.$c['rejected_by'])) ?></div></div><?php endif; ?>
+            <?php if (!empty($c['rejected_by'])): $rb = $conn->query("SELECT full_name FROM users WHERE id=".(int)$c['rejected_by'])->fetch_assoc(); ?><div><div class="rc-muted">Từ chối bởi</div><div><?= h($rb['full_name'] ?? ('#'.$c['rejected_by'])) ?></div></div>
+            <?php elseif (!empty($c['rejected_by_text'])): ?><div><div class="rc-muted">Từ chối bởi</div><div><?= h($c['rejected_by_text']) ?> <span class="rc-muted">(ngoài OS)</span></div></div><?php endif; ?>
             <?php if (!empty($c['office_text'])): ?><div><div class="rc-muted">Văn phòng (text)</div><div><?= h($c['office_text']) ?></div></div><?php endif; ?>
         </div>
         <div style="margin-top:14px"><div class="rc-muted" style="margin-bottom:6px">Thẻ (tags)</div>

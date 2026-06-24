@@ -207,7 +207,9 @@ function hrm_ensure_candidate_module(mysqli $conn): void
     hrm_ensure_column($conn, 'hrm_candidates', 'retention_until', 'DATE NULL');
     hrm_ensure_column($conn, 'hrm_candidates', 'dedup_key', "VARCHAR(190) DEFAULT ''");
     hrm_ensure_column($conn, 'hrm_candidates', 'reject_note', "VARCHAR(255) DEFAULT ''"); // "Thông tin từ chối"
-    hrm_ensure_column($conn, 'hrm_candidates', 'rejected_by', 'INT DEFAULT 0');            // "Từ chối bởi" -> user id
+    hrm_ensure_column($conn, 'hrm_candidates', 'rejected_by', 'INT DEFAULT 0');            // "Từ chối bởi" -> user id (nếu có trong OS)
+    hrm_ensure_column($conn, 'hrm_candidates', 'owner_text', "VARCHAR(120) DEFAULT ''");     // phụ trách không có trong OS
+    hrm_ensure_column($conn, 'hrm_candidates', 'rejected_by_text', "VARCHAR(120) DEFAULT ''"); // từ chối bởi không có trong OS
     try {
         $idx = $conn->query("SHOW INDEX FROM hrm_candidates WHERE Key_name='idx_dedup'");
         if ($idx && $idx->num_rows === 0) { $conn->query("CREATE INDEX idx_dedup ON hrm_candidates (dedup_key)"); }
@@ -265,6 +267,29 @@ function hrm_ensure_candidate_module(mysqli $conn): void
             filter_json TEXT, shared TINYINT DEFAULT 0, created_at DATETIME DEFAULT CURRENT_TIMESTAMP) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4",
     ];
     foreach ($tables as $sql) { $conn->query($sql); }
+}
+
+/**
+ * Phân giải "Phụ trách"/"Từ chối bởi" từ Base (handle hoặc tên) -> ['id'=>userId, 'text'=>tên hiển thị].
+ * - handle -> tên qua hrm_base_aliases(); rồi khớp user OS theo full_name/username/email.
+ * - Có trong OS: ['id'=>id, 'text'=>''].  Không có: ['id'=>0, 'text'=>tên (alias hoặc giá trị gốc)].
+ */
+function hrm_resolve_person(mysqli $conn, string $value): array
+{
+    require_once __DIR__ . '/base_users.php';
+    $raw = ltrim(trim($value), '@ ');
+    if ($raw === '') { return ['id' => 0, 'text' => '']; }
+    $handle = mb_strtolower($raw);
+    $aliases = hrm_base_aliases();
+    $name = $aliases[$handle] ?? $raw;           // tên hiển thị
+    // Khớp user OS theo tên đã quy đổi, hoặc theo handle gốc.
+    $st = $conn->prepare('SELECT id FROM users WHERE LOWER(full_name)=? OR LOWER(username)=? OR LOWER(email)=? ORDER BY (status="active") DESC LIMIT 1');
+    $nlow = mb_strtolower($name);
+    $st->bind_param('sss', $nlow, $handle, $handle);
+    $st->execute();
+    $r = $st->get_result()->fetch_assoc();
+    if ($r) { return ['id' => (int)$r['id'], 'text' => '']; }
+    return ['id' => 0, 'text' => $name];
 }
 
 /** Chuẩn hóa khóa chống trùng từ email/sđt. */

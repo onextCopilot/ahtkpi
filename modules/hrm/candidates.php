@@ -342,7 +342,7 @@ $stCol = ['new' => '#0071e3', 'active' => '#b45309', 'pooled' => '#7c3aed', 'hir
                                         style="background:#f3e8ff;color:#7c3aed"><?= h($pn) ?></span><?php endforeach; endif; ?></td>
                         <td><?= h($c['source_name'] ?: '-') ?></td>
                         <td><?= h($c['event_name'] ?: '-') ?></td>
-                        <td><?= h($c['owner_name'] ?: '-') ?></td>
+                        <td><?= h($c['owner_name'] ?: ($c['owner_text'] ?: '-')) ?></td>
                         <td><?= (int) $c['rating'] ? '<span style="color:#f59e0b">' . str_repeat('★', (int) $c['rating']) . '</span>' : '<span class="cd-mut">-</span>' ?>
                         </td>
                         <td><?= $c['cv_path'] ? '<a href="' . h($c['cv_path']) . '" target="_blank" rel="noopener" onclick="event.stopPropagation()" class="cd-cv">Xem CV</a>' : '<span class="cd-mut">-</span>' ?>
