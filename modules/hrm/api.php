@@ -179,6 +179,43 @@ switch ($action) {
         jout(true);
     }
 
+    /* ── HRM Access: cấp/thu hồi quyền truy cập HRM (admin only) ──────── */
+    case 'hrm_access_add': {
+        if (($_SESSION['role'] ?? '') !== 'admin') { jout(false, ['error' => 'Chỉ admin']); }
+        $targetId = (int)($_POST['user_id'] ?? 0);
+        if (!$targetId) { jout(false, ['error' => 'Chọn user']); }
+        // Đọc danh sách hiện tại.
+        $res = $conn->query("SELECT setting_value FROM system_settings WHERE setting_key='hrm_allowed_user_ids' LIMIT 1");
+        $ids = [];
+        if ($res && $row = $res->fetch_assoc()) {
+            $ids = array_map('intval', json_decode($row['setting_value'] ?? '[]', true) ?: []);
+        }
+        if (!in_array($targetId, $ids, true)) { $ids[] = $targetId; }
+        $json = json_encode(array_values($ids));
+        $st = $conn->prepare("INSERT INTO system_settings (setting_key, setting_value) VALUES ('hrm_allowed_user_ids', ?) ON DUPLICATE KEY UPDATE setting_value = VALUES(setting_value)");
+        $st->bind_param('s', $json);
+        $st->execute();
+        hrm_audit($conn, $uid, 'hrm_access_grant', 'user', $targetId, '');
+        jout(true);
+    }
+    case 'hrm_access_remove': {
+        if (($_SESSION['role'] ?? '') !== 'admin') { jout(false, ['error' => 'Chỉ admin']); }
+        $targetId = (int)($_POST['user_id'] ?? 0);
+        if (!$targetId) { jout(false, ['error' => 'Thiếu dữ liệu']); }
+        $res = $conn->query("SELECT setting_value FROM system_settings WHERE setting_key='hrm_allowed_user_ids' LIMIT 1");
+        $ids = [];
+        if ($res && $row = $res->fetch_assoc()) {
+            $ids = array_map('intval', json_decode($row['setting_value'] ?? '[]', true) ?: []);
+        }
+        $ids = array_values(array_filter($ids, fn($i) => $i !== $targetId));
+        $json = json_encode($ids);
+        $st = $conn->prepare("INSERT INTO system_settings (setting_key, setting_value) VALUES ('hrm_allowed_user_ids', ?) ON DUPLICATE KEY UPDATE setting_value = VALUES(setting_value)");
+        $st->bind_param('s', $json);
+        $st->execute();
+        hrm_audit($conn, $uid, 'hrm_access_revoke', 'user', $targetId, '');
+        jout(true);
+    }
+
     /* ── Settings: email template + toggles ───────────────────────────── */
     case 'save_email_template': {
         if (($_SESSION['role'] ?? '') !== 'admin') { jout(false, ['error' => 'Chỉ admin']); }

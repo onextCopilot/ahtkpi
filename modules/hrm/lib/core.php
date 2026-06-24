@@ -5,10 +5,42 @@
  */
 require_once __DIR__ . '/../../../config/config.php';
 
-/** Require an authenticated session (redirect to login otherwise). */
+/**
+ * Kiểm tra user hiện tại có quyền truy cập HRM không.
+ * Trả true nếu: role admin | role hr | user_id trong hrm_allowed_user_ids (system_settings).
+ * Cũng cho phép Hyun Cao (backward-compat) cho đến khi được grant qua UI.
+ */
+function hrm_can_access(mysqli $conn): bool
+{
+    if (!isset($_SESSION['user_id'])) { return false; }
+    $role     = $_SESSION['role'] ?? '';
+    $username = $_SESSION['username'] ?? '';
+    $name     = $_SESSION['full_name'] ?? '';
+
+    if ($role === 'admin' || $role === 'hr') { return true; }
+    // Backward-compat: Hyun Cao luôn có quyền.
+    if ($username === 'hyun.cao' || $name === 'Hyun Cao') { return true; }
+
+    // Kiểm tra danh sách user được grant quyền HRM.
+    $res = $conn->query("SELECT setting_value FROM system_settings WHERE setting_key='hrm_allowed_user_ids' LIMIT 1");
+    if ($res && $row = $res->fetch_assoc()) {
+        $ids = array_map('intval', json_decode($row['setting_value'] ?? '[]', true) ?: []);
+        if (in_array((int)$_SESSION['user_id'], $ids, true)) { return true; }
+    }
+    return false;
+}
+
+/**
+ * Require an authenticated session AND HRM access permission.
+ * Redirects to /login if not logged in, to /dashboard if logged in but no HRM permission.
+ */
 function hrm_require_login(): void
 {
+    global $conn;
     if (!isset($_SESSION['user_id'])) { header('Location: /login'); exit(); }
+    if (isset($conn) && !hrm_can_access($conn)) {
+        header('Location: /dashboard'); exit();
+    }
 }
 
 /** HTML-escape shorthand. */
@@ -234,6 +266,46 @@ function hrm_candidate_dedup_key(string $email, string $phone): string
     $phone = preg_replace('/[^0-9]/', '', $phone);
     if ($phone !== '' && strlen($phone) >= 8) { $phone = ltrim($phone, '0'); }
     return $email !== '' ? 'e:' . $email : ($phone !== '' ? 'p:' . $phone : '');
+}
+
+/**
+ * Tải CV từ URL ngoài về server (uploads/hrm/cvs/Y/m). Trả về đường dẫn nội bộ hoặc '' nếu lỗi.
+ * Dùng khi import từ Base (link CDN) để giữ bản sao trên hệ thống mình.
+ */
+function hrm_download_cv(string $url, string $name): string
+{
+    $url = trim($url);
+    if (!preg_match('#^https?://#i', $url)) { return ''; }
+    $rel = '/uploads/hrm/cvs/' . date('Y/m');
+    $dir = __DIR__ . '/../../../' . $rel;
+    if (!is_dir($dir)) { @mkdir($dir, 0777, true); }
+    $ext = strtolower(pathinfo(parse_url($url, PHP_URL_PATH) ?? '', PATHINFO_EXTENSION));
+    if (!in_array($ext, ['pdf', 'doc', 'docx', 'png', 'jpg', 'jpeg'], true)) { $ext = 'pdf'; }
+    $base = preg_replace('/[^a-zA-Z0-9_-]/', '_', $name) ?: 'cv';
+    $safe = $base . '_' . substr(md5($url), 0, 8) . '.' . $ext;
+    $target = $dir . '/' . $safe;
+
+    $fp = @fopen($target, 'w');
+    if (!$fp) { return ''; }
+    $ok = false;
+    if (function_exists('curl_init')) {
+        $ch = curl_init($url);
+        curl_setopt_array($ch, [
+            CURLOPT_FILE => $fp, CURLOPT_FOLLOWLOCATION => true, CURLOPT_MAXREDIRS => 5,
+            CURLOPT_TIMEOUT => 25, CURLOPT_CONNECTTIMEOUT => 10, CURLOPT_SSL_VERIFYPEER => false,
+            CURLOPT_USERAGENT => 'AHT-HRM/1.0',
+        ]);
+        $ok = curl_exec($ch);
+        $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        curl_close($ch);
+        $ok = $ok && $code >= 200 && $code < 400;
+    } else {
+        $data = @file_get_contents($url);
+        if ($data !== false) { fwrite($fp, $data); $ok = true; }
+    }
+    fclose($fp);
+    if (!$ok || filesize($target) < 64) { @unlink($target); return ''; }
+    return $rel . '/' . $safe;
 }
 
 /** Trạng thái kho ứng viên + nhãn. */

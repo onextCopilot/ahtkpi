@@ -34,7 +34,7 @@ $senderOpts = function ($sel, $emptyLabel) use ($emailSenders) {
 };
 $offices = $conn->query("SELECT id, name, address, active FROM hrm_offices ORDER BY sort_order, name")->fetch_all(MYSQLI_ASSOC);
 
-$titles = ['offices' => 'Văn phòng', 'pipeline' => 'Giai đoạn & SLA', 'owners' => 'Phụ trách giai đoạn', 'roles' => 'Vai trò tuyển dụng', 'email' => 'Email template', 'channels' => 'Kênh thông báo', 'channels_cfg' => 'Kênh đăng tin'];
+$titles = ['offices' => 'Văn phòng', 'pipeline' => 'Giai đoạn & SLA', 'owners' => 'Phụ trách giai đoạn', 'roles' => 'Vai trò tuyển dụng', 'email' => 'Email template', 'channels' => 'Kênh thông báo', 'channels_cfg' => 'Kênh đăng tin', 'access' => 'Phân quyền HRM'];
 $stages = $conn->query("SELECT id,code,name,sla_hours,sort_order FROM hrm_pipeline_stages ORDER BY sort_order")->fetch_all(MYSQLI_ASSOC);
 $deptList = $conn->query("SELECT id,name FROM departments ORDER BY sort_order, name")->fetch_all(MYSQLI_ASSOC);
 $ownerDept = (int)($_GET['dept'] ?? ($deptList[0]['id'] ?? 0));
@@ -623,6 +623,78 @@ function fbExchange(){
     }).catch(()=>{ btn.disabled=false; btn.textContent=old; res.innerHTML='<span style="color:#dc2626">Lỗi mạng</span>'; });
 }
 chToggleFields();
+</script>
+
+<?php elseif ($tab === 'access'):
+    // Load danh sách user IDs hiện có quyền HRM
+    $hrmAccessRes = $conn->query("SELECT setting_value FROM system_settings WHERE setting_key='hrm_allowed_user_ids' LIMIT 1");
+    $hrmAccessIds = [];
+    if ($hrmAccessRes && $hrmAccessRow = $hrmAccessRes->fetch_assoc()) {
+        $hrmAccessIds = array_map('intval', json_decode($hrmAccessRow['setting_value'] ?? '[]', true) ?: []);
+    }
+    // Load thông tin user được grant
+    $hrmAccessUsers = [];
+    if ($hrmAccessIds) {
+        $inPh = implode(',', array_fill(0, count($hrmAccessIds), '?'));
+        $haStmt = $conn->prepare("SELECT id, full_name, email FROM users WHERE id IN ($inPh) ORDER BY full_name");
+        $haStmt->bind_param(str_repeat('i', count($hrmAccessIds)), ...$hrmAccessIds);
+        $haStmt->execute();
+        $hrmAccessUsers = $haStmt->get_result()->fetch_all(MYSQLI_ASSOC);
+    }
+?>
+<div class="rc-card" style="max-width:680px">
+    <h3 style="font-size:14px;margin-bottom:6px">Phân quyền truy cập HRM</h3>
+    <div class="rc-muted" style="margin-bottom:14px;line-height:1.6">
+        Thêm user vào danh sách để họ thấy menu HRM và truy cập được module tuyển dụng.<br>
+        <b>Luôn có quyền (không cần thêm):</b> Admin · Role HR · Hyun Cao.
+    </div>
+    <div style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap;margin-bottom:16px">
+        <div class="rc-field" style="margin:0;min-width:280px">
+            <label>Thêm user</label>
+            <select id="hrmAccessUser">
+                <?php foreach ($users as $u): if (in_array((int)$u['id'], $hrmAccessIds, true)) { continue; } ?>
+                <option value="<?= $u['id'] ?>"><?= h($u['full_name']) ?><?= $u['email'] ? ' (' . h($u['email']) . ')' : '' ?></option>
+                <?php endforeach; ?>
+            </select>
+        </div>
+        <button class="rc-btn" onclick="hrmAccessAdd()">+ Thêm quyền</button>
+    </div>
+
+    <h4 style="font-size:13px;font-weight:600;margin-bottom:8px;color:#334155">
+        Đang có quyền HRM
+        <span class="rc-muted">(<?= count($hrmAccessUsers) ?> user được cấp thêm)</span>
+    </h4>
+    <?php if (!$hrmAccessUsers): ?>
+    <div class="rc-muted">Chưa có user nào được cấp thêm. Admin, HR và Hyun Cao vẫn luôn có quyền.</div>
+    <?php else: ?>
+    <table class="rc-table">
+        <thead><tr><th>Họ tên</th><th>Email</th><th style="width:80px"></th></tr></thead>
+        <tbody>
+        <?php foreach ($hrmAccessUsers as $u): ?>
+        <tr>
+            <td><b><?= h($u['full_name']) ?></b></td>
+            <td class="rc-muted"><?= h($u['email']) ?></td>
+            <td style="text-align:right">
+                <a href="#" onclick="hrmAccessRemove(<?= (int)$u['id'] ?>);return false"
+                   style="color:#dc2626;font-size:12px;font-weight:600;text-decoration:none">Thu hồi</a>
+            </td>
+        </tr>
+        <?php endforeach; ?>
+        </tbody>
+    </table>
+    <?php endif; ?>
+</div>
+<script>
+function post(a,d){const fd=new FormData();fd.append('action',a);for(const k in d)fd.append(k,d[k]);return fetch('/hrm/api',{method:'POST',body:fd}).then(r=>r.json());}
+function hrmAccessAdd(){
+    const uid=document.getElementById('hrmAccessUser').value;
+    if(!uid){alert('Chọn user');return;}
+    post('hrm_access_add',{user_id:uid}).then(j=>{j.ok?location.reload():alert(j.error||'Lỗi');});
+}
+function hrmAccessRemove(uid){
+    if(!confirm('Thu hồi quyền HRM của user này?'))return;
+    post('hrm_access_remove',{user_id:uid}).then(j=>{j.ok?location.reload():alert(j.error||'Lỗi');});
+}
 </script>
 
 <?php else: ?>

@@ -38,6 +38,24 @@ if (isset($_SESSION['user_id']) && isset($conn)) {
     }
 }
 
+// Check quyền HRM: admin, hr, Hyun Cao (backward-compat), hoặc được grant qua hrm_allowed_user_ids.
+$_sidebar_can_hrm = false;
+if (isset($_SESSION['user_id']) && isset($conn)) {
+    $_role    = $_SESSION['role'] ?? '';
+    $_uname   = $_SESSION['username'] ?? '';
+    $_fname   = $_SESSION['full_name'] ?? '';
+    if ($_role === 'admin' || $_role === 'hr' || $_uname === 'hyun.cao' || $_fname === 'Hyun Cao') {
+        $_sidebar_can_hrm = true;
+    } else {
+        $hrmRes = $conn->query("SELECT setting_value FROM system_settings WHERE setting_key='hrm_allowed_user_ids' LIMIT 1");
+        if ($hrmRes && $hrmRow = $hrmRes->fetch_assoc()) {
+            $hrmIds = array_map('intval', json_decode($hrmRow['setting_value'] ?? '[]', true) ?: []);
+            $_sidebar_can_hrm = in_array((int)$_SESSION['user_id'], $hrmIds, true);
+        }
+    }
+}
+
+
 function isMenuItemActive($path, $current_uri)
 {
     // Exact match for dashboard
@@ -337,8 +355,8 @@ function isMenuItemActive($path, $current_uri)
 
         <?php endif; /* !$_is_hr: kết thúc nhóm module ẩn với role HR */ ?>
 
-        <!-- 8. Tuyển dụng (HRM) — hyun.cao hoặc role HR -->
-        <?php if ((($_SESSION['username'] ?? '') === 'hyun.cao') || (($_SESSION['full_name'] ?? '') === 'Hyun Cao') || $_is_hr): ?>
+        <!-- 8. Tuyển dụng (HRM) — admin, hr, hoặc user được cấp quyền HRM -->
+        <?php if ($_sidebar_can_hrm): ?>
         <a href="/hrm" class="nav-item <?php echo (strpos($current_uri, '/hrm') !== false) ? 'active' : ''; ?>">
             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
