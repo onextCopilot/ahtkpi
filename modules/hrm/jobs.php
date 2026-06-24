@@ -15,7 +15,20 @@ $office = [];
 foreach ($conn->query('SELECT id,name,address FROM hrm_offices') as $o) { $office[(int)$o['id']] = $o; }
 
 // Approved HRFs not yet turned into a job.
-$openHrf = $conn->query("SELECT id, code, title, quantity FROM hrm_requests WHERE status='approved' AND job_id=0 ORDER BY id DESC")->fetch_all(MYSQLI_ASSOC);
+$openHrf = $conn->query("SELECT rq.*, u.full_name AS creator_name
+    FROM hrm_requests rq
+    LEFT JOIN users u ON u.id = rq.created_by
+    WHERE rq.status='approved' AND rq.job_id=0 ORDER BY rq.id DESC")->fetch_all(MYSQLI_ASSOC);
+
+// Khoảng lương dạng chuỗi.
+$fmtHrfSalary = function (array $r): string {
+    $cur = $r['currency'] ?: 'VND';
+    $mn = (float)$r['salary_min']; $mx = (float)$r['salary_max'];
+    if ($mn > 0 && $mx > 0) { return number_format($mn) . ' - ' . number_format($mx) . ' ' . $cur; }
+    if ($mn > 0) { return 'Từ ' . number_format($mn) . ' ' . $cur; }
+    if ($mx > 0) { return 'Tối đa ' . number_format($mx) . ' ' . $cur; }
+    return 'Thỏa thuận';
+};
 
 // Filters.
 $q      = trim($_GET['q'] ?? '');
@@ -120,14 +133,43 @@ hrm_header('Tin tuyển dụng', 'Danh sách tin tuyển dụng', 'jobs');
 </form>
 
 <?php if ($openHrf): ?>
-<div class="rc-card">
-    <h3 style="font-size:14px;margin-bottom:10px">HRF đã duyệt - tạo tin tuyển dụng</h3>
-    <table class="rc-table"><tbody>
-    <?php foreach ($openHrf as $r): ?>
-        <tr><td><b><?= h($r['code']) ?></b></td><td><?= h($r['title']) ?></td><td><?= (int)$r['quantity'] ?> vị trí</td>
-            <td style="text-align:right"><button class="rc-btn" onclick="createJob(<?= $r['id'] ?>)">Tạo tin</button></td></tr>
-    <?php endforeach; ?>
-    </tbody></table>
+<div class="rc-card" style="border:1px solid #16a34a;border-left:4px solid #16a34a;background:#f0fdf4;box-shadow:0 2px 10px rgba(22,163,74,.12)">
+    <h3 style="font-size:14px;margin-bottom:10px;color:#15803d;display:flex;align-items:center;gap:8px">
+        <span style="display:inline-flex;width:20px;height:20px;border-radius:50%;background:#16a34a;color:#fff;align-items:center;justify-content:center;font-size:12px">✓</span>
+        HRF đã duyệt - tạo tin tuyển dụng (<?= count($openHrf) ?>)
+    </h3>
+    <div style="overflow-x:auto">
+    <table class="rc-table" style="white-space:nowrap">
+        <thead><tr>
+            <th>Mã</th><th>Vị trí</th><th>Bộ phận</th><th>Văn phòng</th><th>Level</th><th>SL</th>
+            <th>Loại</th><th>Hình thức</th><th>Kinh nghiệm</th><th>Khoảng lương</th><th>Ưu tiên</th>
+            <th>Lý do</th><th>Người tạo</th><th>Ngày tạo</th><th>Cần onboard</th><th></th>
+        </tr></thead>
+        <tbody>
+        <?php foreach ($openHrf as $r):
+            $off = $office[(int)$r['office_id']] ?? null; ?>
+            <tr>
+                <td><b><?= h($r['code']) ?></b></td>
+                <td><?= h($r['title']) ?></td>
+                <td><?= h($deptName[(int)$r['department_id']] ?? '-') ?></td>
+                <td><?= $off ? h($off['name']) : '-' ?></td>
+                <td><?= h($r['level'] ?: '-') ?></td>
+                <td><?= (int)$r['quantity'] ?></td>
+                <td><?= $r['request_type'] === 'new_hc' ? 'Tuyển mới' : 'Thay thế' ?></td>
+                <td><?= h($r['employment_type'] ?: '-') ?></td>
+                <td><?= h($r['experience_required'] ?: '-') ?></td>
+                <td><?= h($fmtHrfSalary($r)) ?></td>
+                <td><?= h($r['priority'] ?: '-') ?></td>
+                <td><?= h($r['reason'] ?: '-') ?></td>
+                <td><?= h($r['creator_name'] ?: '-') ?></td>
+                <td><?= $r['created_at'] ? date('d/m/Y', strtotime($r['created_at'])) : '-' ?></td>
+                <td><?= $r['need_by_date'] ? date('d/m/Y', strtotime($r['need_by_date'])) : '-' ?></td>
+                <td style="text-align:right"><button class="rc-btn" onclick="createJob(<?= $r['id'] ?>)">Tạo tin</button></td>
+            </tr>
+        <?php endforeach; ?>
+        </tbody>
+    </table>
+    </div>
 </div>
 <?php endif; ?>
 
