@@ -203,11 +203,36 @@ if (isset($_SESSION['is_am_bd']) && $_SESSION['is_am_bd'] == 1) {
         if ($cr && ($crow = $cr->fetch_assoc())) {
             $confirmed_now = in_array($crow['type'], ['confirmed', 'commission_confirmed'], true);
         }
-        if (!$confirmed_now) {
+        // Bỏ qua nếu user đã "đánh dấu đã đọc" alert quý này.
+        $dismissed_now = false;
+        try {
+            $conn->query("CREATE TABLE IF NOT EXISTS kpi_alert_dismissals (
+                user_id INT NOT NULL, quarter VARCHAR(16) NOT NULL, dismissed_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                PRIMARY KEY (user_id, quarter)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+            $dr = $conn->query("SELECT 1 FROM kpi_alert_dismissals WHERE user_id = $current_user_id AND quarter = '$tab_now' LIMIT 1");
+            $dismissed_now = $dr && $dr->num_rows > 0;
+        } catch (\Throwable $e) { /* ignore */ }
+        if (!$confirmed_now && !$dismissed_now) {
             $kpi_alert = ['q' => $q_now, 'y' => $y_now, 'tab' => $tab_now];
         }
     } catch (\Throwable $e) { /* ignore */ }
 }
+
+// ── HRM / Recruitment notifications (HRF approvals, SLA, onboarding…) ──
+$hrm_notifs = [];
+if (($_SESSION['user_id'] ?? 0) && isset($conn)) {
+    try {
+        if ($hn = $conn->prepare("SELECT id, title, body, severity, link, created_at FROM hrm_notifications WHERE user_id = ? AND is_read = 0 ORDER BY created_at DESC LIMIT 20")) {
+            $uidh = (int) $_SESSION['user_id'];
+            $hn->bind_param("i", $uidh);
+            $hn->execute();
+            $rh = $hn->get_result();
+            while ($x = $rh->fetch_assoc()) $hrm_notifs[] = $x;
+            $hn->close();
+        }
+    } catch (\Throwable $e) { /* bảng chưa tồn tại */ }
+}
+$hrm_notif_count = count($hrm_notifs);
 
 // Cảnh báo "invoice chưa add vào Debts" -> hiện ở chuông
 $dw_bell = [];
@@ -224,7 +249,7 @@ if (($_SESSION['user_id'] ?? 0) && isset($conn)) {
     } catch (\Throwable $e) { /* bảng chưa tồn tại */ }
 }
 
-$total_notif_count = $notif_count + $pasx_notif_count + ($kpi_alert ? 1 : 0) + count($dw_bell);
+$total_notif_count = $notif_count + $pasx_notif_count + ($kpi_alert ? 1 : 0) + count($dw_bell) + $hrm_notif_count;
 ?>
 <header class="top-bar">
     <div class="page-title">
@@ -271,7 +296,7 @@ $total_notif_count = $notif_count + $pasx_notif_count + ($kpi_alert ? 1 : 0) + c
                     style="padding: 12px 16px; border-bottom: 1px solid #f1f5f9; display: flex; justify-content: space-between; align-items: center; background: #f8fafc;">
                     <span style="font-weight: 600; font-size: 0.95rem; color: #1e293b;">Thông báo</span>
                     <?php if ($total_notif_count > 0): ?>
-                        <a href="#" onclick="markAllAsRead(event); markAllPasxNotifRead();"
+                        <a href="#" onclick="markAllAsRead(event); markAllPasxNotifRead();<?= $kpi_alert ? " dismissKpiAlert('".$kpi_alert['tab']."','kpi-alert-item');" : '' ?>"
                             style="font-size: 0.8rem; color: #3b82f6; text-decoration: none;">Đánh dấu đã đọc tất cả</a>
                     <?php endif; ?>
                 </div>
@@ -288,6 +313,28 @@ $total_notif_count = $notif_count + $pasx_notif_count + ($kpi_alert ? 1 : 0) + c
                                 <a href="#" onclick="dwBellAck(<?php echo (int) $w['id']; ?>,'dw-bell-<?php echo (int) $w['id']; ?>');return false;" style="font-size:.78rem;color:#64748b;text-decoration:none;">Đã nhận</a>
                             </div>
                         </div>
+                    <?php endforeach; ?>
+                    <?php
+                    $hrm_sev_map = [
+                        'danger'  => ['#fef2f2', '#dc2626', '#fecaca'],
+                        'warning' => ['#fffbeb', '#d97706', '#fde68a'],
+                        'success' => ['#f0fdf4', '#16a34a', '#bbf7d0'],
+                        'info'    => ['#eef2ff', '#4f46e5', '#e0e7ff'],
+                    ];
+                    foreach ($hrm_notifs as $hnf):
+                        $hsev = $hrm_sev_map[$hnf['severity']] ?? $hrm_sev_map['info'];
+                    ?>
+                    <div class="notif-item hrm-notif-item" id="hrm-notif-<?= (int) $hnf['id'] ?>"
+                        style="padding:12px 16px;border-bottom:1px solid #f1f5f9;background:<?= $hsev[0] ?>;border-left:3px solid <?= $hsev[2] ?>;">
+                        <div style="font-size:.82rem;font-weight:700;color:<?= $hsev[1] ?>;margin-bottom:3px;"><?= htmlspecialchars($hnf['title']) ?></div>
+                        <?php if (!empty($hnf['body'])): ?><div style="font-size:.78rem;color:#475569;margin-bottom:6px;"><?= htmlspecialchars($hnf['body']) ?></div><?php endif; ?>
+                        <div style="font-size:.72rem;color:#94a3b8;margin-bottom:8px;"><?= date('d/m/Y H:i', strtotime($hnf['created_at'])) ?></div>
+                        <div style="display:flex;gap:8px;align-items:center;">
+                            <a href="<?= htmlspecialchars($hnf['link'] ?: '/hrm') ?>" style="font-size:.75rem;color:<?= $hsev[1] ?>;text-decoration:none;border:1px solid <?= $hsev[1] ?>;padding:3px 10px;border-radius:5px;font-weight:600;">Xem</a>
+                            <button onclick="markHrmNotifRead(<?= (int) $hnf['id'] ?>, 'hrm-notif-<?= (int) $hnf['id'] ?>')"
+                                style="background:none;border:1px solid #e2e8f0;color:#94a3b8;padding:3px 8px;border-radius:5px;font-size:.72rem;cursor:pointer;margin-left:auto;">Đã đọc</button>
+                        </div>
+                    </div>
                     <?php endforeach; ?>
                     <?php foreach ($pasx_notifs as $pn):
                         $ev = $pn['event'] ?? '';
@@ -455,12 +502,16 @@ $total_notif_count = $notif_count + $pasx_notif_count + ($kpi_alert ? 1 : 0) + c
                     <?php endif; ?>
 
                     <?php if ($kpi_alert): ?>
-                    <div class="notif-item" style="padding:12px 16px;border-bottom:1px solid #f1f5f9;background:#eff6ff;border-left:3px solid #bfdbfe;">
+                    <div class="notif-item" id="kpi-alert-item" style="padding:12px 16px;border-bottom:1px solid #f1f5f9;background:#eff6ff;border-left:3px solid #bfdbfe;">
                         <div style="font-size:.82rem;font-weight:700;color:#2563eb;margin-bottom:3px;">
                             KPI/Hoa hồng Quý <?= $kpi_alert['q'] ?> chưa xác nhận
                         </div>
                         <div style="font-size:.78rem;color:#475569;margin-bottom:8px;">Hãy rà soát và xác nhận báo cáo bán hàng Quý <?= $kpi_alert['q'] ?>/<?= $kpi_alert['y'] ?>.</div>
-                        <a href="/sale-reports?quarter=<?= $kpi_alert['tab'] ?>" style="font-size:.75rem;color:#2563eb;text-decoration:none;border:1px solid #2563eb;padding:3px 10px;border-radius:5px;font-weight:600;">Xác nhận</a>
+                        <div style="display:flex;gap:8px;align-items:center;">
+                            <a href="/sale-reports?quarter=<?= $kpi_alert['tab'] ?>" style="font-size:.75rem;color:#2563eb;text-decoration:none;border:1px solid #2563eb;padding:3px 10px;border-radius:5px;font-weight:600;">Xác nhận</a>
+                            <button onclick="dismissKpiAlert('<?= $kpi_alert['tab'] ?>', 'kpi-alert-item')"
+                                style="background:none;border:1px solid #e2e8f0;color:#94a3b8;padding:3px 8px;border-radius:5px;font-size:.72rem;cursor:pointer;margin-left:auto;">Đã đọc</button>
+                        </div>
                     </div>
                     <?php endif; ?>
                 </div>
@@ -602,6 +653,50 @@ $total_notif_count = $notif_count + $pasx_notif_count + ($kpi_alert ? 1 : 0) + c
                         el.style.opacity = '0'; el.style.transition = 'opacity .3s';
                         setTimeout(() => el.remove(), 300);
                     });
+                }
+            });
+            markAllHrmNotifRead();
+        }
+
+        function markHrmNotifRead(id, elemId) {
+            fetch('/api/hrm/notification_read', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({id: id})
+            }).then(r => r.json()).then(d => {
+                if (d.ok) {
+                    const el = document.getElementById(elemId);
+                    if (el) { el.style.opacity = '0'; el.style.transition = 'opacity .3s'; setTimeout(() => el.remove(), 300); }
+                    decreaseBadge();
+                }
+            });
+        }
+
+        function markAllHrmNotifRead() {
+            fetch('/api/hrm/notification_read', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({all: true})
+            }).then(r => r.json()).then(d => {
+                if (d.ok) {
+                    document.querySelectorAll('.hrm-notif-item').forEach(el => {
+                        el.style.opacity = '0'; el.style.transition = 'opacity .3s';
+                        setTimeout(() => el.remove(), 300);
+                    });
+                }
+            });
+        }
+
+        function dismissKpiAlert(quarter, elemId) {
+            fetch('/api/kpi_alert_dismiss', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({quarter: quarter})
+            }).then(r => r.json()).then(d => {
+                if (d.ok) {
+                    const el = document.getElementById(elemId);
+                    if (el) { el.style.opacity = '0'; el.style.transition = 'opacity .3s'; setTimeout(() => el.remove(), 300); }
+                    decreaseBadge();
                 }
             });
         }
