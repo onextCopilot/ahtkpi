@@ -964,6 +964,7 @@ switch ($action) {
         $mode = in_array($_POST['mode'] ?? '', ['skip','update','create'], true) ? $_POST['mode'] : 'skip';
         $defSource = (int)($_POST['default_source'] ?? 0);
         $defEvent  = (int)($_POST['default_event'] ?? 0);
+        $downloadCv = !empty($_POST['download_cv']);
         if (!$rows) { jout(false, ['error' => 'Không có dòng dữ liệu']); }
         if (empty($map['full_name']) && $map['full_name'] !== 0 && $map['full_name'] !== '0') { jout(false, ['error' => 'Phải gán cột Họ tên']); }
 
@@ -984,7 +985,7 @@ switch ($action) {
                     'notes','classification','campaign','id_card','applied_job','applied_stage','tags',
                     'office_text','reject_reason','cv_path','external_id','interview_date'];
 
-        $ins = $upd = $skip = 0;
+        $ins = $upd = $skip = $cvOk = $cvFail = 0;
         foreach ($rows as $row) {
             $name = $col($row, 'full_name');
             if ($name === '') { $skip++; continue; }
@@ -1002,6 +1003,14 @@ switch ($action) {
             if ($appliedDate) { $set['applied_date'] = [$appliedDate, 's']; }
             if ($defSource) { $set['source_id'] = [$defSource, 'i']; }
             if ($defEvent)  { $set['event_id']  = [$defEvent, 'i']; }
+
+            // Tải CV từ link ngoài về server (nếu bật) -> thay cv_path bằng đường dẫn nội bộ.
+            $cvLocal = '';
+            if ($downloadCv && isset($set['cv_path']) && preg_match('#^https?://#i', $set['cv_path'][0])) {
+                $local = hrm_download_cv($set['cv_path'][0], $name);
+                if ($local !== '') { $set['cv_path'] = [$local, 's']; $cvLocal = $local; $cvOk++; }
+                else { $cvFail++; }
+            }
 
             $existing = null;
             if ($dedup !== '') {
@@ -1026,14 +1035,20 @@ switch ($action) {
                 $st = $conn->prepare('INSERT INTO hrm_candidates (' . implode(',', $cols) . ', last_activity_at) VALUES (' . $ph . ', NOW())');
                 $st->bind_param($types, ...$vals); $st->execute(); $cid = $st->insert_id; $ins++;
             }
+            // CV tải về -> lưu thành 1 tệp đính kèm.
+            if ($cvLocal !== '' && !empty($cid)) {
+                $lbl = 'CV (import)';
+                $q = $conn->prepare("INSERT INTO hrm_candidate_attachments (candidate_id,file_path,label,type,uploaded_by) VALUES (?,?,?, 'cv', ?)");
+                $q->bind_param('issi', $cid, $cvLocal, $lbl, $uid); $q->execute();
+            }
             // Kỹ năng (tách ; hoặc ,).
             $sk = $col($row, 'skills');
             if ($sk !== '' && !empty($cid)) {
                 foreach (preg_split('/[;,]/', $sk) as $s) { $s = trim($s); if ($s !== '') { $q = $conn->prepare('INSERT INTO hrm_candidate_skills (candidate_id,skill) VALUES (?,?)'); $q->bind_param('is', $cid, $s); $q->execute(); } }
             }
         }
-        hrm_audit($conn, $uid, 'candidate_import', 'candidate', 0, "ins=$ins upd=$upd skip=$skip");
-        jout(true, ['inserted' => $ins, 'updated' => $upd, 'skipped' => $skip]);
+        hrm_audit($conn, $uid, 'candidate_import', 'candidate', 0, "ins=$ins upd=$upd skip=$skip cv=$cvOk/" . ($cvOk + $cvFail));
+        jout(true, ['inserted' => $ins, 'updated' => $upd, 'skipped' => $skip, 'cv_ok' => $cvOk, 'cv_fail' => $cvFail]);
     }
 
     /* ── Gộp 2 hồ sơ trùng ──────────────────────────────────────────────── */

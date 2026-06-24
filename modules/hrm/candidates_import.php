@@ -71,9 +71,18 @@ hrm_header('Import ứng viên', 'Nhập hàng loạt từ Excel / CSV', 'candid
     </div>
     <div class="rc-field"><label>Khi trùng (email/SĐT đã có)</label>
         <select id="mode"><option value="skip">Bỏ qua dòng trùng</option><option value="update">Cập nhật hồ sơ đã có</option><option value="create">Vẫn tạo mới</option></select></div>
+    <label style="display:flex;align-items:center;gap:8px;font-size:13px;color:#334155;margin:4px 0 4px">
+        <input type="checkbox" id="dlCv" checked> Tải CV từ link về server (lưu bản sao + tạo tệp đính kèm)</label>
 
     <h4 style="font-size:13px;margin:14px 0 8px">Xem trước (5 dòng đầu)</h4>
     <div style="overflow-x:auto"><table class="rc-table" id="preview" style="white-space:nowrap"></table></div>
+
+    <!-- Progress -->
+    <div id="progWrap" style="display:none;margin-top:14px">
+        <div style="display:flex;justify-content:space-between;font-size:12.5px;color:#475569;margin-bottom:5px">
+            <span id="progLabel">Đang import...</span><span id="progPct">0%</span></div>
+        <div style="height:10px;background:#eef2f6;border-radius:99px;overflow:hidden"><div id="progBar" style="height:100%;width:0;background:linear-gradient(135deg,#0e9f6e,#057a55);transition:width .2s"></div></div>
+    </div>
 
     <div id="commitErr" class="rc-muted" style="color:#dc2626;margin-top:10px"></div>
     <div style="display:flex;gap:8px;margin-top:12px">
@@ -139,21 +148,40 @@ function renderPreview(){
     ROWS.slice(0,5).forEach(r=>{html+='<tr>'+fs.map(f=>'<td>'+escapeHtml(String(r[m[f]]??''))+'</td>').join('')+'</tr>';});
     document.getElementById('preview').innerHTML=html+'</tbody>';
 }
-function commit(){
+async function commit(){
     const m=currentMap();
     if(!('full_name' in m)){document.getElementById('commitErr').textContent='Phải gán cột Họ tên';return;}
-    const fd=new FormData();fd.append('action','cand_import_commit');
-    fd.append('map',JSON.stringify(m));fd.append('rows',JSON.stringify(ROWS));
-    fd.append('mode',document.getElementById('mode').value);
-    fd.append('default_source',document.getElementById('defSource').value);
-    fd.append('default_event',document.getElementById('defEvent').value);
-    document.getElementById('commitBtn').disabled=true;document.getElementById('commitErr').textContent='Đang import...';
-    fetch('/hrm/api',{method:'POST',body:fd}).then(r=>r.json()).then(j=>{
-        document.getElementById('commitBtn').disabled=false;
-        if(!j.ok){document.getElementById('commitErr').textContent=j.error||'Lỗi';return;}
-        document.getElementById('step2').style.display='none';document.getElementById('step3').style.display='block';
-        document.getElementById('result').innerHTML='✓ Thêm mới: <b>'+j.inserted+'</b> · Cập nhật: <b>'+j.updated+'</b> · Bỏ qua (trùng/thiếu tên): <b>'+j.skipped+'</b>';
-    }).catch(()=>{document.getElementById('commitBtn').disabled=false;document.getElementById('commitErr').textContent='Lỗi kết nối';});
+    const dlCv=document.getElementById('dlCv').checked;
+    const mode=document.getElementById('mode').value;
+    const defSource=document.getElementById('defSource').value;
+    const defEvent=document.getElementById('defEvent').value;
+    // Tải CV chậm -> lô nhỏ hơn để feedback mượt và tránh timeout.
+    const chunk=dlCv?8:50;
+    const total=ROWS.length;
+    document.getElementById('commitBtn').disabled=true;
+    document.getElementById('commitErr').textContent='';
+    document.getElementById('progWrap').style.display='block';
+    const sum={inserted:0,updated:0,skipped:0,cv_ok:0,cv_fail:0};
+    for(let off=0; off<total; off+=chunk){
+        const part=ROWS.slice(off,off+chunk);
+        const fd=new FormData();fd.append('action','cand_import_commit');
+        fd.append('map',JSON.stringify(m));fd.append('rows',JSON.stringify(part));
+        fd.append('mode',mode);fd.append('default_source',defSource);fd.append('default_event',defEvent);
+        if(dlCv)fd.append('download_cv','1');
+        let j;
+        try{ j=await (await fetch('/hrm/api',{method:'POST',body:fd})).json(); }
+        catch(e){ document.getElementById('commitErr').textContent='Lỗi kết nối ở dòng '+(off+1); document.getElementById('commitBtn').disabled=false; return; }
+        if(!j.ok){ document.getElementById('commitErr').textContent=j.error||'Lỗi'; document.getElementById('commitBtn').disabled=false; return; }
+        sum.inserted+=j.inserted||0; sum.updated+=j.updated||0; sum.skipped+=j.skipped||0; sum.cv_ok+=j.cv_ok||0; sum.cv_fail+=j.cv_fail||0;
+        const done=Math.min(off+chunk,total); const pct=Math.round(done/total*100);
+        document.getElementById('progBar').style.width=pct+'%';
+        document.getElementById('progPct').textContent=pct+'%';
+        document.getElementById('progLabel').textContent='Đã xử lý '+done+'/'+total+' dòng'+(dlCv?(' · CV: '+sum.cv_ok):'');
+    }
+    document.getElementById('step2').style.display='none';document.getElementById('step3').style.display='block';
+    let html='✓ Thêm mới: <b>'+sum.inserted+'</b> · Cập nhật: <b>'+sum.updated+'</b> · Bỏ qua (trùng/thiếu tên): <b>'+sum.skipped+'</b>';
+    if(dlCv)html+='<br>CV tải về: <b>'+sum.cv_ok+'</b>'+(sum.cv_fail?(' · lỗi tải: <b>'+sum.cv_fail+'</b>'):'');
+    document.getElementById('result').innerHTML=html;
 }
 function escapeHtml(s){return s.replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
 </script>

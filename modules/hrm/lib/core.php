@@ -297,14 +297,15 @@ function hrm_download_cv(string $url, string $name): string
         ]);
         $ok = curl_exec($ch);
         $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-        curl_close($ch);
+        $GLOBALS['hrm_cv_last_err'] = $ok ? ('HTTP ' . $code) : curl_error($ch);
         $ok = $ok && $code >= 200 && $code < 400;
     } else {
         $data = @file_get_contents($url);
         if ($data !== false) { fwrite($fp, $data); $ok = true; }
+        else { $GLOBALS['hrm_cv_last_err'] = 'file_get_contents fail (outbound chặn?)'; }
     }
     fclose($fp);
-    if (!$ok || filesize($target) < 64) { @unlink($target); return ''; }
+    if (!$ok || @filesize($target) < 64) { @unlink($target); return ''; }
     return $rel . '/' . $safe;
 }
 

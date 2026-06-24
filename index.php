@@ -240,6 +240,7 @@ $routes = [
     '/hrm/candidates/export' => 'modules/hrm/candidates_export.php',
     '/hrm/candidates/import' => 'modules/hrm/candidates_import.php',
     '/hrm/candidates/merge' => 'modules/hrm/candidates_merge.php',
+    '/hrm/cv-diag' => 'modules/hrm/cv_diag.php',
     '/hrm/events' => 'modules/hrm/events.php',
     '/hrm/intake' => 'modules/hrm/intake.php',
     '/hrm/candidate' => 'modules/hrm/candidate.php',
