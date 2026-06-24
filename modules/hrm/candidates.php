@@ -13,7 +13,8 @@ $opts = hrm_candidate_filter_options($conn);
 $statuses = hrm_candidate_statuses();
 
 // Phân trang.
-$perPage = in_array((int) ($_GET['pp'] ?? 50), [50, 100], true) ? (int) $_GET['pp'] : 50;
+$pp = (int) ($_GET['pp'] ?? 50);
+$perPage = in_array($pp, [50, 100], true) ? $pp : 50;
 $matched = hrm_candidate_count($conn, $f);
 $pages   = max(1, (int) ceil($matched / $perPage));
 $page    = min(max(1, (int) ($_GET['p'] ?? 1)), $pages);
