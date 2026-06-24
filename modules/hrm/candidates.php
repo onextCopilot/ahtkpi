@@ -15,6 +15,34 @@ $statuses = hrm_candidate_statuses();
 $total = (int)($conn->query("SELECT COUNT(*) c FROM hrm_candidates WHERE status<>'archived'")->fetch_assoc()['c'] ?? 0);
 $qs = http_build_query(array_filter($f, fn($v) => $v !== '' && $v !== 0 && $v !== -1));
 
+// Pipeline cho cột "Giai đoạn hiện tại" (track = các bước không phải "Từ chối").
+$pipe = $conn->query("SELECT name,code,stage_type,sort_order FROM hrm_pipeline_stages ORDER BY sort_order")->fetch_all(MYSQLI_ASSOC);
+$track = array_values(array_filter($pipe, fn($s) => $s['stage_type'] !== 'rejected'));
+$trackTotal = count($track);
+$posByName = []; foreach ($track as $i => $s) { $posByName[mb_strtolower(trim($s['name']))] = $i + 1; }
+$typeByName = []; foreach ($pipe as $s) { $typeByName[mb_strtolower(trim($s['name']))] = $s['stage_type']; }
+$stageCell = function ($name) use ($posByName, $typeByName, $trackTotal) {
+    $name = trim((string)$name);
+    if ($name === '') { return '<span class="cd-mut">-</span>'; }
+    $key = mb_strtolower($name);
+    $type = $typeByName[$key] ?? '';
+    if ($type === 'rejected') {
+        return '<div class="cd-stage rej"><div class="cd-stage-lbl">' . h($name) . '</div>'
+             . '<div class="cd-track"><i class="dot rej"></i></div></div>';
+    }
+    $pos = $posByName[$key] ?? 0;
+    $dots = '';
+    for ($i = 1; $i <= $trackTotal; $i++) {
+        if ($i > 1) { $dots .= '<i class="line' . ($pos > 0 && $i <= $pos ? ' done' : '') . '"></i>'; }
+        $dots .= '<i class="dot' . ($pos > 0 && $i <= $pos ? ' done' : '') . ($i === $pos ? ' cur' : '') . '"></i>';
+    }
+    $num = $pos > 0 ? ' <span class="cd-stage-num">(' . $pos . '/' . $trackTotal . ')</span>' : '';
+    return '<div class="cd-stage"><div class="cd-stage-lbl">' . h($name) . $num . '</div><div class="cd-track">' . $dots . '</div></div>';
+};
+// Icon nhỏ cho cột liên hệ.
+$icMail = '<svg viewBox="0 0 24 24" class="cd-ic"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-10 5L2 7"/></svg>';
+$icPhone = '<svg viewBox="0 0 24 24" class="cd-ic"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.13.96.36 1.9.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.91.34 1.85.57 2.81.7A2 2 0 0 1 22 16.92z"/></svg>';
+
 hrm_header('Ứng viên', 'Kho ứng viên (' . $total . ')', 'candidates');
 ?>
 <form class="cd-filters" method="get" id="filterForm">
@@ -76,37 +104,44 @@ $stCol = ['new'=>'#0071e3','active'=>'#b45309','pooled'=>'#7c3aed','hired'=>'#16
 <table class="cd-table">
     <thead><tr>
         <th style="width:34px"><input type="checkbox" id="checkAll" onclick="toggleAll(this)"></th>
-        <th>Họ và tên</th><th>Trạng thái</th><th>Liên hệ</th><th>Kỹ năng</th><th>Thẻ</th>
-        <th>Nguồn</th><th>Sự kiện</th><th>Phụ trách</th><th>Vị trí ứng tuyển</th><th>Giai đoạn</th>
-        <th>Đánh giá</th><th>Ngày tạo</th><th>CV</th>
+        <th>Họ và tên</th><th>Thông tin liên hệ</th><th>Phân loại</th><th>Tin tuyển dụng</th><th>Giai đoạn hiện tại</th>
+        <th>Trạng thái</th><th>Nguồn</th><th>Sự kiện</th><th>Phụ trách</th><th>Đánh giá</th><th>CV</th>
     </tr></thead>
     <tbody>
-    <?php foreach ($rows as $c): [$ini, $col] = $avatar($c['full_name']); ?>
+    <?php foreach ($rows as $c): [$ini, $col] = $avatar($c['full_name']);
+        $stg = $c['app_stage'] ?: $c['applied_stage']; ?>
         <tr data-id="<?= $c['id'] ?>">
             <td onclick="event.stopPropagation()"><input type="checkbox" class="rowChk" value="<?= $c['id'] ?>" onclick="onCheck()"></td>
-            <td onclick="location.href='/hrm/candidate?id=<?= $c['id'] ?>'"><div class="cd-name-cell">
+            <td class="cd-go"><div class="cd-name-cell">
                 <span class="cd-av" style="background:<?= $col ?>"><?= h($ini) ?></span>
                 <div style="min-width:0"><div class="cd-nm"><?= h($c['full_name']) ?></div>
                     <div class="cd-sub"><?= h($c['current_position'] ?: 'Không có chức danh') ?></div></div>
             </div></td>
+            <td class="cd-go">
+                <?php if ($c['email']): ?><div class="cd-contact"><?= $icMail ?><span><?= h($c['email']) ?></span></div><?php endif; ?>
+                <?php if ($c['phone']): ?><div class="cd-contact"><?= $icPhone ?><span><?= h($c['phone']) ?></span></div><?php endif; ?>
+                <?php if (!$c['email'] && !$c['phone']): ?><span class="cd-mut">-</span><?php endif; ?>
+            </td>
+            <td class="cd-go"><?= h($c['classification'] ?: 'Ứng viên') ?></td>
+            <td class="cd-go cd-job"><?= h($c['app_job'] ?: ($c['applied_job'] ?: '-')) ?></td>
+            <td><?= $stageCell($stg) ?></td>
             <td><span class="cd-badge" style="background:<?= ($stCol[$c['status']]??'#64748b') ?>1a;color:<?= $stCol[$c['status']]??'#64748b' ?>"><?= h($statuses[$c['status']] ?? $c['status']) ?></span><?= $c['talent_pool'] ? ' <span class="cd-badge" style="background:#f3e8ff;color:#7c3aed">Pool</span>' : '' ?></td>
-            <td onclick="location.href='/hrm/candidate?id=<?= $c['id'] ?>'"><?= h($c['email'] ?: '-') ?><?php if ($c['phone']): ?><div class="cd-sub"><?= h($c['phone']) ?></div><?php endif; ?></td>
-            <td class="cd-sub" style="max-width:200px;white-space:normal"><?= h($c['skill_list'] ?: '-') ?></td>
-            <td><?= $c['tag_list'] ? implode(' ', array_map(fn($t)=>'<span class="cd-badge">'.h($t).'</span>', explode(',', $c['tag_list']))) : '-' ?></td>
             <td><?= h($c['source_name'] ?: '-') ?></td>
             <td><?= h($c['event_name'] ?: '-') ?></td>
             <td><?= h($c['owner_name'] ?: '-') ?></td>
-            <td><?= h($c['app_job'] ?: ($c['applied_job'] ?: '-')) ?></td>
-            <td><?php $stg=$c['app_stage'] ?: $c['applied_stage']; echo $stg ? '<span class="cd-badge">'.h($stg).'</span>' : '-'; ?></td>
-            <td><?= (int)$c['rating'] ? str_repeat('★', (int)$c['rating']) : '-' ?></td>
-            <td class="cd-sub"><?= $c['created_at'] ? date('d/m/Y', strtotime($c['created_at'])) : '-' ?></td>
-            <td><?= $c['cv_path'] ? '<a href="'.h($c['cv_path']).'" target="_blank" rel="noopener" onclick="event.stopPropagation()" class="cd-cv">Xem CV</a>' : '-' ?></td>
+            <td><?= (int)$c['rating'] ? '<span style="color:#f59e0b">'.str_repeat('★', (int)$c['rating']).'</span>' : '<span class="cd-mut">-</span>' ?></td>
+            <td><?= $c['cv_path'] ? '<a href="'.h($c['cv_path']).'" target="_blank" rel="noopener" onclick="event.stopPropagation()" class="cd-cv">Xem CV</a>' : '<span class="cd-mut">-</span>' ?></td>
         </tr>
     <?php endforeach; ?>
     </tbody>
 </table>
 </div>
 <?php endif; ?>
+<script>
+document.querySelectorAll('.cd-go').forEach(td=>td.addEventListener('click',function(){
+    const tr=this.closest('tr'); if(tr) location.href='/hrm/candidate?id='+tr.dataset.id;
+}));
+</script>
 
 <style>
 .cd-filters{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:12px}
@@ -115,15 +150,32 @@ $stCol = ['new'=>'#0071e3','active'=>'#b45309','pooled'=>'#7c3aed','hired'=>'#16
 .cd-scroll{background:#fff;border-radius:14px;box-shadow:0 1px 2px rgba(0,0,0,.04),0 0 0 1px rgba(0,0,0,.04);overflow-x:auto;scrollbar-width:none}
 .cd-scroll::-webkit-scrollbar{display:none}
 .cd-table{width:100%;border-collapse:collapse;font-size:13px;color:#1d1d1f}
-.cd-table th{background:#fbfbfd;text-align:left;font-size:11px;font-weight:600;color:#86868b;padding:13px 16px;border-bottom:1px solid #f0f0f2;white-space:nowrap}
-.cd-table td{padding:12px 16px;border-bottom:1px solid #f5f5f7;vertical-align:middle;white-space:nowrap;cursor:pointer}
-.cd-table tbody tr:hover td{background:#f7faff}
-.cd-name-cell{display:flex;align-items:center;gap:10px}
-.cd-av{width:34px;height:34px;border-radius:50%;flex-shrink:0;display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700;font-size:12px}
-.cd-nm{font-weight:600;color:#0071e3;font-size:13.5px}
-.cd-sub{font-size:12px;color:#86868b;margin-top:2px}
+.cd-table th{background:#f6f8f7;text-align:left;font-size:11px;font-weight:700;letter-spacing:.3px;color:#0e9f6e;text-transform:uppercase;padding:12px 16px;border-bottom:1px solid #eef0f2;white-space:nowrap}
+.cd-table td{padding:12px 16px;border-bottom:1px solid #f3f4f6;vertical-align:middle;white-space:nowrap}
+.cd-table .cd-go{cursor:pointer}
+.cd-table tbody tr:hover td{background:#f7faf9}
+.cd-name-cell{display:flex;align-items:center;gap:11px}
+.cd-av{width:36px;height:36px;border-radius:50%;flex-shrink:0;display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700;font-size:12px}
+.cd-nm{font-weight:600;color:#0f172a;font-size:13.5px}
+.cd-sub{font-size:12px;color:#94a3b8;margin-top:2px}
+.cd-mut{color:#cbd5e1}
+.cd-job{font-weight:600;color:#0e7490;max-width:220px;overflow:hidden;text-overflow:ellipsis}
+.cd-contact{display:flex;align-items:center;gap:7px;font-size:12.5px;color:#475569;margin:1px 0}
+.cd-ic{width:14px;height:14px;flex-shrink:0;fill:none;stroke:#94a3b8;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
 .cd-badge{display:inline-block;font-size:11px;font-weight:600;padding:3px 9px;border-radius:980px;background:#eef6ff;color:#0071e3;margin:1px}
-.cd-cv{color:#0071e3;font-weight:600;text-decoration:none}.cd-cv:hover{text-decoration:underline}
+.cd-cv{color:#0e9f6e;font-weight:600;text-decoration:none}.cd-cv:hover{text-decoration:underline}
+/* Giai đoạn hiện tại - thanh chấm tiến trình */
+.cd-stage{min-width:150px}
+.cd-stage-lbl{font-size:12.5px;color:#0f172a;margin-bottom:6px}
+.cd-stage-num{color:#94a3b8}
+.cd-stage.rej .cd-stage-lbl{color:#dc2626;font-weight:600}
+.cd-track{display:flex;align-items:center}
+.cd-track .dot{width:9px;height:9px;border-radius:50%;background:#e2e8f0;flex-shrink:0}
+.cd-track .dot.done{background:#16a34a}
+.cd-track .dot.cur{box-shadow:0 0 0 3px rgba(22,163,74,.18)}
+.cd-track .dot.rej{background:#dc2626}
+.cd-track .line{height:2px;flex:1;min-width:14px;background:#e2e8f0}
+.cd-track .line.done{background:#16a34a}
 </style>
 
 <!-- Modal thêm ứng viên -->
