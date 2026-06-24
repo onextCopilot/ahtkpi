@@ -1004,20 +1004,20 @@ switch ($action) {
             if ($defSource) { $set['source_id'] = [$defSource, 'i']; }
             if ($defEvent)  { $set['event_id']  = [$defEvent, 'i']; }
 
-            // Tải CV từ link ngoài về server (nếu bật) -> thay cv_path bằng đường dẫn nội bộ.
+            $existing = null;
+            if ($dedup !== '') {
+                $d = $conn->prepare('SELECT id FROM hrm_candidates WHERE dedup_key=? LIMIT 1');
+                $d->bind_param('s', $dedup); $d->execute(); $existing = $d->get_result()->fetch_assoc();
+            }
+            if ($existing && $mode === 'skip') { $skip++; continue; } // bỏ qua trước -> không tải CV thừa
+
+            // Tải CV từ link ngoài về server (chỉ cho dòng sẽ ghi) -> thay cv_path bằng đường dẫn nội bộ.
             $cvLocal = '';
             if ($downloadCv && isset($set['cv_path']) && preg_match('#^https?://#i', $set['cv_path'][0])) {
                 $local = hrm_download_cv($set['cv_path'][0], $name);
                 if ($local !== '') { $set['cv_path'] = [$local, 's']; $cvLocal = $local; $cvOk++; }
                 else { $cvFail++; }
             }
-
-            $existing = null;
-            if ($dedup !== '') {
-                $d = $conn->prepare('SELECT id FROM hrm_candidates WHERE dedup_key=? LIMIT 1');
-                $d->bind_param('s', $dedup); $d->execute(); $existing = $d->get_result()->fetch_assoc();
-            }
-            if ($existing && $mode === 'skip') { $skip++; continue; }
             if ($existing && $mode === 'update') {
                 $cid = (int)$existing['id'];
                 $sets = ['full_name=?']; $vals = [$name]; $types = 's';

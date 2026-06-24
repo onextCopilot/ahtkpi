@@ -13,8 +13,10 @@ ini_set('display_errors', 0); // Keep disabled in production
 
 // Parse the current URI
 $request_uri = $_SERVER['REQUEST_URI'];
-$parsed_uri = parse_url($request_uri, PHP_URL_PATH);
+// Tự cắt query string (không dùng parse_url vì "//path" bị hiểu nhầm là host).
+$parsed_uri = explode('?', $request_uri, 2)[0];
 $uri = strtolower(urldecode($parsed_uri));
+$uri = preg_replace('#/{2,}#', '/', $uri); // gộp slash thừa: //hrm/x -> /hrm/x
 $base_path = '/'; // Define base path for the application
 
 // Strip any script filename prefix (e.g. /router.php, /index.php)
