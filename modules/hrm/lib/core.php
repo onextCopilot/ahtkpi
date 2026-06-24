@@ -210,6 +210,14 @@ function hrm_ensure_candidate_module(mysqli $conn): void
     hrm_ensure_column($conn, 'hrm_candidates', 'rejected_by', 'INT DEFAULT 0');            // "Từ chối bởi" -> user id (nếu có trong OS)
     hrm_ensure_column($conn, 'hrm_candidates', 'owner_text', "VARCHAR(120) DEFAULT ''");     // phụ trách không có trong OS
     hrm_ensure_column($conn, 'hrm_candidates', 'rejected_by_text', "VARCHAR(120) DEFAULT ''"); // từ chối bởi không có trong OS
+    // Các mốc ngày/giờ từ Base (lưu text cho đơn giản).
+    hrm_ensure_column($conn, 'hrm_candidates', 'applied_time', "VARCHAR(20) DEFAULT ''");
+    hrm_ensure_column($conn, 'hrm_candidates', 'offer_date', "VARCHAR(20) DEFAULT ''");
+    hrm_ensure_column($conn, 'hrm_candidates', 'offer_time', "VARCHAR(20) DEFAULT ''");
+    hrm_ensure_column($conn, 'hrm_candidates', 'hired_date', "VARCHAR(20) DEFAULT ''");
+    hrm_ensure_column($conn, 'hrm_candidates', 'hired_time', "VARCHAR(20) DEFAULT ''");
+    hrm_ensure_column($conn, 'hrm_candidates', 'reject_date', "VARCHAR(20) DEFAULT ''");
+    hrm_ensure_column($conn, 'hrm_candidates', 'reject_time', "VARCHAR(20) DEFAULT ''");
     try {
         $idx = $conn->query("SHOW INDEX FROM hrm_candidates WHERE Key_name='idx_dedup'");
         if ($idx && $idx->num_rows === 0) { $conn->query("CREATE INDEX idx_dedup ON hrm_candidates (dedup_key)"); }
@@ -277,19 +285,61 @@ function hrm_ensure_candidate_module(mysqli $conn): void
 function hrm_resolve_person(mysqli $conn, string $value): array
 {
     require_once __DIR__ . '/base_users.php';
-    $raw = ltrim(trim($value), '@ ');
-    if ($raw === '') { return ['id' => 0, 'text' => '']; }
-    $handle = mb_strtolower($raw);
+    $value = trim($value);
+    if ($value === '') { return ['id' => 0, 'text' => '']; }
+    // Cột "Thẻ" có thể là "handle,tag,tag" -> token đầu thường là người phụ trách.
+    $tokens = array_values(array_filter(array_map(fn($t) => ltrim(trim($t), '@ '), preg_split('/[;,]/', $value)), fn($t) => $t !== ''));
+    if (!$tokens) { return ['id' => 0, 'text' => '']; }
     $aliases = hrm_base_aliases();
-    $name = $aliases[$handle] ?? $raw;           // tên hiển thị
-    // Khớp user OS theo tên đã quy đổi, hoặc theo handle gốc.
     $st = $conn->prepare('SELECT id FROM users WHERE LOWER(full_name)=? OR LOWER(username)=? OR LOWER(email)=? ORDER BY (status="active") DESC LIMIT 1');
-    $nlow = mb_strtolower($name);
-    $st->bind_param('sss', $nlow, $handle, $handle);
-    $st->execute();
-    $r = $st->get_result()->fetch_assoc();
-    if ($r) { return ['id' => (int)$r['id'], 'text' => '']; }
-    return ['id' => 0, 'text' => $name];
+
+    // Pass 1: token nào khớp user OS (theo handle hoặc tên quy đổi) -> dùng id.
+    foreach ($tokens as $tk) {
+        $h = mb_strtolower($tk);
+        $nm = mb_strtolower($aliases[$h] ?? $tk);
+        $st->bind_param('sss', $nm, $h, $h);
+        $st->execute();
+        if ($r = $st->get_result()->fetch_assoc()) { return ['id' => (int)$r['id'], 'text' => '']; }
+    }
+    // Pass 2: token nào có trong bảng quy đổi -> lưu tên (người đã rời OS).
+    foreach ($tokens as $tk) {
+        $h = mb_strtolower($tk);
+        if (isset($aliases[$h])) { return ['id' => 0, 'text' => $aliases[$h]]; }
+    }
+    // Pass 3: Base để handle phụ trách ở token ĐẦU -> lưu text token đầu (vd "tamntt").
+    return ['id' => 0, 'text' => $tokens[0]];
+}
+
+/**
+ * Như trên nhưng lấy NHIỀU người (cột "Thẻ" có thể chứa nhiều phụ trách).
+ * CHỈ nhận token là người đã biết (user OS hoặc trong bảng quy đổi); token lạ (java, pm...) bỏ qua.
+ * Trả ['ids'=>[userIds...], 'names'=>[tên hiển thị...]].
+ */
+function hrm_resolve_persons(mysqli $conn, string $value): array
+{
+    require_once __DIR__ . '/base_users.php';
+    $value = trim($value);
+    if ($value === '') { return ['ids' => [], 'names' => []]; }
+    $tokens = array_values(array_filter(array_map(fn($t) => ltrim(trim($t), '@ '), preg_split('/[;,]/', $value)), fn($t) => $t !== ''));
+    $aliases = hrm_base_aliases();
+    $st = $conn->prepare('SELECT id, full_name FROM users WHERE LOWER(full_name)=? OR LOWER(username)=? OR LOWER(email)=? ORDER BY (status="active") DESC LIMIT 1');
+    $ids = []; $names = [];
+    foreach ($tokens as $tk) {
+        $h = mb_strtolower($tk);
+        $aliasName = $aliases[$h] ?? null;
+        $nm = mb_strtolower($aliasName ?? $tk);
+        $st->bind_param('sss', $nm, $h, $h);
+        $st->execute();
+        $r = $st->get_result()->fetch_assoc();
+        if ($r) {                              // có trong OS
+            $ids[] = (int)$r['id'];
+            $names[] = $r['full_name'];
+        } elseif ($aliasName !== null) {       // có trong bảng quy đổi (đã rời OS)
+            $names[] = $aliasName;
+        }
+        // token lạ -> bỏ qua
+    }
+    return ['ids' => array_values(array_unique($ids)), 'names' => array_values(array_unique($names))];
 }
 
 /** Chuẩn hóa khóa chống trùng từ email/sđt. */

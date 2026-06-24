@@ -10,6 +10,8 @@
 function hrm_base_aliases(): array
 {
     return [
+        // Recruiter đang hoạt động (không có trong OS) - sửa tên cho đúng nếu cần.
+        'tamntt' => 'tamntt',
         // trang 1
         'trangtq1' => 'Nguyễn Thị Quỳnh Trang', 'chili' => 'Lê Hà Chi', 'tuyenkc' => 'Khúc Chí Tuyên',
         'giangnt2' => 'Nguyễn Thị Giang', 'dungtt1' => 'Trần Thị Dung Dung', 'huongntt' => 'Nguyễn Thị Thu Hương',

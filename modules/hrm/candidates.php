@@ -306,6 +306,17 @@ $stCol = ['new' => '#0071e3', 'active' => '#b45309', 'pooled' => '#7c3aed', 'hir
                     <th>Sự kiện</th>
                     <th>Phụ trách</th>
                     <th>Đánh giá</th>
+                    <th>Chiến dịch</th>
+                    <th>Ngày sinh</th>
+                    <th>Ngày ứng tuyển</th>
+                    <th>Thời gian ứng tuyển</th>
+                    <th>Thời gian phỏng vấn</th>
+                    <th>Ngày đề nghị</th>
+                    <th>Giờ đề nghị</th>
+                    <th>Ngày tuyển</th>
+                    <th>Giờ tuyển</th>
+                    <th>Reject Date</th>
+                    <th>Giờ từ chối</th>
                     <th>CV</th>
                 </tr>
             </thead>
@@ -342,9 +353,20 @@ $stCol = ['new' => '#0071e3', 'active' => '#b45309', 'pooled' => '#7c3aed', 'hir
                                         style="background:#f3e8ff;color:#7c3aed"><?= h($pn) ?></span><?php endforeach; endif; ?></td>
                         <td><?= h($c['source_name'] ?: '-') ?></td>
                         <td><?= h($c['event_name'] ?: '-') ?></td>
-                        <td><?= h($c['owner_name'] ?: ($c['owner_text'] ?: '-')) ?></td>
+                        <td><?= h($c['owner_text'] ?: ($c['owner_name'] ?: '-')) ?></td>
                         <td><?= (int) $c['rating'] ? '<span style="color:#f59e0b">' . str_repeat('★', (int) $c['rating']) . '</span>' : '<span class="cd-mut">-</span>' ?>
                         </td>
+                        <td class="cd-sub"><?= h($c['campaign'] ?: '-') ?></td>
+                        <td class="cd-sub"><?= h($c['dob'] ?: '-') ?></td>
+                        <td class="cd-sub"><?= $c['applied_date'] ? date('d/m/Y', strtotime($c['applied_date'])) : '-' ?></td>
+                        <td class="cd-sub"><?= h($c['applied_time'] ?: '-') ?></td>
+                        <td class="cd-sub"><?= h($c['interview_date'] ?: '-') ?></td>
+                        <td class="cd-sub"><?= h($c['offer_date'] ?: '-') ?></td>
+                        <td class="cd-sub"><?= h($c['offer_time'] ?: '-') ?></td>
+                        <td class="cd-sub"><?= h($c['hired_date'] ?: '-') ?></td>
+                        <td class="cd-sub"><?= h($c['hired_time'] ?: '-') ?></td>
+                        <td class="cd-sub"><?= h($c['reject_date'] ?: '-') ?></td>
+                        <td class="cd-sub"><?= h($c['reject_time'] ?: '-') ?></td>
                         <td><?= $c['cv_path'] ? '<a href="' . h($c['cv_path']) . '" target="_blank" rel="noopener" onclick="event.stopPropagation()" class="cd-cv">Xem CV</a>' : '<span class="cd-mut">-</span>' ?>
                         </td>
                     </tr>

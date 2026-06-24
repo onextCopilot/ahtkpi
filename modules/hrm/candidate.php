@@ -69,7 +69,7 @@ hrm_header($c['full_name'], ($c['current_position'] ?: 'Ứng viên') . ' · ' .
             <div><div class="rc-muted">Lương kỳ vọng</div><div><?= h($c['expected_salary'] ?: '-') ?></div></div>
             <div><div class="rc-muted">Nguồn</div><div><?= h($c['source_name'] ?: '-') ?></div></div>
             <div><div class="rc-muted">Sự kiện</div><div><?= h($c['event_name'] ?: '-') ?></div></div>
-            <div><div class="rc-muted">Người phụ trách</div><div><?= h($c['owner_name'] ?: ($c['owner_text'] ?: '-')) ?><?= (!$c['owner_name'] && $c['owner_text']) ? ' <span class="rc-muted">(ngoài OS)</span>' : '' ?></div></div>
+            <div><div class="rc-muted">Người phụ trách</div><div><?= h($c['owner_text'] ?: ($c['owner_name'] ?: '-')) ?></div></div>
             <div><div class="rc-muted">Đánh giá</div><div><?= (int)$c['rating'] ? str_repeat('★', (int)$c['rating']) : '-' ?></div></div>
             <div><div class="rc-muted">LinkedIn</div><div><?= $c['linkedin_url'] ? '<a href="'.h($c['linkedin_url']).'" target="_blank" rel="noopener">Hồ sơ</a>' : '-' ?></div></div>
             <div><div class="rc-muted">Portfolio</div><div><?= $c['portfolio_url'] ? '<a href="'.h($c['portfolio_url']).'" target="_blank" rel="noopener">Link</a>' : '-' ?></div></div>
