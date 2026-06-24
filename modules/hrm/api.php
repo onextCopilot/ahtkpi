@@ -994,7 +994,7 @@ switch ($action) {
         foreach ($rows as $i => $r) { if (count(array_filter($r, fn($x) => trim((string)$x) !== '')) >= 2) { $hdrIdx = $i; break; } }
         if ($hdrIdx < 0) { jout(false, ['error' => 'File rỗng hoặc không đọc được']); }
         $headers = array_map(fn($x) => trim((string)$x), $rows[$hdrIdx]);
-        $data = array_slice($rows, $hdrIdx + 1, 2000);
+        $data = array_slice($rows, $hdrIdx + 1, 5000); // trần an toàn
         jout(true, ['headers' => $headers, 'rows' => $data, 'total' => count($data)]);
     }
 

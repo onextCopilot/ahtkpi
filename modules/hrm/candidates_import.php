@@ -60,7 +60,7 @@ hrm_header('Import ứng viên', 'Nhập hàng loạt từ Excel / CSV', 'candid
 <!-- BƯỚC 1: upload -->
 <div class="rc-card" id="step1">
     <h3 style="font-size:15px;margin-bottom:8px">Bước 1 · Chọn file</h3>
-    <div class="rc-muted" style="margin-bottom:12px">Hỗ trợ .xlsx và .csv. Dòng đầu (có ≥2 ô) được coi là tiêu đề cột. Tối đa 2000 dòng/lần.</div>
+    <div class="rc-muted" style="margin-bottom:12px">Hỗ trợ .xlsx và .csv. Dòng đầu (có ≥2 ô) được coi là tiêu đề cột. Xử lý theo lô; tối đa 5.000 dòng/lần.</div>
     <form id="upForm" onsubmit="return false">
         <div class="rc-field"><input type="file" name="file" accept=".xlsx,.csv" required></div>
         <div id="upErr" class="rc-muted" style="color:#dc2626"></div>
