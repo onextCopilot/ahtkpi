@@ -490,15 +490,16 @@ switch ($action) {
         $aid = (int)($_POST['application_id'] ?? 0);
         $sid = (int)($_POST['stage_id'] ?? 0);
         if ($aid <= 0 || $sid <= 0) { jout(false, ['error' => 'Thiếu ứng viên hoặc giai đoạn']); }
-        $cur = $conn->query('SELECT status FROM hrm_applications WHERE id=' . $aid)->fetch_assoc();
-        if (!$cur) { jout(false, ['error' => 'Không tìm thấy ứng viên']); }
-        if ($cur['status'] !== 'active') {
-            jout(false, ['error' => 'Ứng viên đang ở trạng thái "' . $cur['status'] . '" (đã loại/giữ/rút) nên không thể chuyển giai đoạn. Hãy mở hồ sơ để mở lại trước.']);
-        }
-        $st = $conn->prepare('UPDATE hrm_applications SET stage_id=? WHERE id=? AND status="active"');
-        $st->bind_param('ii', $sid, $aid);
+        if (!$conn->query('SELECT id FROM hrm_applications WHERE id=' . $aid)->fetch_assoc()) { jout(false, ['error' => 'Không tìm thấy ứng viên']); }
+        $stage = $conn->query('SELECT code,name,sla_hours,stage_type FROM hrm_pipeline_stages WHERE id=' . $sid)->fetch_assoc();
+        if (!$stage) { jout(false, ['error' => 'Không tìm thấy giai đoạn']); }
+        // Status theo loại cột đích: cột Loại -> rejected, cột Tuyển -> hired, còn lại -> active
+        // (cho phép kéo cả ứng viên đã loại/giữ/rút và tự mở lại).
+        $newStatus = $stage['stage_type'] === 'rejected' ? 'rejected'
+                   : ($stage['stage_type'] === 'hired' ? 'hired' : 'active');
+        $st = $conn->prepare('UPDATE hrm_applications SET stage_id=?, status=? WHERE id=?');
+        $st->bind_param('isi', $sid, $newStatus, $aid);
         $st->execute();
-        $stage = $conn->query('SELECT code,name,sla_hours FROM hrm_pipeline_stages WHERE id=' . $sid)->fetch_assoc();
         if (!empty($stage['sla_hours'])) {
             hrm_sla_open($conn, 'application', $aid, strtolower($stage['code']), date('Y-m-d H:i:s', strtotime('+' . (int)$stage['sla_hours'] . ' hours')));
         }
