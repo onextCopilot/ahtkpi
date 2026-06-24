@@ -1105,6 +1105,46 @@ switch ($action) {
         jout(true, ['inserted' => $ins, 'updated' => $upd, 'skipped' => $skip, 'cv_ok' => $cvOk, 'cv_fail' => $cvFail, 'linked' => $linked]);
     }
 
+    /* ── Đồng bộ ứng viên (đã có applied_job) vào pipeline tin tuyển dụng ─ */
+    case 'cand_link_pipeline': {
+        hrm_ensure_candidate_module($conn);
+        $stages = $conn->query("SELECT id,name,code,stage_type,sla_hours FROM hrm_pipeline_stages ORDER BY sort_order")->fetch_all(MYSQLI_ASSOC);
+        $byName = []; $rejStage = null; $defStage = null;
+        foreach ($stages as $s) {
+            $byName[mb_strtolower(trim($s['name']))] = $s;
+            if ($s['stage_type'] === 'rejected' && !$rejStage) { $rejStage = $s; }
+            if (strtoupper($s['code']) === 'SCREENING' && !$defStage) { $defStage = $s; }
+        }
+        if (!$defStage && $stages) { $defStage = $stages[0]; }
+
+        $cands = $conn->query("SELECT id, applied_job, applied_stage FROM hrm_candidates
+            WHERE applied_job <> '' AND status <> 'archived'")->fetch_all(MYSQLI_ASSOC);
+        $jobCache = []; $linked = 0; $noJob = 0;
+        $jf = $conn->prepare("SELECT id FROM hrm_jobs WHERE title=? ORDER BY (status='open') DESC, id DESC LIMIT 1");
+        foreach ($cands as $c) {
+            $title = $c['applied_job'];
+            if (!array_key_exists($title, $jobCache)) {
+                $jf->bind_param('s', $title); $jf->execute();
+                $r = $jf->get_result()->fetch_assoc();
+                $jobCache[$title] = $r ? (int)$r['id'] : 0;
+            }
+            $jid = $jobCache[$title];
+            if (!$jid) { $noJob++; continue; }
+            $cid = (int)$c['id'];
+            if ($conn->query("SELECT id FROM hrm_applications WHERE candidate_id=$cid AND job_id=$jid LIMIT 1")->fetch_assoc()) { continue; }
+            $stName = mb_strtolower(trim($c['applied_stage']));
+            $isRej = $stName !== '' && (strpos($stName, 'reject') !== false || strpos($stName, 'từ chối') !== false || strpos($stName, 'loại') !== false);
+            $stg = $byName[$stName] ?? ($isRej ? $rejStage : $defStage) ?? $defStage;
+            $sid = $stg ? (int)$stg['id'] : 0;
+            $status = ($stg && $stg['stage_type'] === 'rejected') ? 'rejected' : 'active';
+            $a = $conn->prepare('INSERT INTO hrm_applications (candidate_id,job_id,stage_id,status,owner_id) VALUES (?,?,?,?,?)');
+            $a->bind_param('iiisi', $cid, $jid, $sid, $status, $uid); $a->execute();
+            $linked++;
+        }
+        hrm_audit($conn, $uid, 'candidate_link_pipeline', 'candidate', 0, "linked=$linked nojob=$noJob");
+        jout(true, ['linked' => $linked, 'no_job' => $noJob, 'scanned' => count($cands)]);
+    }
+
     /* ── Gộp 2 hồ sơ trùng ──────────────────────────────────────────────── */
     case 'cand_merge': {
         hrm_ensure_candidate_module($conn);

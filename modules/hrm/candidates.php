@@ -44,6 +44,7 @@ hrm_header('Ứng viên', 'Kho ứng viên (' . $total . ')', 'candidates');
     <a class="rc-btn ghost" href="/hrm/candidates/export?fmt=csv&<?= h($qs) ?>">CSV</a>
     <button type="button" class="rc-btn" onclick="document.getElementById('addModal').style.display='flex'">+ Thêm ứng viên</button>
     <a class="rc-btn ghost" href="/hrm/candidates/import">Import Excel</a>
+    <button type="button" class="rc-btn ghost" onclick="linkPipeline()" title="Gắn ứng viên đã có 'Tin ứng tuyển' vào pipeline tin tương ứng">Đồng bộ pipeline</button>
 </form>
 
 <!-- Thanh thao tác hàng loạt -->
@@ -154,6 +155,15 @@ $stCol = ['new'=>'#0071e3','active'=>'#b45309','pooled'=>'#7c3aed','hired'=>'#16
 function selectedIds(){return Array.from(document.querySelectorAll('.rowChk:checked')).map(c=>c.value);}
 function onCheck(){const n=selectedIds().length;document.getElementById('bulkCount').textContent=n;document.getElementById('bulkBar').style.display=n?'flex':'none';document.getElementById('mergeBtn').style.display=n===2?'inline-flex':'none';}
 function mergeTwo(){const ids=selectedIds();if(ids.length!==2){alert('Chọn đúng 2 hồ sơ để gộp');return;}location.href='/hrm/candidates/merge?a='+ids[0]+'&b='+ids[1];}
+function linkPipeline(){
+    if(!confirm('Gắn các ứng viên (có "Tin ứng tuyển" gốc) vào pipeline của tin tương ứng?'))return;
+    const fd=new FormData();fd.append('action','cand_link_pipeline');
+    fetch('/hrm/api',{method:'POST',body:fd}).then(r=>r.json()).then(j=>{
+        if(j.ok)alert('Đã gắn '+j.linked+' ứng viên vào pipeline.'+(j.no_job?(' '+j.no_job+' ứng viên không tìm thấy tin khớp tên.'):''));
+        else alert(j.error||'Lỗi');
+        if(j.ok)location.reload();
+    }).catch(()=>alert('Lỗi kết nối'));
+}
 function toggleAll(cb){document.querySelectorAll('.rowChk').forEach(c=>c.checked=cb.checked);onCheck();}
 function bulk(op,value){
     const ids=selectedIds();if(!ids.length){alert('Chưa chọn ứng viên');return;}
