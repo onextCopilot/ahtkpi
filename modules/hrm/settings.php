@@ -333,7 +333,7 @@ RTBAR;
 .rtbar button{min-width:28px;height:26px;padding:0 8px;border:none;background:none;border-radius:6px;cursor:pointer;font-size:12px;color:#42474e}
 .rtbar button:hover{background:#e9edf2}
 .rtsep{width:1px;height:18px;background:#dde1e6;margin:0 4px}
-.rtsel{height:26px;border:1px solid #dde1e6;background:#fff;border-radius:6px;font-size:12px;color:#42474e;padding:0 4px;cursor:pointer}
+.rtbar .rtsel{width:auto!important;min-width:0;flex:0 0 auto;height:26px;border:1px solid #dde1e6;background:#fff;border-radius:6px;font-size:12px;color:#42474e;padding:0 6px;margin:0;cursor:pointer}
 .rtcolor{position:relative;display:inline-flex;align-items:center;justify-content:center;width:28px;height:26px;border-radius:6px;cursor:pointer;font-size:13px;font-weight:700;color:#42474e}
 .rtcolor:hover{background:#e9edf2}
 .rtcolor input[type=color]{position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer;border:none;padding:0}
