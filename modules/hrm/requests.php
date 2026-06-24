@@ -24,7 +24,7 @@ $edit = isset($_GET['edit']) && $id;
 if ($new || $edit) {
     $r = ['title'=>'','request_type'=>'replacement','level'=>'','department_id'=>0,'office_id'=>0,
           'quantity'=>1,'need_by_date'=>'','salary_min'=>0,'salary_max'=>0,'reason'=>'','jd'=>'',
-          'employment_type'=>'','experience_required'=>'','priority'=>'Trung bình'];
+          'employment_type'=>'','experience_required'=>'','priority'=>'Trung bình','approver_role'=>''];
     if ($edit) {
         $req = $conn->query('SELECT * FROM hrm_requests WHERE id = ' . $id)->fetch_assoc();
         if (!$req) { hrm_header('Không tìm thấy', '', 'requests'); echo '<div class="rc-empty">HRF không tồn tại.</div>'; hrm_footer(); exit; }
@@ -61,6 +61,9 @@ if ($new || $edit) {
                         <?php foreach (['Không yêu cầu','Dưới 1 năm','1-2 năm','2-3 năm','3-5 năm','Trên 5 năm'] as $opt): ?><option value="<?= $opt ?>"<?= $sel($r['experience_required'],$opt) ?>><?= $opt ?></option><?php endforeach; ?></select></div>
                 <div class="rc-field"><label>Mức độ ưu tiên</label>
                     <select name="priority"><?php foreach (['Cao','Trung bình','Thấp'] as $opt): ?><option value="<?= $opt ?>"<?= $sel($r['priority'],$opt) ?>><?= $opt ?></option><?php endforeach; ?></select></div>
+                <div class="rc-field"><label>Người phê duyệt *</label>
+                    <select name="approver_role"><option value="">-</option>
+                        <?php foreach (hrm_hrf_approver_roles() as $rk => $rlabel): ?><option value="<?= $rk ?>"<?= $sel($r['approver_role'],$rk) ?>><?= $rlabel ?></option><?php endforeach; ?></select></div>
             </div>
             <div class="rc-field"><label>Lý do tuyển</label>
                 <select name="reason">
@@ -199,6 +202,7 @@ if ($new || $edit) {
         if(!f.quantity.value||parseInt(f.quantity.value,10)<1)errs.push([f.quantity,'Nhập số lượng (>= 1)']);
         if(!f.need_by_date.value)errs.push([f.need_by_date,'Chọn ngày cần onboard']);
         if(!f.employment_type.value)errs.push([f.employment_type,'Chọn hình thức làm việc']);
+        if(submit&&!f.approver_role.value)errs.push([f.approver_role,'Chọn người phê duyệt']);
         if(errs.length){errs.forEach(e=>hrfSetErr(e[0],e[1]));errs[0][0].focus();return;}
         document.getElementById('jdInput').value = jdQuill.getText().trim() ? jdQuill.root.innerHTML : '';
         const fd=new FormData(f); fd.append('action', IS_EDIT?'update_request':'save_request'); if(submit)fd.append('submit','1');
@@ -253,6 +257,7 @@ if ($id) {
             <div><div class="rc-muted">Hình thức làm việc</div><div><?= h($req['employment_type'] ?: '-') ?></div></div>
             <div><div class="rc-muted">Kinh nghiệm yêu cầu</div><div><?= h($req['experience_required'] ?: '-') ?></div></div>
             <div><div class="rc-muted">Mức độ ưu tiên</div><div><?= h($req['priority'] ?: '-') ?></div></div>
+            <div><div class="rc-muted">Người phê duyệt</div><div><?= !empty($req['approver_role']) ? h(hrm_role_label($req['approver_role'])) : '-' ?></div></div>
         </div>
         <div style="margin-top:12px"><div class="rc-muted">Lý do</div><div><?= nl2br(h($req['reason'] ?: '-')) ?></div></div>
         <?php if (!empty($req['jd'])): ?><div style="margin-top:12px"><div class="rc-muted">Mô tả công việc (JD)</div><div class="rc-rich"><?= $req['jd'] ?></div></div><?php endif; ?>

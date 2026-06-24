@@ -77,6 +77,7 @@ function hrm_schema(): array
         employment_type VARCHAR(32) DEFAULT '',
         experience_required VARCHAR(50) DEFAULT '',
         priority VARCHAR(16) DEFAULT 'Trung bình',
+        approver_role VARCHAR(32) DEFAULT '',
         status ENUM('draft','pending','approved','rejected','cancelled') NOT NULL DEFAULT 'draft',
         job_id INT DEFAULT 0,
         created_by INT NOT NULL,

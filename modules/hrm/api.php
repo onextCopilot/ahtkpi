@@ -35,16 +35,18 @@ switch ($action) {
         $emp         = trim($_POST['employment_type'] ?? '');
         $expr        = trim($_POST['experience_required'] ?? '');
         $prio        = trim($_POST['priority'] ?? '') ?: 'Trung bình';
+        $approver    = (string)($_POST['approver_role'] ?? ''); if (!isset(hrm_hrf_approver_roles()[$approver])) { $approver = ''; }
         $submit      = !empty($_POST['submit']);
 
-        if ($dept <= 0)       { jout(false, ['error' => 'Chọn bộ phận']); }
-        if ($level === '')    { jout(false, ['error' => 'Nhập Level']); }
-        if (!$needBy)         { jout(false, ['error' => 'Chọn ngày cần onboard']); }
-        if ($emp === '')      { jout(false, ['error' => 'Chọn hình thức làm việc']); }
+        if ($dept <= 0)             { jout(false, ['error' => 'Chọn bộ phận']); }
+        if ($level === '')          { jout(false, ['error' => 'Nhập Level']); }
+        if (!$needBy)               { jout(false, ['error' => 'Chọn ngày cần onboard']); }
+        if ($emp === '')            { jout(false, ['error' => 'Chọn hình thức làm việc']); }
+        if ($submit && $approver === '') { jout(false, ['error' => 'Chọn người phê duyệt']); }
 
         hrm_ensure_request_columns($conn);
-        $st = $conn->prepare('INSERT INTO hrm_requests (code,title,department_id,office_id,level,quantity,salary_min,salary_max,need_by_date,reason,jd,request_type,employment_type,experience_required,priority,status,created_by) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,"draft",?)');
-        $st->bind_param('ssiisiddsssssssi', $code, $title, $dept, $office, $level, $qty, $smin, $smax, $needBy, $reason, $jd, $type, $emp, $expr, $prio, $uid);
+        $st = $conn->prepare('INSERT INTO hrm_requests (code,title,department_id,office_id,level,quantity,salary_min,salary_max,need_by_date,reason,jd,request_type,employment_type,experience_required,priority,approver_role,status,created_by) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,"draft",?)');
+        $st->bind_param('ssiisiddssssssssi', $code, $title, $dept, $office, $level, $qty, $smin, $smax, $needBy, $reason, $jd, $type, $emp, $expr, $prio, $approver, $uid);
         if (!$st->execute()) { jout(false, ['error' => $conn->error]); }
         $id = $st->insert_id;
         hrm_audit($conn, $uid, 'hrf_create', 'hrf', $id, $code);
@@ -76,16 +78,18 @@ switch ($action) {
         $emp = trim($_POST['employment_type'] ?? '');
         $expr = trim($_POST['experience_required'] ?? '');
         $prio = trim($_POST['priority'] ?? '') ?: 'Trung bình';
+        $approver = (string)($_POST['approver_role'] ?? ''); if (!isset(hrm_hrf_approver_roles()[$approver])) { $approver = ''; }
         $submit = !empty($_POST['submit']);
 
         if ($dept <= 0)    { jout(false, ['error' => 'Chọn bộ phận']); }
         if ($level === '') { jout(false, ['error' => 'Nhập Level']); }
         if (!$needBy)      { jout(false, ['error' => 'Chọn ngày cần onboard']); }
         if ($emp === '')   { jout(false, ['error' => 'Chọn hình thức làm việc']); }
+        if ($submit && $approver === '') { jout(false, ['error' => 'Chọn người phê duyệt']); }
 
         hrm_ensure_request_columns($conn);
-        $st = $conn->prepare('UPDATE hrm_requests SET title=?,department_id=?,office_id=?,level=?,quantity=?,salary_min=?,salary_max=?,need_by_date=?,reason=?,jd=?,request_type=?,employment_type=?,experience_required=?,priority=? WHERE id=?');
-        $st->bind_param('siisiddsssssssi', $title, $dept, $office, $level, $qty, $smin, $smax, $needBy, $reason, $jd, $type, $emp, $expr, $prio, $id);
+        $st = $conn->prepare('UPDATE hrm_requests SET title=?,department_id=?,office_id=?,level=?,quantity=?,salary_min=?,salary_max=?,need_by_date=?,reason=?,jd=?,request_type=?,employment_type=?,experience_required=?,priority=?,approver_role=? WHERE id=?');
+        $st->bind_param('siisiddssssssssi', $title, $dept, $office, $level, $qty, $smin, $smax, $needBy, $reason, $jd, $type, $emp, $expr, $prio, $approver, $id);
         $st->execute();
         hrm_audit($conn, $uid, 'hrf_update', 'hrf', $id, '');
 
@@ -105,6 +109,7 @@ switch ($action) {
         if (!$req) { jout(false, ['error' => 'Không tìm thấy HRF']); }
         if ((int)$req['created_by'] !== $uid && ($_SESSION['role'] ?? '') !== 'admin') { jout(false, ['error' => 'Không có quyền']); }
         if ($req['status'] !== 'draft') { jout(false, ['error' => 'HRF đã được gửi']); }
+        if (!isset(hrm_hrf_approver_roles()[$req['approver_role'] ?? ''])) { jout(false, ['error' => 'Chọn người phê duyệt trước khi gửi']); }
         $n = hrm_approval_start($conn, 'hrf', $id, $req['request_type'], $uid);
         if ($n === 0) { jout(false, ['error' => 'Chưa cấu hình luồng duyệt HRF']); }
         jout(true, ['steps' => $n]);

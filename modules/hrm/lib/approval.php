@@ -15,8 +15,17 @@ require_once __DIR__ . '/events.php';
 /** Begin an approval chain for an entity. Returns number of steps created. */
 function hrm_approval_start(mysqli $conn, string $entityType, int $entityId, string $conditionKey, int $actorId): int
 {
-    // Load flow (fall back to the unconditioned flow).
-    $flow = hrm_approval_flow($conn, $entityType, $conditionKey);
+    // HRF: nếu người tạo đã chọn người phê duyệt (CDO/COO/CEO) thì duyệt 1 cấp tới role đó.
+    $flow = null;
+    if ($entityType === 'hrf') {
+        $rr = $conn->query('SELECT approver_role FROM hrm_requests WHERE id = ' . $entityId)->fetch_assoc();
+        $role = $rr['approver_role'] ?? '';
+        if (isset(hrm_hrf_approver_roles()[$role])) {
+            $flow = [['step_order' => 1, 'approver_role' => $role, 'sla_hours' => 48]];
+        }
+    }
+    // Mặc định: lấy luồng cấu hình (fallback luồng không điều kiện).
+    if (!$flow) { $flow = hrm_approval_flow($conn, $entityType, $conditionKey); }
     if (!$flow) { return 0; }
 
     // Clear any prior rows (re-submit), then create fresh.

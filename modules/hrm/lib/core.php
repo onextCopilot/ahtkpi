@@ -44,6 +44,7 @@ function hrm_roles(): array
         'head_of_department' => 'Head of Department',
         'bc_director'        => 'BC Director',
         'cdo'                => 'CDO',
+        'coo'                => 'COO',
         'cfo'                => 'CFO',
         'ceo'                => 'CEO',
     ];
@@ -145,6 +146,13 @@ function hrm_ensure_request_columns(mysqli $conn): void
     hrm_ensure_column($conn, 'hrm_requests', 'employment_type', "VARCHAR(32) DEFAULT ''");
     hrm_ensure_column($conn, 'hrm_requests', 'experience_required', "VARCHAR(50) DEFAULT ''");
     hrm_ensure_column($conn, 'hrm_requests', 'priority', "VARCHAR(16) DEFAULT 'Trung bình'");
+    hrm_ensure_column($conn, 'hrm_requests', 'approver_role', "VARCHAR(32) DEFAULT ''");
+}
+
+/** Các role được phép chọn làm người phê duyệt 1 cấp cho HRF. */
+function hrm_hrf_approver_roles(): array
+{
+    return ['cdo' => 'CDO', 'coo' => 'COO', 'ceo' => 'CEO'];
 }
 
 /**
