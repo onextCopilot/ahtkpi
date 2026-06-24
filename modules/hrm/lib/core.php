@@ -324,7 +324,7 @@ function hrm_resolve_persons(mysqli $conn, string $value): array
     $aliases = hrm_base_aliases();
     $st = $conn->prepare('SELECT id, full_name FROM users WHERE LOWER(full_name)=? OR LOWER(username)=? OR LOWER(email)=? ORDER BY (status="active") DESC LIMIT 1');
     $ids = []; $names = [];
-    foreach ($tokens as $tk) {
+    foreach ($tokens as $idx => $tk) {
         $h = mb_strtolower($tk);
         $aliasName = $aliases[$h] ?? null;
         $nm = mb_strtolower($aliasName ?? $tk);
@@ -336,8 +336,10 @@ function hrm_resolve_persons(mysqli $conn, string $value): array
             $names[] = $r['full_name'];
         } elseif ($aliasName !== null) {       // có trong bảng quy đổi (đã rời OS)
             $names[] = $aliasName;
+        } elseif ($idx === 0) {                // token đầu = phụ trách chính -> giữ handle dù chưa biết tên
+            $names[] = $tk;
         }
-        // token lạ -> bỏ qua
+        // token sau mà không phải người đã biết (java, pm...) -> bỏ qua
     }
     return ['ids' => array_values(array_unique($ids)), 'names' => array_values(array_unique($names))];
 }
