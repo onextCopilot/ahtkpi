@@ -1009,7 +1009,26 @@ switch ($action) {
                 $d = $conn->prepare('SELECT id FROM hrm_candidates WHERE dedup_key=? LIMIT 1');
                 $d->bind_param('s', $dedup); $d->execute(); $existing = $d->get_result()->fetch_assoc();
             }
-            if ($existing && $mode === 'skip') { $skip++; continue; } // bỏ qua trước -> không tải CV thừa
+            if ($existing && $mode === 'skip') {
+                $skip++;
+                // Vẫn BỔ SUNG CV cho hồ sơ cũ nếu nó chưa có CV (không đụng field khác).
+                if ($downloadCv && isset($set['cv_path']) && preg_match('#^https?://#i', $set['cv_path'][0])) {
+                    $cid0 = (int)$existing['id'];
+                    $cur = $conn->query("SELECT cv_path FROM hrm_candidates WHERE id=$cid0")->fetch_assoc();
+                    // Bổ sung khi chưa có CV, hoặc CV đang là link ngoài (chưa localize).
+                    if (empty($cur['cv_path']) || preg_match('#^https?://#i', $cur['cv_path'])) {
+                        $local = hrm_download_cv($set['cv_path'][0], $name);
+                        if ($local !== '') {
+                            $u = $conn->prepare('UPDATE hrm_candidates SET cv_path=? WHERE id=?'); $u->bind_param('si', $local, $cid0); $u->execute();
+                            $lbl = 'CV (import)';
+                            $q = $conn->prepare("INSERT INTO hrm_candidate_attachments (candidate_id,file_path,label,type,uploaded_by) VALUES (?,?,?, 'cv', ?)");
+                            $q->bind_param('issi', $cid0, $local, $lbl, $uid); $q->execute();
+                            $cvOk++;
+                        } else { $cvFail++; }
+                    }
+                }
+                continue;
+            }
 
             // Tải CV từ link ngoài về server (chỉ cho dòng sẽ ghi) -> thay cv_path bằng đường dẫn nội bộ.
             $cvLocal = '';
