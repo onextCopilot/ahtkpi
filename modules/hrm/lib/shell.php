@@ -203,6 +203,11 @@ function hrm_subnav(string $active, bool $isAdmin): void
             'KPI & Báo cáo', 'Recruitment KPI',
             [['kpi', 'Tổng quan KPI', '/hrm/kpi', '<line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/>']],
         ],
+        'candidates' => [
+            '<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><circle cx="18" cy="9" r="3"/><path d="m21.5 21-1.5-1.5"/>',
+            'Ứng viên', 'Kho ứng viên',
+            [['candidates', 'Kho ứng viên', '/hrm/candidates', '<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><circle cx="18" cy="9" r="3"/><path d="m21.5 21-1.5-1.5"/>']],
+        ],
     ];
 
     if (isset($simple[$active])) {

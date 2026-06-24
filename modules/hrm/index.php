@@ -28,7 +28,7 @@ $tiles = [
     ['Tuyển dụng', 'E-Hiring', '/hrm/recruitment', 'linear-gradient(135deg,#0e9f6e,#057a55)',
         '<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>',
         null],
-    ['Ứng viên', 'Kho nhân tài', '/hrm/candidates', 'linear-gradient(135deg,#06b6d4,#0e7490)',
+    ['Ứng viên', 'Kho ứng viên', '/hrm/candidates', 'linear-gradient(135deg,#06b6d4,#0e7490)',
         '<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><circle cx="18" cy="9" r="3"/><path d="m21.5 21-1.5-1.5"/>',
         null],
     ['Onboarding', 'Hội nhập 60 ngày', '/hrm/onboarding', 'linear-gradient(135deg,#3b82f6,#1d4ed8)',
