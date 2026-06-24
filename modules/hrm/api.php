@@ -851,6 +851,35 @@ switch ($action) {
         jout(true, ['n' => count($ids)]);
     }
 
+    /* ── Sự kiện tuyển dụng (nguồn ứng viên ngoài tin tuyển dụng) ───────── */
+    case 'event_save': {
+        hrm_ensure_candidate_module($conn);
+        $eid  = (int)($_POST['id'] ?? 0);
+        $name = trim($_POST['name'] ?? '');
+        if ($name === '') { jout(false, ['error' => 'Thiếu tên sự kiện']); }
+        $type = trim($_POST['type'] ?? '');
+        $date = ($_POST['event_date'] ?? '') ?: null;
+        $loc  = trim($_POST['location'] ?? '');
+        if ($eid > 0) {
+            $st = $conn->prepare('UPDATE hrm_events SET name=?, type=?, event_date=?, location=? WHERE id=?');
+            $st->bind_param('ssssi', $name, $type, $date, $loc, $eid);
+            $st->execute();
+        } else {
+            $st = $conn->prepare('INSERT INTO hrm_events (name,type,event_date,location) VALUES (?,?,?,?)');
+            $st->bind_param('ssss', $name, $type, $date, $loc);
+            $st->execute(); $eid = $st->insert_id;
+        }
+        hrm_audit($conn, $uid, 'event_save', 'event', $eid, $name);
+        jout(true, ['id' => $eid]);
+    }
+    case 'event_del': {
+        $eid = (int)($_POST['id'] ?? 0);
+        $n = (int)($conn->query("SELECT COUNT(*) c FROM hrm_candidates WHERE event_id=$eid")->fetch_assoc()['c'] ?? 0);
+        if ($n > 0) { $conn->query("UPDATE hrm_events SET active=0 WHERE id=$eid"); } // còn ứng viên -> ẩn
+        else        { $conn->query("DELETE FROM hrm_events WHERE id=$eid"); }
+        jout(true);
+    }
+
     case 'save_test': {
         $aid = (int)($_POST['application_id'] ?? 0);
         $type = trim($_POST['test_type'] ?? ''); $score = (float)($_POST['score'] ?? 0);

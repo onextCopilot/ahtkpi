@@ -113,6 +113,7 @@ $routes = [
     '/hrm/application' => 'modules/hrm/application.php',
     '/hrm/candidates' => 'modules/hrm/candidates.php',
     '/hrm/candidates/export' => 'modules/hrm/candidates_export.php',
+    '/hrm/events' => 'modules/hrm/events.php',
     '/hrm/candidate' => 'modules/hrm/candidate.php',
     '/hrm/onboarding' => 'modules/hrm/onboarding.php',
     '/hrm/onboarding-detail' => 'modules/hrm/onboarding_detail.php',
