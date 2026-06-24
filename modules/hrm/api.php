@@ -1091,17 +1091,20 @@ switch ($action) {
 
             $existing = null;
             if ($dedup !== '') {
-                $d = $conn->prepare('SELECT id FROM hrm_candidates WHERE dedup_key=? LIMIT 1');
+                $d = $conn->prepare('SELECT id, source_id, event_id, cv_path FROM hrm_candidates WHERE dedup_key=? LIMIT 1');
                 $d->bind_param('s', $dedup); $d->execute(); $existing = $d->get_result()->fetch_assoc();
             }
             if ($existing && $mode === 'skip') {
                 $skip++;
                 $cid0 = (int)$existing['id'];
-                // Vẫn BỔ SUNG CV cho hồ sơ cũ nếu nó chưa có CV (không đụng field khác).
+                // Bổ sung các trường còn TRỐNG cho hồ sơ cũ (không ghi đè dữ liệu đã có).
+                $bset = []; $bvals = []; $btypes = '';
+                if ((int)$existing['source_id'] === 0 && $srcId)  { $bset[] = 'source_id=?'; $bvals[] = $srcId;   $btypes .= 'i'; }
+                if ((int)$existing['event_id'] === 0 && $defEvent) { $bset[] = 'event_id=?';  $bvals[] = $defEvent; $btypes .= 'i'; }
+                if ($bset) { $bvals[] = $cid0; $btypes .= 'i'; $bu = $conn->prepare('UPDATE hrm_candidates SET ' . implode(',', $bset) . ' WHERE id=?'); $bu->bind_param($btypes, ...$bvals); $bu->execute(); }
+                // Bổ sung CV nếu hồ sơ cũ chưa có (hoặc còn link ngoài).
                 if ($downloadCv && isset($set['cv_path']) && preg_match('#^https?://#i', $set['cv_path'][0])) {
-                    $cur = $conn->query("SELECT cv_path FROM hrm_candidates WHERE id=$cid0")->fetch_assoc();
-                    // Bổ sung khi chưa có CV, hoặc CV đang là link ngoài (chưa localize).
-                    if (empty($cur['cv_path']) || preg_match('#^https?://#i', $cur['cv_path'])) {
+                    if (empty($existing['cv_path']) || preg_match('#^https?://#i', $existing['cv_path'])) {
                         $lbl = $cvLabelOf($set['cv_path'][0]);
                         $local = hrm_download_cv($set['cv_path'][0], $name);
                         if ($local !== '') {
