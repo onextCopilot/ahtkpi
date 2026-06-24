@@ -38,13 +38,13 @@ if (isset($_SESSION['user_id']) && isset($conn)) {
     }
 }
 
-// Check quyền HRM: admin, hr, Hyun Cao (backward-compat), hoặc được grant qua hrm_allowed_user_ids.
+// Check quyền HRM: hyun.cao + role hr luôn được vào; admin và role khác phải được grant qua hrm_allowed_user_ids.
 $_sidebar_can_hrm = false;
 if (isset($_SESSION['user_id']) && isset($conn)) {
     $_role    = $_SESSION['role'] ?? '';
     $_uname   = $_SESSION['username'] ?? '';
     $_fname   = $_SESSION['full_name'] ?? '';
-    if ($_role === 'admin' || $_role === 'hr' || $_uname === 'hyun.cao' || $_fname === 'Hyun Cao') {
+    if ($_role === 'hr' || $_uname === 'hyun.cao' || $_fname === 'Hyun Cao') {
         $_sidebar_can_hrm = true;
     } else {
         $hrmRes = $conn->query("SELECT setting_value FROM system_settings WHERE setting_key='hrm_allowed_user_ids' LIMIT 1");

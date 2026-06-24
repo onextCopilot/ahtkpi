@@ -7,8 +7,8 @@ require_once __DIR__ . '/../../../config/config.php';
 
 /**
  * Kiểm tra user hiện tại có quyền truy cập HRM không.
- * Trả true nếu: role admin | role hr | user_id trong hrm_allowed_user_ids (system_settings).
- * Cũng cho phép Hyun Cao (backward-compat) cho đến khi được grant qua UI.
+ * Luôn cho phép: hyun.cao + role hr.
+ * Admin và các role khác phải được grant rõ ràng qua hrm_allowed_user_ids (system_settings).
  */
 function hrm_can_access(mysqli $conn): bool
 {
@@ -17,9 +17,9 @@ function hrm_can_access(mysqli $conn): bool
     $username = $_SESSION['username'] ?? '';
     $name     = $_SESSION['full_name'] ?? '';
 
-    if ($role === 'admin' || $role === 'hr') { return true; }
-    // Backward-compat: Hyun Cao luôn có quyền.
+    // hyun.cao và role hr luôn có quyền.
     if ($username === 'hyun.cao' || $name === 'Hyun Cao') { return true; }
+    if ($role === 'hr') { return true; }
 
     // Kiểm tra danh sách user được grant quyền HRM.
     $res = $conn->query("SELECT setting_value FROM system_settings WHERE setting_key='hrm_allowed_user_ids' LIMIT 1");
