@@ -360,7 +360,7 @@ $stCol = ['new' => '#0071e3', 'active' => '#b45309', 'pooled' => '#7c3aed', 'hir
                         <td class="cd-sub"><?= h($c['dob'] ?: '-') ?></td>
                         <td class="cd-sub"><?= $c['applied_date'] ? date('d/m/Y', strtotime($c['applied_date'])) : '-' ?></td>
                         <td class="cd-sub"><?= h($c['applied_time'] ?: '-') ?></td>
-                        <td class="cd-sub"><?= h($c['interview_date'] ?: '-') ?></td>
+                        <td class="cd-sub cd-itv" title="<?= h($c['interview_date']) ?>"><?= h($c['interview_date'] ?: '-') ?></td>
                         <td class="cd-sub"><?= h($c['offer_date'] ?: '-') ?></td>
                         <td class="cd-sub"><?= h($c['offer_time'] ?: '-') ?></td>
                         <td class="cd-sub"><?= h($c['hired_date'] ?: '-') ?></td>
@@ -499,6 +499,12 @@ $stCol = ['new' => '#0071e3', 'active' => '#b45309', 'pooled' => '#7c3aed', 'hir
         max-width: 220px;
         overflow: hidden;
         text-overflow: ellipsis
+    }
+    .cd-itv {
+        max-width: 130px;
+        white-space: normal;
+        word-break: break-word;
+        line-height: 1.35
     }
 
     .cd-contact {
