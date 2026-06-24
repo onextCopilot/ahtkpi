@@ -682,6 +682,7 @@ while ($r = $sh_res_result->fetch_assoc()) {
                                         <option value="user" <?php echo ($user['role'] == 'user' || empty($user['role'])) ? 'selected' : ''; ?>>User</option>
                                         <option value="admin" <?php echo ($user['role'] == 'admin') ? 'selected' : ''; ?>>
                                             Admin</option>
+                                        <option value="hr" <?php echo ($user['role'] == 'hr') ? 'selected' : ''; ?>>HR (chỉ HRM + Tài liệu)</option>
                                     </select>
                                 </div>
                                 <div class="form-group">

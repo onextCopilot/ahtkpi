@@ -21,6 +21,9 @@ $_sidebar_mc_only = !empty($_SESSION['is_marketer'])
     && empty($_SESSION['can_view_invoice'])
     && (($_SESSION['role'] ?? '') !== 'admin');
 
+// Role HR bị giới hạn: chỉ thấy HRM + Tài liệu/Quy trình (+ Profile/Logout).
+$_is_hr = (($_SESSION['role'] ?? '') === 'hr');
+
 // Debts Check: chỉ Hyun Cao & nhantt được thấy/truy cập
 $_debts_check_ok = in_array(($_SESSION['full_name'] ?? ''), ['Hyun Cao', 'Nguyen Thi Thanh Nhan'], true)
     || in_array(strtolower($_SESSION['email'] ?? ''), ['hyun@arrowhitech.com', 'nhanntt@arrowhitech.com'], true);
@@ -61,6 +64,7 @@ function isMenuItemActive($path, $current_uri)
     </div>
 
     <nav class="sidebar-nav">
+        <?php if (!$_is_hr): ?>
         <!-- 1. Dashboard -->
         <a href="/dashboard" class="nav-item <?php echo isMenuItemActive('/dashboard', $current_uri); ?>">
             <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -331,8 +335,10 @@ function isMenuItemActive($path, $current_uri)
         </div>
         <?php endif; ?>
 
-        <!-- 8. Tuyển dụng (HRM) — chỉ hyun.cao -->
-        <?php if ((($_SESSION['username'] ?? '') === 'hyun.cao') || (($_SESSION['full_name'] ?? '') === 'Hyun Cao')): ?>
+        <?php endif; /* !$_is_hr: kết thúc nhóm module ẩn với role HR */ ?>
+
+        <!-- 8. Tuyển dụng (HRM) — hyun.cao hoặc role HR -->
+        <?php if ((($_SESSION['username'] ?? '') === 'hyun.cao') || (($_SESSION['full_name'] ?? '') === 'Hyun Cao') || $_is_hr): ?>
         <a href="/hrm" class="nav-item <?php echo (strpos($current_uri, '/hrm') !== false) ? 'active' : ''; ?>">
             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>

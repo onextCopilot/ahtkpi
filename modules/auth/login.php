@@ -50,7 +50,8 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                     $_SESSION['is_marketer'] = $user['is_marketer'] ?? 0;
                     $_SESSION['can_view_odoo_logs'] = $user['can_view_odoo_logs'] ?? 0;
 
-                    header("Location: /dashboard");
+                    $_landing = function_exists('app_restricted_role_home') ? app_restricted_role_home($user['role']) : '/dashboard';
+                    header("Location: " . $_landing);
                     exit();
                 } else {
                     $error = 'Incorrect username or password';

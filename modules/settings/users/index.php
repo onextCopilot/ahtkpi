@@ -963,6 +963,7 @@ if ($sl_tbl && $sl_tbl->num_rows > 0) {
                         <select name="role" id="role">
                             <option value="user">User</option>
                             <option value="admin">Admin</option>
+                            <option value="hr">HR (chỉ HRM + Tài liệu)</option>
                         </select>
                     </div>
                 </div>
