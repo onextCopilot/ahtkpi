@@ -155,6 +155,124 @@ function hrm_hrf_approver_roles(): array
     return ['cdo' => 'CDO', 'coo' => 'COO', 'ceo' => 'CEO'];
 }
 
+/* ── Candidate / Talent module (P1) ─────────────────────────────────────
+ * Mở rộng hrm_candidates + tạo các bảng phụ trợ. Idempotent, tự chạy trên live.
+ */
+function hrm_ensure_candidate_module(mysqli $conn): void
+{
+    // Cột bổ sung cho hồ sơ 360.
+    hrm_ensure_column($conn, 'hrm_candidates', 'status', "VARCHAR(20) DEFAULT 'new'");        // new/active/pooled/hired/blacklist/archived
+    hrm_ensure_column($conn, 'hrm_candidates', 'owner_id', 'INT DEFAULT 0');
+    hrm_ensure_column($conn, 'hrm_candidates', 'rating', 'TINYINT DEFAULT 0');
+    hrm_ensure_column($conn, 'hrm_candidates', 'linkedin_url', "VARCHAR(255) DEFAULT ''");
+    hrm_ensure_column($conn, 'hrm_candidates', 'portfolio_url', "VARCHAR(255) DEFAULT ''");
+    hrm_ensure_column($conn, 'hrm_candidates', 'location', "VARCHAR(150) DEFAULT ''");
+    hrm_ensure_column($conn, 'hrm_candidates', 'years_exp', 'DECIMAL(4,1) DEFAULT 0');
+    hrm_ensure_column($conn, 'hrm_candidates', 'event_id', 'INT DEFAULT 0');
+    hrm_ensure_column($conn, 'hrm_candidates', 'last_activity_at', 'DATETIME NULL');
+    hrm_ensure_column($conn, 'hrm_candidates', 'consent_status', "VARCHAR(20) DEFAULT ''");    // ''/given/withdrawn
+    hrm_ensure_column($conn, 'hrm_candidates', 'consent_at', 'DATETIME NULL');
+    hrm_ensure_column($conn, 'hrm_candidates', 'retention_until', 'DATE NULL');
+    hrm_ensure_column($conn, 'hrm_candidates', 'dedup_key', "VARCHAR(190) DEFAULT ''");
+    try {
+        $idx = $conn->query("SHOW INDEX FROM hrm_candidates WHERE Key_name='idx_dedup'");
+        if ($idx && $idx->num_rows === 0) { $conn->query("CREATE INDEX idx_dedup ON hrm_candidates (dedup_key)"); }
+    } catch (\Throwable $e) { /* index có thể đã tồn tại */ }
+
+    $tables = [
+        "CREATE TABLE IF NOT EXISTS hrm_candidate_skills (
+            id INT AUTO_INCREMENT PRIMARY KEY, candidate_id INT NOT NULL,
+            skill VARCHAR(80) NOT NULL, level VARCHAR(20) DEFAULT '',
+            KEY idx_cand (candidate_id), KEY idx_skill (skill)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4",
+        "CREATE TABLE IF NOT EXISTS hrm_candidate_experience (
+            id INT AUTO_INCREMENT PRIMARY KEY, candidate_id INT NOT NULL,
+            company VARCHAR(150) DEFAULT '', title VARCHAR(150) DEFAULT '',
+            period VARCHAR(60) DEFAULT '', summary TEXT, sort_order INT DEFAULT 0,
+            KEY idx_cand (candidate_id)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4",
+        "CREATE TABLE IF NOT EXISTS hrm_candidate_education (
+            id INT AUTO_INCREMENT PRIMARY KEY, candidate_id INT NOT NULL,
+            school VARCHAR(150) DEFAULT '', degree VARCHAR(100) DEFAULT '',
+            major VARCHAR(120) DEFAULT '', grad_year VARCHAR(10) DEFAULT '',
+            KEY idx_cand (candidate_id)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4",
+        "CREATE TABLE IF NOT EXISTS hrm_candidate_attachments (
+            id INT AUTO_INCREMENT PRIMARY KEY, candidate_id INT NOT NULL,
+            file_path VARCHAR(500) NOT NULL, label VARCHAR(150) DEFAULT '',
+            type VARCHAR(20) DEFAULT 'cv', is_primary TINYINT DEFAULT 0,
+            uploaded_by INT DEFAULT 0, created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            KEY idx_cand (candidate_id)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4",
+        "CREATE TABLE IF NOT EXISTS hrm_candidate_activities (
+            id INT AUTO_INCREMENT PRIMARY KEY, candidate_id INT NOT NULL,
+            type VARCHAR(20) DEFAULT 'note', body TEXT, actor_id INT DEFAULT 0,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            KEY idx_cand (candidate_id, created_at)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4",
+        "CREATE TABLE IF NOT EXISTS hrm_candidate_tags (
+            candidate_id INT NOT NULL, tag VARCHAR(60) NOT NULL,
+            PRIMARY KEY (candidate_id, tag), KEY idx_tag (tag)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4",
+        "CREATE TABLE IF NOT EXISTS hrm_candidate_reminders (
+            id INT AUTO_INCREMENT PRIMARY KEY, candidate_id INT NOT NULL,
+            due_at DATETIME NOT NULL, note VARCHAR(255) DEFAULT '', owner_id INT DEFAULT 0,
+            done TINYINT DEFAULT 0, created_by INT DEFAULT 0, created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            KEY idx_cand (candidate_id), KEY idx_due (owner_id, done, due_at)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4",
+        "CREATE TABLE IF NOT EXISTS hrm_events (
+            id INT AUTO_INCREMENT PRIMARY KEY, name VARCHAR(150) NOT NULL,
+            type VARCHAR(40) DEFAULT '', event_date DATE NULL, location VARCHAR(150) DEFAULT '',
+            active TINYINT DEFAULT 1, created_at DATETIME DEFAULT CURRENT_TIMESTAMP) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4",
+        "CREATE TABLE IF NOT EXISTS hrm_candidate_merges (
+            id INT AUTO_INCREMENT PRIMARY KEY, kept_id INT NOT NULL, merged_id INT NOT NULL,
+            payload MEDIUMTEXT, actor_id INT DEFAULT 0, created_at DATETIME DEFAULT CURRENT_TIMESTAMP) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4",
+        "CREATE TABLE IF NOT EXISTS hrm_saved_segments (
+            id INT AUTO_INCREMENT PRIMARY KEY, name VARCHAR(120) NOT NULL, owner_id INT DEFAULT 0,
+            filter_json TEXT, shared TINYINT DEFAULT 0, created_at DATETIME DEFAULT CURRENT_TIMESTAMP) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4",
+    ];
+    foreach ($tables as $sql) { $conn->query($sql); }
+}
+
+/** Chuẩn hóa khóa chống trùng từ email/sđt. */
+function hrm_candidate_dedup_key(string $email, string $phone): string
+{
+    $email = strtolower(trim($email));
+    $phone = preg_replace('/[^0-9]/', '', $phone);
+    if ($phone !== '' && strlen($phone) >= 8) { $phone = ltrim($phone, '0'); }
+    return $email !== '' ? 'e:' . $email : ($phone !== '' ? 'p:' . $phone : '');
+}
+
+/** Trạng thái kho ứng viên + nhãn. */
+function hrm_candidate_statuses(): array
+{
+    return ['new' => 'Mới', 'active' => 'Đang xử lý', 'pooled' => 'Talent pool',
+            'hired' => 'Đã tuyển', 'blacklist' => 'Blacklist', 'archived' => 'Lưu trữ'];
+}
+
+/** Ghi 1 dòng vào timeline ứng viên + cập nhật mốc hoạt động gần nhất. */
+function hrm_cand_activity(mysqli $conn, int $cid, string $type, string $body, int $actor): void
+{
+    $st = $conn->prepare('INSERT INTO hrm_candidate_activities (candidate_id,type,body,actor_id) VALUES (?,?,?,?)');
+    $st->bind_param('issi', $cid, $type, $body, $actor);
+    $st->execute();
+    $conn->query('UPDATE hrm_candidates SET last_activity_at=NOW() WHERE id=' . $cid);
+}
+
+/**
+ * Lưu file upload cho ứng viên vào uploads/hrm/<sub>/Y/m. Trả về [path|null, error|''].
+ * $field = tên field trong $_FILES.
+ */
+function hrm_save_upload(string $field, string $sub = 'docs', array $allowed = ['pdf','doc','docx','png','jpg','jpeg']): array
+{
+    if (empty($_FILES[$field]['tmp_name']) || ($_FILES[$field]['error'] ?? 1) !== UPLOAD_ERR_OK) {
+        return [null, 'Chưa chọn file hợp lệ'];
+    }
+    $ext = strtolower(pathinfo($_FILES[$field]['name'], PATHINFO_EXTENSION));
+    if (!in_array($ext, $allowed, true)) { return [null, 'Định dạng không hỗ trợ (.' . $ext . ')']; }
+    if ($_FILES[$field]['size'] > 10 * 1024 * 1024) { return [null, 'File quá 10MB']; }
+    $rel = '/uploads/hrm/' . $sub . '/' . date('Y/m');
+    $dir = __DIR__ . '/../../../' . $rel;
+    if (!is_dir($dir)) { @mkdir($dir, 0777, true); }
+    $base = preg_replace('/[^a-zA-Z0-9_-]/', '_', pathinfo($_FILES[$field]['name'], PATHINFO_FILENAME));
+    $safe = $base . '_' . time() . '.' . $ext;
+    if (!move_uploaded_file($_FILES[$field]['tmp_name'], $dir . '/' . $safe)) { return [null, 'Lưu file thất bại']; }
+    return [$rel . '/' . $safe, ''];
+}
+
 /**
  * Áp 1 lần nội dung chuẩn cho email phê duyệt HRF lên live (bản gõ tay có thể bị lỗi link).
  * Có cờ trong hrm_settings nên chỉ chạy một lần, không đè chỉnh sửa thủ công về sau.

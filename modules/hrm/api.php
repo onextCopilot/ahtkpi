@@ -669,36 +669,186 @@ switch ($action) {
 
     /* ── Sửa thông tin ứng viên (ghi audit thay đổi) ─────────────────── */
     case 'update_candidate': {
+        hrm_ensure_candidate_module($conn);
         $cid = (int)($_POST['candidate_id'] ?? 0);
         if (!$cid) { jout(false, ['error' => 'Thiếu ứng viên']); }
         $old = $conn->query("SELECT * FROM hrm_candidates WHERE id=$cid")->fetch_assoc();
         if (!$old) { jout(false, ['error' => 'Không tìm thấy ứng viên']); }
         $name = trim($_POST['full_name'] ?? '');
         if ($name === '') { jout(false, ['error' => 'Thiếu họ tên']); }
-        $email = trim($_POST['email'] ?? '');
-        $phone = trim($_POST['phone'] ?? '');
-        $pos   = trim($_POST['current_position'] ?? '');
-        $gender= trim($_POST['gender'] ?? '');
-        $dob   = trim($_POST['dob'] ?? '');
-        $score = (float)($_POST['score'] ?? 0);
-        $src   = (int)($_POST['source_id'] ?? 0);
+        $f = fn($k) => trim($_POST[$k] ?? '');
+        $email = $f('email'); $phone = $f('phone');
+        $statuses = hrm_candidate_statuses();
+        $status = isset($statuses[$_POST['status'] ?? '']) ? $_POST['status'] : ($old['status'] ?: 'new');
+        $dedup = hrm_candidate_dedup_key($email, $phone);
 
-        // Diff để ghi audit.
-        $labels = ['full_name'=>'Họ tên','email'=>'Email','phone'=>'SĐT','current_position'=>'Vị trí','gender'=>'Giới tính','dob'=>'Ngày sinh'];
-        $newvals = ['full_name'=>$name,'email'=>$email,'phone'=>$phone,'current_position'=>$pos,'gender'=>$gender,'dob'=>$dob];
-        $changes = [];
-        foreach ($labels as $f => $lbl) {
-            if ((string)($old[$f] ?? '') !== (string)$newvals[$f]) { $changes[] = $lbl . ': "' . ($old[$f] ?? '') . '" → "' . $newvals[$f] . '"'; }
-        }
-        if ((float)$old['score'] !== $score) { $changes[] = 'Điểm: ' . (float)$old['score'] . ' → ' . $score; }
-        if ((int)$old['source_id'] !== $src) { $changes[] = 'Đổi nguồn'; }
-
-        $st = $conn->prepare('UPDATE hrm_candidates SET full_name=?, email=?, phone=?, current_position=?, gender=?, dob=?, score=?, source_id=? WHERE id=?');
-        $st->bind_param('ssssssdii', $name, $email, $phone, $pos, $gender, $dob, $score, $src, $cid);
+        $st = $conn->prepare('UPDATE hrm_candidates SET full_name=?, email=?, phone=?, current_position=?, gender=?, dob=?,
+            score=?, source_id=?, status=?, owner_id=?, rating=?, linkedin_url=?, portfolio_url=?, location=?, years_exp=?,
+            event_id=?, expected_salary=?, notice_period=?, languages=?, classification=?, notes=?, dedup_key=? WHERE id=?');
+        $score = (float)($_POST['score'] ?? 0); $src = (int)($_POST['source_id'] ?? 0);
+        $owner = (int)($_POST['owner_id'] ?? 0); $rating = (int)($_POST['rating'] ?? 0);
+        $years = (float)($_POST['years_exp'] ?? 0); $event = (int)($_POST['event_id'] ?? 0);
+        $pos=$f('current_position'); $gender=$f('gender'); $dob=$f('dob'); $li=$f('linkedin_url');
+        $pf=$f('portfolio_url'); $loc=$f('location'); $exp=$f('expected_salary'); $np=$f('notice_period');
+        $lang=$f('languages'); $cls=$f('classification'); $notes=$f('notes');
+        $types = 'ssssss' . 'di' . 's' . 'ii' . 'sss' . 'd' . 'i' . 'sssss' . 's' . 'i';
+        $st->bind_param($types, $name,$email,$phone,$pos,$gender,$dob, $score,$src, $status, $owner,$rating,
+            $li,$pf,$loc, $years, $event, $exp,$np,$lang,$cls,$notes, $dedup, $cid);
         if (!$st->execute()) { jout(false, ['error' => $conn->error]); }
 
-        if ($changes) { hrm_audit($conn, $uid, 'candidate_update', 'candidate', $cid, implode(' · ', $changes)); }
+        $changes = [];
+        foreach (['full_name'=>'Họ tên','email'=>'Email','phone'=>'SĐT','status'=>'Trạng thái'] as $k=>$lbl) {
+            $nv = $k==='status' ? $status : ($k==='full_name'?$name:($k==='email'?$email:$phone));
+            if ((string)($old[$k] ?? '') !== (string)$nv) { $changes[] = $lbl; }
+        }
+        if ($changes) {
+            hrm_audit($conn, $uid, 'candidate_update', 'candidate', $cid, implode(', ', $changes));
+            hrm_cand_activity($conn, $cid, 'update', 'Cập nhật: ' . implode(', ', $changes), $uid);
+        }
         jout(true);
+    }
+
+    /* ════════════════ Candidate / Talent module (P1) ══════════════════ */
+    case 'cand_create': {
+        hrm_ensure_candidate_module($conn);
+        $name = trim($_POST['full_name'] ?? '');
+        if ($name === '') { jout(false, ['error' => 'Thiếu họ tên']); }
+        $email = trim($_POST['email'] ?? ''); $phone = trim($_POST['phone'] ?? '');
+        $src = (int)($_POST['source_id'] ?? 0); $event = (int)($_POST['event_id'] ?? 0);
+        $pos = trim($_POST['current_position'] ?? '');
+        $dedup = hrm_candidate_dedup_key($email, $phone);
+        // Chống trùng: nếu trùng email/sđt -> báo về để người dùng quyết định.
+        if ($dedup !== '' && empty($_POST['force'])) {
+            $d = $conn->prepare('SELECT id, full_name FROM hrm_candidates WHERE dedup_key=? LIMIT 1');
+            $d->bind_param('s', $dedup); $d->execute();
+            if ($dup = $d->get_result()->fetch_assoc()) {
+                jout(false, ['error' => 'Trùng với ứng viên "' . $dup['full_name'] . '". Mở hồ sơ đó hoặc bấm lại để vẫn tạo.', 'dup_id' => (int)$dup['id']]);
+            }
+        }
+        $st = $conn->prepare("INSERT INTO hrm_candidates (full_name,email,phone,source_id,event_id,current_position,status,owner_id,dedup_key,created_by,last_activity_at) VALUES (?,?,?,?,?,?, 'new', ?, ?, ?, NOW())");
+        $st->bind_param('sssiisiii', $name,$email,$phone,$src,$event,$pos,$uid,$dedup,$uid);
+        if (!$st->execute()) { jout(false, ['error' => $conn->error]); }
+        $cid = $st->insert_id;
+        hrm_cand_activity($conn, $cid, 'create', 'Tạo hồ sơ ứng viên', $uid);
+        hrm_audit($conn, $uid, 'candidate_create', 'candidate', $cid, $name);
+        jout(true, ['id' => $cid]);
+    }
+
+    case 'cand_activity_add': {
+        $cid = (int)($_POST['candidate_id'] ?? 0);
+        $body = trim($_POST['body'] ?? '');
+        $type = in_array($_POST['type'] ?? '', ['note','call','email','meeting'], true) ? $_POST['type'] : 'note';
+        if (!$cid || $body === '') { jout(false, ['error' => 'Thiếu nội dung']); }
+        hrm_cand_activity($conn, $cid, $type, $body, $uid);
+        jout(true);
+    }
+
+    case 'cand_reminder_add': {
+        $cid = (int)($_POST['candidate_id'] ?? 0);
+        $due = trim($_POST['due_at'] ?? ''); $note = trim($_POST['note'] ?? '');
+        if (!$cid || $due === '') { jout(false, ['error' => 'Thiếu thời gian']); }
+        $owner = (int)($_POST['owner_id'] ?? $uid) ?: $uid;
+        $st = $conn->prepare('INSERT INTO hrm_candidate_reminders (candidate_id,due_at,note,owner_id,created_by) VALUES (?,?,?,?,?)');
+        $st->bind_param('issii', $cid, $due, $note, $owner, $uid);
+        $st->execute();
+        hrm_cand_activity($conn, $cid, 'note', 'Đặt nhắc việc: ' . ($note ?: $due), $uid);
+        jout(true);
+    }
+    case 'cand_reminder_done': {
+        $rid = (int)($_POST['reminder_id'] ?? 0);
+        $conn->query('UPDATE hrm_candidate_reminders SET done=1 WHERE id=' . $rid);
+        jout(true);
+    }
+
+    case 'cand_skill_add': {
+        $cid = (int)($_POST['candidate_id'] ?? 0); $skill = trim($_POST['skill'] ?? '');
+        $level = trim($_POST['level'] ?? '');
+        if (!$cid || $skill === '') { jout(false, ['error' => 'Thiếu kỹ năng']); }
+        $st = $conn->prepare('INSERT INTO hrm_candidate_skills (candidate_id,skill,level) VALUES (?,?,?)');
+        $st->bind_param('iss', $cid, $skill, $level); $st->execute();
+        jout(true, ['id' => $st->insert_id]);
+    }
+    case 'cand_skill_del': { $conn->query('DELETE FROM hrm_candidate_skills WHERE id=' . (int)($_POST['id'] ?? 0)); jout(true); }
+
+    case 'cand_exp_add': {
+        $cid = (int)($_POST['candidate_id'] ?? 0);
+        if (!$cid) { jout(false, ['error' => 'Thiếu ứng viên']); }
+        $co=trim($_POST['company']??''); $ti=trim($_POST['title']??''); $pe=trim($_POST['period']??''); $sm=trim($_POST['summary']??'');
+        $st = $conn->prepare('INSERT INTO hrm_candidate_experience (candidate_id,company,title,period,summary) VALUES (?,?,?,?,?)');
+        $st->bind_param('issss', $cid,$co,$ti,$pe,$sm); $st->execute();
+        jout(true, ['id' => $st->insert_id]);
+    }
+    case 'cand_exp_del': { $conn->query('DELETE FROM hrm_candidate_experience WHERE id=' . (int)($_POST['id'] ?? 0)); jout(true); }
+
+    case 'cand_edu_add': {
+        $cid = (int)($_POST['candidate_id'] ?? 0);
+        if (!$cid) { jout(false, ['error' => 'Thiếu ứng viên']); }
+        $sc=trim($_POST['school']??''); $dg=trim($_POST['degree']??''); $mj=trim($_POST['major']??''); $yr=trim($_POST['grad_year']??'');
+        $st = $conn->prepare('INSERT INTO hrm_candidate_education (candidate_id,school,degree,major,grad_year) VALUES (?,?,?,?,?)');
+        $st->bind_param('issss', $cid,$sc,$dg,$mj,$yr); $st->execute();
+        jout(true, ['id' => $st->insert_id]);
+    }
+    case 'cand_edu_del': { $conn->query('DELETE FROM hrm_candidate_education WHERE id=' . (int)($_POST['id'] ?? 0)); jout(true); }
+
+    case 'cand_tag_add': {
+        $cid = (int)($_POST['candidate_id'] ?? 0); $tag = trim($_POST['tag'] ?? '');
+        if (!$cid || $tag === '') { jout(false, ['error' => 'Thiếu thẻ']); }
+        $st = $conn->prepare('INSERT IGNORE INTO hrm_candidate_tags (candidate_id,tag) VALUES (?,?)');
+        $st->bind_param('is', $cid, $tag); $st->execute();
+        jout(true);
+    }
+    case 'cand_tag_del': {
+        $cid = (int)($_POST['candidate_id'] ?? 0); $tag = trim($_POST['tag'] ?? '');
+        $st = $conn->prepare('DELETE FROM hrm_candidate_tags WHERE candidate_id=? AND tag=?');
+        $st->bind_param('is', $cid, $tag); $st->execute();
+        jout(true);
+    }
+
+    case 'cand_attach_add': {
+        hrm_ensure_candidate_module($conn);
+        $cid = (int)($_POST['candidate_id'] ?? 0);
+        if (!$cid) { jout(false, ['error' => 'Thiếu ứng viên']); }
+        [$path, $err] = hrm_save_upload('file', 'attachments');
+        if (!$path) { jout(false, ['error' => $err]); }
+        $label = trim($_POST['label'] ?? '') ?: basename($path);
+        $type = in_array($_POST['type'] ?? '', ['cv','cert','portfolio','other'], true) ? $_POST['type'] : 'cv';
+        $st = $conn->prepare('INSERT INTO hrm_candidate_attachments (candidate_id,file_path,label,type,uploaded_by) VALUES (?,?,?,?,?)');
+        $st->bind_param('isssi', $cid,$path,$label,$type,$uid); $st->execute();
+        // Nếu chưa có CV chính, đặt file CV đầu tiên làm cv_path.
+        if ($type === 'cv') {
+            $cur = $conn->query("SELECT cv_path FROM hrm_candidates WHERE id=$cid")->fetch_assoc();
+            if (empty($cur['cv_path'])) {
+                $u = $conn->prepare('UPDATE hrm_candidates SET cv_path=? WHERE id=?'); $u->bind_param('si', $path, $cid); $u->execute();
+            }
+        }
+        hrm_cand_activity($conn, $cid, 'note', 'Tải lên tệp: ' . $label, $uid);
+        jout(true, ['id' => $st->insert_id, 'path' => $path]);
+    }
+    case 'cand_attach_del': { $conn->query('DELETE FROM hrm_candidate_attachments WHERE id=' . (int)($_POST['id'] ?? 0)); jout(true); }
+
+    case 'cand_bulk': {
+        hrm_ensure_candidate_module($conn);
+        $ids = array_values(array_filter(array_map('intval', explode(',', $_POST['ids'] ?? ''))));
+        $op  = $_POST['op'] ?? '';
+        if (!$ids) { jout(false, ['error' => 'Chưa chọn ứng viên']); }
+        $in = implode(',', $ids);
+        if ($op === 'tag') {
+            $tag = trim($_POST['value'] ?? ''); if ($tag === '') { jout(false, ['error' => 'Thiếu thẻ']); }
+            $stmt = $conn->prepare('INSERT IGNORE INTO hrm_candidate_tags (candidate_id,tag) VALUES (?,?)');
+            foreach ($ids as $cid) { $stmt->bind_param('is', $cid, $tag); $stmt->execute(); }
+        } elseif ($op === 'status') {
+            $v = $_POST['value'] ?? ''; if (!isset(hrm_candidate_statuses()[$v])) { jout(false, ['error' => 'Trạng thái không hợp lệ']); }
+            $conn->query("UPDATE hrm_candidates SET status='" . $conn->real_escape_string($v) . "' WHERE id IN ($in)");
+        } elseif ($op === 'pool') {
+            $conn->query("UPDATE hrm_candidates SET talent_pool=1, status=IF(status='new','pooled',status) WHERE id IN ($in)");
+        } elseif ($op === 'owner') {
+            $v = (int)($_POST['value'] ?? 0);
+            $conn->query("UPDATE hrm_candidates SET owner_id=$v WHERE id IN ($in)");
+        } elseif ($op === 'delete') {
+            $conn->query("UPDATE hrm_candidates SET status='archived' WHERE id IN ($in)");
+        } else { jout(false, ['error' => 'Thao tác không hợp lệ']); }
+        hrm_audit($conn, $uid, 'candidate_bulk', 'candidate', 0, $op . ' x' . count($ids));
+        jout(true, ['n' => count($ids)]);
     }
 
     case 'save_test': {
