@@ -25,10 +25,10 @@ function hrm_candidate_filters(): array
 }
 
 /** Trả về danh sách ứng viên + cột phụ trợ theo bộ lọc. */
-function hrm_candidate_query(mysqli $conn, array $f, int $limit = 500): array
+/** Dựng mệnh đề WHERE dùng chung cho query + count. Trả [whereSql, params, types]. */
+function hrm_candidate_where(array $f): array
 {
     $where = []; $params = []; $types = '';
-
     if ($f['ids'] !== '') {
         $ids = array_values(array_filter(array_map('intval', explode(',', $f['ids']))));
         if ($ids) { $where[] = 'c.id IN (' . implode(',', $ids) . ')'; }
@@ -49,10 +49,24 @@ function hrm_candidate_query(mysqli $conn, array $f, int $limit = 500): array
     if ($f['to'] !== '')   { $where[] = 'DATE(c.created_at) <= ?'; $params[] = $f['to'];   $types .= 's'; }
     if ($f['tag'] !== '')   { $where[] = 'EXISTS (SELECT 1 FROM hrm_candidate_tags t WHERE t.candidate_id=c.id AND t.tag=?)'; $params[] = $f['tag']; $types .= 's'; }
     if ($f['skill'] !== '') { $where[] = 'EXISTS (SELECT 1 FROM hrm_candidate_skills sk WHERE sk.candidate_id=c.id AND sk.skill LIKE ?)'; $params[] = '%' . $f['skill'] . '%'; $types .= 's'; }
-
     // Mặc định ẩn ứng viên đã lưu trữ trừ khi lọc đúng trạng thái đó.
     if ($f['status'] !== 'archived') { $where[] = "c.status <> 'archived'"; }
+    return [$where ? ' WHERE ' . implode(' AND ', $where) : '', $params, $types];
+}
 
+/** Đếm tổng ứng viên khớp bộ lọc (cho phân trang). */
+function hrm_candidate_count(mysqli $conn, array $f): int
+{
+    [$whereSql, $params, $types] = hrm_candidate_where($f);
+    $st = $conn->prepare('SELECT COUNT(*) c FROM hrm_candidates c' . $whereSql);
+    if ($types) { $st->bind_param($types, ...$params); }
+    $st->execute();
+    return (int)($st->get_result()->fetch_assoc()['c'] ?? 0);
+}
+
+function hrm_candidate_query(mysqli $conn, array $f, int $limit = 50, int $offset = 0): array
+{
+    [$whereSql, $params, $types] = hrm_candidate_where($f);
     $sql = "SELECT c.*, s.name AS source_name, ev.name AS event_name, u.full_name AS owner_name,
             (SELECT GROUP_CONCAT(t.tag SEPARATOR ',') FROM hrm_candidate_tags t WHERE t.candidate_id=c.id) AS tag_list,
             (SELECT GROUP_CONCAT(p.name SEPARATOR ',') FROM hrm_candidate_pools cp JOIN hrm_pools p ON p.id=cp.pool_id WHERE cp.candidate_id=c.id AND p.active=1) AS pool_list,
@@ -63,8 +77,8 @@ function hrm_candidate_query(mysqli $conn, array $f, int $limit = 500): array
             LEFT JOIN hrm_candidate_sources s ON s.id=c.source_id
             LEFT JOIN hrm_events ev ON ev.id=c.event_id
             LEFT JOIN users u ON u.id=c.owner_id"
-         . ($where ? ' WHERE ' . implode(' AND ', $where) : '')
-         . ' ORDER BY c.id DESC LIMIT ' . (int)$limit;
+         . $whereSql
+         . ' ORDER BY c.id DESC LIMIT ' . (int)$limit . ' OFFSET ' . (int)$offset;
     $st = $conn->prepare($sql);
     if ($types) { $st->bind_param($types, ...$params); }
     $st->execute();

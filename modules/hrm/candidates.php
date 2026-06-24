@@ -10,10 +10,18 @@ hrm_ensure_candidate_module($conn);
 
 $f = hrm_candidate_filters();
 $opts = hrm_candidate_filter_options($conn);
-$rows = hrm_candidate_query($conn, $f, 500);
 $statuses = hrm_candidate_statuses();
-$total = (int) ($conn->query("SELECT COUNT(*) c FROM hrm_candidates WHERE status<>'archived'")->fetch_assoc()['c'] ?? 0);
+
+// Phân trang.
+$perPage = in_array((int) ($_GET['pp'] ?? 50), [50, 100], true) ? (int) $_GET['pp'] : 50;
+$matched = hrm_candidate_count($conn, $f);
+$pages   = max(1, (int) ceil($matched / $perPage));
+$page    = min(max(1, (int) ($_GET['p'] ?? 1)), $pages);
+$offset  = ($page - 1) * $perPage;
+$rows    = hrm_candidate_query($conn, $f, $perPage, $offset);
+$total   = $matched;
 $qs = http_build_query(array_filter($f, fn($v) => $v !== '' && $v !== 0 && $v !== -1));
+$pageQs = $qs . ($qs ? '&' : '') . 'pp=' . $perPage; // giữ filter + page size cho link trang
 
 // Pipeline cho cột "Giai đoạn hiện tại" (track = các bước không phải "Từ chối").
 $pipe = $conn->query("SELECT name,code,stage_type,sort_order FROM hrm_pipeline_stages ORDER BY sort_order")->fetch_all(MYSQLI_ASSOC);
@@ -53,12 +61,29 @@ $stageCell = function ($name) use ($posByName, $typeByName, $trackTotal) {
 $icMail = '<svg viewBox="0 0 24 24" class="cd-ic"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-10 5L2 7"/></svg>';
 $icPhone = '<svg viewBox="0 0 24 24" class="cd-ic"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.13.96.36 1.9.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.91.34 1.85.57 2.81.7A2 2 0 0 1 22 16.92z"/></svg>';
 
-hrm_header('Ứng viên', 'Kho ứng viên (' . $total . ')', 'candidates');
+hrm_header('Ứng viên', 'Kho ứng viên (' . $total . ')'); // không dùng sidebar trái -> rộng hết khổ
 ?>
+<!-- Nav ngang riêng cho trang Kho ứng viên (thay sidebar trái để có nhiều không gian) -->
+<div class="cd-topnav">
+    <a href="/hrm" class="cd-tnav-back" title="Tất cả ứng dụng"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg></a>
+    <a href="/hrm/candidates" class="cd-tnav-item active">Kho ứng viên</a>
+    <a href="/hrm/pools" class="cd-tnav-item">Talent pools</a>
+    <a href="/hrm/events" class="cd-tnav-item">Sự kiện</a>
+</div>
+<style>
+.cd-topnav{display:flex;align-items:center;gap:6px;margin-bottom:14px;border-bottom:1px solid #e5e9ef;padding-bottom:2px;flex-wrap:wrap}
+.cd-tnav-back{display:inline-flex;align-items:center;justify-content:center;width:34px;height:34px;border-radius:8px;color:#64748b;margin-right:4px}
+.cd-tnav-back:hover{background:#f1f5f9;color:#0f172a}
+.cd-tnav-back svg{width:17px;height:17px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.cd-tnav-item{padding:9px 16px;font-size:13.5px;font-weight:600;color:#64748b;text-decoration:none;border-bottom:2px solid transparent;margin-bottom:-3px}
+.cd-tnav-item:hover{color:#0f172a}
+.cd-tnav-item.active{color:#0e9f6e;border-bottom-color:#0e9f6e}
+</style>
 <!-- ── Toolbar ──────────────────────────────────────────────────────── -->
 <div class="cdf-wrap">
     <!-- Hàng 1: Tìm kiếm + bộ lọc chính + actions -->
     <form class="cdf-row cdf-row1" method="get" id="filterForm">
+        <input type="hidden" name="pp" value="<?= $perPage ?>">
         <div class="cdf-search-wrap">
             <svg class="cdf-search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
             <input name="q" value="<?= h($f['q']) ?>" placeholder="Tìm tên, email, SĐT, vị trí..." class="cdf-search" id="cdf-q" autocomplete="off">
@@ -374,7 +399,34 @@ $stCol = ['new' => '#0071e3', 'active' => '#b45309', 'pooled' => '#7c3aed', 'hir
             </tbody>
         </table>
     </div>
+    <!-- Phân trang -->
+    <div class="cd-pager">
+        <div class="cd-pager-info">
+            <?= number_format($offset + 1) ?>–<?= number_format(min($offset + $perPage, $matched)) ?> / <b><?= number_format($matched) ?></b>
+            <span class="cd-pager-pp">· Mỗi trang:
+                <?php foreach ([50, 100] as $pp): ?>
+                    <?php if ($pp === $perPage): ?><b><?= $pp ?></b><?php else: ?><a href="/hrm/candidates?<?= h($qs . ($qs ? '&' : '')) ?>pp=<?= $pp ?>"><?= $pp ?></a><?php endif; ?>
+                <?php endforeach; ?>
+            </span>
+        </div>
+        <div class="cd-pager-nav">
+            <?php $mk = fn($p) => '/hrm/candidates?' . h($pageQs) . '&p=' . $p; ?>
+            <a class="cd-pg<?= $page <= 1 ? ' off' : '' ?>" href="<?= $page <= 1 ? '#' : $mk($page - 1) ?>">‹ Trước</a>
+            <span class="cd-pg-cur">Trang <?= $page ?>/<?= $pages ?></span>
+            <a class="cd-pg<?= $page >= $pages ? ' off' : '' ?>" href="<?= $page >= $pages ? '#' : $mk($page + 1) ?>">Sau ›</a>
+        </div>
+    </div>
 <?php endif; ?>
+<style>
+.cd-pager{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-top:14px;font-size:13px;color:#475569}
+.cd-pager-pp{color:#94a3b8;margin-left:6px}
+.cd-pager-pp a{color:#0e7490;text-decoration:none;margin:0 2px}
+.cd-pager-nav{display:flex;align-items:center;gap:10px}
+.cd-pg{padding:7px 14px;border:1px solid var(--bd);border-radius:8px;text-decoration:none;color:#334155;font-weight:600;background:#fff}
+.cd-pg:hover{background:#f4f6f9}
+.cd-pg.off{opacity:.4;pointer-events:none}
+.cd-pg-cur{color:#64748b}
+</style>
 <script>
     document.querySelectorAll('.cd-go').forEach(td => td.addEventListener('click', function () {
         const tr = this.closest('tr'); if (tr) location.href = '/hrm/candidate?id=' + tr.dataset.id;
