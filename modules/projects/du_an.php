@@ -195,7 +195,7 @@ function sortTh2($label, $col, $currentSort, $currentDir, $extraGetParams = []) 
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>My Project - AHT KPI</title>
+    <title>Projects - AHT KPI</title>
     <link rel="stylesheet" href="../../assets/css/dashboard.css">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
@@ -320,7 +320,7 @@ function sortTh2($label, $col, $currentSort, $currentDir, $extraGetParams = []) 
             <div class="page-header-left">
                 <div class="page-icon"><i class="fas fa-trophy"></i></div>
                 <div class="page-title">
-                    <h1>My Project</h1>
+                    <h1>Projects</h1>
                     <p>Business Plans đã Deal Won từ Odoo CRM</p>
                 </div>
             </div>

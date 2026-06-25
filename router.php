@@ -131,6 +131,7 @@ $routes = [
     '/presale' => 'modules/presale/index.php',
     '/presale/ajax-handler' => 'modules/presale/ajax_handler.php',
     '/tai-lieu-quy-trinh' => 'modules/documents/tai_lieu_quy_trinh.php',
+    '/projects' => 'modules/projects/index.php',
     '/projects/phuong-an-kinh-doanh' => 'modules/projects/phuong_an_kinh_doanh.php',
     '/projects/du-an' => 'modules/projects/du_an.php',
     '/projects/du-an/detail' => 'modules/projects/du_an_detail.php',

@@ -311,13 +311,9 @@ function isMenuItemActive($path, $current_uri)
             <span>OKR Management</span>
         </a>
 
-        <!-- 8. Projects Dropdown (AM/BD + Admin only) -->
+        <!-- 8. Projects (AM/BD + Admin only) -->
         <?php if (!empty($_SESSION['is_am_bd']) || ($_SESSION['role'] ?? '') === 'admin'): ?>
-        <div class="nav-item nav-item-parent <?php
-        $is_projects_open = strpos($current_uri, '/projects/phuong-an-kinh-doanh') !== false ||
-            strpos($current_uri, '/projects/du-an') !== false ||
-            strpos($current_uri, '/projects/ceo-review') !== false;
-        echo $is_projects_open ? 'active open' : ''; ?>" onclick="toggleSubmenu(this)">
+        <a href="/projects" class="nav-item <?php echo (strpos($current_uri, '/projects') !== false) ? 'active' : ''; ?>">
             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
                 stroke-linecap="round" stroke-linejoin="round">
                 <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path>
@@ -325,32 +321,7 @@ function isMenuItemActive($path, $current_uri)
                 <line x1="9" y1="14" x2="15" y2="14"></line>
             </svg>
             <span>Projects</span>
-            <svg class="chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <polyline points="6 9 12 15 18 9"></polyline>
-            </svg>
-        </div>
-        <div class="submenu <?php echo $is_projects_open ? 'open' : ''; ?>">
-            <a href="/projects/phuong-an-kinh-doanh"
-                class="submenu-item <?php echo (strpos($current_uri, '/projects/phuong-an-kinh-doanh') !== false) ? 'active' : ''; ?>">
-                <span>Business Plans</span>
-            </a>
-            <a href="/projects/du-an"
-                class="submenu-item <?php echo (strpos($current_uri, '/projects/du-an') !== false) ? 'active' : ''; ?>">
-                <span>My Project</span>
-            </a>
-            <?php if ($_sidebar_is_ceo_approver): ?>
-            <a href="/projects/ceo-review"
-                class="submenu-item <?php echo (strpos($current_uri, '/projects/ceo-review') !== false) ? 'active' : ''; ?>"
-                style="display:flex;align-items:center;gap:6px;">
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;opacity:0.7;">
-                    <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
-                    <circle cx="12" cy="7" r="4"/>
-                    <polyline points="9 11 12 14 22 4"/>
-                </svg>
-                <span>CEO Review</span>
-            </a>
-            <?php endif; ?>
-        </div>
+        </a>
         <?php endif; ?>
 
         <?php endif; /* !$_is_hr: kết thúc nhóm module ẩn với role HR */ ?>
