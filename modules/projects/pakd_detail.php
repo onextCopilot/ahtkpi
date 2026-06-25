@@ -1422,9 +1422,148 @@ function getProjectTypeIcon($type) {
         /* Cells need relative so indicator positions correctly */
         #fin-table td,
         .contract-box .form-group { position: relative; }
+
+        /* ── Floating Print Button ── */
+        #btn-float-print {
+            position: fixed;
+            bottom: 32px;
+            right: 32px;
+            z-index: 9999;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 11px 20px;
+            border: none;
+            border-radius: 10px;
+            background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%);
+            color: #fff;
+            font-size: 13px;
+            font-weight: 700;
+            font-family: inherit;
+            cursor: pointer;
+            box-shadow: 0 4px 18px rgba(99,102,241,0.45);
+            transition: transform 0.15s, box-shadow 0.15s;
+            letter-spacing: 0.01em;
+        }
+        #btn-float-print:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 28px rgba(99,102,241,0.5);
+        }
+        #btn-float-print:active { transform: scale(0.97); }
+
+        @media print {
+            /* ── Ẩn toàn bộ chrome, giữ lại nội dung PAKD ── */
+            aside.sidebar,
+            header.top-bar,
+            .top-metrics-bar,
+            .won-banner,
+            .loss-banner,
+            #ceo-action-banner,
+            .actions-row,
+            .opp-row,
+            .opp-input-group .clear-btn,
+            .field-link,
+            .btn-add-cr,
+            .btn-del-cr,
+            .btn-req-pasx,
+            .btn-resend-pasx,
+            .btn-save,
+            .btn-reject,
+            .btn-approve,
+            .pasx-chat-section,
+            .pasx-section,
+            .pakd-log-section,
+            .modal,
+            .modal-backdrop,
+            .tpl-no-print,
+            #btn-float-print { display: none !important; }
+
+            /* Full-width, bỏ sidebar */
+            html, body {
+                display: block !important;
+                background: #fff !important;
+                margin: 0 !important;
+                padding: 0 !important;
+                width: 100% !important;
+            }
+            body { font-size: 11pt !important; }
+            .main-content {
+                margin-left: 0 !important;
+                width: 100% !important;
+                min-height: unset !important;
+            }
+            .detail-container {
+                padding: 10px 16px !important;
+                width: 100% !important;
+                box-sizing: border-box !important;
+            }
+
+            /* Metadata box 3 cột khi in */
+            .metadata-box {
+                grid-template-columns: repeat(3, 1fr) !important;
+                page-break-inside: avoid;
+            }
+
+            /* Contract box */
+            .contract-box {
+                background: #fefce8 !important;
+                -webkit-print-color-adjust: exact;
+                print-color-adjust: exact;
+            }
+            .form-grid { grid-template-columns: repeat(2, 1fr) !important; }
+
+            /* Bảng tài chính */
+            .fin-table-wrap {
+                border: 1px solid #ccc !important;
+                border-radius: 0 !important;
+                overflow: visible !important;
+                page-break-inside: auto;
+            }
+            .fin-table {
+                width: 100% !important;
+                font-size: 10pt !important;
+                table-layout: auto !important;
+            }
+            .fin-table colgroup .col-action { display: none; }
+            .fin-table thead th:last-child,
+            .fin-table tbody td:last-child { display: none; }
+            .fin-table thead th {
+                background: #1e293b !important;
+                color: #fff !important;
+                -webkit-print-color-adjust: exact;
+                print-color-adjust: exact;
+            }
+            .fin-table tr.row-rev  { background: #dcfce7 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+            .fin-table tr.row-cost { background: #ffedd5 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+            .fin-table tr.row-cat  { background: #f1f5f9 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+            .fin-table tr { page-break-inside: avoid; }
+
+            /* Input/select gọn khi in */
+            .fin-input, .pct-inp {
+                border: none !important;
+                background: transparent !important;
+                padding: 0 !important;
+                font-size: 10pt !important;
+            }
+            select {
+                -webkit-appearance: none;
+                appearance: none;
+                border: none !important;
+                background: transparent !important;
+                padding: 0 !important;
+            }
+
+            /* Trang A4 ngang */
+            @page { size: A4 landscape; margin: 12mm 10mm; }
+        }
     </style>
 </head>
 <body>
+
+    <!-- Floating Print Button (ngoài flow trang, ẩn khi in) -->
+    <button id="btn-float-print" onclick="window.open('/projects/pakd/print?id=<?= $pakd_id ?>', '_blank')" title="In / Xuất PDF">
+        <i class="fas fa-print"></i> In / Xuất PDF
+    </button>
 
     <?php include __DIR__ . '/../includes/sidebar.php'; ?>
 
@@ -1694,7 +1833,7 @@ function getProjectTypeIcon($type) {
                 .tpl-chip.cost{background:#ecfdf5;color:#047857}
                 .tpl-chip.ded{background:#fef3c7;color:#b45309}
                 </style>
-                <div class="tpl-card">
+                <div class="tpl-card tpl-no-print">
                     <div class="tpl-card-row">
                         <div class="tpl-field">
                             <label for="sel-template-type"><i class="fas fa-layer-group" style="color:var(--gray);margin-right:6px;"></i>Loại Phương án Kinh doanh</label>
