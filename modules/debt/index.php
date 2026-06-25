@@ -606,18 +606,20 @@ if ($res) {
         $row['paid_amount_vnd'] = $paid_vnd;
 
         $mKey = !empty($row['invoice_date']) ? date('m/Y', strtotime($row['invoice_date'])) : 'No Date';
-        // Aging calculation (unpaid only)
-        if (!$is_paid_status) {
+        // Aging + Top Debtors: dùng SỐ CÒN NỢ THỰC TẾ ($owed_vnd), KHÔNG dùng full
+        // $vnd_value hay nhãn payment_status (có thể bị stale: hóa đơn đã thu đủ trên
+        // Odoo nhưng DB vẫn ghi "Not paid"). Nhờ vậy khớp với tổng NOT PAID (= sum $owed_vnd).
+        if ($owed_vnd > 0) {
             $inv_date = !empty($row['invoice_date']) ? $row['invoice_date'] : date('Y-m-d');
             $diff = (time() - strtotime($inv_date)) / (60 * 60 * 24);
-            if ($diff <= 30) $aging_data['0-30'] += $vnd_value;
-            else if ($diff <= 60) $aging_data['31-60'] += $vnd_value;
-            else if ($diff <= 90) $aging_data['61-90'] += $vnd_value;
-            else $aging_data['90+'] += $vnd_value;
+            if ($diff <= 30) $aging_data['0-30'] += $owed_vnd;
+            else if ($diff <= 60) $aging_data['31-60'] += $owed_vnd;
+            else if ($diff <= 90) $aging_data['61-90'] += $owed_vnd;
+            else $aging_data['90+'] += $owed_vnd;
 
-            // Top Debtors (unpaid only)
+            // Top Debtors (số còn nợ thực tế)
             $client = $row['client_name'] ?: 'Khách hàng ẩn danh';
-            $debtor_totals[$client] = ($debtor_totals[$client] ?? 0) + $vnd_value;
+            $debtor_totals[$client] = ($debtor_totals[$client] ?? 0) + $owed_vnd;
         }
 
         // AM Performance
@@ -3969,14 +3971,14 @@ if ($res_am && $res_am->num_rows > 0) {
                             },
                             dataLabels: {
                                 enabled: true,
-                                formatter: val => (val/1e9).toFixed(1) + ' Tỷ đ',
-                                offsetX: 40,
+                                formatter: val => val.toLocaleString('vi-VN') + ' đ',
+                                offsetX: 50,
                                 style: { fontSize: '11px', fontWeight: '700', colors: ['#334155'] }
                             },
                             colors: ['#f5222d'],
-                            xaxis: { 
-                                categories: <?php echo json_encode(array_keys($top_debtors)); ?>, 
-                                labels: { formatter: v => (v/1e9).toFixed(1) + ' Tỷ' } 
+                            xaxis: {
+                                categories: <?php echo json_encode(array_keys($top_debtors)); ?>,
+                                labels: { formatter: v => (v/1e6).toFixed(0) + ' tr' }
                             },
                             tooltip: { y: { formatter: val => val.toLocaleString('vi-VN') + ' đ' } }
                         }).render();
