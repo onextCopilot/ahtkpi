@@ -1,5 +1,6 @@
 <?php
 require_once __DIR__ . '/../../config/config.php';
+require_once __DIR__ . '/../../includes/app_settings.php';
 
 if (!isset($_SESSION['user_id'])) {
     header('Location: /login');
@@ -116,6 +117,41 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'save_
     if (!$pid) { echo json_encode(['ok' => false, 'msg' => 'ID không hợp lệ']); exit; }
     $st = $conn->prepare("UPDATE pakd SET division_names=? WHERE id=?");
     $st->bind_param("si", $division, $pid);
+    $ok = $st->execute();
+    $st->close();
+    echo json_encode(['ok' => $ok]);
+    exit;
+}
+
+// ── AJAX: Save loại Phương án (template) ──
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'save_template_type') {
+    header('Content-Type: application/json; charset=utf-8');
+    $pid  = (int)($_POST['id'] ?? 0);
+    $tpl  = trim($_POST['template_type'] ?? '');
+    $allowed = ['project_by_task', 'project_base', 'license', 'dedicated', ''];
+    if (!$pid) { echo json_encode(['ok' => false, 'msg' => 'ID không hợp lệ']); exit; }
+    if (!in_array($tpl, $allowed, true)) { echo json_encode(['ok' => false, 'msg' => 'Loại phương án không hợp lệ']); exit; }
+    // Ensure column exists (ignore if already there)
+    $r = $conn->query("SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='pakd' AND COLUMN_NAME='template_type'");
+    if ($r && $r->num_rows === 0) $conn->query("ALTER TABLE pakd ADD COLUMN template_type VARCHAR(50) DEFAULT NULL");
+    $st = $conn->prepare("UPDATE pakd SET template_type=? WHERE id=?");
+    $st->bind_param("si", $tpl, $pid);
+    $ok = $st->execute();
+    $st->close();
+    echo json_encode(['ok' => $ok]);
+    exit;
+}
+
+// ── AJAX: Save loại dự án (allocation) ──
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'save_alloc_type') {
+    header('Content-Type: application/json; charset=utf-8');
+    $pid = (int)($_POST['id'] ?? 0);
+    $at  = trim($_POST['alloc_project_type'] ?? '');
+    if (!$pid) { echo json_encode(['ok' => false, 'msg' => 'ID không hợp lệ']); exit; }
+    $r = $conn->query("SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='pakd' AND COLUMN_NAME='alloc_project_type'");
+    if ($r && $r->num_rows === 0) $conn->query("ALTER TABLE pakd ADD COLUMN alloc_project_type VARCHAR(50) DEFAULT NULL");
+    $st = $conn->prepare("UPDATE pakd SET alloc_project_type=? WHERE id=?");
+    $st->bind_param("si", $at, $pid);
     $ok = $st->execute();
     $st->close();
     echo json_encode(['ok' => $ok]);
@@ -792,7 +828,7 @@ $pakd = $stmt->get_result()->fetch_assoc();
 $stmt->close();
 
 // Ensure won_status / lost_reason columns exist (MySQL 5.7 compatible)
-foreach (['won_status' => 'VARCHAR(20)', 'lost_reason' => 'VARCHAR(255)'] as $_col => $_def) {
+foreach (['won_status' => 'VARCHAR(20)', 'lost_reason' => 'VARCHAR(255)', 'template_type' => 'VARCHAR(50)', 'alloc_project_type' => 'VARCHAR(50)'] as $_col => $_def) {
     $r = $conn->query("SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='pakd' AND COLUMN_NAME='$_col'");
     if ($r && $r->num_rows === 0) $conn->query("ALTER TABLE pakd ADD COLUMN `$_col` $_def DEFAULT NULL");
 }
@@ -887,12 +923,12 @@ $fin_rev_net      = !empty($fin_saved['rev_net']) ? (float)$fin_saved['rev_net']
 // Nếu đã nhận được data từ callback thì dùng tổng human+overtime, không thì dùng pasx_value
 $pasx_has_data    = ($fin_human_cost > 0 || $fin_overtime > 0);
 $fin_prod_cost    = $pasx_has_data ? ($fin_human_cost + $fin_overtime) : (float)($pakd['pasx_value'] ?? 0);
-$fin_sales_pct    = (float)($fin_saved['r421_pct'] ?? 2.0);
+$fin_sales_pct    = (float)($fin_saved['r421_pct'] ?? 0);
 $fin_presales_pct = (float)($fin_saved['r422_pct'] ?? 0.0);
 $fin_mkt_pct      = (float)($fin_saved['r423_pct'] ?? 0.0);
-$fin_sales_comm   = (int)round(max(0, $fin_rev_gross) * $fin_sales_pct    / 100);
-$fin_presales_comm= (int)round(max(0, $fin_rev_gross) * $fin_presales_pct / 100);
-$fin_mkt_comm     = (int)round(max(0, $fin_rev_gross) * $fin_mkt_pct      / 100);
+$fin_sales_comm   = (int)round(max(0, $fin_rev_net) * $fin_sales_pct    / 100);
+$fin_presales_comm= (int)round(max(0, $fin_rev_net) * $fin_presales_pct / 100);
+$fin_mkt_comm     = (int)round(max(0, $fin_rev_net) * $fin_mkt_pct      / 100);
 $fin_sales_total  = $fin_sales_comm + $fin_presales_comm + $fin_mkt_comm;
 $fin_mgmt_pct     = (float)($fin_saved['r43_pct'] ?? 12.0);
 $fin_mgmt         = (int)round(max(0, $fin_rev_net) * $fin_mgmt_pct / 100);
@@ -1315,6 +1351,14 @@ function getProjectTypeIcon($type) {
             font-weight: 700; padding: 10px 12px;
             border-top: 2px solid #e2e8f0; border-bottom: 2px solid #e2e8f0;
         }
+        /* Highlighted formula row (Doanh thu thuần) — nổi bật */
+        .fin-table tr.row-highlight { background: #eff6ff !important; }
+        .fin-table tr.row-highlight td {
+            color: #1e3a8a !important; font-size: 14px;
+            padding: 13px 12px;
+            border-top: 2px solid #bfdbfe; border-bottom: 2px solid #bfdbfe;
+        }
+        .fin-table tr.row-highlight .td-amount { color: #1d4ed8 !important; font-size: 15px; }
 
         /* Row type: sub-item */
         .fin-table tr.row-sub { background: #fff; }
@@ -1355,18 +1399,18 @@ function getProjectTypeIcon($type) {
         }
         .fin-input:hover, .fin-input:focus { border-color: var(--border); background: #fff; }
         .fin-input::placeholder { color: var(--lgray); }
-        .fin-input.r { text-align: right; }
+        .fin-input.r { text-align: right; padding-right: 0; }
 
         /* Percentage inline input */
-        .pct-wrap  { display: inline-flex; align-items: center; gap: 3px; }
+        .pct-wrap  { display: flex; width: 100%; align-items: center; gap: 3px; }
         .pct-inp   {
-            width: 60px; text-align: right; border: 1px solid var(--border); border-radius: 4px;
+            width: 58px; flex: 0 0 58px; text-align: right; border: 1px solid var(--border); border-radius: 4px;
             padding: 2px 6px; font-size: 12px; font-family: inherit;
             color: var(--slate); background: #fff; outline: none;
         }
         .pct-inp:focus { border-color: var(--primary); }
-        .pct-sfx   { font-size: 11px; color: var(--gray); }
-        .pct-res   { font-size: 12px; color: var(--gray); margin-left: 2px; }
+        .pct-sfx   { font-size: 11px; color: var(--gray); flex: 0 0 auto; }
+        .pct-res   { font-size: 12px; color: var(--gray); flex: 1 1 auto; text-align: right; white-space: nowrap; padding-right: 0; }
 
         /* ── Inline save indicator ── */
         .field-saved {
@@ -1601,10 +1645,6 @@ function getProjectTypeIcon($type) {
                     </div>
                 </div>
 
-                <div class="form-group timeline-group">
-                    <label class="form-label">Thời gian triển khai</label>
-                    <input type="text" id="inp-timeline" class="form-control" placeholder="vd: Q3-Q4/2026, 6 tháng từ 01/06/2026..." value="<?= htmlspecialchars($pakd['timeline'] ?: '') ?>">
-                </div>
             </div>
 
             <!-- ── Financial Detail Table ── -->
@@ -1613,6 +1653,74 @@ function getProjectTypeIcon($type) {
                     <i class="fas fa-table-cells-large" style="color:var(--gray);"></i>
                     Phương án Kinh doanh chi tiết
                 </h3>
+                <?php
+                $tpl_cur   = $pakd['template_type'] ?? '';
+                $alloc_cur = $pakd['alloc_project_type'] ?? '';
+                // Loại dự án (đồng bộ với trang Settings phân bổ)
+                $alloc_pt = [
+                    'ito_global'          => 'Dự án từ ITO Global',
+                    'ito_vn_inhouse'      => 'ITO Việt Nam (dedicated/project base) in-house',
+                    'headcount_onsite_vn' => 'Thuê Headcounts & Onsite tại Việt Nam',
+                    'consulting_hn'       => 'Consulting ERP/eCom HN / CSM tự sales HN',
+                    'consulting_hcm'      => 'Consulting ERP/eCom BC7 HCM / CSM tự sales HCM',
+                    'bc_onext_phutho'     => 'BC Onext Phú Thọ',
+                    'consulting_malaysia' => 'Consulting ERP/eCom tại Malaysia',
+                    'ito_japan'           => 'ITO Japan',
+                    'csm_delivery_hn'     => 'CSM Delivery chuyển xuống — Hà Nội',
+                    'csm_delivery_hcm'    => 'CSM Delivery chuyển xuống — HCM',
+                    'trading_license'     => 'Trading về license (Odoo, Salesforce…)',
+                    'thue_vendors'        => 'Thuê Vendors',
+                ];
+                // Đọc qua app_settings (cùng store với trang Project Settings)
+                $alloc_raw   = app_setting_get($conn, 'pakd_allocation_rates', '');
+                $alloc_rates = $alloc_raw ? (json_decode($alloc_raw, true) ?: []) : [];
+                // Ghi đè nhãn loại dự án nếu admin đã sửa trong Project Settings
+                $alb_raw = app_setting_get($conn, 'pakd_allocation_labels', '');
+                $albMap  = $alb_raw ? (json_decode($alb_raw, true) ?: []) : [];
+                foreach ($albMap as $albKey => $albVal) {
+                    if (isset($alloc_pt[$albKey]) && trim((string)$albVal) !== '') $alloc_pt[$albKey] = $albVal;
+                }
+                ?>
+                <style>
+                .tpl-card{background:#fff;border:1px solid #e2e8f0;border-radius:12px;padding:16px 18px;margin-bottom:16px;box-shadow:0 1px 3px rgba(0,0,0,.05)}
+                .tpl-card-row{display:flex;align-items:center;gap:28px;flex-wrap:wrap}
+                .tpl-field{display:flex;align-items:center;gap:10px}
+                .tpl-field label{font-size:13px;font-weight:600;color:var(--slate)}
+                .tpl-info{margin-top:14px;padding-top:14px;border-top:1px dashed #e2e8f0}
+                .tpl-info-block{font-size:12.5px;color:#475569;line-height:1.7}
+                .tpl-info-block + .tpl-info-block{margin-top:10px}
+                .tpl-info-block b{color:#0f172a}
+                .tpl-chip{display:inline-block;background:#eef2ff;color:#4338ca;border-radius:6px;padding:2px 9px;font-size:11.5px;margin:3px 5px 0 0}
+                .tpl-chip.cost{background:#ecfdf5;color:#047857}
+                .tpl-chip.ded{background:#fef3c7;color:#b45309}
+                </style>
+                <div class="tpl-card">
+                    <div class="tpl-card-row">
+                        <div class="tpl-field">
+                            <label for="sel-template-type"><i class="fas fa-layer-group" style="color:var(--gray);margin-right:6px;"></i>Loại Phương án Kinh doanh</label>
+                            <select id="sel-template-type" class="project-type-select" onchange="onTemplateChange(this.value)" style="max-width:240px;">
+                                <option value="">— Chọn loại phương án —</option>
+                                <option value="project_by_task" <?= $tpl_cur === 'project_by_task' ? 'selected' : '' ?>>Project By Task template</option>
+                                <option value="project_base"    <?= $tpl_cur === 'project_base'    ? 'selected' : '' ?>>Project Base template</option>
+                                <option value="license"         <?= $tpl_cur === 'license'         ? 'selected' : '' ?>>License template</option>
+                                <option value="dedicated"       <?= $tpl_cur === 'dedicated'       ? 'selected' : '' ?>>Dedicated template</option>
+                            </select>
+                        </div>
+                        <div class="tpl-field">
+                            <label for="sel-alloc-type"><i class="fas fa-percent" style="color:var(--gray);margin-right:6px;"></i>Loại dự án (phân bổ)</label>
+                            <select id="sel-alloc-type" class="project-type-select" onchange="onAllocChange(this.value)" style="max-width:300px;">
+                                <option value="">— Chọn loại dự án để tự điền % —</option>
+                                <?php foreach ($alloc_pt as $aKey => $aLabel): ?>
+                                <option value="<?= htmlspecialchars($aKey) ?>" <?= $alloc_cur === $aKey ? 'selected' : '' ?>><?= htmlspecialchars($aLabel) ?></option>
+                                <?php endforeach; ?>
+                            </select>
+                        </div>
+                    </div>
+                    <div id="tpl-change-info" class="tpl-info" style="display:none;">
+                        <div id="tpl-info-template" class="tpl-info-block"></div>
+                        <div id="tpl-info-alloc" class="tpl-info-block"></div>
+                    </div>
+                </div>
                 <div class="fin-table-wrap">
                     <table class="fin-table" id="fin-table">
                         <colgroup>
@@ -1644,26 +1752,13 @@ function getProjectTypeIcon($type) {
                                 <td class="td-rate">100.00%</td>
                                 <td class="td-amount" id="r1-amt"><?= formatVND($fin_rev_gross) ?></td>
                                 <td class="td-ccy">VND</td>
-                                <td class="td-action"></td>
+                                <td class="td-action">
+                                    <button class="btn-add-cr" onclick="addRevRow()" title="Thêm dòng doanh thu">
+                                        <i class="fas fa-plus"></i>
+                                    </button>
+                                </td>
                             </tr>
-                            <tr class="row-sub">
-                                <td class="td-stt">1.1</td>
-                                <td class="ind-1"><input class="fin-input" value="Doanh thu dịch vụ - gói triển khai" placeholder="Hạng mục..."></td>
-                                <td><input class="fin-input" placeholder="Diễn giải..."></td>
-                                <td class="td-rate" id="r11-rate">100.00%</td>
-                                <td class="td-amount"><input class="fin-input r" id="r11-inp" value="<?= number_format($fin_rev_gross, 0, '', '') ?>" placeholder="0" oninput="fin_calc()"></td>
-                                <td class="td-ccy">VND</td>
-                                <td class="td-action"></td>
-                            </tr>
-                            <tr class="row-sub">
-                                <td class="td-stt">1.2</td>
-                                <td class="ind-1"><input class="fin-input" value="Doanh thu khác" placeholder="Hạng mục..."></td>
-                                <td><input class="fin-input" placeholder="Diễn giải..."></td>
-                                <td class="td-rate" id="r12-rate"></td>
-                                <td class="td-amount"><input class="fin-input r" id="r12-inp" placeholder="0" oninput="fin_calc()"></td>
-                                <td class="td-ccy">VND</td>
-                                <td class="td-action"></td>
-                            </tr>
+                            <tbody id="rev-rows"></tbody>
 
                             <!-- 1.3 Change Requests -->
                             <tr class="row-sub row-cr-header">
@@ -1689,29 +1784,16 @@ function getProjectTypeIcon($type) {
                                 <td class="td-rate"></td>
                                 <td class="td-amount" id="r2-amt">0</td>
                                 <td class="td-ccy">VND</td>
-                                <td class="td-action"></td>
+                                <td class="td-action">
+                                    <button class="btn-add-cr" onclick="addDedRow()" title="Thêm khoản giảm trừ">
+                                        <i class="fas fa-plus"></i>
+                                    </button>
+                                </td>
                             </tr>
-                            <tr class="row-sub">
-                                <td class="td-stt">2.1</td>
-                                <td class="ind-1"><input class="fin-input" value="Chi hoa hồng cho đối tác" placeholder="Hạng mục..."></td>
-                                <td><input class="fin-input" value="Chi phí feedback, hoa hồng cho CTV, đối tác" placeholder="Diễn giải..."></td>
-                                <td class="td-rate"></td>
-                                <td class="td-amount"><input class="fin-input r" id="r21-inp" placeholder="0" oninput="fin_calc()"></td>
-                                <td class="td-ccy">VND</td>
-                                <td class="td-action"></td>
-                            </tr>
-                            <tr class="row-sub">
-                                <td class="td-stt">2.2</td>
-                                <td class="ind-1"><input class="fin-input" value="Khoản giảm trừ khác" placeholder="Hạng mục..."></td>
-                                <td><input class="fin-input" placeholder="Diễn giải..."></td>
-                                <td class="td-rate"></td>
-                                <td class="td-amount"><input class="fin-input r" id="r22-inp" placeholder="0" oninput="fin_calc()"></td>
-                                <td class="td-ccy">VND</td>
-                                <td class="td-action"></td>
-                            </tr>
+                            <tbody id="ded-rows"></tbody>
 
                             <!-- 3. Doanh thu thuần (FORMULA) -->
-                            <tr class="row-formula">
+                            <tr class="row-formula row-highlight">
                                 <td class="td-stt">3</td>
                                 <td>Doanh thu thuần <i class="fas fa-circle-info" style="color:var(--lgray);font-size:10px;" title="= Doanh thu - Khoản giảm trừ"></i></td>
                                 <td class="td-desc">= Doanh thu - Khoản giảm trừ</td>
@@ -1791,15 +1873,18 @@ function getProjectTypeIcon($type) {
                                     <?php endif; ?>
                                 </td>
                                 <td class="td-rate" id="r41-rate"><?= pctCost($fin_prod_cost, $fin_total_cost) ?>%</td>
-                                <td class="td-amount"><?= formatVND($fin_prod_cost) ?></td>
+                                <td class="td-amount" id="r41-amt"><?= formatVND($fin_prod_cost) ?></td>
                                 <td class="td-ccy">VND</td>
                                 <td class="td-action">
-                                    <button class="btn-pasx-history" onclick="openPasxHistory()" title="Review lịch sử từ ArrowHitech Profile">
+                                    <button class="btn-add-cr" id="btn-add-cog" onclick="addCogRow()" title="Thêm dòng giá vốn" style="display:none;">
+                                        <i class="fas fa-plus"></i>
+                                    </button>
+                                    <button class="btn-pasx-history" id="btn-pasx-eye" onclick="openPasxHistory()" title="Review lịch sử từ ArrowHitech Profile">
                                         <i class="fas fa-eye"></i>
                                     </button>
                                 </td>
                             </tr>
-                            <tr class="row-detail row-lock">
+                            <tr class="row-detail row-lock pasx-lock-row">
                                 <td class="td-stt">4.1.1</td>
                                 <td class="ind-2">Human Cost / Chi phí nhân công <i class="fas fa-circle-info" style="color:var(--lgray);font-size:10px;"></i></td>
                                 <td class="td-desc pasx-sub-desc">
@@ -1815,7 +1900,7 @@ function getProjectTypeIcon($type) {
                                 <td class="td-ccy">VND</td>
                                 <td class="td-action"></td>
                             </tr>
-                            <tr class="row-detail row-lock">
+                            <tr class="row-detail row-lock pasx-lock-row">
                                 <td class="td-stt">4.1.2</td>
                                 <td class="ind-2">Chi phí làm việc ngoài giờ / Overtime cost <i class="fas fa-circle-info" style="color:var(--lgray);font-size:10px;"></i></td>
                                 <td class="td-desc pasx-sub-desc">
@@ -1831,6 +1916,8 @@ function getProjectTypeIcon($type) {
                                 <td class="td-ccy">VND</td>
                                 <td class="td-action"></td>
                             </tr>
+                            <!-- 4.1.x Giá vốn nhập tay (chỉ template License/Trading) -->
+                            <tbody id="cog-rows"></tbody>
 
                             <!-- 4.2 Chi phí bán hàng -->
                             <tr class="row-sub row-section">
@@ -1845,11 +1932,11 @@ function getProjectTypeIcon($type) {
                             <tr class="row-detail">
                                 <td class="td-stt">4.2.1</td>
                                 <td class="ind-2"><input class="fin-input" id="r421-name" value="<?= htmlspecialchars($fin_saved['r421_name'] ?? 'Sales Commission') ?>"></td>
-                                <td class="td-desc"><input class="fin-input" id="r421-desc" value="<?= htmlspecialchars($fin_saved['r421_desc'] ?? '2% doanh thu') ?>"></td>
+                                <td class="td-desc">% doanh thu</td>
                                 <td class="td-rate" id="r421-rate"></td>
                                 <td class="td-amount">
                                     <div class="pct-wrap">
-                                        <input type="number" class="pct-inp" id="r421-pct" value="<?= $fin_sales_pct ?>" min="0" max="100" step="0.1" oninput="fin_calc()">
+                                        <input type="number" class="pct-inp" id="r421-pct" value="<?= $fin_sales_pct ?: '' ?>" min="0" max="100" step="0.1" placeholder="0" oninput="fin_calc()">
                                         <span class="pct-sfx">%</span>
                                         <span class="pct-res" id="r421-res">= <?= formatVND($fin_sales_comm) ?></span>
                                     </div>
@@ -1860,7 +1947,7 @@ function getProjectTypeIcon($type) {
                             <tr class="row-detail">
                                 <td class="td-stt">4.2.2</td>
                                 <td class="ind-2"><input class="fin-input" id="r422-name" value="<?= htmlspecialchars($fin_saved['r422_name'] ?? 'Presales Commission') ?>"></td>
-                                <td class="td-desc"><input class="fin-input" id="r422-desc" value="<?= htmlspecialchars($fin_saved['r422_desc'] ?? '% doanh thu') ?>"></td>
+                                <td class="td-desc">% doanh thu</td>
                                 <td class="td-rate" id="r422-rate"></td>
                                 <td class="td-amount">
                                     <div class="pct-wrap">
@@ -1875,7 +1962,7 @@ function getProjectTypeIcon($type) {
                             <tr class="row-detail">
                                 <td class="td-stt">4.2.3</td>
                                 <td class="ind-2"><input class="fin-input" id="r423-name" value="<?= htmlspecialchars($fin_saved['r423_name'] ?? 'MKT Commission') ?>"></td>
-                                <td class="td-desc"><input class="fin-input" id="r423-desc" value="<?= htmlspecialchars($fin_saved['r423_desc'] ?? '% doanh thu') ?>"></td>
+                                <td class="td-desc">% doanh thu</td>
                                 <td class="td-rate" id="r423-rate"></td>
                                 <td class="td-amount">
                                     <div class="pct-wrap">
@@ -1901,11 +1988,11 @@ function getProjectTypeIcon($type) {
                             <tr class="row-sub row-section">
                                 <td class="td-stt">4.3</td>
                                 <td class="ind-1">Chi phí quản lý + back office</td>
-                                <td class="td-desc">12% doanh thu thuần — Tuân thủ bằng phân bổ</td>
+                                <td class="td-desc"><span id="r43-desc-pct"><?= rtrim(rtrim(number_format($fin_mgmt_pct, 2, '.', ''), '0'), '.') ?></span>% doanh thu thuần - Tuân thủ bằng phân bổ</td>
                                 <td class="td-rate" id="r43-rate"><?= number_format($fin_mgmt_pct, 2) ?>%</td>
                                 <td class="td-amount">
                                     <div class="pct-wrap">
-                                        <input type="number" class="pct-inp" id="r43-pct" value="<?= $fin_mgmt_pct ?>" min="0" max="100" step="0.1" oninput="fin_calc()">
+                                        <input type="number" class="pct-inp" id="r43-pct" value="<?= $fin_mgmt_pct ?>" min="0" max="100" step="0.1" readonly title="Tự động lấy từ tỷ lệ phân bổ (Loại dự án)" style="background:#f1f5f9;color:#64748b;cursor:not-allowed;">
                                         <span class="pct-sfx">%</span>
                                         <span class="pct-res" id="r43-res">= <?= formatVND($fin_mgmt) ?></span>
                                     </div>
@@ -2045,33 +2132,43 @@ function getProjectTypeIcon($type) {
         }
 
         function fin_calc() {
-            // ── Row 1: Doanh thu = sum(1.1 + 1.2 + 1.3 CR) ──
-            const v11 = fin_parse(document.getElementById('r11-inp').value);
-            const v12 = fin_parse(document.getElementById('r12-inp').value);
+            // ── Row 1: Doanh thu = sum(dòng doanh thu động) + CR ──
+            const revItems = getRevTotal();
             const v13 = getCrTotal();
-            const revGross = v11 + v12 + v13;
+            const revGross = revItems + v13;
             document.getElementById('r1-amt').textContent = fin_fmt(revGross);
-            document.getElementById('r11-rate').textContent = revGross > 0 ? (v11 / revGross * 100).toFixed(2) + '%' : '';
-            document.getElementById('r13-amt').textContent = fin_fmt(v13);
-            document.getElementById('r13-rate').textContent = v13 > 0 && revGross > 0 ? (v13 / revGross * 100).toFixed(2) + '%' : '';
+            // per-row rate cho các dòng doanh thu động
+            document.querySelectorAll('#rev-rows .rev-amt').forEach(function(inp){
+                const row = inp.closest('tr'); if (!row) return;
+                const rc = row.querySelector('.td-rate');
+                const v = fin_parse(inp.value);
+                if (rc) rc.textContent = (v > 0 && revGross > 0) ? (v / revGross * 100).toFixed(2) + '%' : '';
+            });
+            const r13a = document.getElementById('r13-amt');
+            if (r13a) r13a.textContent = fin_fmt(v13);
+            const r13r = document.getElementById('r13-rate');
+            if (r13r) r13r.textContent = v13 > 0 && revGross > 0 ? (v13 / revGross * 100).toFixed(2) + '%' : '';
 
-            // ── Row 2: Khoản giảm trừ = sum(2.1 + 2.2) ──
-            const v21 = fin_parse(document.getElementById('r21-inp').value);
-            const v22 = fin_parse(document.getElementById('r22-inp').value);
-            const deductions = v21 + v22;
+            // ── Row 2: Khoản giảm trừ = sum(dòng giảm trừ động) ──
+            const deductions = getDedTotal();
             document.getElementById('r2-amt').textContent = fin_fmt(deductions);
 
             // ── Row 3: Doanh thu thuần ──
             const revNet = revGross - deductions;
             document.getElementById('r3-amt').textContent = fin_fmt(revNet);
 
-            // ── Row 4.2: Sales commissions (base = revGross, always ≥ 0) ──
+            // ── 4.1 Chi phí giá vốn: COG nhập tay (license) hoặc PASX ──
+            const prodCost = COG_MODE ? getCogTotal() : FIN_PROD;
+            const r41a = document.getElementById('r41-amt');
+            if (r41a) r41a.textContent = fin_fmt(prodCost);
+
+            // ── Row 4.2: Sales commissions (base = doanh thu thuần, always ≥ 0) ──
             const p421 = parseFloat(document.getElementById('r421-pct').value) || 0;
             const p422 = parseFloat(document.getElementById('r422-pct').value) || 0;
             const p423 = parseFloat(document.getElementById('r423-pct').value) || 0;
-            const v421 = Math.max(0, revGross * p421 / 100);
-            const v422 = Math.max(0, revGross * p422 / 100);
-            const v423 = Math.max(0, revGross * p423 / 100);
+            const v421 = Math.max(0, revNet * p421 / 100);
+            const v422 = Math.max(0, revNet * p422 / 100);
+            const v423 = Math.max(0, revNet * p423 / 100);
             const v424 = fin_parse(document.getElementById('r424-inp').value);
 
             document.getElementById('r421-res').textContent = '= ' + fin_fmt(v421);
@@ -2085,6 +2182,8 @@ function getProjectTypeIcon($type) {
             const p43 = parseFloat(document.getElementById('r43-pct').value) || 0;
             const v43 = Math.max(0, revNet * p43 / 100);
             document.getElementById('r43-res').textContent = '= ' + fin_fmt(v43);
+            const r43d = document.getElementById('r43-desc-pct');
+            if (r43d) r43d.textContent = (Math.round(p43 * 100) / 100);
 
             // ── Row 4.4: Other costs — collect individual values first ──
             let otherTotal = 0;
@@ -2099,18 +2198,25 @@ function getProjectTypeIcon($type) {
             document.getElementById('r44-amt').textContent = fin_fmt(otherTotal);
 
             // ── Row 4: Total cost ──
-            const totalCost = FIN_PROD + salesTotal + v43 + otherTotal;
+            const totalCost = prodCost + salesTotal + v43 + otherTotal;
             const totalPct = revNet > 0 ? (totalCost / revNet * 100).toFixed(2) : '0.00';
             document.getElementById('r4-rate').textContent = totalPct + '%';
             document.getElementById('r4-amt').textContent = fin_fmt(totalCost);
 
             // ── All cost sub-row rates: % of totalCost, always ≥ 0 ──
             const r41 = document.getElementById('r41-rate');
-            if (r41) r41.textContent = costPct(FIN_PROD, totalCost);
+            if (r41) r41.textContent = costPct(prodCost, totalCost);
             const r411 = document.getElementById('r411-rate');
             if (r411) r411.textContent = FIN_HUMAN > 0 ? costPct(FIN_HUMAN, totalCost) : '';
             const r412 = document.getElementById('r412-rate');
             if (r412) r412.textContent = FIN_OVERTIME > 0 ? costPct(FIN_OVERTIME, totalCost) : '';
+            // per-row rate cho các dòng giá vốn nhập tay (COG)
+            document.querySelectorAll('#cog-rows .cog-amt').forEach(function(inp){
+                const row = inp.closest('tr'); if (!row) return;
+                const rc = row.querySelector('.td-rate');
+                const v = fin_parse(inp.value);
+                if (rc) rc.textContent = v > 0 ? costPct(v, totalCost) : '';
+            });
             // 4.2 sub-items: % of totalCost
             document.getElementById('r421-rate').textContent = v421 > 0 ? costPct(v421, totalCost) : '';
             document.getElementById('r422-rate').textContent = v422 > 0 ? costPct(v422, totalCost) : '';
@@ -2137,7 +2243,7 @@ function getProjectTypeIcon($type) {
             const tmbGp = document.getElementById('tmb-gross-profit');
             if (tmbGp) tmbGp.textContent = fin_fmt(grossProfit);
             const tmbPasxPct = document.getElementById('tmb-pasx-pct');
-            if (tmbPasxPct && revNet > 0) tmbPasxPct.textContent = '(' + (FIN_PROD / revNet * 100).toFixed(2) + '%)';
+            if (tmbPasxPct && revNet > 0) tmbPasxPct.textContent = '(' + (prodCost / revNet * 100).toFixed(2) + '%)';
 
             // ── Cập nhật PASX action buttons theo margin realtime ──
             if (PASX_HAS_DATA && PAKD_STATUS !== 'approved' && PASX_STATUS !== 'pending_ceo' && PASX_STATUS !== 'rejected') {
@@ -2183,10 +2289,11 @@ function getProjectTypeIcon($type) {
             fin_calc();
             const el = id => document.getElementById(id);
             const finData = {
-                r11_amt:     fin_parse(el('r11-inp')?.value),
-                r12_amt:     fin_parse(el('r12-inp')?.value),
-                r21_amt:     fin_parse(el('r21-inp')?.value),
-                r22_amt:     fin_parse(el('r22-inp')?.value),
+                // Dòng động: doanh thu / giảm trừ / giá vốn (COG)
+                rev_items:   getRevData(),
+                ded_items:   getDedData(),
+                cog_items:   getCogData(),
+                cog_mode:    COG_MODE,
                 r421_pct:    parseFloat(el('r421-pct')?.value) || 0,
                 r422_pct:    parseFloat(el('r422-pct')?.value) || 0,
                 r423_pct:    parseFloat(el('r423-pct')?.value) || 0,
@@ -2226,15 +2333,51 @@ function getProjectTypeIcon($type) {
 
         // ── Load saved fin_data on page open ──
         (function fin_load() {
-            const saved = <?= json_encode($fin_saved) ?>;
-            if (!saved || !Object.keys(saved).length) return;
+            const saved = <?= json_encode($fin_saved) ?> || {};
             const el = id => document.getElementById(id);
             const set = (id, val) => { const e = el(id); if (e && val !== undefined) e.value = val; };
-            set('r11-inp',  saved.r11_amt  || '');
-            set('r12-inp',  saved.r12_amt  || '');
-            set('r21-inp',  saved.r21_amt  || '');
-            set('r22-inp',  saved.r22_amt  || '');
-            set('r421-pct', saved.r421_pct !== undefined ? saved.r421_pct : 2);
+
+            // Doanh thu (dòng động) — ưu tiên rev_items, fallback schema cũ r11/r12, cuối cùng default.
+            let revBuilt = false;
+            if (Array.isArray(saved.rev_items) && saved.rev_items.length) {
+                saved.rev_items.forEach(x => addRevRow(x.name || '', x.desc || '', x.amt || ''));
+                revBuilt = true;
+            } else if (saved.r11_amt !== undefined || saved.r11_name !== undefined) {
+                addRevRow(saved.r11_name || 'Doanh thu dịch vụ - gói triển khai', saved.r11_desc || '', saved.r11_amt || '');
+                addRevRow(saved.r12_name || 'Doanh thu khác (nếu có)', saved.r12_desc || '', saved.r12_amt || '');
+                revBuilt = true;
+            }
+            if (!revBuilt) {
+                addRevRow('Doanh thu dịch vụ - gói triển khai', '', '');
+                addRevRow('Doanh thu khác (nếu có)', '', '');
+            }
+
+            // Khoản giảm trừ (dòng động)
+            let dedBuilt = false;
+            if (Array.isArray(saved.ded_items) && saved.ded_items.length) {
+                saved.ded_items.forEach(x => addDedRow(x.name || '', x.desc || '', x.amt || ''));
+                dedBuilt = true;
+            } else if (saved.r21_amt !== undefined || saved.r21_name !== undefined) {
+                addDedRow(saved.r21_name || 'Chi hoa hồng cho đối tác', saved.r21_desc || '', saved.r21_amt || '');
+                addDedRow(saved.r22_name || 'Khoản giảm trừ khác', saved.r22_desc || '', saved.r22_amt || '');
+                dedBuilt = true;
+            }
+            if (!dedBuilt) {
+                addDedRow('Partner Commission', 'Chi phí cho đối tác sales', '');
+                addDedRow('Khoản giảm trừ khác', '', '');
+            }
+
+            // Giá vốn (COG) — chỉ bật cho template License (4.1 nhập tay).
+            // Template khác: 4.1 khóa từ Phương án sản xuất, KHÔNG hiển thị dòng giá vốn.
+            const _tplType = document.getElementById('sel-template-type')?.value || '';
+            if (_tplType === 'license') {
+                setCogMode(true);
+                if (Array.isArray(saved.cog_items)) saved.cog_items.forEach(x => addCogRow(x.name || '', x.desc || '', x.amt || ''));
+            } else {
+                setCogMode(false);
+            }
+
+            set('r421-pct', saved.r421_pct !== undefined ? saved.r421_pct : '');
             set('r422-pct', saved.r422_pct !== undefined ? saved.r422_pct : 0);
             set('r423-pct', saved.r423_pct !== undefined ? saved.r423_pct : 0);
             set('r424-inp', saved.r424_amt || '');
@@ -2245,15 +2388,23 @@ function getProjectTypeIcon($type) {
             }
             if (Array.isArray(saved.change_requests)) {
                 saved.change_requests.forEach(function(cr) {
-                    if (cr && (cr.name || cr.amount)) {
-                        addCrRow(cr.name || '', cr.amount || 0);
-                    }
+                    if (cr && (cr.name || cr.amount)) addCrRow(cr.name || '', cr.amount || 0);
                 });
             }
+            if (typeof fin_calc === 'function') fin_calc();
         })();
 
         // ── Wire up autosave + init on DOM ready ──
         document.addEventListener('DOMContentLoaded', function () {
+            // Hiện panel field thay đổi theo lựa chọn đã lưu
+            const _tcur = document.getElementById('sel-template-type')?.value;
+            if (_tcur) showTplTemplateInfo(_tcur);
+            const _acur = document.getElementById('sel-alloc-type')?.value;
+            if (_acur && ALLOC_RATES[_acur]) {
+                const _r = ALLOC_RATES[_acur];
+                showAllocInfo(_acur, (parseFloat(_r.sales_mkt) || 0), (parseFloat(_r.bo_management) || 0) + (parseFloat(_r.bo_branch) || 0));
+            }
+
             if (PAKD_STATUS === 'approved') {
                 // Khoá toàn bộ field khi đã approved
                 document.querySelectorAll('.detail-container input, .detail-container select, .detail-container textarea').forEach(function (el) {
@@ -2382,6 +2533,251 @@ function getProjectTypeIcon($type) {
             });
         }
 
+        // ── Định nghĩa field theo từng template (nhãn + số mẫu từ file Excel) ──
+        const PAKD_TEMPLATES = {
+            project_base: {
+                rev: [
+                    { name: 'Doanh thu dịch vụ - gói triển khai', desc: 'Tổng giá trị dịch vụ triển khai trong hợp đồng', amt: 0 },
+                    { name: 'Doanh thu license (nếu có)', desc: '', amt: 0 },
+                    { name: 'Doanh thu khác (nếu có)', desc: '', amt: 0 }
+                ],
+                ded: [
+                    { name: 'Partner Commission', desc: 'Chi phí cho đối tác sales', amt: 0 },
+                    { name: 'Doanh thu của đối tác triển khai (nếu có)', desc: '', amt: 0 },
+                    { name: 'Khoản giảm trừ khác', desc: '', amt: 0 }
+                ],
+                cog_mode: false, cog: []
+            },
+            project_by_task: {
+                rev: [
+                    { name: 'Doanh thu dịch vụ - theo Task', desc: 'Tổng giá trị dịch vụ triển khai trong hợp đồng', amt: 0 },
+                    { name: 'Doanh thu license (nếu có)', desc: '', amt: 0 },
+                    { name: 'Doanh thu khác (nếu có)', desc: '', amt: 0 }
+                ],
+                ded: [
+                    { name: 'Partner Commission', desc: 'Chi phí cho đối tác sales', amt: 0 },
+                    { name: 'Doanh thu của đối tác triển khai (nếu có)', desc: '', amt: 0 },
+                    { name: 'Khoản giảm trừ khác', desc: '', amt: 0 }
+                ],
+                cog_mode: false, cog: []
+            },
+            dedicated: {
+                rev: [
+                    { name: 'Doanh thu dịch vụ - Dedicated', desc: 'Tổng giá trị dịch vụ triển khai trong hợp đồng', amt: 0 },
+                    { name: 'Doanh thu license (nếu có)', desc: '', amt: 0 },
+                    { name: 'Doanh thu khác (nếu có)', desc: '', amt: 0 }
+                ],
+                ded: [
+                    { name: 'Partner Commission', desc: 'Chi phí cho đối tác sales', amt: 0 },
+                    { name: 'Doanh thu của đối tác triển khai (nếu có)', desc: '', amt: 0 },
+                    { name: 'Khoản giảm trừ khác', desc: '', amt: 0 }
+                ],
+                cog_mode: false, cog: []
+            },
+            license: {
+                rev: [
+                    { name: 'Doanh thu dịch vụ triển khai (nếu có)', desc: 'Tổng giá trị dịch vụ triển khai trong hợp đồng', amt: 0 },
+                    { name: 'Doanh thu license', desc: '', amt: 0 },
+                    { name: 'Doanh thu khác (nếu có)', desc: '', amt: 0 }
+                ],
+                ded: [
+                    { name: 'Partner Commission', desc: 'Chi phí cho đối tác sales', amt: 0 },
+                    { name: 'Doanh thu của đối tác triển khai (nếu có)', desc: '', amt: 0 },
+                    { name: 'Khoản giảm trừ khác', desc: '', amt: 0 }
+                ],
+                cog_mode: true,
+                cog: [
+                    { name: 'Giá vốn Odoo license', desc: '', amt: 0 },
+                    { name: 'Giá vốn Odoo.sh', desc: '', amt: 0 },
+                    { name: 'Chi phí chuyển khoản', desc: 'kế toán điền', amt: 0 },
+                    { name: 'Thuế nhà thầu', desc: 'kế toán điền', amt: 0 },
+                    { name: 'Chi phí dịch vụ khác', desc: '', amt: 0 }
+                ]
+            }
+        };
+        // Tỷ lệ phân bổ từ Settings (loại dự án → % các nhóm)
+        const ALLOC_RATES = <?= json_encode($alloc_rates ?: new stdClass(), JSON_UNESCAPED_UNICODE) ?>;
+
+        function pakdPost(action, extra) {
+            return fetch('/projects/pakd/edit?id=' + PAKD_ID, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                body: new URLSearchParams(Object.assign({ action: action, id: PAKD_ID }, extra))
+            }).then(r => r.json());
+        }
+        function finSet(id, val) { const e = document.getElementById(id); if (e) e.value = val; }
+
+        // ── Modal xác nhận dạng HTML (thay cho confirm() mặc định) ──
+        function pakdConfirm(opts) {
+            opts = opts || {};
+            if (!document.getElementById('pakd-confirm-style')) {
+                const st = document.createElement('style');
+                st.id = 'pakd-confirm-style';
+                st.textContent =
+                    '.pcf-overlay{position:fixed;inset:0;background:rgba(15,23,42,.5);backdrop-filter:blur(3px);display:flex;align-items:center;justify-content:center;z-index:10050;animation:pcfFade .15s ease}' +
+                    '.pcf-box{background:#fff;border-radius:16px;width:100%;max-width:440px;box-shadow:0 24px 60px rgba(0,0,0,.25);overflow:hidden;animation:pcfUp .2s cubic-bezier(.16,1,.3,1)}' +
+                    '.pcf-head{display:flex;align-items:center;gap:12px;padding:20px 22px 0}' +
+                    '.pcf-ic{width:42px;height:42px;border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0;background:#eef2ff;color:#4f46e5}' +
+                    '.pcf-ic.danger{background:#fee2e2;color:#dc2626}' +
+                    '.pcf-title{font-size:16px;font-weight:700;color:#0f172a}' +
+                    '.pcf-body{padding:12px 22px 4px;font-size:13.5px;color:#475569;line-height:1.6;white-space:pre-line}' +
+                    '.pcf-foot{display:flex;justify-content:flex-end;gap:10px;padding:18px 22px 20px}' +
+                    '.pcf-btn{padding:9px 18px;border-radius:9px;font-size:13.5px;font-weight:600;cursor:pointer;border:1px solid transparent;font-family:inherit;transition:.15s}' +
+                    '.pcf-cancel{background:#fff;border-color:#e2e8f0;color:#475569}.pcf-cancel:hover{background:#f8fafc;border-color:#cbd5e1}' +
+                    '.pcf-ok{background:#4f46e5;color:#fff}.pcf-ok:hover{background:#4338ca}' +
+                    '.pcf-ok.danger{background:#dc2626}.pcf-ok.danger:hover{background:#b91c1c}' +
+                    '@keyframes pcfFade{from{opacity:0}to{opacity:1}}@keyframes pcfUp{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:translateY(0)}}';
+                document.head.appendChild(st);
+            }
+            const danger = !!opts.danger;
+            const ov = document.createElement('div');
+            ov.className = 'pcf-overlay';
+            ov.innerHTML =
+                '<div class="pcf-box" role="dialog" aria-modal="true">' +
+                    '<div class="pcf-head">' +
+                        '<div class="pcf-ic ' + (danger ? 'danger' : '') + '"><i class="fas ' + (opts.icon || (danger ? 'fa-triangle-exclamation' : 'fa-circle-question')) + '"></i></div>' +
+                        '<div class="pcf-title"></div>' +
+                    '</div>' +
+                    '<div class="pcf-body"></div>' +
+                    '<div class="pcf-foot">' +
+                        '<button class="pcf-btn pcf-cancel"></button>' +
+                        '<button class="pcf-btn pcf-ok ' + (danger ? 'danger' : '') + '"></button>' +
+                    '</div>' +
+                '</div>';
+            ov.querySelector('.pcf-title').textContent = opts.title || 'Xác nhận';
+            ov.querySelector('.pcf-body').textContent  = opts.message || '';
+            const btnCancel = ov.querySelector('.pcf-cancel');
+            const btnOk     = ov.querySelector('.pcf-ok');
+            btnCancel.textContent = opts.cancelText || 'Huỷ';
+            btnOk.textContent     = opts.okText || 'Đồng ý';
+            function close() { ov.remove(); document.removeEventListener('keydown', onKey); }
+            function onKey(e) { if (e.key === 'Escape') close(); else if (e.key === 'Enter') { close(); opts.onOk && opts.onOk(); } }
+            btnCancel.onclick = function () { close(); opts.onCancel && opts.onCancel(); };
+            btnOk.onclick     = function () { close(); opts.onOk && opts.onOk(); };
+            ov.onclick = function (e) { if (e.target === ov) close(); };
+            document.addEventListener('keydown', onKey);
+            document.body.appendChild(ov);
+            btnOk.focus();
+        }
+
+        // ── Panel: liệt kê field thay đổi ──
+        function _tplChips(arr, cls) {
+            return (arr || []).map(function(x){ return '<span class="tpl-chip ' + (cls || '') + '">' + escHtml(x.name || '') + '</span>'; }).join('');
+        }
+        function showTplInfoBox() { const c = document.getElementById('tpl-change-info'); if (c) c.style.display = ''; }
+        function showTplTemplateInfo(tpl) {
+            const box = document.getElementById('tpl-info-template'); if (!box) return;
+            const t = PAKD_TEMPLATES[tpl];
+            if (!t) { box.innerHTML = ''; return; }
+            const tname = document.querySelector('#sel-template-type option[value="' + tpl + '"]')?.textContent || tpl;
+            let html = '<b><i class="fas fa-wand-magic-sparkles"></i> Field theo template ' + escHtml(tname) + ':</b>';
+            html += '<div>Doanh thu (' + (t.rev || []).length + '): ' + _tplChips(t.rev) + '</div>';
+            html += '<div>Giảm trừ (' + (t.ded || []).length + '): ' + _tplChips(t.ded, 'ded') + '</div>';
+            if (t.cog_mode) {
+                html += '<div>Chi phí giá vốn 4.1 (' + (t.cog || []).length + '): ' + _tplChips(t.cog, 'cost') + '</div>';
+            } else {
+                html += '<div style="color:#64748b;">Chi phí sản xuất 4.1: giữ nguyên từ Phương án sản xuất.</div>';
+            }
+            box.innerHTML = html;
+            showTplInfoBox();
+        }
+        function showAllocInfo(val, smPct, mgmtPct) {
+            const box = document.getElementById('tpl-info-alloc'); if (!box) return;
+            if (!val) { box.innerHTML = ''; return; }
+            const label = document.querySelector('#sel-alloc-type option[value="' + val + '"]')?.textContent || '';
+            box.innerHTML = '<b><i class="fas fa-percent"></i> Đã áp dụng phân bổ (' + escHtml(label) + '):</b>'
+                + '<span class="tpl-chip cost">4.2 Sales &amp; MKT: ' + smPct + '%</span>'
+                + '<span class="tpl-chip cost">4.3 BO + Management: ' + mgmtPct + '%</span>';
+            showTplInfoBox();
+        }
+
+        function applyTemplateFields(tpl) {
+            const t = PAKD_TEMPLATES[tpl];
+            if (!t) return;
+            const rev = document.getElementById('rev-rows'); if (rev) rev.innerHTML = '';
+            (t.rev || []).forEach(function(x){ addRevRow(x.name, x.desc, x.amt); });
+            const ded = document.getElementById('ded-rows'); if (ded) ded.innerHTML = '';
+            (t.ded || []).forEach(function(x){ addDedRow(x.name, x.desc, x.amt); });
+            const cog = document.getElementById('cog-rows'); if (cog) cog.innerHTML = '';
+            setCogMode(!!t.cog_mode);
+            if (t.cog_mode) (t.cog || []).forEach(function(x){ addCogRow(x.name, x.desc, x.amt); });
+            showTplTemplateInfo(tpl);
+            if (typeof fin_calc === 'function') fin_calc();
+            if (typeof autosave === 'function') autosave(document.querySelector('#rev-rows .dyn-amt') || document.getElementById('r43-pct'));
+        }
+
+        function onTemplateChange(val) {
+            pakdPost('save_template_type', { template_type: val }).then(d => {
+                const sel = document.getElementById('sel-template-type');
+                if (d.ok) {
+                    showToast('Đã lưu loại phương án', 'success');
+                    sel.style.borderColor = '#16a34a';
+                    setTimeout(() => sel.style.borderColor = '', 2000);
+                } else {
+                    showToast(d.msg || 'Lỗi lưu loại phương án', 'error');
+                }
+            }).catch(() => showToast('Lỗi kết nối', 'error'));
+
+            // Luôn đồng bộ cấu trúc mục 4.1 theo template (kể cả khi không tải lại field):
+            // template không phải License → xóa các dòng giá vốn nhập tay, khóa 4.1 từ PASX.
+            const newIsCog = !!(PAKD_TEMPLATES[val] && PAKD_TEMPLATES[val].cog_mode);
+            if (!newIsCog) {
+                const cog = document.getElementById('cog-rows'); if (cog) cog.innerHTML = '';
+                setCogMode(false);
+                if (typeof fin_calc === 'function') fin_calc();
+                if (typeof autosave === 'function') autosave(document.getElementById('r43-pct'));
+            }
+
+            if (val && PAKD_TEMPLATES[val]) {
+                const isLic = !!(PAKD_TEMPLATES[val] && PAKD_TEMPLATES[val].cog_mode);
+                const msg = isLic
+                    ? 'Doanh thu, Giảm trừ và mục 4.1 Giá vốn sẽ được nạp lại bằng số liệu mẫu của template License (ghi đè dữ liệu hiện có ở các mục này).'
+                    : 'Doanh thu & Giảm trừ sẽ được nạp lại bằng số liệu mẫu. Mục 4.1 Chi phí sản xuất giữ nguyên (lấy từ Phương án sản xuất).';
+                pakdConfirm({
+                    title: 'Tải field theo template?',
+                    message: msg,
+                    okText: 'Tải lại field',
+                    cancelText: 'Giữ nguyên',
+                    icon: 'fa-wand-magic-sparkles',
+                    onOk: function () { applyTemplateFields(val); }
+                });
+            }
+        }
+
+        function onAllocChange(val) {
+            pakdPost('save_alloc_type', { alloc_project_type: val }).then(d => {
+                const sel = document.getElementById('sel-alloc-type');
+                if (d.ok && sel) { sel.style.borderColor = '#16a34a'; setTimeout(() => sel.style.borderColor = '', 2000); }
+            }).catch(() => {});
+
+            if (!val) return;
+            const r = ALLOC_RATES[val];
+            if (!r) { showToast('Chưa cấu hình tỷ lệ phân bổ — vào Settings để thiết lập', 'info'); return; }
+
+            // 4.3 Chi phí quản lý + back office = BO + Management (+ BO Chi nhánh)
+            const mgmtPct = (parseFloat(r.bo_management) || 0) + (parseFloat(r.bo_branch) || 0);
+            finSet('r43-pct', mgmtPct);
+
+            // 4.2 Sales & MKT: tổng 4.2 = sales_mkt% × doanh thu thuần.
+            // Các commission (Sales/Presales/MKT) tính trên doanh thu thuần;
+            // "Chi phí bán hàng khác" = phần còn lại để đạt đúng tỷ lệ phân bổ.
+            const revGross = getRevTotal() + (typeof getCrTotal === 'function' ? getCrTotal() : 0);
+            const revNet = revGross - getDedTotal();
+            const smPct = parseFloat(r.sales_mkt) || 0;
+            const p421 = parseFloat(document.getElementById('r421-pct').value) || 0;
+            const p422 = parseFloat(document.getElementById('r422-pct').value) || 0;
+            const p423 = parseFloat(document.getElementById('r423-pct').value) || 0;
+            const commission = revNet * (p421 + p422 + p423) / 100;
+            let other = Math.round(revNet * smPct / 100 - commission);
+            if (other < 0) other = 0;
+            finSet('r424-inp', other);
+
+            if (typeof fin_calc === 'function') fin_calc();
+            if (typeof autosave === 'function') autosave(document.getElementById('r43-pct'));
+            showAllocInfo(val, smPct, mgmtPct);
+            showToast('Đã áp dụng phân bổ: Sales&MKT ' + smPct + '%, BO+Mgmt ' + mgmtPct + '%', 'success');
+        }
+
         // ── Update status banner dynamically (không cần F5) ──
         function updateStatusBanner(label, color, iconCls) {
             const bar = document.querySelector('.top-metrics-bar');
@@ -2454,6 +2850,50 @@ function getProjectTypeIcon($type) {
             fin_calc();
             autosave(btn);
         }
+
+        // ── Dòng động: Doanh thu / Giảm trừ / Giá vốn (COG) ──
+        var COG_MODE = false; // var: tránh TDZ vì fin_load (IIFE) chạy trước dòng này
+        function setCogMode(on) {
+            COG_MODE = !!on;
+            document.querySelectorAll('.pasx-lock-row').forEach(function(r){ r.style.display = COG_MODE ? 'none' : ''; });
+            const addBtn = document.getElementById('btn-add-cog'); if (addBtn) addBtn.style.display = COG_MODE ? '' : 'none';
+            const cog = document.getElementById('cog-rows'); if (cog) cog.style.display = COG_MODE ? '' : 'none';
+        }
+        function _sumByClass(sel){ let t=0; document.querySelectorAll(sel).forEach(function(i){ t+=fin_parse(i.value); }); return t; }
+        function getRevTotal(){ return _sumByClass('#rev-rows .rev-amt'); }
+        function getDedTotal(){ return _sumByClass('#ded-rows .ded-amt'); }
+        function getCogTotal(){ return _sumByClass('#cog-rows .cog-amt'); }
+        function _collectDyn(sel){
+            const out=[];
+            document.querySelectorAll(sel).forEach(function(row){
+                out.push({
+                    name: row.querySelector('.dyn-name')?.value || '',
+                    desc: row.querySelector('.dyn-desc')?.value || '',
+                    amt:  fin_parse(row.querySelector('.dyn-amt')?.value || '0')
+                });
+            });
+            return out;
+        }
+        function getRevData(){ return _collectDyn('#rev-rows tr.dyn-row'); }
+        function getDedData(){ return _collectDyn('#ded-rows tr.dyn-row'); }
+        function getCogData(){ return _collectDyn('#cog-rows tr.dyn-row'); }
+        function _dynRow(stt, amtClass, name, desc, amt){
+            const tr = document.createElement('tr');
+            tr.className = 'row-sub dyn-row';
+            tr.innerHTML =
+                '<td class="td-stt" style="color:#94a3b8;font-size:11px;">'+stt+'</td>' +
+                '<td class="ind-1"><input class="fin-input dyn-name" value="'+escHtml(name||'')+'" placeholder="Hạng mục..." onblur="autosave(this)"></td>' +
+                '<td><input class="fin-input dyn-desc" value="'+escHtml(desc||'')+'" placeholder="Diễn giải..." onblur="autosave(this)"></td>' +
+                '<td class="td-rate"></td>' +
+                '<td class="td-amount"><input class="fin-input r dyn-amt '+amtClass+'" value="'+(amt||'')+'" placeholder="0" oninput="fin_calc()" onblur="autosave(this)"></td>' +
+                '<td class="td-ccy">VND</td>' +
+                '<td class="td-action"><button class="btn-del-cr" onclick="deleteDynRow(this)" title="Xóa dòng"><i class="fas fa-trash-alt"></i></button></td>';
+            return tr;
+        }
+        function addRevRow(name, desc, amt){ document.getElementById('rev-rows').appendChild(_dynRow('1.x','rev-amt',name,desc,amt)); fin_calc(); }
+        function addDedRow(name, desc, amt){ document.getElementById('ded-rows').appendChild(_dynRow('2.x','ded-amt',name,desc,amt)); fin_calc(); }
+        function addCogRow(name, desc, amt){ document.getElementById('cog-rows').appendChild(_dynRow('4.1.x','cog-amt',name,desc,amt)); fin_calc(); }
+        function deleteDynRow(btn){ const r=btn.closest('tr'); if(r) r.remove(); fin_calc(); autosave(document.getElementById('r43-pct')); }
 
         // ── Resend PASX Request ──
         function resendPasxRequest() {
@@ -3796,12 +4236,12 @@ async function doResetPakd() {
             closeResetModal();
             window.location.reload();
         } else {
-            alert('Lỗi: ' + data.msg);
+            (typeof showToast === 'function') ? showToast('Lỗi: ' + data.msg, 'error') : console.error(data.msg);
             btn.disabled = false;
             btn.innerHTML = '<i class="fas fa-rotate-left"></i> Xác nhận Reset';
         }
     } catch(e) {
-        alert('Lỗi kết nối');
+        (typeof showToast === 'function') ? showToast('Lỗi kết nối', 'error') : console.error(e);
         btn.disabled = false;
         btn.innerHTML = '<i class="fas fa-rotate-left"></i> Xác nhận Reset';
     }

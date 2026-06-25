@@ -359,7 +359,7 @@ function isMenuItemActive($path, $current_uri)
         </a>
 
         <?php if ($_SESSION['role'] === 'admin'): ?>
-            <a href="/settings" class="nav-item <?php echo isMenuItemActive('/settings', $current_uri); ?>">
+            <a href="/settings" class="nav-item <?php echo (strpos($current_uri, '/settings') === 0) ? 'active' : ''; ?>">
                 <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                     <circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="2" stroke-linecap="round"
                         stroke-linejoin="round" />

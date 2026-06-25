@@ -142,6 +142,8 @@ $routes = [
     '/projects/pakd/sync-odoo' => 'modules/projects/sync_pakd_odoo.php',
     '/projects/pakd/settings' => 'modules/projects/pakd_sync_settings.php',
     '/projects/ceo-review'    => 'modules/projects/ceo_review.php',
+    '/projects/settings' => 'modules/projects/settings_index.php',
+    '/projects/settings/allocation' => 'modules/projects/settings_index.php',
 ];
 
 // DEBUG: log URI + match result
