@@ -124,95 +124,181 @@ foreach ($departments as $d) {
 }
 ?>
 <style>
-.plan-bar{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:14px}
-.plan-bar .lbl{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--mut);margin-right:4px}
-.plan-pill{display:inline-flex;align-items:center;gap:8px;font-size:13px;font-weight:600;color:#475569;text-decoration:none;padding:7px 14px;border-radius:8px;border:1px solid var(--bd);background:#fff}
-.plan-pill.active{background:var(--rc);color:#fff;border-color:var(--rc)}
-.plan-pill .x{opacity:.7;font-weight:700}
-.plan-add{font-size:13px;font-weight:600;color:var(--rc2);background:#fff;border:1px dashed #cbd5e1;border-radius:8px;padding:7px 12px;cursor:pointer}
-.plan-scroll{overflow:auto;border:1px solid var(--bd);border-radius:12px;background:#fff;max-height:calc(100vh - 220px)}
-table.plan{border-collapse:separate;border-spacing:0;font-size:12px;white-space:nowrap}
-table.plan th,table.plan td{border-right:1px solid #eef1f5;border-bottom:1px solid #eef1f5;padding:4px 6px;text-align:center}
-table.plan tbody td{min-width:42px}
-table.plan thead th{position:sticky;top:0;z-index:6;background:#f8fafc;color:var(--mut);font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.2px;line-height:1.25;white-space:normal}
-table.plan thead tr:nth-child(2) th{top:19px;min-width:42px}
-table.plan .grp{background:#f1f5f9;color:#334155;border-bottom:1px solid #e2e8f0}
-table.plan .col-dept{position:sticky;left:0;z-index:2;box-sizing:border-box;background:#fff;text-align:left;width:180px;min-width:180px;max-width:180px;white-space:normal;font-weight:600;color:#0f172a;line-height:1.3;vertical-align:middle}
-/* Bố cục tên + nút thao tác để trong wrapper, KHÔNG dùng display:flex trên chính <td>
-   (flex làm ô mất tư cách table-cell -> position:sticky theo chiều dọc bị hỏng). */
+/* ── Plan Page ── */
+.plan-header{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;margin-bottom:16px;flex-wrap:wrap}
+.plan-cycle-bar{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.plan-cycle-lbl{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:#94a3b8;white-space:nowrap}
+.plan-pill{display:inline-flex;align-items:center;gap:7px;font-size:13px;font-weight:600;color:#475569;text-decoration:none;padding:7px 14px;border-radius:9px;border:1.5px solid #e2e8f0;background:#fff;transition:.15s}
+.plan-pill:hover{border-color:#94a3b8;color:#0f172a}
+.plan-pill.active{background:#0f172a;color:#fff;border-color:#0f172a;box-shadow:0 2px 8px rgba(15,23,42,.25)}
+.plan-pill.active .plan-pill-x{color:rgba(255,255,255,.6)}
+.plan-pill-x{font-size:15px;line-height:1;color:#94a3b8;cursor:pointer;margin-left:2px}
+.plan-pill-x:hover{color:#dc2626}
+.plan-add-btn{display:inline-flex;align-items:center;gap:6px;font-size:13px;font-weight:600;color:#6366f1;background:#f5f3ff;border:1.5px dashed #c4b5fd;border-radius:9px;padding:7px 14px;cursor:pointer;transition:.15s}
+.plan-add-btn:hover{background:#ede9fe;border-color:#a78bfa}
+
+/* Summary bar */
+.plan-summary{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:16px}
+.plan-scard{background:#fff;border:1px solid #e8ecf0;border-radius:12px;padding:14px 16px;position:relative;overflow:hidden}
+.plan-scard::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;border-radius:12px 12px 0 0}
+.plan-scard.blue::before{background:linear-gradient(90deg,#3b82f6,#6366f1)}
+.plan-scard.green::before{background:linear-gradient(90deg,#10b981,#059669)}
+.plan-scard.orange::before{background:linear-gradient(90deg,#f59e0b,#d97706)}
+.plan-scard.red::before{background:linear-gradient(90deg,#ef4444,#dc2626)}
+.plan-scard-val{font-size:26px;font-weight:800;color:#0f172a;line-height:1;margin-bottom:3px;font-variant-numeric:tabular-nums}
+.plan-scard.blue .plan-scard-val{color:#2563eb}
+.plan-scard.green .plan-scard-val{color:#059669}
+.plan-scard.orange .plan-scard-val{color:#d97706}
+.plan-scard.red .plan-scard-val{color:#dc2626}
+.plan-scard-lbl{font-size:11px;font-weight:600;color:#64748b;text-transform:uppercase;letter-spacing:.4px}
+
+/* Removed depts */
+.plan-readd{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:12px;padding:10px 14px;background:#fafbfc;border:1px solid #e8ecf0;border-radius:10px}
+.plan-readd-lbl{font-size:11.5px;color:#94a3b8;font-weight:600;white-space:nowrap}
+.plan-readd .chip{display:inline-flex;align-items:center;gap:5px;background:#fff;border:1.5px dashed #cbd5e1;border-radius:7px;padding:4px 10px;cursor:pointer;color:#334155;font-size:12px;font-weight:600;transition:.15s}
+.plan-readd .chip:hover{border-color:#6366f1;color:#6366f1;background:#f5f3ff}
+
+/* Table container */
+.plan-scroll{overflow:auto;border:1px solid #e2e8f0;border-radius:12px;background:#fff;max-height:calc(100vh - 310px);box-shadow:0 1px 4px rgba(0,0,0,.06)}
+
+/* Table core */
+table.plan{border-collapse:separate;border-spacing:0;font-size:12px;white-space:nowrap;width:100%}
+table.plan th,table.plan td{border-right:1px solid #eef1f5;border-bottom:1px solid #eef1f5;padding:5px 7px;text-align:center}
+table.plan tbody td{min-width:44px}
+
+/* Thead row 1 — group headers */
+table.plan thead tr:first-child th{position:sticky;top:0;z-index:6;font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;padding:5px 8px;line-height:1.2;white-space:nowrap}
+table.plan thead tr:first-child th.grp-init{background:#f1f5f9;color:#475569}
+table.plan thead tr:first-child th.grp-appr{background:#ecfdf5;color:#065f46}
+table.plan thead tr:first-child th.grp-month{background:#eff6ff;color:#1e40af}
+table.plan thead tr:first-child th.grp-month:nth-child(odd){background:#e0e7ff;color:#3730a3}
+/* Thead row 2 — sub-column headers */
+table.plan thead tr:nth-child(2) th{position:sticky;top:22px;z-index:6;background:#f8fafc;color:#94a3b8;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.3px;min-width:44px;line-height:1.25;white-space:normal;padding:4px 6px}
+
+/* Dept (frozen left) column */
+table.plan .col-dept{position:sticky;left:0;z-index:2;box-sizing:border-box;background:#fff;text-align:left;width:185px;min-width:185px;max-width:185px;white-space:normal;font-weight:600;color:#0f172a;line-height:1.35;vertical-align:middle;font-size:12.5px}
 table.plan .col-dept .col-dept-inner{display:flex;align-items:center;gap:6px;justify-content:space-between}
-table.plan .dept-acts{flex:none;display:flex;gap:4px}
-table.plan .dept-del,table.plan .dept-edit{width:20px;height:20px;line-height:1;border:none;border-radius:50%;background:#f1f5f9;color:#94a3b8;font-size:13px;cursor:pointer;opacity:0;transition:.15s;padding:0}
+table.plan .dept-acts{flex:none;display:flex;gap:3px}
+table.plan .dept-del,table.plan .dept-edit{width:22px;height:22px;line-height:1;border:none;border-radius:6px;background:#f1f5f9;color:#94a3b8;font-size:12px;cursor:pointer;opacity:0;transition:.15s;padding:0;display:inline-flex;align-items:center;justify-content:center}
 table.plan tbody tr:hover .dept-del,table.plan tbody tr:hover .dept-edit{opacity:1}
 table.plan .dept-del:hover{background:#fee2e2;color:#dc2626}
 table.plan .dept-edit:hover{background:#dbeafe;color:#2563eb}
-/* Modal "Thêm/Sửa định biên" */
-.pm-overlay{position:fixed;inset:0;background:rgba(15,23,42,.45);z-index:9998;display:none;align-items:flex-start;justify-content:center;padding:40px 16px;overflow:auto}
-.pm-box{background:#fff;width:520px;max-width:100%;border-radius:12px;box-shadow:0 20px 60px rgba(0,0,0,.3);overflow:hidden}
-.pm-head{display:flex;align-items:center;justify-content:space-between;padding:14px 18px;border-bottom:1px solid var(--bd);font-weight:700;font-size:15px;color:#0f172a;background:#f8fafc}
-.pm-x{border:none;background:none;font-size:20px;cursor:pointer;color:#94a3b8;line-height:1}
-.pm-body{padding:18px;max-height:70vh;overflow:auto}
-.pm-grid2{display:grid;grid-template-columns:1fr 1fr;gap:0 14px}
-.pm-sec{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:#16a34a;margin:16px 0 10px;border-top:1px solid #f1f5f9;padding-top:14px}
-.pm-months{display:grid;grid-template-columns:repeat(3,1fr);gap:10px 12px}
-.pm-months .m label{display:block;font-size:11px;font-weight:600;color:#475569;margin-bottom:4px}
-.pm-months .m input{width:100%;padding:7px 10px;border:1px solid var(--bd);border-radius:8px;font-size:13px;font-family:inherit;outline:none}
-.pm-months .m input:focus{border-color:var(--rc2)}
-.pm-foot{display:flex;justify-content:flex-end;gap:10px;padding:14px 18px;border-top:1px solid var(--bd);background:#fafbfc}
-.pm-box .rc-field input[readonly]{background:#f1f5f9;color:#64748b}
-.plan-readd{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:12px;font-size:12.5px;color:var(--mut)}
-.plan-readd .chip{display:inline-flex;align-items:center;gap:6px;background:#fff;border:1px dashed #cbd5e1;border-radius:8px;padding:5px 10px;cursor:pointer;color:#334155;font-weight:600}
-.plan-readd .chip:hover{border-color:var(--rc2);color:var(--rc2)}
-table.plan thead .col-dept{z-index:7;background:#f8fafc}
-/* Khối 4 cột đầu đóng băng: width cố định (border-box) + left cộng dồn cố định -> sticky chuẩn, không phụ thuộc JS.
-   Cộng dồn: dept 180 | chốt 84 | nhân sự 56 | đề xuất 56  => left 0 / 180 / 264 / 320 */
+
+/* Frozen columns (init group) */
 table.plan .col-chot,table.plan .col-ns,table.plan .col-canp,table.plan .col-dau{position:sticky;z-index:2;box-sizing:border-box;white-space:normal}
-table.plan thead .col-chot,table.plan thead .col-ns,table.plan thead .col-canp,table.plan thead .col-dau{z-index:7}
-table.plan .col-chot{left:180px;width:84px;min-width:84px;max-width:84px}
-table.plan .col-ns{left:264px;width:56px;min-width:56px;max-width:56px}
-table.plan .col-canp{left:320px;width:56px;min-width:56px;max-width:56px}
-table.plan thead .col-dau{left:180px}
-/* đường phân cách mép phải của khối đóng băng */
-table.plan .col-canp,table.plan .col-dau{box-shadow:2px 0 0 #e2e8f0}
-/* Zebra (chẵn/lẻ) - áp cho cả ô phòng ban dính trái */
-table.plan tbody tr.odd td,table.plan tbody tr.odd .col-dept{background:#ffffff}
-table.plan tbody tr.even td,table.plan tbody tr.even .col-dept{background:#f5f7fa}
-/* Hover */
+table.plan thead .col-dept,table.plan thead .col-chot,table.plan thead .col-ns,table.plan thead .col-canp,table.plan thead .col-dau{z-index:7}
+table.plan .col-chot{left:185px;width:80px;min-width:80px;max-width:80px}
+table.plan .col-ns{left:265px;width:54px;min-width:54px;max-width:54px}
+table.plan .col-canp{left:319px;width:54px;min-width:54px;max-width:54px}
+table.plan thead .col-dau{left:185px}
+table.plan .col-canp,table.plan .col-dau{box-shadow:3px 0 0 #e2e8f0}
+
+/* Approved group coloring */
+table.plan td.grp-appr,table.plan th.grp-appr{border-left:2px solid #d1fae5;background-color:rgba(236,253,245,.5)}
+table.plan thead th.grp-appr-sub{background:#ecfdf5;color:#065f46;border-left:2px solid #d1fae5}
+
+/* Month group separators */
+table.plan .grp-mo{border-left:2px solid #e0e7ff}
+table.plan td.grp-mo,table.plan th.grp-mo{border-left:2px solid #dde4ff}
+
+/* Zebra rows */
+table.plan tbody tr.odd td,table.plan tbody tr.odd .col-dept{background:#fff}
+table.plan tbody tr.even td,table.plan tbody tr.even .col-dept{background:#f9fafb}
 table.plan tbody tr.odd:hover td,table.plan tbody tr.odd:hover .col-dept,
-table.plan tbody tr.even:hover td,table.plan tbody tr.even:hover .col-dept{background:#eef4ff}
-/* Đang chọn (click để bật/tắt) - thắng cả zebra & hover nên đặt sau cùng */
+table.plan tbody tr.even:hover td,table.plan tbody tr.even:hover .col-dept{background:#eff6ff}
 table.plan tbody tr.sel td,table.plan tbody tr.sel .col-dept,
-table.plan tbody tr.sel:hover td,table.plan tbody tr.sel:hover .col-dept{background:#fde9c8}
-/* Hàng "Tổng số" ghim ngay dưới phần đầu bảng (top được JS đặt theo chiều cao thead) */
-table.plan tbody tr.total td{position:sticky;top:38px;z-index:4;background:#fffaf0;font-weight:700;color:#0f172a;border-bottom:2px solid #e2e8f0}
-table.plan tbody tr.total .col-dept,table.plan tbody tr.total .col-chot,table.plan tbody tr.total .col-ns,table.plan tbody tr.total .col-canp{z-index:5}
-table.plan tbody tr.total .col-dept{background:#fffaf0}
-table.plan input{width:34px;border:1px solid transparent;border-radius:5px;padding:2px 1px;text-align:center;font-size:11px;font-family:inherit;background:transparent;color:#0f172a;outline:none;-moz-appearance:textfield}
+table.plan tbody tr.sel:hover td,table.plan tbody tr.sel:hover .col-dept{background:#fff7ed}
+
+/* Total row */
+table.plan tbody tr.total td{position:sticky;top:22px;z-index:4;background:#fef9c3;font-weight:700;color:#0f172a;border-bottom:2px solid #fde68a;border-top:none;font-size:12.5px}
+table.plan tbody tr.total .col-dept,table.plan tbody tr.total .col-chot,table.plan tbody tr.total .col-ns,table.plan tbody tr.total .col-canp{z-index:5;background:#fef9c3}
+
+/* Cell value styles */
+table.plan .calc{color:#2563eb;font-weight:600}
+table.plan .mut{color:#cbd5e1}
+table.plan .pos{color:#059669;font-weight:700}
+table.plan .neg{color:#dc2626;font-weight:700}
+
+/* Inline inputs */
+table.plan input{width:36px;border:1px solid transparent;border-radius:5px;padding:2px 2px;text-align:center;font-size:11.5px;font-family:inherit;background:transparent;color:#0f172a;outline:none;-moz-appearance:textfield}
 table.plan input::-webkit-outer-spin-button,table.plan input::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
 table.plan input:hover{border-color:#e2e8f0;background:#fff}
-table.plan input:focus{border-color:var(--rc2);background:#fff;box-shadow:0 0 0 3px rgba(14,107,92,.1)}
-table.plan .calc{color:#2563eb;font-weight:600}
-table.plan .mut{color:#94a3b8}
-table.plan .grp-mo{border-left:2px solid #e2e8f0}
-table.plan td.grp-mo,table.plan th.grp-mo{border-left:2px solid #e2e8f0}
+table.plan input:focus{border-color:#6366f1;background:#fff;box-shadow:0 0 0 3px rgba(99,102,241,.12)}
+
+/* Footnote */
+.plan-note{margin-top:10px;padding:10px 14px;background:#f8fafc;border-radius:8px;border:1px solid #e8ecf0;font-size:12px;color:#64748b;display:flex;align-items:center;gap:8px}
+.plan-note svg{width:14px;height:14px;flex-shrink:0;opacity:.5}
+
+/* Modal */
+.pm-overlay{position:fixed;inset:0;background:rgba(15,23,42,.5);z-index:9998;display:none;align-items:flex-start;justify-content:center;padding:40px 16px;overflow:auto;backdrop-filter:blur(2px)}
+.pm-box{background:#fff;width:540px;max-width:100%;border-radius:16px;box-shadow:0 24px 80px rgba(0,0,0,.25);overflow:hidden}
+.pm-head{display:flex;align-items:center;justify-content:space-between;padding:16px 20px;border-bottom:1px solid #f1f5f9;font-weight:700;font-size:15px;color:#0f172a}
+.pm-head-icon{width:32px;height:32px;background:#eff6ff;border-radius:8px;display:inline-flex;align-items:center;justify-content:center;margin-right:8px;flex-shrink:0}
+.pm-head-icon svg{width:16px;height:16px;color:#2563eb}
+.pm-x{border:none;background:#f1f5f9;width:30px;height:30px;border-radius:8px;font-size:16px;cursor:pointer;color:#64748b;display:flex;align-items:center;justify-content:center;transition:.15s}
+.pm-x:hover{background:#fee2e2;color:#dc2626}
+.pm-body{padding:20px;max-height:72vh;overflow-y:auto}
+.pm-grid2{display:grid;grid-template-columns:1fr 1fr;gap:0 16px}
+.pm-sec{display:flex;align-items:center;gap:8px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:#6366f1;margin:18px 0 12px;}
+.pm-sec::after{content:'';flex:1;height:1px;background:#e8ecf0}
+.pm-months{display:grid;grid-template-columns:repeat(4,1fr);gap:8px 10px}
+.pm-months .m label{display:block;font-size:10.5px;font-weight:700;color:#64748b;margin-bottom:4px;text-transform:uppercase;letter-spacing:.3px}
+.pm-months .m input{width:100%;padding:7px 10px;border:1.5px solid #e2e8f0;border-radius:8px;font-size:13px;font-family:inherit;outline:none;transition:.15s;text-align:center}
+.pm-months .m input:focus{border-color:#6366f1;box-shadow:0 0 0 3px rgba(99,102,241,.12)}
+.pm-foot{display:flex;justify-content:flex-end;gap:10px;padding:14px 20px;border-top:1px solid #f1f5f9;background:#fafbfc}
+.pm-box .rc-field input[readonly]{background:#f8fafc;color:#64748b;cursor:not-allowed}
 </style>
 
-<div class="plan-bar">
-    <span class="lbl">Chu kỳ</span>
-    <?php foreach ($cycles as $c): $act = (int)$c['id'] === $cid; ?>
-        <a class="plan-pill <?= $act ? 'active' : '' ?>" href="/hrm/plan?cycle=<?= (int)$c['id'] ?>">
-            <?= h($c['name']) ?>
-            <?php if ($act && $isAdmin): ?><span class="x" title="Xóa chu kỳ" onclick="event.preventDefault();delCycle(<?= (int)$c['id'] ?>)">×</span><?php endif; ?>
-        </a>
-    <?php endforeach; ?>
-    <button class="plan-add" onclick="addCycle()">+ Thêm chu kỳ</button>
+<div class="plan-header">
+    <div>
+        <div class="plan-cycle-bar">
+            <span class="plan-cycle-lbl">Chu kỳ</span>
+            <?php foreach ($cycles as $c): $act = (int)$c['id'] === $cid; ?>
+                <a class="plan-pill <?= $act ? 'active' : '' ?>" href="/hrm/plan?cycle=<?= (int)$c['id'] ?>">
+                    <?= h($c['name']) ?>
+                    <?php if ($act && $isAdmin): ?><span class="plan-pill-x" title="Xóa chu kỳ" onclick="event.preventDefault();delCycle(<?= (int)$c['id'] ?>)">×</span><?php endif; ?>
+                </a>
+            <?php endforeach; ?>
+            <button class="plan-add-btn" onclick="addCycle()">
+                <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                Thêm chu kỳ
+            </button>
+        </div>
+    </div>
+    <a href="/hrm/requests" class="rc-btn ghost" style="white-space:nowrap">
+        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:-2px;margin-right:5px"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="18" x2="12" y2="12"/><line x1="9" y1="15" x2="15" y2="15"/></svg>
+        Tạo yêu cầu tuyển dụng
+    </a>
+</div>
+
+<!-- Summary KPI cards -->
+<div class="plan-summary">
+    <div class="plan-scard blue">
+        <div class="plan-scard-val"><?= $T['chot'] ?></div>
+        <div class="plan-scard-lbl">Tổng định biên đã chốt</div>
+    </div>
+    <div class="plan-scard green">
+        <div class="plan-scard-val"><?= $T['ns'] ?></div>
+        <div class="plan-scard-lbl">Nhân sự hiện tại</div>
+    </div>
+    <div class="plan-scard orange">
+        <div class="plan-scard-val"><?= array_sum($T['need']) ?></div>
+        <div class="plan-scard-lbl">Tổng nhu cầu tuyển (năm)</div>
+    </div>
+    <div class="plan-scard red">
+        <div class="plan-scard-val"><?= $T['all'] ?></div>
+        <div class="plan-scard-lbl">HRF đã duyệt (<?= $yr ?>)</div>
+    </div>
 </div>
 
 <?php if ($removedDepts): ?>
 <div class="plan-readd">
-    <span>Phòng ban đã xóa:</span>
+    <span class="plan-readd-lbl">Phòng ban đã ẩn:</span>
     <?php foreach ($removedDepts as $rd): ?>
-        <span class="chip" onclick="restoreDept(<?= (int)$rd['id'] ?>)">+ <?= h($rd['name']) ?></span>
+        <span class="chip" onclick="restoreDept(<?= (int)$rd['id'] ?>)">
+            <svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+            <?= h($rd['name']) ?>
+        </span>
     <?php endforeach; ?>
 </div>
 <?php endif; ?>
@@ -227,16 +313,25 @@ function pcell($val) {
 <table class="plan">
     <thead>
         <tr>
-            <th rowspan="2" class="col-dept">Vị trí công việc</th>
-            <th colspan="3" class="grp grp-mo col-dau">Đầu năm</th>
-            <th colspan="3" class="grp grp-mo">Đề xuất đã duyệt</th>
-            <?php foreach ($months as $mo): ?><th colspan="4" class="grp grp-mo"><?= h($mo) ?></th><?php endforeach; ?>
+            <th rowspan="2" class="col-dept" style="background:#f8fafc;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;color:#64748b">Phòng ban / Bộ phận</th>
+            <th colspan="3" class="grp-init col-dau" style="background:#f1f5f9;color:#374151;font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;border-left:2px solid #e2e8f0">📋 Đầu năm</th>
+            <th colspan="3" class="grp-appr" style="background:#ecfdf5;color:#065f46;font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;border-left:2px solid #a7f3d0">✅ HRF đã duyệt</th>
+            <?php foreach ($months as $i => $mo): ?>
+                <th colspan="4" class="grp-mo" style="background:<?= $i%2===0?'#eff6ff':'#e0e7ff' ?>;color:<?= $i%2===0?'#1e40af':'#3730a3' ?>;font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.4px"><?= h($mo) ?></th>
+            <?php endforeach; ?>
         </tr>
         <tr>
-            <th class="grp-mo col-chot">Định biên đã chốt</th><th class="col-ns">Nhân sự</th><th class="col-canp">Đề xuất</th>
-            <th class="grp-mo">Tất cả</th><th>Tuyển mới</th><th>Tuyển TT</th>
+            <th class="col-chot" style="border-left:2px solid #e2e8f0;background:#f8fafc;color:#64748b;font-size:10px">Định biên</th>
+            <th class="col-ns" style="background:#f8fafc;color:#64748b;font-size:10px">Nhân sự</th>
+            <th class="col-canp" style="background:#f8fafc;color:#64748b;font-size:10px">Cần tuyển</th>
+            <th class="grp-appr-sub grp-appr" style="font-size:10px">Tổng</th>
+            <th style="background:#ecfdf5;color:#065f46;font-size:10px">Mới</th>
+            <th style="background:#ecfdf5;color:#065f46;font-size:10px;border-right:2px solid #a7f3d0">Thay thế</th>
             <?php for ($i=0;$i<12;$i++): ?>
-                <th class="grp-mo">Định biên</th><th>Thực tế</th><th>Cần tuyển</th><th>Đề xuất</th>
+                <th class="grp-mo" style="background:#f8fafc;color:#64748b;font-size:10px">Định biên</th>
+                <th style="background:#f8fafc;color:#64748b;font-size:10px">Thực tế</th>
+                <th style="background:#f8fafc;color:#2563eb;font-size:10px;font-weight:800">Cần tuyển</th>
+                <th style="background:#f8fafc;color:#9333ea;font-size:10px">Đề xuất</th>
             <?php endfor; ?>
         </tr>
     </thead>
@@ -274,23 +369,29 @@ function pcell($val) {
 </table>
 </div>
 
-<div class="rc-muted" style="margin-top:10px">
-    "Đề xuất đã duyệt" lấy từ Yêu cầu tuyển dụng (HRF) đã duyệt trong năm <?= (int)$cycle['year'] ?>.
-    Bấm ✎ trên mỗi phòng ban để nhập định biên; "Đề xuất / Cần tuyển" tự tính.
+<div class="plan-note">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+    <span>"HRF đã duyệt" lấy từ Yêu cầu tuyển dụng có trạng thái <strong>Đã duyệt</strong> trong năm <?= (int)$cycle['year'] ?>. Di chuột vào tên phòng ban và bấm ✎ để nhập định biên. "Cần tuyển" và "Đề xuất" được tính tự động.</span>
 </div>
 
 <!-- Modal nhập định biên theo phòng ban -->
 <div id="planModal" class="pm-overlay">
     <div class="pm-box">
-        <div class="pm-head"><span id="pmTitle">Định biên</span><button class="pm-x" onclick="closePlanModal()">×</button></div>
+        <div class="pm-head">
+            <div style="display:flex;align-items:center;gap:0">
+                <span class="pm-head-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg></span>
+                <span id="pmTitle">Nhập định biên</span>
+            </div>
+            <button class="pm-x" onclick="closePlanModal()">×</button>
+        </div>
         <div class="pm-body">
             <div class="pm-grid2">
                 <div class="rc-field"><label>Chu kỳ</label><input id="pmCycle" readonly></div>
                 <div class="rc-field"><label>Phòng ban</label><input id="pmDept" readonly></div>
             </div>
             <div class="pm-grid2">
-                <div class="rc-field"><label>Định biên đã chốt</label><input type="number" min="0" id="pmChot"></div>
-                <div class="rc-field"><label>Nhân sự (đầu năm)</label><input type="number" min="0" id="pmNs"></div>
+                <div class="rc-field"><label>Định biên đã chốt</label><input type="number" min="0" id="pmChot" placeholder="0"></div>
+                <div class="rc-field"><label>Nhân sự đầu năm</label><input type="number" min="0" id="pmNs" placeholder="0"></div>
             </div>
             <div class="pm-sec">Định biên theo tháng</div>
             <div class="pm-months" id="pmPlan"></div>
@@ -299,7 +400,7 @@ function pcell($val) {
         </div>
         <div class="pm-foot">
             <button class="rc-btn ghost" onclick="closePlanModal()">Hủy</button>
-            <button class="rc-btn" onclick="savePlanModal()">Lưu</button>
+            <button class="rc-btn" onclick="savePlanModal()">💾 Lưu định biên</button>
         </div>
     </div>
 </div>
