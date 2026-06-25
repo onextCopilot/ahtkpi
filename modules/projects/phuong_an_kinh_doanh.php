@@ -707,11 +707,12 @@ function formatVND($n) {
                             <?php sortTh('Trạng thái',     'status',          $sortCol, $sortDir, $qp) ?>
                             <?php sortTh('Ngày assign',    'assignment_date', $sortCol, $sortDir, $qp) ?>
                             <?php sortTh('Dự kiến đóng',   'expected_closing',$sortCol, $sortDir, $qp) ?>
+                            <th style="text-align:center;">Thao tác</th>
                         </tr>
                     </thead>
                     <tbody id="pakdTableBody">
                     <?php if (empty($pakdList)): ?>
-                        <tr><td colspan="11">
+                        <tr><td colspan="13">
                             <div class="empty-state">
                                 <div class="empty-icon"><i class="fas fa-folder-open"></i></div>
                                 <h3>Chưa có phương án nào</h3>
@@ -738,7 +739,7 @@ function formatVND($n) {
                                         $y = date('Y', strtotime($p['assignment_date']));
                                         $groupLabel = $viMonths[$m] . ' ' . $y;
                                     }
-                                    echo "<tr class=\"month-group-row\"><td colspan=\"12\"><i class=\"fas fa-calendar-alt\" style=\"margin-right:6px;\"></i>{$groupLabel}</td></tr>";
+                                    echo "<tr class=\"month-group-row\"><td colspan=\"13\"><i class=\"fas fa-calendar-alt\" style=\"margin-right:6px;\"></i>{$groupLabel}</td></tr>";
                                 }
                             }
                             $rowNum++;
@@ -831,6 +832,13 @@ function formatVND($n) {
                             </td>
                             <td style="font-size:12px;color:var(--lgray);"><?= !empty($p['assignment_date']) ? date('d/m/Y', strtotime($p['assignment_date'])) : '—' ?></td>
                             <td style="font-size:12px;color:var(--lgray);"><?= !empty($p['expected_closing']) ? date('d/m/Y', strtotime($p['expected_closing'])) : '—' ?></td>
+                            <td style="text-align:center;">
+                                <button type="button" class="action-btn del"
+                                    title="Xoá phương án"
+                                    onclick="event.stopPropagation();deletePakd(<?= (int)$p['id'] ?>, <?= htmlspecialchars(json_encode($p['name']), ENT_QUOTES, 'UTF-8') ?>)">
+                                    <i class="fas fa-trash-alt"></i>
+                                </button>
+                            </td>
                         </tr>
                         <?php endforeach; ?>
                     <?php endif; ?>

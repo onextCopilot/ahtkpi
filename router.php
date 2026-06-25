@@ -138,6 +138,7 @@ $routes = [
     '/projects/du-an/detail' => 'modules/projects/du_an_detail.php',
     '/projects/pakd/create' => 'modules/projects/pakd_create.php',
     '/projects/pakd/edit' => 'modules/projects/pakd_detail.php',
+    '/projects/pakd/delete' => 'modules/projects/pakd_delete.php',
     '/projects/pakd/sync-odoo' => 'modules/projects/sync_pakd_odoo.php',
     '/projects/pakd/settings' => 'modules/projects/pakd_sync_settings.php',
     '/projects/ceo-review'    => 'modules/projects/ceo_review.php',
