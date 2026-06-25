@@ -1054,6 +1054,15 @@ switch ($action) {
                     'notes','classification','campaign','id_card','applied_job','applied_stage','tags',
                     'office_text','reject_reason','reject_note','cv_path','external_id','interview_date',
                     'applied_time','offer_date','offer_time','hired_date','hired_time','reject_date','reject_time'];
+        // Giới hạn độ dài từng cột VARCHAR -> cắt giá trị import cho khớp (tránh "Data too long" làm hỏng cả lần import).
+        $colMax = [];
+        if ($r = $conn->query("SELECT COLUMN_NAME, CHARACTER_MAXIMUM_LENGTH FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='hrm_candidates' AND DATA_TYPE IN ('varchar','char')")) {
+            while ($c = $r->fetch_assoc()) { $colMax[$c['COLUMN_NAME']] = (int)$c['CHARACTER_MAXIMUM_LENGTH']; }
+        }
+        $fitCol = function (string $cn, string $v) use ($colMax) {
+            $max = $colMax[$cn] ?? 0;
+            return ($max > 0 && mb_strlen($v) > $max) ? mb_substr($v, 0, $max) : $v;
+        };
         // Nhãn tệp = tên file CV gốc từ URL.
         $cvLabelOf = fn($url) => (basename(parse_url((string)$url, PHP_URL_PATH) ?: '') ?: 'CV');
 
@@ -1095,7 +1104,7 @@ switch ($action) {
 
             // Dựng cặp cột=>giá trị động (chỉ field được map & có dữ liệu).
             $set = []; // col => [value, type]
-            foreach ($strCols as $cn) { $v = $col($row, $cn); if ($v !== '') { $set[$cn] = [$v, 's']; } }
+            foreach ($strCols as $cn) { $v = $col($row, $cn); if ($v !== '') { $set[$cn] = [$fitCol($cn, $v), 's']; } }
             if ($years > 0) { $set['years_exp'] = [$years, 'd']; }
             if ($score > 0) { $set['score'] = [$score, 'd']; }
             if ($appliedDate) { $set['applied_date'] = [$appliedDate, 's']; }
@@ -1106,12 +1115,12 @@ switch ($action) {
             $ownerId = $ownerPs['ids'][0] ?? 0;
             $ownerText = implode(', ', $ownerPs['names']);
             if ($ownerId) { $set['owner_id'] = [$ownerId, 'i']; }
-            if ($ownerText !== '') { $set['owner_text'] = [$ownerText, 's']; } // danh sách đầy đủ để hiển thị
+            if ($ownerText !== '') { $set['owner_text'] = [$fitCol('owner_text', $ownerText), 's']; } // danh sách đầy đủ để hiển thị
             // Từ chối bởi: tương tự.
             $rejP = hrm_resolve_person($conn, $col($row, 'rejected_by'));
             $rejById = $rejP['id']; $rejText = $rejP['text'];
             if ($rejById) { $set['rejected_by'] = [$rejById, 'i']; }
-            elseif ($rejText !== '') { $set['rejected_by_text'] = [$rejText, 's']; }
+            elseif ($rejText !== '') { $set['rejected_by_text'] = [$fitCol('rejected_by_text', $rejText), 's']; }
             if ($defEvent)  { $set['event_id']  = [$defEvent, 'i']; }
 
             $existing = null;
