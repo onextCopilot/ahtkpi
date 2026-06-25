@@ -195,6 +195,7 @@ $routes = [
     '/debt-warning' => 'modules/debt_warning/index.php',
     '/customers' => 'modules/customers/index.php',
     '/invoices' => 'modules/invoices/index.php',
+    '/performance' => 'modules/performance/index.php',
     '/kpi' => 'modules/kpi/index.php',
     '/api/kpi_tab_order' => 'api/kpi_tab_order.php',
     '/api/kpi_tab_order.php' => 'api/kpi_tab_order.php',

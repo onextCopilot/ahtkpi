@@ -273,42 +273,22 @@ function isMenuItemActive($path, $current_uri)
             </div>
         <?php endif; ?>
 
-        <!-- 6. KPI Management Dropdown -->
-        <div class="nav-item nav-item-parent <?php
-        $is_kpi_open = ($current_uri === '/kpi') || strpos($current_uri, '/core-key-kpi') !== false || strpos($current_uri, '/guides') !== false;
-        echo $is_kpi_open ? 'active open' : ''; ?>" onclick="toggleSubmenu(this)">
+        <!-- 6. Performance Management (App launcher: gom KPI + OKR) -->
+        <a href="/performance" class="nav-item <?php
+        $is_perf_active = strpos($current_uri, '/performance') !== false
+            || ($current_uri === '/kpi')
+            || strpos($current_uri, '/core-key-kpi') !== false
+            || strpos($current_uri, '/guides') !== false
+            || strpos($current_uri, '/modules/okr') !== false;
+        echo $is_perf_active ? 'active' : ''; ?>">
             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
                 stroke-linecap="round" stroke-linejoin="round">
-                <line x1="18" y1="20" x2="18" y2="10"></line>
-                <line x1="12" y1="20" x2="12" y2="4"></line>
-                <line x1="6" y1="20" x2="6" y2="14"></line>
+                <rect x="3" y="3" width="7" height="7" rx="1.5"></rect>
+                <rect x="14" y="3" width="7" height="7" rx="1.5"></rect>
+                <rect x="3" y="14" width="7" height="7" rx="1.5"></rect>
+                <rect x="14" y="14" width="7" height="7" rx="1.5"></rect>
             </svg>
-            <span>KPI Management</span>
-            <svg class="chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <polyline points="6 9 12 15 18 9"></polyline>
-            </svg>
-        </div>
-        <div class="submenu <?php echo $is_kpi_open ? 'open' : ''; ?>">
-            <a href="/kpi" class="submenu-item <?php echo ($current_uri === '/kpi') ? 'active' : ''; ?>">
-                <span>General KPI Management</span>
-            </a>
-            <a href="/core-key-kpi"
-                class="submenu-item <?php echo ($current_uri === '/core-key-kpi') ? 'active' : ''; ?>">
-                <span>Core & Key KPI</span>
-            </a>
-            <a href="/guides" class="submenu-item <?php echo ($current_uri === '/guides') ? 'active' : ''; ?>">
-                <span>Guides</span>
-            </a>
-        </div>
-
-        <!-- 7. OKR Management -->
-        <a href="/modules/okr" class="nav-item <?php echo isMenuItemActive('/modules/okr', $current_uri); ?>">
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <circle cx="12" cy="12" r="10"></circle>
-                <circle cx="12" cy="12" r="6"></circle>
-                <circle cx="12" cy="12" r="2"></circle>
-            </svg>
-            <span>OKR Management</span>
+            <span>Performance Management</span>
         </a>
 
         <!-- 8. Projects (AM/BD + Admin only) -->
