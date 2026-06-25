@@ -232,6 +232,7 @@ $routes = [
     '/folio'     => 'modules/folio/index.php',
     // ── HRM / Recruitment (rebuilt 2026, SOP-driven) ──────────────────
     '/hrm' => 'modules/hrm/index.php',
+    '/hrm/dashboard' => 'modules/hrm/dashboard.php',
     '/hrm/recruitment' => 'modules/hrm/recruitment.php',
     '/hrm/plan' => 'modules/hrm/plan.php',
     '/hrm/requests' => 'modules/hrm/requests.php',

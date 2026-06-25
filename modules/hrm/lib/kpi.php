@@ -64,3 +64,103 @@ function hrm_kpi_metrics(mysqli $conn, string $from, string $to): array
         ],
     ];
 }
+
+/**
+ * Point-in-time counters cho dashboard điều hành (không phụ thuộc kỳ).
+ * Mỗi số là "đang ở trạng thái này NGAY BÂY GIỜ".
+ */
+function hrm_dashboard_counts(mysqli $conn): array
+{
+    $q = fn(string $sql): int => (int)($conn->query($sql)->fetch_row()[0] ?? 0);
+    return [
+        'hrf_pending'   => $q("SELECT COUNT(*) FROM hrm_requests WHERE status='pending'"),
+        'jobs_open'     => $q("SELECT COUNT(*) FROM hrm_jobs WHERE status='open'"),
+        'apps_active'   => $q("SELECT COUNT(*) FROM hrm_applications WHERE status='active'"),
+        'offers_out'    => $q("SELECT COUNT(*) FROM hrm_offers WHERE status IN ('sent','pending_approval')"),
+        'onb_active'    => $q("SELECT COUNT(*) FROM hrm_onboarding WHERE status='active'"),
+        'probation_due' => $q("SELECT COUNT(*) FROM hrm_checkpoints WHERE status='pending' AND due_date IS NOT NULL AND due_date <= DATE_ADD(CURDATE(), INTERVAL 14 DAY)"),
+    ];
+}
+
+/**
+ * Cảnh báo SLA / điểm tắc nghẽn cần xử lý: HRF quá hạn duyệt, ứng viên kẹt giai
+ * đoạn quá SLA, task onboarding quá hạn. Trả mảng ['type','color','text','due','link'].
+ */
+function hrm_dashboard_alerts(mysqli $conn): array
+{
+    $alerts = [];
+
+    // 1. HRF quá hạn duyệt (bước phê duyệt pending mà đã quá due_at).
+    $res = $conn->query("SELECT a.due_at, rq.id, rq.code, rq.title
+        FROM hrm_approvals a JOIN hrm_requests rq ON rq.id = a.entity_id
+        WHERE a.entity_type='hrf' AND a.status='pending' AND a.due_at IS NOT NULL AND a.due_at < NOW()
+        ORDER BY a.due_at LIMIT 15");
+    while ($res && ($r = $res->fetch_assoc())) {
+        $alerts[] = ['type' => 'HRF quá hạn duyệt', 'color' => '#dc2626',
+            'text' => trim(($r['code'] ?: '') . ' · ' . $r['title']),
+            'due' => $r['due_at'], 'link' => '/hrm/requests?id=' . (int)$r['id']];
+    }
+
+    // 2. Ứng viên kẹt ở 1 giai đoạn vượt SLA của giai đoạn đó.
+    $res = $conn->query("SELECT ap.id, c.full_name, s.name AS stage_name, s.sla_hours, ap.updated_at
+        FROM hrm_applications ap
+        JOIN hrm_pipeline_stages s ON s.id = ap.stage_id
+        JOIN hrm_candidates c ON c.id = ap.candidate_id
+        WHERE ap.status='active' AND s.sla_hours > 0
+          AND ap.updated_at < DATE_SUB(NOW(), INTERVAL s.sla_hours HOUR)
+        ORDER BY ap.updated_at LIMIT 15");
+    while ($res && ($r = $res->fetch_assoc())) {
+        $alerts[] = ['type' => 'Kẹt giai đoạn', 'color' => '#b45309',
+            'text' => trim(($r['full_name'] ?: 'Ứng viên') . ' · ' . $r['stage_name'] . ' (SLA ' . (int)$r['sla_hours'] . 'h)'),
+            'due' => $r['updated_at'], 'link' => '/hrm/application?id=' . (int)$r['id']];
+    }
+
+    // 3. Task onboarding quá hạn chưa hoàn thành.
+    $res = $conn->query("SELECT t.id, t.title, t.due_date, o.id AS onb_id, o.candidate_name
+        FROM hrm_onboarding_tasks t JOIN hrm_onboarding o ON o.id = t.onboarding_id
+        WHERE t.done=0 AND t.due_date IS NOT NULL AND t.due_date < CURDATE()
+          AND o.status IN ('preboarding','active')
+        ORDER BY t.due_date LIMIT 15");
+    while ($res && ($r = $res->fetch_assoc())) {
+        $alerts[] = ['type' => 'Onboarding trễ', 'color' => '#7c3aed',
+            'text' => trim(($r['candidate_name'] ?: '') . ' · ' . $r['title']),
+            'due' => $r['due_date'], 'link' => '/hrm/onboarding-detail?id=' . (int)$r['onb_id']];
+    }
+
+    return $alerts;
+}
+
+/**
+ * Tải tuyển dụng theo phòng ban: số vị trí đang mở + ứng viên đang xử lý.
+ * Trả mảng [name => ['open'=>int, 'active'=>int]] sắp theo tổng giảm dần.
+ */
+function hrm_dashboard_dept_load(mysqli $conn): array
+{
+    $rows = [];
+    $res = $conn->query("SELECT COALESCE(d.name,'(Chưa gán)') name, COUNT(*) c
+        FROM hrm_jobs j LEFT JOIN departments d ON d.id = j.department_id
+        WHERE j.status='open' GROUP BY j.department_id");
+    while ($res && ($r = $res->fetch_assoc())) { $rows[$r['name']] = ['open' => (int)$r['c'], 'active' => 0]; }
+
+    $res = $conn->query("SELECT COALESCE(d.name,'(Chưa gán)') name, COUNT(*) c
+        FROM hrm_applications ap JOIN hrm_jobs j ON j.id = ap.job_id
+        LEFT JOIN departments d ON d.id = j.department_id
+        WHERE ap.status='active' GROUP BY j.department_id");
+    while ($res && ($r = $res->fetch_assoc())) {
+        if (!isset($rows[$r['name']])) { $rows[$r['name']] = ['open' => 0, 'active' => 0]; }
+        $rows[$r['name']]['active'] = (int)$r['c'];
+    }
+
+    uasort($rows, fn($a, $b) => ($b['open'] + $b['active']) <=> ($a['open'] + $a['active']));
+    return $rows;
+}
+
+/** Hoạt động gần đây từ audit log (kèm tên người thực hiện). */
+function hrm_dashboard_activity(mysqli $conn, int $limit = 12): array
+{
+    $limit = max(1, min(50, $limit));
+    $res = $conn->query("SELECT a.action, a.entity_type, a.entity_id, a.detail, a.created_at, u.full_name
+        FROM hrm_audit_log a LEFT JOIN users u ON u.id = a.user_id
+        ORDER BY a.id DESC LIMIT $limit");
+    return $res ? $res->fetch_all(MYSQLI_ASSOC) : [];
+}
