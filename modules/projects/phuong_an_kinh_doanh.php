@@ -364,8 +364,8 @@ function formatVND($n) {
             border: 1px solid var(--border); box-shadow: var(--sh-sm); overflow: hidden;
             display: flex; flex-direction: column;
         }
-        .table-wrap { overflow-x: auto; overflow-y: auto; max-height: calc(100vh - 300px); }
-        .table-wrap thead th { position: sticky; top: 0; z-index: 10; box-shadow: 0 1px 0 var(--border); }
+        .table-wrap { overflow-x: auto; }
+        .table-wrap thead th { position: static; z-index: auto; box-shadow: none; }
         table { width: 100%; border-collapse: separate; border-spacing: 0; }
         thead th {
             padding: 11px 16px; text-align: left;
