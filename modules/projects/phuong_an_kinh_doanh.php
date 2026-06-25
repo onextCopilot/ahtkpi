@@ -264,7 +264,8 @@ function formatVND($n) {
         }
         * { box-sizing: border-box; }
         body { background: var(--bg); font-family: 'Inter', sans-serif; color: var(--slate); margin: 0; }
-        .main-content { flex: 1; padding: 28px; min-height: 100vh; }
+        /* Override global layout: allow page to scroll naturally via browser window */
+        .main-content { flex: 1; padding: 28px; min-height: 100vh; height: auto !important; overflow-y: visible !important; overflow-x: hidden !important; }
 
         /* Page header */
         .page-header {
