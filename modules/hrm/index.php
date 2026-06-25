@@ -22,9 +22,6 @@ $dateLine = 'HÀ NỘI, ' . $session . ' ' . $weekdays[(int)date('w')] . ', ' . 
 
 // tile: [label, subtitle, href|null, gradient, svg-path, badge|null]
 $tiles = [
-    ['Tổng quan', 'Dashboard điều hành', '/hrm/dashboard', 'linear-gradient(135deg,#0ea5e9,#0369a1)',
-        '<rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/>',
-        null],
     ['Kế hoạch tuyển dụng', 'Recruitment Plan', '/hrm/plan', 'linear-gradient(135deg,#6366f1,#4338ca)',
         '<path d="M9 2h6a1 1 0 0 1 1 1v1h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2V3a1 1 0 0 1 1-1z"/><path d="M9 4h6"/><path d="m9 13 2 2 4-4"/>',
         $pendingHrf ?: null],

@@ -1770,6 +1770,14 @@ switch ($action) {
         jout(true);
     }
 
+    /* ── Dashboard: real-time stat counts (GET, no auth needed beyond login) ── */
+    case 'dashboard_counts': {
+        require_once __DIR__ . '/lib/kpi.php';
+        $counts = hrm_dashboard_counts($conn);
+        jout(true, ['counts' => $counts]);
+    }
+
     default:
         jout(false, ['error' => 'Unknown action: ' . $action]);
 }
+

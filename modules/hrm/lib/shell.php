@@ -196,11 +196,6 @@ function hrm_subnav(string $active, bool $isAdmin): void
     $planKeys   = ['plan', 'requests'];
     $isPlan     = in_array($active, $planKeys, true);
     $simple = [
-        'dashboard' => [
-            '<rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/>',
-            'Tổng quan', 'Dashboard điều hành HRM',
-            [['dashboard', 'Tổng quan', '/hrm/dashboard', '<rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/>']],
-        ],
         'onboarding' => [
             '<path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/>',
             'Onboarding', 'Hội nhập 60 ngày',
