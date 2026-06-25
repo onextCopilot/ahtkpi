@@ -109,7 +109,8 @@ hrm_header('Tin tuyển dụng', 'Danh sách tin tuyển dụng', 'jobs');
 /* ── Jobs page — modern shell ── */
 /* Cho phép vùng nội dung co lại để bảng rộng dùng cuộn ngang nội bộ, không đẩy cả trang tràn ngang (fix nút bị cắt). */
 .main-content{min-width:0}
-.jb-wrap{display:grid;gap:18px;padding-bottom:20px;min-width:0;max-width:100%}
+.jb-wrap{display:grid;grid-template-columns:minmax(0,1fr);gap:18px;padding-bottom:20px;min-width:0;max-width:100%}
+.jb-wrap>*{min-width:0}
 
 /* Toolbar — tabs + stats + action trên cùng một dòng */
 .jb-toolbar{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
