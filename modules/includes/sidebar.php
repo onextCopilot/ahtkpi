@@ -98,19 +98,6 @@ function isMenuItemActive($path, $current_uri)
             <span>Dashboard</span>
         </a>
 
-        <!-- Outbound Radar — chỉ hyun.cao -->
-        <?php if ((($_SESSION['username'] ?? '') === 'hyun.cao') || (($_SESSION['full_name'] ?? '') === 'Hyun Cao')): ?>
-        <a href="/outbound-radar"
-            class="nav-item <?php echo (strpos($current_uri, '/outbound-radar') !== false) ? 'active' : ''; ?>">
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-                stroke-linecap="round" stroke-linejoin="round">
-                <circle cx="12" cy="12" r="2"></circle>
-                <path d="M16.24 7.76a6 6 0 0 1 0 8.49M7.76 16.24a6 6 0 0 1 0-8.49M19.07 4.93a10 10 0 0 1 0 14.14M4.93 19.07a10 10 0 0 1 0-14.14"></path>
-            </svg>
-            <span>Outbound Radar</span>
-        </a>
-        <?php endif; ?>
-
         <!-- 2. Planning & Budgeting -->
         <a href="/plan-budgeting"
             class="nav-item <?php echo (strpos($current_uri, '/plan-budgeting') !== false) ? 'active' : ''; ?>">
